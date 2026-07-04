@@ -79,6 +79,7 @@ pcl_codec_t makeCodec(const char* content_type,
 
 }  // namespace
 
+///< REQ_PCL_337: registered codec vtable is returned unmodified by get().
 TEST(PclCodecRegistry, RegisterAndGetReturnsSamePointer) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -91,6 +92,7 @@ TEST(PclCodecRegistry, RegisterAndGetReturnsSamePointer) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_338: get() on an unregistered content_type returns NULL.
 TEST(PclCodecRegistry, GetUnregisteredReturnsNull) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -100,6 +102,7 @@ TEST(PclCodecRegistry, GetUnregisteredReturnsNull) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_339: registering a codec with a mismatched ABI version is rejected with PCL_ERR_STATE and not counted.
 TEST(PclCodecRegistry, BadAbiVersionRejectedWithState) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -113,6 +116,7 @@ TEST(PclCodecRegistry, BadAbiVersionRejectedWithState) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_340: NULL registry/codec/content_type arguments to register() and get() are rejected/return NULL.
 TEST(PclCodecRegistry, NullArgsRejectedWithInvalid) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -130,6 +134,7 @@ TEST(PclCodecRegistry, NullArgsRejectedWithInvalid) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_341: multiple codecs may register under the same content_type; get() returns the first registered.
 TEST(PclCodecRegistry, MultipleCodecsPerContentTypeAllowedFirstWinsForGet) {
   // A bridge loads several per-component codec plugins, all under the same
   // content_type; the registry keeps them all and get() returns the first.
@@ -147,6 +152,7 @@ TEST(PclCodecRegistry, MultipleCodecsPerContentTypeAllowedFirstWinsForGet) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_342: re-registering the identical codec vtable pointer is rejected with PCL_ERR_STATE.
 TEST(PclCodecRegistry, SameCodecPointerRejectedWithState) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -160,6 +166,7 @@ TEST(PclCodecRegistry, SameCodecPointerRejectedWithState) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_343: get_at() iterates same-content_type codecs in registration order and returns NULL past the end or for bad arguments.
 TEST(PclCodecRegistry, GetAtIteratesCodecsForContentTypeInRegistrationOrder) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -188,6 +195,7 @@ TEST(PclCodecRegistry, GetAtIteratesCodecsForContentTypeInRegistrationOrder) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_344: count() reflects registrations; clear() removes all registrations without destroying the borrowed codecs.
 TEST(PclCodecRegistry, CountAndClearWork) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -207,6 +215,7 @@ TEST(PclCodecRegistry, CountAndClearWork) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_345: the process-global default registry is created lazily and remains stable across calls.
 TEST(PclCodecRegistry, DefaultReturnsStableNonNullPointer) {
   pcl_codec_registry_t* first = pcl_codec_registry_default();
   pcl_codec_registry_t* second = pcl_codec_registry_default();
@@ -215,6 +224,7 @@ TEST(PclCodecRegistry, DefaultReturnsStableNonNullPointer) {
   EXPECT_EQ(second, first);
 }
 
+///< REQ_PCL_346: a codec vtable's encode/decode/free_msg round-trip a typed value through a pcl_msg_t.
 TEST(PclCodecRegistry, RoundTripEncodeDecodeFreeMsgThroughStubCodec) {
   StubCodecCtx ctx;
   pcl_codec_t codec = makeCodec("application/stub", PCL_CODEC_ABI_VERSION, &ctx);

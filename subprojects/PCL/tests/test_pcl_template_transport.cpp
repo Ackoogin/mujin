@@ -278,6 +278,7 @@ struct LoopbackPair {
 // Template-specific tests
 // ---------------------------------------------------------------------------
 
+///< REQ_PCL_429: pcl_transport_template_create() rejects NULL hooks/executor and hooks missing send_blocking or recv_blocking.
 TEST(PclTransportTemplate, RejectsMissingHooks) {
   silence_logs();
   auto* e = pcl_executor_create();
@@ -299,6 +300,7 @@ TEST(PclTransportTemplate, RejectsMissingHooks) {
   restore_logs();
 }
 
+///< REQ_PCL_430: a failing hooks.open aborts creation without invoking hooks.close.
 TEST(PclTransportTemplate, OpenFailureAbortsCreate) {
   silence_logs();
   auto* e = pcl_executor_create();
@@ -325,11 +327,13 @@ TEST(PclTransportTemplate, OpenFailureAbortsCreate) {
   restore_logs();
 }
 
+///< REQ_PCL_431: pcl_transport_template_destroy(NULL) is a safe no-op.
 TEST(PclTransportTemplate, DestroyNullIsNoOp) {
   pcl_transport_template_destroy(nullptr);
   SUCCEED();
 }
 
+///< REQ_PCL_432: pcl_transport_template_set_peer_id() rejects a NULL context, NULL peer id, or empty peer id with PCL_ERR_INVALID.
 TEST(PclTransportTemplate, SetPeerIdValidation) {
   silence_logs();
   // A standalone transport -- no executor registrations to keep in sync,
@@ -355,6 +359,7 @@ TEST(PclTransportTemplate, SetPeerIdValidation) {
   restore_logs();
 }
 
+///< REQ_PCL_433: the template transport's vtable exposes the full pub/sub + unary-RPC shape (PCL.072 conformance).
 TEST(PclTransportTemplate, VtableShape) {
   silence_logs();
   LoopbackPair p;
@@ -364,6 +369,7 @@ TEST(PclTransportTemplate, VtableShape) {
   restore_logs();
 }
 
+///< REQ_PCL_434: hooks.close fires exactly once when the transport is destroyed.
 TEST(PclTransportTemplate, CloseRunsAfterDestroy) {
   silence_logs();
   auto* e = pcl_executor_create();
@@ -399,6 +405,7 @@ TEST(PclTransportTemplate, CloseRunsAfterDestroy) {
 // Regression: a transport that has been renamed via set_peer_id() must
 // still unregister *every* alias from its executor on destroy, otherwise
 // the executor keeps a dangling pointer into the freed adapter_ctx.
+///< REQ_PCL_435: destroy() unregisters every alias a transport was ever known by from the executor, not just its current peer id.
 TEST(PclTransportTemplate, DestroyClearsRenamedPeerAlias) {
   silence_logs();
 
@@ -434,6 +441,7 @@ TEST(PclTransportTemplate, DestroyClearsRenamedPeerAlias) {
 // Regression: hooks may report inbound PUBLISH frames with type_name=NULL.
 // The template must normalise that to "" so the executor's
 // post_remote_incoming() does not silently reject them.
+///< REQ_PCL_436: an inbound PUBLISH frame with a NULL type_name is normalised to an empty string so remote ingress is not silently rejected.
 TEST(PclTransportTemplate, RecvPublishNormalisesNullTypeName) {
   silence_logs();
   LoopbackPair p;
@@ -492,6 +500,7 @@ TEST(PclTransportTemplate, RecvPublishNormalisesNullTypeName) {
 // Regression: invoke_async must surface PCL_ERR_STATE when the send
 // thread is already stopping, instead of silently leaking a pending
 // callback that will never fire.
+///< REQ_PCL_437: invoke_async() returns PCL_ERR_STATE (without firing the callback) once the send thread has been stopped.
 TEST(PclTransportTemplate, InvokeAsyncFailsWhenSendStopped) {
   silence_logs();
 
@@ -539,6 +548,7 @@ TEST(PclTransportTemplate, InvokeAsyncFailsWhenSendStopped) {
 // silently exposed.  The previous implementation routed via
 // pcl_executor_post_service_request(), which always treats requests
 // as local -- bypassing remote-exposure rules.
+///< REQ_PCL_438: an inbound SVC_REQ for a LOCAL-only service is dispatched through the remote-aware executor path, so the handler is never invoked and the caller still receives an empty response.
 TEST(PclTransportTemplate, RemoteSvcReqHonoursLocalOnlyExposure) {
   silence_logs();
   LoopbackPair p;
@@ -619,6 +629,7 @@ TEST(PclTransportTemplate, RemoteSvcReqHonoursLocalOnlyExposure) {
 // kept the *raw* untruncated input, destroy()'s register_transport(NULL)
 // would compare the long alias against the executor's truncated slot
 // key and miss it -- leaving a dangling adapter_ctx in the executor.
+///< REQ_PCL_439: an alias exceeding the executor's fixed peer-id buffer is tracked in its truncated form, so destroy() correctly unregisters it.
 TEST(PclTransportTemplate, DestroyClearsLongPeerIdAlias) {
   silence_logs();
 
@@ -655,6 +666,7 @@ TEST(PclTransportTemplate, DestroyClearsLongPeerIdAlias) {
 // as that default.  Otherwise destroying a template that was only
 // registered as a named peer would silently wipe an unrelated
 // default transport.
+///< REQ_PCL_440: destroy() does not clear the executor's default transport slot unless this instance is currently installed there.
 TEST(PclTransportTemplate, DestroyPreservesUnrelatedDefaultTransport) {
   silence_logs();
 
@@ -707,6 +719,7 @@ TEST(PclTransportTemplate, DestroyPreservesUnrelatedDefaultTransport) {
 // Conformance -- the same suite any transport can extend.
 // ---------------------------------------------------------------------------
 
+///< REQ_PCL_441: the template transport passes the shared publish-round-trip conformance case (PCL.072).
 TEST(PclTransportTemplate_Conformance, PublishRoundTrip) {
   silence_logs();
   LoopbackPair p;
@@ -717,6 +730,7 @@ TEST(PclTransportTemplate_Conformance, PublishRoundTrip) {
   restore_logs();
 }
 
+///< REQ_PCL_442: the template transport passes the shared service-round-trip conformance case (PCL.072).
 TEST(PclTransportTemplate_Conformance, ServiceRoundTrip) {
   silence_logs();
   LoopbackPair p;
@@ -727,6 +741,7 @@ TEST(PclTransportTemplate_Conformance, ServiceRoundTrip) {
   restore_logs();
 }
 
+///< REQ_PCL_443: the template transport preserves publish ordering across multiple messages (PCL.072 conformance).
 TEST(PclTransportTemplate_Conformance, MultiplePublishesPreserveOrder) {
   silence_logs();
   LoopbackPair p;
@@ -960,7 +975,7 @@ TEST(PclTransportTemplate, DestroyDrainsQueuedFramesBehindSlowSend) {
   restore_logs();
 }
 
-///< REQ_PCL_290: once the vtable shutdown has stopped the send thread,
+///< REQ_PCL_320: once the vtable shutdown has stopped the send thread,
 ///< publish and invoke_async fail with PCL_ERR_STATE and a pending async
 ///< entry is rolled back rather than orphaned.
 TEST(PclTransportTemplate, PublishAndInvokeFailAfterVtableShutdown) {
@@ -1004,7 +1019,7 @@ TEST(PclTransportTemplate, DestroyClearsDefaultTransportWhenSelf) {
   pcl_executor_destroy(exec);
 }
 
-///< REQ_PCL_290: destroying a transport with un-responded async requests
+///< REQ_PCL_321: destroying a transport with un-responded async requests
 ///< drains and frees the pending correlation entries.
 TEST(PclTransportTemplate, DestroyFreesUnansweredPendingRequests) {
   silence_logs();

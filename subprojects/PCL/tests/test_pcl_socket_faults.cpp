@@ -283,6 +283,7 @@ private:
 
 // -- Tests ----------------------------------------------------------------
 
+///< REQ_PCL_409: the socket gateway container's configure fails with PCL_ERR_NOMEM when its port table is already full.
 TEST(PclSocketFaults, GatewayConfigureFailsWhenPortsAlreadyFull) {
   silence_logs();
   LoopbackPair pair;
@@ -297,6 +298,7 @@ TEST(PclSocketFaults, GatewayConfigureFailsWhenPortsAlreadyFull) {
   restore_logs();
 }
 
+///< REQ_PCL_410: pcl_socket_transport_invoke_remote_async() returns PCL_ERR_NOMEM and cleans up when the pending-record or wire-frame allocation fails.
 TEST(PclSocketFaults, InvokeRemoteAsyncFrameMallocFails) {
   silence_logs();
   LoopbackPair pair;
@@ -319,6 +321,7 @@ TEST(PclSocketFaults, InvokeRemoteAsyncFrameMallocFails) {
   restore_logs();
 }
 
+///< REQ_PCL_411: a mid-enqueue allocation failure in pcl_socket_transport_invoke_remote_async() rolls back the previously registered pending record.
 TEST(PclSocketFaults, InvokeRemoteAsyncEnqueueDataMallocFailsRollsBackPending) {
   silence_logs();
   LoopbackPair pair;
@@ -342,6 +345,7 @@ TEST(PclSocketFaults, InvokeRemoteAsyncEnqueueDataMallocFailsRollsBackPending) {
   restore_logs();
 }
 
+///< REQ_PCL_412: the client receive thread drops a malformed PUBLISH frame, a malformed SVC_RESP frame, and an unrecognised frame type byte without crashing.
 TEST(PclSocketFaults, RecvThreadDropsMalformedPublishResponseAndUnknownFrames) {
   silence_logs();
   uint16_t port = pick_free_tcp_port();
@@ -379,6 +383,7 @@ TEST(PclSocketFaults, RecvThreadDropsMalformedPublishResponseAndUnknownFrames) {
   restore_logs();
 }
 
+///< REQ_PCL_413: the client receive thread handles an allocation failure while decoding a service response's type-name string without crashing or leaking.
 TEST(PclSocketFaults, RecvThreadHandlesResponseTypeAllocationFailure) {
   silence_logs();
   uint16_t port = pick_free_tcp_port();
@@ -412,6 +417,7 @@ TEST(PclSocketFaults, RecvThreadHandlesResponseTypeAllocationFailure) {
   restore_logs();
 }
 
+///< REQ_PCL_414: pcl_socket_transport_create_client_ex() with bounded retries exercises the backoff-sleep path and fails closed (NULL) against an unresolvable host or a refused port.
 TEST(PclSocketFaults, ClientRetryCoversBadHostAndBackoffSleep) {
   silence_logs();
   auto* e = pcl_executor_create();
@@ -432,6 +438,7 @@ TEST(PclSocketFaults, ClientRetryCoversBadHostAndBackoffSleep) {
   restore_logs();
 }
 
+///< REQ_PCL_415: with auto_reconnect enabled, the client's reconnect backoff loop runs while the server stays down, and pcl_socket_transport_get_state() reports non-CONNECTED throughout.
 TEST(PclSocketFaults, AutoReconnectBackoffRunsWhileServerStaysDown) {
   silence_logs();
   LoopbackPair pair;

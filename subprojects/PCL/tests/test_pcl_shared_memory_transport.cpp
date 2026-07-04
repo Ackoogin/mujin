@@ -1394,7 +1394,7 @@ TEST(PclSharedMemoryTransport, TopicBackpressureConfigLifecycle) {
   restore_logs();
 }
 
-///< REQ_PCL_305: a publisher with no explicit endpoint route publishing via
+///< REQ_PCL_326: a publisher with no explicit endpoint route publishing via
 ///< the default shm transport uses the legacy default route modes without
 ///< error, and local subscribers still receive the message.
 TEST(PclSharedMemoryTransport, PublishWithoutRoutesUsesDefaultModes) {
@@ -1561,7 +1561,7 @@ TEST(PclSharedMemoryTransport, ServicePeerFilterYieldsEmptyResponse) {
   restore_logs();
 }
 
-///< REQ_PCL_306: a remote unary handler failure is converted into an empty
+///< REQ_PCL_307: a remote unary handler failure is converted into an empty
 ///< response so the caller is never left waiting.
 TEST(PclSharedMemoryTransport, ServiceHandlerErrorYieldsEmptyResponse) {
   silence_logs();
@@ -1620,7 +1620,7 @@ TEST(PclSharedMemoryTransport, ServiceHandlerErrorYieldsEmptyResponse) {
   restore_logs();
 }
 
-///< REQ_PCL_306: two providers advertising the same service make discovery
+///< REQ_PCL_308: two providers advertising the same service make discovery
 ///< ambiguous; unary and streaming invocation both fail closed.
 TEST(PclSharedMemoryTransport, AmbiguousProviderFailsClosed) {
   silence_logs();
@@ -1690,7 +1690,7 @@ TEST(PclSharedMemoryTransport, AmbiguousProviderFailsClosed) {
   restore_logs();
 }
 
-///< REQ_PCL_306: destroying a participant with un-answered unary and stream
+///< REQ_PCL_309: destroying a participant with un-answered unary and stream
 ///< requests frees the pending records and fires stream callbacks with
 ///< PCL_ERR_CANCELLED.
 TEST(PclSharedMemoryTransport, DestroyWithPendingRequestsCancelsThem) {
@@ -1780,7 +1780,7 @@ TEST(PclSharedMemoryTransport, DestroyWithPendingRequestsCancelsThem) {
   restore_logs();
 }
 
-///< REQ_PCL_306: the bus supports at most 8 participants; the ninth join
+///< REQ_PCL_310: the bus supports at most 8 participants; the ninth join
 ///< fails closed.
 TEST(PclSharedMemoryTransport, ParticipantSlotsExhausted) {
   silence_logs();
@@ -1860,7 +1860,7 @@ TEST(PclSharedMemoryTransport, TopicBackpressureRejectsOverlongTopic) {
   restore_logs();
 }
 
-///< REQ_PCL_305: subscriber ports with no explicit route fall back to the
+///< REQ_PCL_327: subscriber ports with no explicit route fall back to the
 ///< legacy defaults -- remote ingress is accepted when a default transport is
 ///< attached and refused when the executor has no transport at all.
 TEST(PclSharedMemoryTransport, RemoteIngressDefaultRouteModes) {
@@ -1966,7 +1966,7 @@ pcl_status_t stream_svc_configure(pcl_container_t* c, void* ud) {
 
 }  // namespace
 
-///< REQ_PCL_306: a stream request from a peer outside the provider's
+///< REQ_PCL_311: a stream request from a peer outside the provider's
 ///< allow-list is terminated with an error END frame instead of dispatching
 ///< the stream handler.
 TEST(PclSharedMemoryTransport, StreamPeerFilterEndsWithError) {
@@ -2020,7 +2020,7 @@ TEST(PclSharedMemoryTransport, StreamPeerFilterEndsWithError) {
   restore_logs();
 }
 
-///< REQ_PCL_306: a stream handler that fails instead of streaming causes an
+///< REQ_PCL_312: a stream handler that fails instead of streaming causes an
 ///< END frame carrying the handler's error status.
 TEST(PclSharedMemoryTransport, StreamHandlerErrorEndsStream) {
   silence_logs();
@@ -2074,7 +2074,7 @@ TEST(PclSharedMemoryTransport, StreamHandlerErrorEndsStream) {
   restore_logs();
 }
 
-///< REQ_PCL_306: the per-participant service table deduplicates repeated
+///< REQ_PCL_313: the per-participant service table deduplicates repeated
 ///< service names and caps at 16 advertised services.
 TEST(PclSharedMemoryTransport, ServiceTableDedupesAndCaps) {
   silence_logs();
@@ -2141,7 +2141,7 @@ TEST(PclSharedMemoryTransport, ServiceTableDedupesAndCaps) {
   restore_logs();
 }
 
-///< REQ_PCL_306: a request that arrives after the provider re-routed its
+///< REQ_PCL_314: a request that arrives after the provider re-routed its
 ///< service to local-only is refused at dispatch time -- unary requests get
 ///< an empty response, stream requests an error END frame.
 TEST(PclSharedMemoryTransport, StaleAdvertisementRefusedAtDispatch) {
@@ -2240,7 +2240,7 @@ TEST(PclSharedMemoryTransport, StaleAdvertisementRefusedAtDispatch) {
   restore_logs();
 }
 
-///< REQ_PCL_306: a service port with no explicit route falls back to the
+///< REQ_PCL_315: a service port with no explicit route falls back to the
 ///< legacy defaults -- advertised when a default transport is attached,
 ///< local-only (not advertised) when the executor has no transport.
 TEST(PclSharedMemoryTransport, ServiceWithoutRouteUsesDefaultModes) {
@@ -2307,7 +2307,7 @@ TEST(PclSharedMemoryTransport, ServiceWithoutRouteUsesDefaultModes) {
   restore_logs();
 }
 
-///< REQ_PCL_306: without a default transport attached, a routeless service
+///< REQ_PCL_316: without a default transport attached, a routeless service
 ///< stays local-only and is never advertised on the bus.
 TEST(PclSharedMemoryTransport, ServiceWithoutRouteOrTransportStaysLocal) {
   silence_logs();

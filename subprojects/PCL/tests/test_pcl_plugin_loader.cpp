@@ -24,10 +24,12 @@ using LastTopicFn = const char* (*)(void);
 
 }  // namespace
 
+///< REQ_PCL_381: pcl_plugin_unload_transport(NULL, ...) fails closed with PCL_ERR_INVALID.
 TEST(PclPluginLoader, UnloadTransportNullHandleFailsClosed) {
   EXPECT_EQ(pcl_plugin_unload_transport(nullptr, nullptr), PCL_ERR_INVALID);
 }
 
+///< REQ_PCL_382: pcl_plugin_unload_transport() degrades to a plain unload for a stateless plugin exporting no teardown symbol.
 TEST(PclPluginLoader, UnloadTransportDegradesToUnloadWithoutTeardownSymbol) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
@@ -39,6 +41,7 @@ TEST(PclPluginLoader, UnloadTransportDegradesToUnloadWithoutTeardownSymbol) {
   EXPECT_EQ(pcl_plugin_unload_transport(handle, transport), PCL_OK);
 }
 
+///< REQ_PCL_383: a loaded transport plugin's vtable is callable and its symbols are resolvable via pcl_plugin_symbol().
 TEST(PclPluginLoader, LoadTransportPluginAndCallVtable) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
@@ -75,6 +78,7 @@ TEST(PclPluginLoader, LoadTransportPluginAndCallVtable) {
   pcl_plugin_unload(handle);
 }
 
+///< REQ_PCL_384: a loaded transport plugin's vtable can be installed as the executor's default transport.
 TEST(PclPluginLoader, InstallLoadedTransportOnExecutor) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
@@ -99,6 +103,7 @@ TEST(PclPluginLoader, InstallLoadedTransportOnExecutor) {
   pcl_plugin_unload(handle);
 }
 
+///< REQ_PCL_385: pcl_plugin_load_codec() registers the plugin's codec by content_type and threads config_json into the entry point.
 TEST(PclPluginLoader, LoadCodecPluginRegistersByContentType) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -141,6 +146,7 @@ TEST(PclPluginLoader, LoadCodecPluginRegistersByContentType) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_386: pcl_plugin_load_codec() with a nonexistent path fails closed with PCL_ERR_NOT_FOUND.
 TEST(PclPluginLoader, MissingFileFailsClosed) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -155,6 +161,7 @@ TEST(PclPluginLoader, MissingFileFailsClosed) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_387: the shared-memory transport plugin constructs a working transport from its JSON configuration.
 TEST(PclPluginLoader, LoadSharedMemoryTransportPluginViaConfig) {
   pcl_executor_t* executor = pcl_executor_create();
   ASSERT_NE(executor, nullptr);
@@ -191,6 +198,7 @@ TEST(PclPluginLoader, LoadSharedMemoryTransportPluginViaConfig) {
   pcl_executor_destroy(executor);
 }
 
+///< REQ_PCL_388: the shared-memory transport plugin fails closed (PCL_ERR_STATE) on NULL configuration.
 TEST(PclPluginLoader, SharedMemoryTransportPluginNullConfigFailsClosed) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
@@ -201,6 +209,7 @@ TEST(PclPluginLoader, SharedMemoryTransportPluginNullConfigFailsClosed) {
   EXPECT_EQ(transport, nullptr);
 }
 
+///< REQ_PCL_389: the UDP transport plugin constructs a working transport from its JSON configuration.
 TEST(PclPluginLoader, LoadUdpTransportPluginViaConfig) {
   pcl_executor_t* executor = pcl_executor_create();
   ASSERT_NE(executor, nullptr);
@@ -235,6 +244,7 @@ TEST(PclPluginLoader, LoadUdpTransportPluginViaConfig) {
   pcl_executor_destroy(executor);
 }
 
+///< REQ_PCL_390: the UDP transport plugin fails closed (PCL_ERR_STATE) on NULL configuration.
 TEST(PclPluginLoader, UdpTransportPluginNullConfigFailsClosed) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
@@ -245,6 +255,7 @@ TEST(PclPluginLoader, UdpTransportPluginNullConfigFailsClosed) {
   EXPECT_EQ(transport, nullptr);
 }
 
+///< REQ_PCL_391: pcl_codec_registry_load_plugins_from_manifest() loads codec plugins listed in a manifest, ignoring comments/blanks and skipping a non-codec plugin path.
 TEST(PclPluginLoader, LoadCodecPluginsFromManifest) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -272,6 +283,7 @@ TEST(PclPluginLoader, LoadCodecPluginsFromManifest) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_392: pcl_codec_registry_load_plugins_from_manifest() with a nonexistent manifest fails closed with PCL_ERR_NOT_FOUND.
 TEST(PclPluginLoader, MissingManifestFailsClosed) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -281,6 +293,7 @@ TEST(PclPluginLoader, MissingManifestFailsClosed) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_393: pcl_plugin_load_codec() fails closed with PCL_ERR_STATE for a codec plugin declaring an incompatible ABI version.
 TEST(PclPluginLoader, BadAbiFailsClosed) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -296,6 +309,7 @@ TEST(PclPluginLoader, BadAbiFailsClosed) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_394: pcl_plugin_load_codec() fails closed with PCL_ERR_STATE when the plugin's entry point returns NULL.
 TEST(PclPluginLoader, CodecEntryReturningNullFailsClosed) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -311,6 +325,7 @@ TEST(PclPluginLoader, CodecEntryReturningNullFailsClosed) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_395: loading the same codec plugin twice yields the identical vtable pointer, which the registry rejects with PCL_ERR_STATE; the loader unloads the redundant handle.
 TEST(PclPluginLoader, ReloadingSameCodecVtableFailsClosed) {
   // Loading the same codec plugin twice yields the identical static vtable
   // pointer; the registry rejects the re-registration with PCL_ERR_STATE and
@@ -334,6 +349,7 @@ TEST(PclPluginLoader, ReloadingSameCodecVtableFailsClosed) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_396: pcl_plugin_load_transport() fails closed with PCL_ERR_NOT_FOUND when the library exports no ABI-version symbol.
 TEST(PclPluginLoader, TransportPluginWithoutAbiSymbolFailsClosed) {
   // A codec plugin has no pcl_transport_abi_version symbol.
   pcl_plugin_handle_t* handle = nullptr;
@@ -345,6 +361,7 @@ TEST(PclPluginLoader, TransportPluginWithoutAbiSymbolFailsClosed) {
   EXPECT_EQ(transport, nullptr);
 }
 
+///< REQ_PCL_397: pcl_plugin_load_transport() fails closed with PCL_ERR_STATE when the plugin's declared ABI version does not match PCL_TRANSPORT_ABI_VERSION.
 TEST(PclPluginLoader, TransportPluginWithWrongAbiFailsClosed) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
@@ -355,6 +372,7 @@ TEST(PclPluginLoader, TransportPluginWithWrongAbiFailsClosed) {
   EXPECT_EQ(transport, nullptr);
 }
 
+///< REQ_PCL_398: pcl_plugin_load_transport() fails closed with PCL_ERR_NOT_FOUND when the library exports no entry-point symbol.
 TEST(PclPluginLoader, TransportPluginWithoutEntrySymbolFailsClosed) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
@@ -365,6 +383,7 @@ TEST(PclPluginLoader, TransportPluginWithoutEntrySymbolFailsClosed) {
   EXPECT_EQ(transport, nullptr);
 }
 
+///< REQ_PCL_399: pcl_codec_registry_load_plugins_from_paths() skips NULL/empty/missing/non-codec entries and still loads the valid ones; NULL registry or path array (with nonzero count) is rejected.
 TEST(PclPluginLoader, LoadCodecPluginsFromPathsSkipsBadEntries) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -403,6 +422,7 @@ void set_env_var(const char* name, const char* value) {
 
 }  // namespace
 
+///< REQ_PCL_400: pcl_codec_registry_load_plugins_from_env() splits the environment value on the platform separator, skips a missing entry, and loads the rest; an unset variable is PCL_OK with nothing loaded.
 TEST(PclPluginLoader, LoadCodecPluginsFromEnv) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -441,6 +461,7 @@ TEST(PclPluginLoader, LoadCodecPluginsFromEnv) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_401: pcl_codec_registry_load_plugins_from_manifest() rejects NULL registry, NULL, or empty manifest path with PCL_ERR_INVALID.
 TEST(PclPluginLoader, ManifestNullArgsFailClosed) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -453,6 +474,7 @@ TEST(PclPluginLoader, ManifestNullArgsFailClosed) {
   pcl_codec_registry_destroy(registry);
 }
 
+///< REQ_PCL_402: pcl_plugin_open()/pcl_plugin_symbol()/pcl_plugin_unload() provide a portable raw dynamic-library wrapper, NULL-safe throughout.
 TEST(PclPluginLoader, OpenSymbolUnloadRawLibrary) {
   EXPECT_EQ(pcl_plugin_open(nullptr), nullptr);
   EXPECT_EQ(pcl_plugin_open("/no/such/library.so"), nullptr);
@@ -467,6 +489,7 @@ TEST(PclPluginLoader, OpenSymbolUnloadRawLibrary) {
   pcl_plugin_unload(nullptr);  // NULL-safe.
 }
 
+///< REQ_PCL_403: the socket transport plugin's server and client roles interoperate end-to-end purely through the plugin ABI, including gateway access and safe teardown-then-unload.
 TEST(PclPluginLoader, SocketPluginServerClientRoundTripViaEntry) {
   // Stand the socket transport up purely through the plugin ABI: a server
   // gateway on one executor, then a client on another executor connecting to
@@ -587,6 +610,7 @@ TEST(PclPluginLoader, SocketPluginServerClientRoundTripViaEntry) {
   pcl_executor_destroy(server_exec);
 }
 
+///< REQ_PCL_404: the socket transport plugin fails closed (PCL_ERR_STATE) on NULL config, missing role, unknown role, out-of-range port, missing port, or missing executor.
 TEST(PclPluginLoader, SocketPluginRejectsBadConfigs) {
   pcl_executor_t* executor = pcl_executor_create();
   ASSERT_NE(executor, nullptr);
@@ -641,6 +665,7 @@ TEST(PclPluginLoader, SocketPluginRejectsBadConfigs) {
   pcl_executor_destroy(executor);
 }
 
+///< REQ_PCL_405: two independent batch loads of the same codec plugin in one process each retain their own registry registration.
 TEST(PclPluginLoader, LoadCodecPluginsFromPathsTwiceRetainsBothHandles) {
   // Two successive batch loads in one process: the first grows the resident
   // list, the second reuses its spare capacity.
@@ -661,6 +686,7 @@ TEST(PclPluginLoader, LoadCodecPluginsFromPathsTwiceRetainsBothHandles) {
   pcl_codec_registry_destroy(second);
 }
 
+///< REQ_PCL_406: the shared-memory transport plugin fails closed (PCL_ERR_STATE) when bus_name, participant_id, or executor is missing from its configuration.
 TEST(PclPluginLoader, ShmPluginRejectsIncompleteConfigs) {
   pcl_executor_t* executor = pcl_executor_create();
   ASSERT_NE(executor, nullptr);
@@ -695,6 +721,7 @@ TEST(PclPluginLoader, ShmPluginRejectsIncompleteConfigs) {
   pcl_executor_destroy(executor);
 }
 
+///< REQ_PCL_407: the shared-memory transport plugin's teardown-then-unload path releases its live transport safely.
 TEST(PclPluginLoader, ShmPluginTeardownThenUnload) {
   pcl_executor_t* executor = pcl_executor_create();
   ASSERT_NE(executor, nullptr);
@@ -716,6 +743,7 @@ TEST(PclPluginLoader, ShmPluginTeardownThenUnload) {
   pcl_executor_destroy(executor);
 }
 
+///< REQ_PCL_408: the UDP transport plugin fails closed (PCL_ERR_STATE) when remote_host, remote_port, local_port (out of range), or executor is missing/invalid in its configuration.
 TEST(PclPluginLoader, UdpPluginRejectsIncompleteConfigs) {
   pcl_executor_t* executor = pcl_executor_create();
   ASSERT_NE(executor, nullptr);

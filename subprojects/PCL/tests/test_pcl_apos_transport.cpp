@@ -81,6 +81,7 @@ struct AposPair {
 
 }  // namespace
 
+///< REQ_PCL_444: the APOS stub delivers messages FIFO per channel and waitOnMultiChannel() reports which channel has data.
 TEST(AposStub, FifoAndWaitOnMultiChannel) {
   setupAPOS(42u);
 
@@ -113,6 +114,7 @@ TEST(AposStub, FifoAndWaitOnMultiChannel) {
   EXPECT_EQ(std::string(reinterpret_cast<char*>(out), size), "de");
 }
 
+///< REQ_PCL_445: the APOS transport's vtable exposes the full pub/sub + unary-RPC shape (PCL.072 conformance).
 TEST(PclTransportApos, VtableShape) {
   silence_logs();
   AposPair p;
@@ -122,6 +124,7 @@ TEST(PclTransportApos, VtableShape) {
   restore_logs();
 }
 
+///< REQ_PCL_446: the APOS transport passes the shared publish-round-trip conformance case (PCL.072).
 TEST(PclTransportApos_Conformance, PublishRoundTrip) {
   silence_logs();
   AposPair p;
@@ -132,6 +135,7 @@ TEST(PclTransportApos_Conformance, PublishRoundTrip) {
   restore_logs();
 }
 
+///< REQ_PCL_447: the APOS transport passes the shared service-round-trip conformance case (PCL.072).
 TEST(PclTransportApos_Conformance, ServiceRoundTrip) {
   silence_logs();
   AposPair p;
@@ -206,7 +210,7 @@ TEST(AposStub, BlockingWrappersAndDelayFunction) {
   EXPECT_EQ(rs, RS_ERROR);
 }
 
-///< REQ_PCL_297: non-blocking receive distinguishes an empty channel
+///< REQ_PCL_322: non-blocking receive distinguishes an empty channel
 ///< (RS_RESOURCE) from an undersized caller buffer (RS_ERROR, message kept).
 TEST(AposStub, NonBlockingReceiveEdgeCases) {
   setupAPOS(44u);
@@ -235,7 +239,7 @@ TEST(AposStub, NonBlockingReceiveEdgeCases) {
   EXPECT_EQ(size, 4);
 }
 
-///< REQ_PCL_297: an infinite wait (NULL timeout) blocks until a producer
+///< REQ_PCL_323: an infinite wait (NULL timeout) blocks until a producer
 ///< thread queues data on one of the watched channels.
 TEST(AposStub, InfiniteWaitWokenByProducerThread) {
   setupAPOS(45u);
@@ -304,7 +308,7 @@ TEST(PclTransportApos, OversizedTopicRejectedAtEncode) {
   restore_logs();
 }
 
-///< REQ_PCL_300: malformed or empty frames arriving on the receive channel
+///< REQ_PCL_325: malformed or empty frames arriving on the receive channel
 ///< are dropped without crashing the receive thread.
 TEST(PclTransportApos, MalformedInboundAposMessagesDropped) {
   silence_logs();
@@ -351,7 +355,7 @@ TEST(PclTransportApos, MalformedInboundAposMessagesDropped) {
   restore_logs();
 }
 
-///< REQ_PCL_297: a blocking receive whose message exceeds the caller's
+///< REQ_PCL_324: a blocking receive whose message exceeds the caller's
 ///< buffer maps the non-blocking RS_ERROR onto TM_ERROR.
 TEST(AposStub, BlockingReceiveUndersizedBufferIsError) {
   setupAPOS(47u);
