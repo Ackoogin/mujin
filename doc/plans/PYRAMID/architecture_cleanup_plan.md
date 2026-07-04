@@ -7,6 +7,13 @@ actions, manifest-routed remote ingress, capability direction/mode) is **not**
 duplicated here — that is tracked in
 [`transport_plugins.md`](transport_plugins.md).
 
+> **Tracking:** outstanding-work status for all PYRAMID docs is consolidated
+> in [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md). Items 1 and 2
+> below were **executed 2026-07-03** via
+> [`generator_refactor_plan.md`](generator_refactor_plan.md)
+> (commits `3fb876f..14d3b23`); this doc remains the design detail for the
+> rest.
+
 ## Completed directly (with the review)
 
 These were low-risk moves/deletes and one packaging defect fix, applied
