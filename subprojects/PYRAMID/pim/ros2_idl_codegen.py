@@ -6,7 +6,7 @@ Emits real ROS2 interface definitions (``.msg`` / ``.srv``) from the canonical
 ``.proto`` contracts, so PYRAMID-over-ROS2 is a first-class, introspectable ROS2
 citizen rather than an opaque ``PclEnvelope`` byte blob. This is the foundation
 of the "native IDL, not envelope" work tracked in
-``doc/plans/PYRAMID/transport_plugins_wip.md`` §1.
+``doc/plans/PYRAMID/transport_plugins.md`` §1.
 
 The interface shape mirrors the ``pyramid::domain_model::*`` structs (the native
 representation every wire codec round-trips) via the shared

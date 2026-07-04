@@ -107,11 +107,24 @@ already applied to the header path.
 
 ## WS-A — Typed ROS2 codec on the live wire (headline)
 
-The native IDL types and the round-trip-verified `domain_model`↔`pyramid_msgs`
-codec exist; the live ROS2 transport still carries the pass-through
-`PclEnvelope`. Detail: `transport_plugins.md` §1 and cleanup plan item 6.
-Keep the envelope path as the decoupled codec-over-ROS2 fallback; native
-typed becomes the default.
+Much of this stack is already delivered — the remaining work is the last
+wire switch, not greenfield. In the tree today:
+
+- **Done:** `pim/ros2_idl_codegen.py` emits real `.msg`/`.srv` from the proto
+  contracts (invoked by the ros2 backend; `pyramid_msgs` built by colcon via
+  `scripts/build_ros2_transport.sh`); `pim/ros2_marshal_codegen.py` emits the
+  `domain_model`↔`pyramid_msgs` codec (`pyramid_ros2_codec.hpp`), round-trip
+  verified by `test_ros2_codec_roundtrip` in the ament test suite.
+- **Exists, envelope-only:** the coupled plugin already registers
+  `application/ros2` (`plugins/pyramid_ros2_coupled_plugin.cpp`) — as a
+  passthrough envelope codec; `RclcppRuntimeAdapter`
+  (`ros2/src/rclcpp_runtime_adapter.cpp`) exists but is keyed to
+  `PclEnvelope.msg`, the only message in `ros2/msg/`.
+
+What's left: make the live path use the typed codec/messages instead of the
+envelope. Detail: `transport_plugins.md` §1 and cleanup plan item 6. Keep the
+envelope path as the decoupled codec-over-ROS2 fallback; native typed becomes
+the default.
 
 ### A1. Make the ROS2 marshal codegen package-neutral (prerequisite)
 
@@ -126,17 +139,24 @@ switch so A2/A3 do not land on a domain-coupled generator.
 - **Accept:** generic-layout fixture generates a compiling typed ROS2 codec
   with zero `pyramid` tokens; pyramid `pyramid_msgs` output unchanged.
 
-### A2. Register `application/ros2` as a real registry codec
+### A2. Back the existing `application/ros2` registration with the typed codec
+
+The content type and codec-vtable registration already exist in the coupled
+plugin as a passthrough envelope codec.
 
 - **Plan:** add a ros2 branch to the codec-plugin emitter (post-split home in
-  `pim/cpp/`), backed by the generated `ros2_codec`. The plugin must build
-  **inside the ament package** (rclcpp only resolves there), unlike the
+  `pim/cpp/`), backed by the generated `ros2_codec` from
+  `pyramid_ros2_codec.hpp`. The typed codec must build **inside the ament
+  package** (rclcpp/pyramid_msgs only resolve there), unlike the
   json/fb/protobuf plugins built by the top-level CMake — wire it into the
-  ament `CMakeLists` the IDL generator already maintains.
-- **Accept:** plugin loads through the standard registry path in the ament
-  build; fail-closed behaviour preserved when absent.
+  ament `CMakeLists` the IDL generator already maintains; the passthrough
+  stays as the envelope fallback.
+- **Accept:** typed codec loads through the standard registry path in the
+  ament build; fail-closed behaviour preserved when absent.
 
-### A3. Typed `RclcppRuntimeAdapter`
+### A3. Switch `RclcppRuntimeAdapter` to typed messages
+
+The adapter exists and works — over `PclEnvelope`.
 
 - **Plan:** publish/serve the `pyramid_msgs` messages (e.g.
   `rclcpp::GenericPublisher`/`GenericSubscription` keyed by the
