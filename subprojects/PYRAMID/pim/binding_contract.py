@@ -195,6 +195,19 @@ class PyramidCompatNamingPolicy:
     data_model_types_namespace = "pyramid::domain_model"
     data_model_types_header = "pyramid_data_model_types.hpp"
 
+    # Canonical base/common short-name mapping for the PYRAMID compat layout.
+    # Single source of truth for the pyramid.data_model.base.* / common.* domain
+    # literals so the language naming modules (cpp/ada) and the gRPC backend do
+    # not each hardcode them. Each value equals the type's own last segment, so
+    # the mapping is a semantic anchor rather than a rename.
+    base_type_map = {
+        "pyramid.data_model.base.Identifier": "Identifier",
+        "pyramid.data_model.base.Query": "Query",
+        "pyramid.data_model.base.Ack": "Ack",
+        "pyramid.data_model.common.Query": "Query",
+        "pyramid.data_model.common.Ack": "Ack",
+    }
+
     def cpp_namespace_for_package(self, package: str) -> str:
         if package == self.data_model_proto_root:
             return self.data_model_types_namespace
@@ -322,6 +335,10 @@ class GenericNamingPolicy:
     """Naming policy that derives names directly from proto package identity."""
 
     layout = "generic"
+
+    # No domain base/common short-name mapping on the generic layout: names come
+    # straight from proto package identity, so there are no compat literals.
+    base_type_map: dict = {}
 
     def cpp_namespace_for_package(self, package: str) -> str:
         return package.replace(".", "::") if package else "proto"

@@ -29,14 +29,10 @@ from binding_contract import (
 
 OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete', 'Cancel']
 
-# Base-type short names from pyramid.data_model.base.* and common.*
-BASE_TYPE_MAP = {
-    'pyramid.data_model.base.Identifier': 'Identifier',
-    'pyramid.data_model.base.Query':      'Query',
-    'pyramid.data_model.base.Ack':        'Ack',
-    'pyramid.data_model.common.Query':    'Query',
-    'pyramid.data_model.common.Ack':      'Ack',
-}
+# Base-type short names from pyramid.data_model.base.* and common.*.
+# The domain literals live in the PYRAMID compat policy (single source of
+# truth); this module just consumes them (see C3 in the PYRAMID TODO).
+BASE_TYPE_MAP = PyramidCompatNamingPolicy.base_type_map
 
 # Standard topic names -- tactical_objects bridge-facing topics aligned
 # directly to canonical proto-derived PYRAMID payloads.

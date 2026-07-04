@@ -40,12 +40,9 @@ _DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
 
 _OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete']
 
-_BASE_TYPE_MAP = {
-    'pyramid.data_model.base.Identifier': 'Identifier',
-    'pyramid.data_model.common.Query': 'Query',
-    'pyramid.data_model.common.Ack': 'Ack',
-    'pyramid.data_model.base.Ack': 'Ack',
-}
+# Domain base/common short-name mapping lives in the PYRAMID compat policy
+# (single source of truth); consumed here for the pyramid-layout gate below.
+_BASE_TYPE_MAP = PyramidCompatNamingPolicy.base_type_map
 
 
 def _ada_pkg_segment(segment: str) -> str:

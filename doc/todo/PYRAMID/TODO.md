@@ -67,7 +67,7 @@ behind explicit triggers.
 | 7 | A4 Plain-rclcpp interop proof | S |
 | 8 | C1 Retire `src/protobuf_support/` | S/M |
 | 9 | C2 Manifest-driven CMake completion + default flip | M |
-| 10 | C3 Domain literals behind the compat policy + source guard | M |
+| 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
 | 11 | C6 Document remaining allowed facade leaks | S |
 | 12 | C4 Retire codegen shims (after one SDK release) | S |
 | 13 | C5 Windows parity pass | S/M |
@@ -314,6 +314,19 @@ still regex-parses module identity from
   produce identical target source lists on both trees; default flipped.
 
 ### C3. Confine residual domain knowledge to the compat policy (cleanup item 5)
+
+**✅ Done 2026-07-04.** Made `PyramidCompatNamingPolicy.base_type_map` (in
+`binding_contract.py`) the single source of truth for the
+`pyramid.data_model.base.*`/`common.*` short-name mapping; `pim/cpp/naming.py`,
+`pim/ada/naming.py`, and `pim/backends/grpc_backend.py` now consume it instead
+of each hardcoding a copy (`GenericNamingPolicy.base_type_map == {}`). Added
+`tests/test_no_domain_literals.py` asserting the map key literals appear only in
+the compat policy, not the consumer modules, and that the map stays a semantic
+anchor (each value == last segment). Byte-identical pyramid output re-verified
+via old-vs-new `diff -qr` across cpp+ada+grpc+ros2. **Residual (not blocking):**
+a lone `packages_with_messages.discard('pyramid.data_model.base')` domain
+literal remains in `_service_codec_imports` (`cpp/naming.py`) — a no-op on the
+generic layout; route through `data_model_proto_root` in a later pass.
 
 `BASE_TYPE_MAP` (now in `pim/cpp/naming.py`) hardcodes
 `pyramid.data_model.base.*`/`common.*` short-name mapping; residual

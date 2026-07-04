@@ -19,7 +19,7 @@ from proto_parser import (
     camel_to_snake as _camel_to_snake,
     camel_to_lower_snake as _camel_to_lower_snake,
 )
-from binding_contract import TopicSpecResolver
+from binding_contract import TopicSpecResolver, PyramidCompatNamingPolicy
 from cabi_codegen import _c_struct_name
 
 
@@ -27,14 +27,10 @@ from cabi_codegen import _c_struct_name
 
 OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete', 'Cancel']
 
-# Base-type short names from pyramid.data_model.base.* and common.*
-BASE_TYPE_MAP = {
-    'pyramid.data_model.base.Identifier': 'Identifier',
-    'pyramid.data_model.base.Query':      'Query',
-    'pyramid.data_model.base.Ack':        'Ack',
-    'pyramid.data_model.common.Query':    'Query',
-    'pyramid.data_model.common.Ack':      'Ack',
-}
+# Base-type short names from pyramid.data_model.base.* and common.*.
+# The domain literals live in the PYRAMID compat policy (single source of
+# truth); this module just consumes them (see C3 in the PYRAMID TODO).
+BASE_TYPE_MAP = PyramidCompatNamingPolicy.base_type_map
 
 # Wire-name service prefix derived from proto service name
 # e.g. Object_Of_Interest_Service -> "object_of_interest"
