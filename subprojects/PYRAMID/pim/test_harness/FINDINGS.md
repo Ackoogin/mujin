@@ -51,10 +51,18 @@ Reproduce: `./viability_check.sh` (or `.bat`); comms test:
 
 ## Remaining follow-ups
 
-- **FlatBuffers `.cpp` JSON-bridge include/call derivation** still assumes
-  single-segment data-model packages; nested packages (e.g.
-  `common_pim_components.authorisation`) need the same full-namespace
-  treatment applied to the header path.
+- **FlatBuffers `.cpp` JSON-bridge include/call derivation** for nested
+  data-model packages appears resolved (verified 2026-07-04: the bridge
+  derives includes and calls via `_cpp_type_namespace_for_type`, and the
+  generated output for `common_pim_components.authorisation` carries the
+  full-namespace include and calls). Close-out — a nested-package fixture
+  test and a compile-gate re-run — is tracked as item B2 in
+  `doc/todo/PYRAMID/TODO.md`.
+- **Ada FlatBuffers codec skips the reserved-word package rename**
+  (found 2026-07-04): generated `flatbuffers/ada/*-flatbuffers_codec` units
+  reference `Pyramid.Data_Model.Generic_Pim.Generic.Types` (illegal Ada;
+  the unit is correctly emitted as `Generic_Pkg.Types`). Tracked as item B3
+  in `doc/todo/PYRAMID/TODO.md`.
 - The hardcoded topic catalog concern noted here was since resolved:
   `standard_topics.py` is now data-driven
   (`pim/topic_metadata/tactical_objects_topics.json`).

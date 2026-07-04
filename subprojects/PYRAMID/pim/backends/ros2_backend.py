@@ -95,7 +95,7 @@ class Ros2Backend(codec_backends.CodecBackend):
         # Native ROS2 IDL (.msg/.srv) generated alongside the cpp support layer,
         # into <bindings>/ros2/idl/{msg,srv}. This is the typed, introspectable
         # ROS2 surface that replaces the opaque PclEnvelope (see the IDL plan in
-        # doc/plans/PYRAMID/transport_plugins_wip.md). The ament interface
+        # doc/plans/PYRAMID/transport_plugins.md). The ament interface
         # package pyramid_msgs globs these and runs them through rosidl.
         idl_dir = output_dir.parent / 'idl'
         idl_service_modules = (

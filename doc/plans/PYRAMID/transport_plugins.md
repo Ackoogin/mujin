@@ -1,7 +1,8 @@
 # PYRAMID Transport & Codec Plugins — Capability & Remaining Work
 
-This is the single living doc for the PYRAMID transport/codec plugin work: what
-the system can do today, and what is left. **How the plugin system works and how
+This doc records the transport/codec plugin capability and the detail of its
+remaining work; execution order and status across all PYRAMID work is tracked
+in [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md). **How the plugin system works and how
 to use it** lives in the architecture reference —
 [`subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
 (plugin model, capability model + matrix, config/deploy/author) and
