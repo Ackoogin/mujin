@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
@@ -368,6 +369,13 @@ TEST(PclUdpTransport, SubscribeAndShutdownVtable) {
   ASSERT_NE(vt->shutdown, nullptr);
   vt->shutdown(vt->adapter_ctx);
   vt->shutdown(nullptr);  // NULL-safe
+
+  const char payload[] = "after-shutdown";
+  pcl_msg_t msg = {};
+  msg.data = payload;
+  msg.size = static_cast<uint32_t>(sizeof(payload) - 1u);
+  msg.type_name = "T";
+  EXPECT_EQ(vt->publish(vt->adapter_ctx, "t", &msg), PCL_ERR_STATE);
 
   pcl_udp_transport_destroy(udp);
   pcl_executor_destroy(exec);

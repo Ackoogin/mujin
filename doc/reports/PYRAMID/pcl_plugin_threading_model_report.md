@@ -1,6 +1,6 @@
 # PCL Plugin Threading Model Report
 
-Status: 2026-07-04.
+Status: 2026-07-04.  Updated after the UDP transport egress fix.
 
 This report records the threading-model review for PCL transports and PYRAMID
 runtime plugins.  It focuses on the rule that PCL component business logic runs
@@ -45,10 +45,15 @@ The non-conforming paths are:
 
 | Area | Issue | Primary files |
 |------|-------|---------------|
-| UDP transport | `publish` calls `sendto` directly from the executor thread. | `subprojects/PCL/src/pcl_transport_udp.c` |
 | Shared-memory transport | default publish is fail-fast, but configured topic backpressure sleeps on the caller thread; service and stream invoke paths poll discovery; bus lock waits indefinitely. | `subprojects/PCL/src/pcl_transport_shared_memory.c`, `subprojects/PCL/include/pcl/pcl_transport_shared_memory.h` |
 | ROS2 coupled plugin | consumed unary/stream calls synchronously wait on ROS2 services and stream completion from the executor call path. | `subprojects/PYRAMID/plugins/pyramid_ros2_coupled_plugin.cpp`, `subprojects/PYRAMID/ros2/src/rclcpp_runtime_adapter.cpp`, `subprojects/PYRAMID/pim/backends/ros2_backend.py` |
 | gRPC coupled plugin | consumed unary/stream calls invoke blocking generated gRPC clients from the executor call path and call callbacks before returning. | `subprojects/PYRAMID/plugins/pyramid_grpc_coupled_plugin.cpp`, `subprojects/PYRAMID/pim/backends/grpc_backend.py` |
+
+Resolved paths:
+
+| Area | Resolution | Verification |
+|------|------------|--------------|
+| UDP transport | `publish` now formats the datagram and enqueues it to a transport-owned send thread; only that worker calls `sendto`.  Shutdown stops egress and future publishes fail with `PCL_ERR_STATE`. | Built `test_pcl_udp_transport`; ran `ctest --test-dir build -C Release -R "PclUdpTransport\\." --output-on-failure` |
 
 ## Fix plan
 

@@ -13,6 +13,8 @@
 ///   - binds a local UDP socket (\p local_port, or 0 for ephemeral)
 ///   - sends published datagrams to a single configured peer (\p remote_host:\p remote_port)
 ///   - dispatches inbound datagrams to the executor as remote ingress from the configured peer_id
+///   - owns a send thread; publish() only formats and queues datagrams, so PCL
+///     business logic never blocks in sendto()
 ///
 /// For many-to-one or one-to-many pub/sub, instantiate one UDP transport
 /// per peer and register each one separately via
@@ -39,10 +41,10 @@ typedef struct pcl_udp_transport_t pcl_udp_transport_t;
 
 /// \brief Create a UDP transport bound to \p local_port, targeting \p remote_host:\p remote_port.
 ///
-/// Binds a UDP socket to \p local_port (0 = ephemeral) and records the
-/// remote endpoint used by publish().  Spawns a receive thread that
-/// decodes PUBLISH datagrams and delivers them to the executor via
-/// pcl_executor_post_remote_incoming().
+/// Binds a UDP socket to \p local_port (0 = ephemeral) and records the remote
+/// endpoint used by publish().  Spawns a send thread for queued outbound
+/// datagrams and a receive thread that decodes PUBLISH datagrams and delivers
+/// them to the executor via pcl_executor_post_remote_incoming().
 ///
 /// \param local_port    Local UDP port to bind (0 = OS-assigned ephemeral).
 /// \param remote_host   Remote peer hostname or IP string.
@@ -74,8 +76,8 @@ const pcl_transport_t* pcl_udp_transport_get_transport(pcl_udp_transport_t* ctx)
 
 /// \brief Destroy a UDP transport and release all resources.
 ///
-/// Signals the receive thread to stop, closes the socket, joins the
-/// thread, and frees the handle.
+/// Signals the send and receive threads to stop, joins both threads, closes the
+/// socket, and frees the handle.
 void pcl_udp_transport_destroy(pcl_udp_transport_t* ctx);
 
 #ifdef __cplusplus

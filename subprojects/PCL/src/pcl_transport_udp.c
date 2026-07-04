@@ -48,6 +48,12 @@
 
 // -- Main transport struct ------------------------------------------------
 
+typedef struct pcl_udp_outbound_frame_t {
+  uint8_t*                         data;
+  uint32_t                         size;
+  struct pcl_udp_outbound_frame_t* next;
+} pcl_udp_outbound_frame_t;
+
 struct pcl_udp_transport_t {
   pcl_executor_t* executor;
   pcl_transport_t transport;
@@ -60,12 +66,23 @@ struct pcl_udp_transport_t {
 
   volatile int     recv_stop;
   volatile int     recv_running;
+  volatile int     send_stop;
 
 #ifdef _WIN32
   HANDLE           recv_thread;
+  HANDLE           send_thread;
+  CRITICAL_SECTION send_lock;
+  HANDLE           send_event;
 #else
   pthread_t        recv_thread;
+  pthread_t        send_thread;
+  pthread_mutex_t  send_lock;
+  pthread_cond_t   send_cond;
 #endif
+  int              send_sync_ready;
+
+  pcl_udp_outbound_frame_t* send_head;
+  pcl_udp_outbound_frame_t* send_tail;
 };
 
 // -- Byte-order helpers ---------------------------------------------------
@@ -90,6 +107,168 @@ static void udp_write_u32_be(uint8_t* p, uint32_t v) {
   p[3] = (uint8_t)(v & 0xFF);
 }
 
+static void udp_free_outbound_frame(pcl_udp_outbound_frame_t* frame) {
+  if (!frame) return;
+  pcl_free(frame->data);
+  pcl_free(frame);
+}
+
+static void udp_free_outbound_queue(struct pcl_udp_transport_t* ctx) {
+  pcl_udp_outbound_frame_t* frame;
+  if (!ctx) return;
+  frame = ctx->send_head;
+  ctx->send_head = NULL;
+  ctx->send_tail = NULL;
+  while (frame) {
+    pcl_udp_outbound_frame_t* next = frame->next;
+    udp_free_outbound_frame(frame);
+    frame = next;
+  }
+}
+
+static pcl_status_t udp_enqueue_outbound_frame(struct pcl_udp_transport_t* ctx,
+                                               uint8_t*                    data,
+                                               uint32_t                    size) {
+  pcl_udp_outbound_frame_t* frame;
+
+  if (!ctx || !data || size == 0u) return PCL_ERR_INVALID;
+  if (ctx->send_stop) return PCL_ERR_STATE;
+
+  frame = (pcl_udp_outbound_frame_t*)pcl_alloc(sizeof(*frame));
+  if (!frame) return PCL_ERR_NOMEM;
+
+  frame->data = data;
+  frame->size = size;
+  frame->next = NULL;
+
+#ifdef _WIN32
+  EnterCriticalSection(&ctx->send_lock);
+  if (ctx->send_stop) {
+    LeaveCriticalSection(&ctx->send_lock);
+    pcl_free(frame);
+    return PCL_ERR_STATE;
+  }
+  if (ctx->send_tail) {
+    ctx->send_tail->next = frame;
+  } else {
+    ctx->send_head = frame;
+  }
+  ctx->send_tail = frame;
+  LeaveCriticalSection(&ctx->send_lock);
+  SetEvent(ctx->send_event);
+#else
+  pthread_mutex_lock(&ctx->send_lock);
+  if (ctx->send_stop) {
+    pthread_mutex_unlock(&ctx->send_lock);
+    pcl_free(frame);
+    return PCL_ERR_STATE;
+  }
+  if (ctx->send_tail) {
+    ctx->send_tail->next = frame;
+  } else {
+    ctx->send_head = frame;
+  }
+  ctx->send_tail = frame;
+  pthread_cond_signal(&ctx->send_cond);
+  pthread_mutex_unlock(&ctx->send_lock);
+#endif
+
+  return PCL_OK;
+}
+
+static void udp_signal_send_stop(struct pcl_udp_transport_t* ctx) {
+  if (!ctx || !ctx->send_sync_ready) return;
+  ctx->send_stop = 1;
+#ifdef _WIN32
+  SetEvent(ctx->send_event);
+#else
+  pthread_mutex_lock(&ctx->send_lock);
+  pthread_cond_signal(&ctx->send_cond);
+  pthread_mutex_unlock(&ctx->send_lock);
+#endif
+}
+
+static void udp_destroy_send_sync(struct pcl_udp_transport_t* ctx) {
+  if (!ctx || !ctx->send_sync_ready) return;
+#ifdef _WIN32
+  if (ctx->send_event) {
+    CloseHandle(ctx->send_event);
+    ctx->send_event = NULL;
+  }
+  DeleteCriticalSection(&ctx->send_lock);
+#else
+  pthread_cond_destroy(&ctx->send_cond);
+  pthread_mutex_destroy(&ctx->send_lock);
+#endif
+  ctx->send_sync_ready = 0;
+}
+
+// -- Send thread -----------------------------------------------------------
+
+#ifdef _WIN32
+static DWORD WINAPI udp_send_thread_main(LPVOID arg)
+#else
+static void* udp_send_thread_main(void* arg)
+#endif
+{
+  struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)arg;
+
+  for (;;) {
+    pcl_udp_outbound_frame_t* frame = NULL;
+
+#ifdef _WIN32
+    for (;;) {
+      EnterCriticalSection(&ctx->send_lock);
+      frame = ctx->send_head;
+      if (frame) {
+        ctx->send_head = frame->next;
+        if (!ctx->send_head) ctx->send_tail = NULL;
+      }
+      LeaveCriticalSection(&ctx->send_lock);
+
+      if (frame || ctx->send_stop) break;
+      WaitForSingleObject(ctx->send_event, INFINITE);
+    }
+#else
+    pthread_mutex_lock(&ctx->send_lock);
+    while (!ctx->send_stop && ctx->send_head == NULL) {
+      pthread_cond_wait(&ctx->send_cond, &ctx->send_lock);
+    }
+    frame = ctx->send_head;
+    if (frame) {
+      ctx->send_head = frame->next;
+      if (!ctx->send_head) ctx->send_tail = NULL;
+    }
+    pthread_mutex_unlock(&ctx->send_lock);
+#endif
+
+    if (!frame) {
+      if (ctx->send_stop) break;
+      continue;
+    }
+
+    if (ctx->sock != PCL_INVALID_SOCKET) {
+#ifdef _WIN32
+      (void)sendto(ctx->sock, (const char*)frame->data, (int)frame->size, 0,
+                   (const struct sockaddr*)&ctx->remote_addr,
+                   (int)sizeof(ctx->remote_addr));
+#else
+      (void)sendto(ctx->sock, frame->data, frame->size, 0,
+                   (const struct sockaddr*)&ctx->remote_addr,
+                   (socklen_t)sizeof(ctx->remote_addr));
+#endif
+    }
+
+    udp_free_outbound_frame(frame);
+  }
+
+#ifdef _WIN32
+  return 0;
+#else
+  return NULL;
+#endif
+}
+
 // -- Transport vtable: publish (called on PCL main thread) ----------------
 
 static pcl_status_t udp_publish(void*            adapter_ctx,
@@ -100,7 +279,7 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
   uint32_t data_len, payload_size;
   uint8_t* buf;
   size_t   off;
-  int      rc;
+  pcl_status_t rc;
 
   if (!ctx || ctx->sock == PCL_INVALID_SOCKET || !topic || !msg) return PCL_ERR_INVALID;
   /* A nonzero size with a null data pointer would reserve data_len bytes in the
@@ -132,18 +311,11 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
     memcpy(buf + off, msg->data, data_len);
   }
 
-#ifdef _WIN32
-  rc = sendto(ctx->sock, (const char*)buf, (int)payload_size, 0,
-              (const struct sockaddr*)&ctx->remote_addr,
-              (int)sizeof(ctx->remote_addr));
-#else
-  rc = (int)sendto(ctx->sock, buf, payload_size, 0,
-                   (const struct sockaddr*)&ctx->remote_addr,
-                   (socklen_t)sizeof(ctx->remote_addr));
-#endif
-
-  pcl_free(buf);
-  return (rc < 0) ? PCL_ERR_INVALID : PCL_OK;
+  rc = udp_enqueue_outbound_frame(ctx, buf, payload_size);
+  if (rc != PCL_OK) {
+    pcl_free(buf);
+  }
+  return rc;
 }
 
 // -- Transport vtable: subscribe / shutdown -------------------------------
@@ -159,6 +331,7 @@ static void udp_shutdown(void* adapter_ctx) {
   struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)adapter_ctx;
   if (!ctx) return;
   ctx->recv_stop = 1;
+  udp_signal_send_stop(ctx);
 }
 
 // -- Receive thread -------------------------------------------------------
@@ -299,7 +472,30 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   ctx->transport.shutdown     = udp_shutdown;
   ctx->transport.adapter_ctx  = ctx;
 
+#ifdef _WIN32
+  InitializeCriticalSection(&ctx->send_lock);
+  ctx->send_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (!ctx->send_event) {
+    DeleteCriticalSection(&ctx->send_lock);
+    pcl_free(ctx);
+    return NULL;
+  }
+  ctx->send_sync_ready = 1;
+#else
+  if (pthread_mutex_init(&ctx->send_lock, NULL) != 0) {
+    pcl_free(ctx);
+    return NULL;
+  }
+  if (pthread_cond_init(&ctx->send_cond, NULL) != 0) {
+    pthread_mutex_destroy(&ctx->send_lock);
+    pcl_free(ctx);
+    return NULL;
+  }
+  ctx->send_sync_ready = 1;
+#endif
+
   if (udp_resolve_remote(remote_host, remote_port, &ctx->remote_addr) != 0) {
+    udp_destroy_send_sync(ctx);
     pcl_free(ctx);
     return NULL;
   }
@@ -307,6 +503,7 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   ctx->sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (ctx->sock == PCL_INVALID_SOCKET) {
     // GCOVR_EXCL_START: socket() fails only on fd/kernel exhaustion.
+    udp_destroy_send_sync(ctx);
     pcl_free(ctx);
     return NULL;
     // GCOVR_EXCL_STOP
@@ -323,6 +520,7 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
     // GCOVR_EXCL_START: with SO_REUSEADDR set, binding fails only on
     // platform-specific port conflicts that cannot be forced portably.
     pcl_close_socket(ctx->sock);
+    udp_destroy_send_sync(ctx);
     pcl_free(ctx);
     return NULL;
     // GCOVR_EXCL_STOP
@@ -355,17 +553,40 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
 #endif
 
 #ifdef _WIN32
+  ctx->send_thread = CreateThread(NULL, 0, udp_send_thread_main, ctx, 0, NULL);
+  if (!ctx->send_thread) {
+    pcl_close_socket(ctx->sock);
+    udp_destroy_send_sync(ctx);
+    pcl_free(ctx);
+    return NULL;
+  }
   ctx->recv_thread = CreateThread(NULL, 0, udp_recv_thread_main, ctx, 0, NULL);
   if (!ctx->recv_thread) {
+    udp_signal_send_stop(ctx);
+    WaitForSingleObject(ctx->send_thread, 5000);
+    CloseHandle(ctx->send_thread);
     pcl_close_socket(ctx->sock);
+    udp_destroy_send_sync(ctx);
     pcl_free(ctx);
     return NULL;
   }
 #else
-  if (pthread_create(&ctx->recv_thread, NULL, udp_recv_thread_main, ctx) != 0) {
+  if (pthread_create(&ctx->send_thread, NULL, udp_send_thread_main, ctx) != 0) {
     // GCOVR_EXCL_START: thread creation fails only on kernel resource
     // exhaustion, not injectable in normal testing.
     pcl_close_socket(ctx->sock);
+    udp_destroy_send_sync(ctx);
+    pcl_free(ctx);
+    return NULL;
+    // GCOVR_EXCL_STOP
+  }
+  if (pthread_create(&ctx->recv_thread, NULL, udp_recv_thread_main, ctx) != 0) {
+    // GCOVR_EXCL_START: thread creation fails only on kernel resource
+    // exhaustion, not injectable in normal testing.
+    udp_signal_send_stop(ctx);
+    pthread_join(ctx->send_thread, NULL);
+    pcl_close_socket(ctx->sock);
+    udp_destroy_send_sync(ctx);
     pcl_free(ctx);
     return NULL;
     // GCOVR_EXCL_STOP
@@ -411,6 +632,20 @@ void pcl_udp_transport_destroy(pcl_udp_transport_t* ctx_opaque) {
   }
 
   ctx->recv_stop = 1;
+  udp_signal_send_stop(ctx);
+
+#ifdef _WIN32
+  if (ctx->send_thread) {
+    WaitForSingleObject(ctx->send_thread, 5000);
+    CloseHandle(ctx->send_thread);
+    ctx->send_thread = NULL;
+  }
+#else
+  if (ctx->send_thread) {
+    pthread_join(ctx->send_thread, NULL);
+    ctx->send_thread = 0;
+  }
+#endif
 
   if (ctx->sock != PCL_INVALID_SOCKET) {
     pcl_close_socket(ctx->sock);
@@ -430,5 +665,7 @@ void pcl_udp_transport_destroy(pcl_udp_transport_t* ctx_opaque) {
   }
 #endif
 
+  udp_free_outbound_queue(ctx);
+  udp_destroy_send_sync(ctx);
   pcl_free(ctx);
 }
