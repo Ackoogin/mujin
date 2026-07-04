@@ -1,7 +1,10 @@
 # PYRAMID — Consolidated TODO & Plan
 
-**Last consolidated: 2026-07-04.** This is the single tracker for all
-outstanding PCL/PYRAMID work. It consolidates the remaining items from:
+**Last consolidated: 2026-07-04. All items verified against the tree on
+2026-07-04** (both contract trees regenerated with all backends; statuses
+below reflect generated output and build wiring, not just the source docs).
+This is the single tracker for all outstanding PCL/PYRAMID work. It
+consolidates the remaining items from:
 
 | Source doc | Role now |
 |------------|----------|
@@ -56,17 +59,18 @@ behind explicit triggers.
 | Order | Item | Size |
 |-------|------|------|
 | 1 | B1 Ada consumed-side parent package stub | S |
-| 2 | B2 FlatBuffers JSON-bridge nested packages | S |
-| 3 | A1 Package-neutral ROS2 marshal codegen | M |
-| 4 | A2 `application/ros2` registry codec plugin | M |
-| 5 | A3 Typed `RclcppRuntimeAdapter` on the live wire | M/L |
-| 6 | A4 Plain-rclcpp interop proof | S |
-| 7 | C1 Retire `src/protobuf_support/` | M |
-| 8 | C2 Manifest-driven CMake completion + default flip | M |
-| 9 | C3 Domain literals behind the compat policy + source guard | M |
-| 10 | C6 Document remaining allowed facade leaks | S |
-| 11 | C4 Retire codegen shims (after one SDK release) | S |
-| 12 | C5 Windows parity pass | S/M |
+| 2 | B3 Ada FlatBuffers codec misses reserved-word rename | S |
+| 3 | B2 Close out FlatBuffers JSON-bridge nested packages | S |
+| 4 | A1 Package-neutral ROS2 marshal codegen | M |
+| 5 | A2 `application/ros2` registry codec plugin | M |
+| 6 | A3 Typed `RclcppRuntimeAdapter` on the live wire | M/L |
+| 7 | A4 Plain-rclcpp interop proof | S |
+| 8 | C1 Retire `src/protobuf_support/` | S/M |
+| 9 | C2 Manifest-driven CMake completion + default flip | M |
+| 10 | C3 Domain literals behind the compat policy + source guard | M |
+| 11 | C6 Document remaining allowed facade leaks | S |
+| 12 | C4 Retire codegen shims (after one SDK release) | S |
+| 13 | C5 Windows parity pass | S/M |
 
 C1–C3 are independent of WS-A and of each other; they can be picked up in
 parallel whenever there is slack. C4 is time-gated, C5 environment-gated.
@@ -77,11 +81,12 @@ parallel whenever there is slack. C4 is time-gated, C5 environment-gated.
 
 ### B1. Ada consumed-side generic-layout parent package stub missing
 
-Recorded in `generator_refactor_plan.md` follow-ups. Consumed-side
-generic-layout facades whose service has no consumed types package get no
-parent package stub (e.g. `pyramid-components-pim_osprey-sensors-services-
-consumed.ads` is withed but never emitted); 3 of 174 generic-tree units fail
-the `gnatgcc -c -gnat2020` object-compile.
+Recorded in `generator_refactor_plan.md` follow-ups; **re-verified 2026-07-04**
+by regenerating the generic tree — exactly three parent packages are withed
+by children but never emitted: `pim_osprey.sensors`,
+`pim_osprey.tactical_objects`, and `pim_seaspray.sensors`
+`…services.consumed`. These are the 3 of 174 units failing the
+`gnatgcc -c -gnat2020` object-compile.
 
 - **Plan:** in the Ada service generator, emit the parent `…-consumed.ads`
   package stub whenever any child consumed unit is generated, regardless of
@@ -90,18 +95,42 @@ the `gnatgcc -c -gnat2020` object-compile.
 - **Accept:** 174/174 generic-tree units object-compile; pyramid tree
   byte-identical.
 
-### B2. FlatBuffers `.cpp` JSON-bridge include/call derivation for nested packages
+### B2. Close out: FlatBuffers `.cpp` JSON-bridge for nested packages
 
-Carried from `pim/test_harness/FINDINGS.md` and cleanup plan item 7. The
-bridge assumes single-segment data-model packages; nested packages (e.g.
-`common_pim_components.authorisation`) need the full-namespace treatment
-already applied to the header path.
+Carried from `pim/test_harness/FINDINGS.md` and cleanup plan item 7 as
+"assumes single-segment packages" — **that appears already fixed** (verified
+2026-07-04): the bridge now derives includes and calls through
+`_cpp_type_namespace_for_type(full_type, naming_policy)`, and the generated
+output for the nested `common_pim_components.authorisation` package carries
+the correct full-namespace include and `toJson`/`fromJson` calls. What's
+missing is the closing evidence: no nested-package fixture exists in
+`test_generic_flatbuffers_protobuf.py`, and the FB compile gate hasn't been
+re-run against this case.
 
-- **Plan:** reuse the native-namespace derivation (post-split home:
-  `pim/cpp/naming.py`) for the bridge include/call derivation; add a
-  nested-package fixture to `test_generic_flatbuffers_protobuf.py`.
-- **Accept:** FlatBuffers codecs for the `pim/test` tree compile; pyramid
-  output unchanged.
+- **Plan:** add the nested-package fixture test; run the FlatBuffers compile
+  gate on the `pim/test` tree; update the stale FINDINGS.md follow-up.
+- **Accept:** fixture test green; FlatBuffers codecs for the `pim/test` tree
+  compile; pyramid output unchanged.
+
+### B3. Ada FlatBuffers codec skips the reserved-word package rename (new, found 2026-07-04)
+
+The core Ada generators escape Ada reserved words in package segments
+(`generic` → `Generic_Pkg`, via `_ada_pkg_segment` /
+`_ADA_RESERVED_WORDS` in `pim/ada/naming.py`), but the FlatBuffers backend
+derives Ada package names on its own path: every generated
+`flatbuffers/ada/*-flatbuffers_codec.{ads,adb}` that touches the generic
+tree's `generic_pim.generic` data-model package emits
+`with Pyramid.Data_Model.Generic_Pim.Generic.Types` — `Generic` is a
+reserved word, so these units are illegal Ada and reference a unit that is
+(correctly) emitted as `Generic_Pkg.Types`. 10+ files affected on the
+`pim/test` tree. Not caught earlier because the Ada object-compile gate
+covers the core tree, not the FlatBuffers Ada codec output.
+
+- **Plan:** route the FlatBuffers backend's Ada package derivation through
+  `pim/ada/naming.py`'s segment escaping; extend the Ada object-compile gate
+  to include `flatbuffers/ada/` output.
+- **Accept:** no `Generic_Pim.Generic.` references in generated output; the
+  FlatBuffers Ada codec units object-compile; pyramid tree byte-identical.
 
 ---
 
@@ -130,8 +159,11 @@ the default.
 
 `pim/ros2_marshal_codegen.py`/`pim/ros2_ir.py` are tied to
 `pyramid::domain_model`, `pyramid_msgs`, and `pyramid_ros2_codec.hpp`, so
-generic layouts cannot get a typed ROS2 codec. Do this **before** the wire
-switch so A2/A3 do not land on a domain-coupled generator.
+generic layouts cannot get a typed ROS2 codec — the ros2 backend explicitly
+gates codec generation on `layout == 'pyramid'`
+(`pim/backends/ros2_backend.py`; verified 2026-07-04: the generic tree gets
+`ros2/idl` + transport support but no `ros2/codec/`). Do this **before** the
+wire switch so A2/A3 do not land on a domain-coupled generator.
 
 - **Plan:** route package name, msg-package name, and codec header name
   through the naming policy (`PyramidCompatNamingPolicy` supplies today's
@@ -181,10 +213,15 @@ The adapter exists and works — over `PclEnvelope`.
 ### C1. Retire checked-in `src/protobuf_support/` (cleanup item 3)
 
 The hand-maintained `pyramid_services_tactical_objects_protobuf_codec.{hpp,cpp}`
-is the last non-generated binding artifact on an otherwise generated path.
+is the last non-generated binding artifact on an otherwise generated path
+(still wired as `pyramid_protobuf_support` in the top-level CMake).
+**Verified 2026-07-04:** the protobuf backend *already emits* per-service
+protobuf codecs on the generic layout (13 service codec files on the
+`pim/test` tree) — the pyramid compat layout just doesn't get them. This is
+an enable-and-diff job, not greenfield emitter work.
 
-- **Plan:** teach the protobuf backend to emit the service-codec support it
-  covers; record it in `binding_manifest.json` under a role; select via
+- **Plan:** extend the existing service-codec emission to the pyramid compat
+  layout; record it in `binding_manifest.json` under a role; select via
   `pyramid_binding_sources`. Keep the checked-in copy until the generated
   output is diff-verified against it, then delete.
 - **Accept:** `src/protobuf_support/` deleted; protobuf E2E tests
@@ -192,14 +229,21 @@ is the last non-generated binding artifact on an otherwise generated path.
 
 ### C2. Complete manifest-driven CMake and flip the default (cleanup item 4)
 
-`PYRAMID_BINDING_SOURCE_MODE` still defaults to `glob` (`CMakeLists.txt:115`);
-manifest mode covers FlatBuffers schemas + JSON codec sources only. The
-per-module C-ABI marshal loop still parses module identity from filenames;
-codec-plugin targets and protoc/gRPC proto inputs remain on globs/fixed paths.
+`PYRAMID_BINDING_SOURCE_MODE` still defaults to `glob` (`CMakeLists.txt:115`).
+**Verified 2026-07-04 — further along than the cleanup plan text:** the
+manifest already carries `codec_plugins`, `protobuf_protos`, and
+`grpc_service_protos` roles, and `pyramid_manifest.cmake` already has the
+matching accessors (e.g. `pyramid_manifest_plugins`). What remains is
+consumption: only 2 of ~14 source-selection sites in the PYRAMID
+`CMakeLists.txt` go through the manifest-capable `pyramid_binding_sources()`
+(FlatBuffers schemas + JSON codec sources); the other 12 are raw
+`pyramid_glob_generated()` calls, and the per-module C-ABI marshal loop
+still regex-parses module identity from
+`pyramid_data_model_*_cabi_marshal.cpp` filenames.
 
-- **Plan:** add module identity and plugin/proto-input roles to
-  `binding_manifest.json`; extend `pyramid_manifest.cmake` accessors with
-  matching `cmake -P` tests; convert the remaining consumers; verify the full
+- **Plan:** add module identity to `binding_manifest.json`; convert the 12
+  remaining glob call sites (marshal sources + loop, service codecs, plugin
+  targets, protobuf support, gRPC/ROS2 transports) to roles; verify the full
   preset matrix (`default`, `all-on`, `all-off`, `flatbuffers-only`); flip
   the default to `manifest`, keep `glob` one release as fallback.
 - **Accept:** manifest mode selects every generated source; glob and manifest
