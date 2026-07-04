@@ -455,6 +455,24 @@ smoke, and the updated comms/plugin-load `.bat` harness scripts, have been
 authored but only run on Linux. Run the `.bat` suite once a Windows
 environment is available; fix whatever falls out.
 
+**✅ Done 2026-07-04 — ran the full Windows `.bat` suite on the Windows box;
+everything passed, no fixes required.**
+- `pim/test_harness/viability_check.bat` — newer `pim/test` proto (48 protos,
+  201 msgs, 40 services) generates and the osprey facade compiles under MSVC. PASS.
+- `pim/test_harness/build_comms_test.bat` — statically-linked comms round-trip,
+  JSON + FlatBuffers topics. PASS (0 failures).
+- `pim/test_harness/build_plugin_load_test.bat` — no-relink DLL codec load with
+  config threaded to the plugin. PASS (0 failures).
+- `pim/test_harness/build_contract_routing_test.bat` — contract-derived endpoint
+  routing. `contract_routing_validation=pass transports=2`.
+- `scripts/package_sdk.bat` (against `build/`) → offline SDK packaged cleanly
+  (PCL libs + flatc + transport plugins + generator + template), then the
+  downstream smoke (`scripts/generate_bindings.bat` + `scripts/build_plugins.bat
+  --smoke-tests`) built the plugins from the offline package and ran the SDK
+  smoke tests: **2/2 passed** (`sdk_codec_plugin_load_smoke`,
+  `sdk_tactical_objects_fail_closed_smoke`). PASS.
+The scripts work on Windows as authored — verification-only, no code changes.
+
 ### C6. Document the remaining allowed facade leaks (review §6.9 step 8)
 
 **✅ Done 2026-07-04.** Added a "Compatibility-only shim surfaces" section to
