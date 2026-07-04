@@ -25,6 +25,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -84,6 +85,17 @@ class BindingArtifactManifest:
             'protobuf_service_codecs': [],
             'protobuf_protos': [],
             'grpc_service_protos': [],
+            # Build-source roles: populated by a post-generation scan
+            # (populate_build_source_roles) so manifest mode selects exactly the
+            # sources the CMake glob sites do. Kept distinct from the semantic
+            # roles above so each maps 1:1 to a source-selection site.
+            'service_json_codecs': [],
+            'service_marshal': [],
+            'flatbuffers_service_codecs': [],
+            'grpc_transport': [],
+            'grpc_plugin_aggregator': [],
+            'ros2_transport': [],
+            'marshal_modules': [],
         }
         self._seen = {
             key: set()
@@ -245,6 +257,47 @@ class BindingArtifactManifest:
         except ValueError:
             rel = path
         return rel.as_posix()
+
+    def _scan_generated(self, subdir: str, name_pattern: str):
+        """Relative posix paths of files under output_dir/subdir matching
+        name_pattern, searched recursively -- mirroring the CMake
+        `file(GLOB_RECURSE ${DIR}/subdir/name_pattern)` the build sites use."""
+        base = self._output_dir / subdir if subdir else self._output_dir
+        if not base.is_dir():
+            return []
+        return sorted(
+            self._relative_output_path(p)
+            for p in base.rglob(name_pattern)
+            if p.is_file())
+
+    def populate_build_source_roles(self) -> None:
+        """Populate the build-source roles by scanning the emitted tree with the
+        exact patterns the CMake source-selection sites glob, so `manifest`
+        mode selects the same sources as `glob` mode. Called once after all
+        generation, before write()."""
+        self._data['service_json_codecs'] = self._scan_generated(
+            '', 'pyramid_components_*_codec.cpp')
+        self._data['service_marshal'] = self._scan_generated(
+            '', 'pyramid_components_*_cabi_marshal.cpp')
+        self._data['flatbuffers_service_codecs'] = self._scan_generated(
+            'flatbuffers/cpp', 'pyramid_services_*_flatbuffers_codec.cpp')
+        self._data['grpc_transport'] = self._scan_generated(
+            'grpc/cpp', '*_grpc_transport.cpp')
+        self._data['grpc_plugin_aggregator'] = self._scan_generated(
+            'grpc/cpp', 'pyramid_grpc_plugin_aggregator.cpp')
+        self._data['ros2_transport'] = [
+            rel for rel in self._scan_generated('ros2/cpp', '*.cpp')
+            if not rel.endswith('_ros2_codec_plugin.cpp')]
+        # Per-module marshal identity for the churn-isolation loop, so CMake does
+        # not re-parse the module name out of the filename.
+        modules = []
+        for rel in self._scan_generated(
+                '', 'pyramid_data_model_*_cabi_marshal.cpp'):
+            match = re.match(
+                r'^pyramid_data_model_(.+)_cabi_marshal\.cpp$', Path(rel).name)
+            if match:
+                modules.append({'module': match.group(1), 'source': rel})
+        self._data['marshal_modules'] = modules
 
 
 def _display_path(path: Path) -> str:
@@ -678,6 +731,7 @@ def main():
             manifest.record_backend_outputs(backend_name, files)
             total += len(files)
 
+    manifest.populate_build_source_roles()
     manifest.write()
     print(f'\nDone -- {total} files generated in {output_dir}/')
 

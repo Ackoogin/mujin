@@ -117,6 +117,39 @@ function(pyramid_manifest_plugins out_targets out_sources out_content_types json
     set(${out_content_types} "${_ctypes}" PARENT_SCOPE)
 endfunction()
 
+# Return two parallel lists for the per-module C-ABI marshal sources: the module
+# names and the sources (anchored under base_dir), from the `marshal_modules`
+# role. Lets the churn-isolation loop read module identity from the manifest
+# instead of re-parsing it out of `pyramid_data_model_<module>_cabi_marshal.cpp`
+# filenames.
+function(pyramid_manifest_marshal_modules out_modules out_sources json base_dir)
+    set(_modules "")
+    set(_sources "")
+    if(NOT json)
+        set(${out_modules} "" PARENT_SCOPE)
+        set(${out_sources} "" PARENT_SCOPE)
+        return()
+    endif()
+
+    string(JSON _len ERROR_VARIABLE _err LENGTH "${json}" "marshal_modules")
+    if(_err OR _len STREQUAL "" OR _len EQUAL 0)
+        set(${out_modules} "" PARENT_SCOPE)
+        set(${out_sources} "" PARENT_SCOPE)
+        return()
+    endif()
+
+    math(EXPR _last "${_len} - 1")
+    foreach(_i RANGE ${_last})
+        string(JSON _obj GET "${json}" "marshal_modules" ${_i})
+        string(JSON _module GET "${_obj}" "module")
+        string(JSON _source GET "${_obj}" "source")
+        list(APPEND _modules "${_module}")
+        list(APPEND _sources "${base_dir}/${_source}")
+    endforeach()
+    set(${out_modules} "${_modules}" PARENT_SCOPE)
+    set(${out_sources} "${_sources}" PARENT_SCOPE)
+endfunction()
+
 # Return a scalar top-level string field (e.g. "layout"), or empty if absent.
 function(pyramid_manifest_field out_var json field)
     if(NOT json)

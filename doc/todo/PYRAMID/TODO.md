@@ -66,7 +66,7 @@ behind explicit triggers.
 | 6 | ~~A3 Typed `RclcppRuntimeAdapter` on the live wire~~ **✅ done 2026-07-04 (live ROS2 build + tests)** | M/L |
 | 7 | ~~A4 Plain-rclcpp interop proof~~ **✅ done 2026-07-04 (live Humble, 9/9)** | S |
 | 8 | ~~C1 Retire `src/protobuf_support/`~~ **✅ done 2026-07-04 (generated per-service, live MSVC build)** | S/M |
-| 9 | C2 Manifest-driven CMake completion + default flip | M |
+| 9 | ~~C2 Manifest-driven CMake completion~~ **✅ done 2026-07-04 (default flip deferred by choice)** | M |
 | 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
 | 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
 | 12 | C4 Retire codegen shims (after one SDK release) | S |
@@ -380,6 +380,38 @@ still regex-parses module identity from
   the default to `manifest`, keep `glob` one release as fallback.
 - **Accept:** manifest mode selects every generated source; glob and manifest
   produce identical target source lists on both trees; default flipped.
+
+**✅ Done 2026-07-04 (manifest-complete; default flip deliberately deferred).**
+Per the chosen scope, the manifest now drives every source-selection site while
+`glob` stays the default (the outward-facing flip is deferred to CI once the full
+preset matrix is exercised). Changes:
+- **Generator** (`generate_bindings.py`): a post-generation
+  `populate_build_source_roles()` scans the emitted tree with the exact glob
+  patterns and records the previously-unrepresented build-source roles
+  (`service_json_codecs`, `service_marshal`, `flatbuffers_service_codecs`,
+  `grpc_transport`, `grpc_plugin_aggregator`, `ros2_transport`), plus
+  `marshal_modules` — a `{module, source}` list giving **module identity** for
+  the churn-isolation marshal loop.
+- **CMake accessor** (`cmake/pyramid_manifest.cmake`): new
+  `pyramid_manifest_marshal_modules()` returning parallel module/source lists.
+- **CMakeLists**: converted all remaining `pyramid_glob_generated` source-
+  selection sites (service JSON codecs, data-model marshal + per-module loop,
+  service marshal, FlatBuffers service codecs, json/flatbuffers/protobuf codec
+  plugins, gRPC transport + plugin aggregator, ROS2 transport) to
+  `pyramid_binding_sources`/manifest accessors with the glob as fallback; the
+  per-module marshal loop now reads module identity from the manifest instead of
+  regex-parsing filenames (regex kept only as the glob-mode fallback).
+- **Verified (default preset):** glob vs. manifest produce **identical** per-
+  target generated-source lists (59/59, diff clean); a manifest-mode build of the
+  structurally-changed targets (`pyramid_generated_marshal`,
+  `pyramid_codec_json_tactical_objects`) compiles; `test_pyramid_manifest.cmake`
+  extended for `marshal_modules` (pyramid + generic layouts); `pytest` 41 passed;
+  non-manifest generated output byte-identical (only `binding_manifest.json`
+  gains the new roles).
+- **Deferred (not done):** flipping `PYRAMID_BINDING_SOURCE_MODE` default to
+  `manifest`, and exercising the full `all-on`/`all-off`/`flatbuffers-only`
+  preset matrix. The mechanism is complete and opt-in via
+  `-DPYRAMID_BINDING_SOURCE_MODE=manifest`.
 
 ### C3. Confine residual domain knowledge to the compat policy (cleanup item 5)
 

@@ -250,14 +250,12 @@ pyramid_binding_sources(_pyramid_generated_codecs_srcs
 # every symbol defined when linking a DLL, whereas a Linux .so silently defers
 # the undefined externals (which is why an omission here builds green on Linux
 # but fails LNK2019 on Windows).
-pyramid_binding_manifest_active(_pyramid_manifest_active)
-if(NOT _pyramid_manifest_active)
-    pyramid_glob_generated(_pyramid_generated_service_codecs_srcs
-        "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_codec.cpp")
-    list(APPEND _pyramid_generated_codecs_srcs
-        ${_pyramid_generated_service_codecs_srcs})
-    unset(_pyramid_generated_service_codecs_srcs)
-endif()
+pyramid_binding_sources(_pyramid_generated_service_codecs_srcs
+    ROLE service_json_codecs SUFFIX _codec.cpp
+    GLOBS "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_codec.cpp")
+list(APPEND _pyramid_generated_codecs_srcs
+    ${_pyramid_generated_service_codecs_srcs})
+unset(_pyramid_generated_service_codecs_srcs)
 # C-ABI marshalling (to_c/from_c/_free) for the typed-value plugin boundary.
 # Linked into both components and codec plugins so each side can marshal
 # between the native data-model types and their frozen C structs.
@@ -267,8 +265,29 @@ endif()
 # client that links it pulls in neither a wire codec nor a transport. The wire
 # codecs live exclusively in the loaded codec plugin .so (and, for components
 # that still use the in-tree codec, in pyramid_generated_codecs below).
-pyramid_glob_generated(_pyramid_generated_marshal_srcs
-    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
+# Data-model C-ABI marshalling sources + their module identity. Manifest mode
+# reads module names from the `marshal_modules` role; glob mode derives them from
+# the `pyramid_data_model_<module>_cabi_marshal.cpp` filenames (the two lists are
+# kept parallel and consumed by index in the per-module loop below).
+pyramid_binding_manifest_active(_pyramid_manifest_active)
+set(_pyramid_generated_marshal_srcs "")
+set(_pyramid_marshal_modules "")
+if(_pyramid_manifest_active)
+    pyramid_manifest_marshal_modules(_pyramid_marshal_modules
+        _pyramid_generated_marshal_srcs
+        "${_PYRAMID_MANIFEST_JSON}" "${PYRAMID_CPP_BINDINGS_DIR}")
+endif()
+if(NOT _pyramid_generated_marshal_srcs)
+    pyramid_glob_generated(_pyramid_generated_marshal_srcs
+        "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
+    set(_pyramid_marshal_modules "")
+    foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
+        get_filename_component(_marshal_name "${_marshal_src}" NAME)
+        string(REGEX REPLACE "^pyramid_data_model_(.+)_cabi_marshal\\.cpp$" "\\1"
+            _marshal_module "${_marshal_name}")
+        list(APPEND _pyramid_marshal_modules "${_marshal_module}")
+    endforeach()
+endif()
 pyramid_require_generated(_pyramid_generated_marshal_srcs
     "generated PYRAMID C-ABI marshalling sources")
 
@@ -278,8 +297,9 @@ pyramid_require_generated(_pyramid_generated_marshal_srcs
 # deployment-library loop below and are compiled straight into the aggregate
 # pyramid_generated_marshal (which the codec plugins link transitively), so the
 # service-side marshal symbols resolve at .dll link time.
-pyramid_glob_generated(_pyramid_generated_service_marshal_srcs
-    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_cabi_marshal.cpp")
+pyramid_binding_sources(_pyramid_generated_service_marshal_srcs
+    ROLE service_marshal SUFFIX _cabi_marshal.cpp
+    GLOBS "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_cabi_marshal.cpp")
 
 # W6 -- per-data-model-module marshalling libraries (churn isolation).
 # Each data-model module (common, base, tactical, autonomy, sensors, ...) is
@@ -295,10 +315,11 @@ set(PYRAMID_MARSHAL_INCLUDE_DIRS
     "${PYRAMID_ROOT_DIR}/core/external"   # tl/optional.hpp (header-only) used by data-model types
 )
 set(_pyramid_marshal_objects)
-foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
-    get_filename_component(_marshal_name "${_marshal_src}" NAME)
-    string(REGEX REPLACE "^pyramid_data_model_(.+)_cabi_marshal\\.cpp$" "\\1"
-        _marshal_module "${_marshal_name}")
+list(LENGTH _pyramid_generated_marshal_srcs _pyramid_marshal_count)
+math(EXPR _pyramid_marshal_last "${_pyramid_marshal_count} - 1")
+foreach(_i RANGE ${_pyramid_marshal_last})
+    list(GET _pyramid_generated_marshal_srcs ${_i} _marshal_src)
+    list(GET _pyramid_marshal_modules ${_i} _marshal_module)
     set(_marshal_obj "pyramid_marshal_${_marshal_module}_obj")
     add_library(${_marshal_obj} OBJECT "${_marshal_src}")
     add_dependencies(${_marshal_obj} pyramid_cpp_bindings_codegen)
@@ -337,8 +358,9 @@ unset(_pyramid_marshal_objects)
 # Wire codecs (JSON + optional FlatBuffers). Linked by the codec plugins and by
 # any component still using the in-tree wire codec; re-exports the marshalling.
 if(PYRAMID_ENABLE_FLATBUFFERS)
-    pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_srcs
-        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_*_flatbuffers_codec.cpp")
+    pyramid_binding_sources(_pyramid_generated_flatbuffers_codec_srcs
+        ROLE flatbuffers_service_codecs SUFFIX _flatbuffers_codec.cpp
+        GLOBS "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_*_flatbuffers_codec.cpp")
     list(APPEND _pyramid_generated_codecs_srcs
         ${_pyramid_generated_flatbuffers_codec_srcs})
     unset(_pyramid_generated_flatbuffers_codec_srcs)
@@ -363,8 +385,18 @@ target_include_directories(pyramid_generated_codecs
         "${PYRAMID_CPP_BINDINGS_DIR}"
 )
 
-pyramid_glob_generated(_pyramid_generated_json_codec_plugin_srcs
-    "${PYRAMID_CPP_BINDINGS_DIR}/*_json_codec_plugin.cpp")
+pyramid_binding_manifest_active(_pyramid_manifest_active)
+set(_pyramid_generated_json_codec_plugin_srcs "")
+if(_pyramid_manifest_active)
+    pyramid_manifest_plugins(_pyramid_json_plugin_tgts
+        _pyramid_generated_json_codec_plugin_srcs _pyramid_json_plugin_ctypes
+        "${_PYRAMID_MANIFEST_JSON}" "${PYRAMID_CPP_BINDINGS_DIR}"
+        CONTENT_TYPE application/json)
+endif()
+if(NOT _pyramid_generated_json_codec_plugin_srcs)
+    pyramid_glob_generated(_pyramid_generated_json_codec_plugin_srcs
+        "${PYRAMID_CPP_BINDINGS_DIR}/*_json_codec_plugin.cpp")
+endif()
 set(PYRAMID_CODEC_PLUGIN_TARGETS)
 foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_json_codec_plugin_srcs)
     get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
@@ -394,8 +426,18 @@ endforeach()
 unset(_pyramid_generated_json_codec_plugin_srcs)
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
-    pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_plugin_srcs
-        "${PYRAMID_CPP_BINDINGS_DIR}/*_flatbuffers_codec_plugin.cpp")
+    pyramid_binding_manifest_active(_pyramid_manifest_active)
+    set(_pyramid_generated_flatbuffers_codec_plugin_srcs "")
+    if(_pyramid_manifest_active)
+        pyramid_manifest_plugins(_pyramid_fb_plugin_tgts
+            _pyramid_generated_flatbuffers_codec_plugin_srcs _pyramid_fb_plugin_ctypes
+            "${_PYRAMID_MANIFEST_JSON}" "${PYRAMID_CPP_BINDINGS_DIR}"
+            CONTENT_TYPE application/flatbuffers)
+    endif()
+    if(NOT _pyramid_generated_flatbuffers_codec_plugin_srcs)
+        pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_plugin_srcs
+            "${PYRAMID_CPP_BINDINGS_DIR}/*_flatbuffers_codec_plugin.cpp")
+    endif()
     foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_flatbuffers_codec_plugin_srcs)
         get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
             "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
@@ -560,8 +602,18 @@ if(PYRAMID_ENABLE_PROTOBUF)
     # application/protobuf codec plugins -- one MODULE per service contract,
     # mirroring the json/flatbuffers codec plugins. Links pyramid_protobuf_support
     # (which carries the protobuf gen include dirs + libprotobuf transitively).
-    pyramid_glob_generated(_pyramid_generated_protobuf_codec_plugin_srcs
-        "${PYRAMID_CPP_BINDINGS_DIR}/*_protobuf_codec_plugin.cpp")
+    pyramid_binding_manifest_active(_pyramid_manifest_active)
+    set(_pyramid_generated_protobuf_codec_plugin_srcs "")
+    if(_pyramid_manifest_active)
+        pyramid_manifest_plugins(_pyramid_pb_plugin_tgts
+            _pyramid_generated_protobuf_codec_plugin_srcs _pyramid_pb_plugin_ctypes
+            "${_PYRAMID_MANIFEST_JSON}" "${PYRAMID_CPP_BINDINGS_DIR}"
+            CONTENT_TYPE application/protobuf)
+    endif()
+    if(NOT _pyramid_generated_protobuf_codec_plugin_srcs)
+        pyramid_glob_generated(_pyramid_generated_protobuf_codec_plugin_srcs
+            "${PYRAMID_CPP_BINDINGS_DIR}/*_protobuf_codec_plugin.cpp")
+    endif()
     foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_protobuf_codec_plugin_srcs)
         get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
             "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
@@ -684,15 +736,17 @@ if(PYRAMID_ENABLE_GRPC)
 
         add_custom_target(pyramid_grpc_codegen DEPENDS ${PYRAMID_GRPC_OUTPUTS})
 
-        pyramid_glob_generated(PYRAMID_GRPC_TRANSPORT_SRCS
-            "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/*_grpc_transport.cpp")
+        pyramid_binding_sources(PYRAMID_GRPC_TRANSPORT_SRCS
+            ROLE grpc_transport SUFFIX _grpc_transport.cpp
+            GLOBS "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/*_grpc_transport.cpp")
         pyramid_require_generated(PYRAMID_GRPC_TRANSPORT_SRCS
             "generated PYRAMID gRPC transport sources")
         # Proto-driven aggregator: a stable C ABI (pyramid_grpc_plugin_server_*)
         # the loadable coupled gRPC plugin uses to start/stop real gRPC servers
         # for any configured component without re-declaring generated types.
-        pyramid_glob_generated(PYRAMID_GRPC_PLUGIN_AGG_SRCS
-            "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_grpc_plugin_aggregator.cpp")
+        pyramid_binding_sources(PYRAMID_GRPC_PLUGIN_AGG_SRCS
+            ROLE grpc_plugin_aggregator SUFFIX .cpp
+            GLOBS "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_grpc_plugin_aggregator.cpp")
         pyramid_require_generated(PYRAMID_GRPC_PLUGIN_AGG_SRCS
             "generated PYRAMID gRPC plugin aggregator source")
         add_library(pyramid_grpc_transport STATIC
@@ -747,8 +801,9 @@ endif()
 if(PYRAMID_ENABLE_ROS2)
     set(PYRAMID_ROS2_SUPPORT_DIR
         "${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp")
-    pyramid_glob_generated(PYRAMID_ROS2_TRANSPORT_SRCS
-        "${PYRAMID_ROS2_SUPPORT_DIR}/*.cpp")
+    pyramid_binding_sources(PYRAMID_ROS2_TRANSPORT_SRCS
+        ROLE ros2_transport SUFFIX .cpp
+        GLOBS "${PYRAMID_ROS2_SUPPORT_DIR}/*.cpp")
     list(FILTER PYRAMID_ROS2_TRANSPORT_SRCS EXCLUDE REGEX
         "_ros2_codec_plugin\\.cpp$")
     pyramid_require_generated(PYRAMID_ROS2_TRANSPORT_SRCS
