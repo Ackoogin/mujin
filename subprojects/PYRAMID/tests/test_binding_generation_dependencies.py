@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Check that generated service facades only expose selected dependencies."""
+"""Check that generated service facades only expose selected dependencies.
+
+Facade-closure enforcement (review §6.9): the ``_Json`` C-ABI export shim and
+the ``grpc_*`` transport symbols (``grpc_provided_``, ``Configure_Grpc``,
+``Grpc_Content_Type``) are compatibility-only generated implementation details.
+``check_facade_tests`` asserts they are absent from the component-facing gRPC
+interop example, which must instead use the typed ``Invoke_*`` facade with
+``Content_Type``. See ``doc/architecture/generated_bindings.md`` ->
+"Compatibility-only shim surfaces".
+"""
 
 from __future__ import annotations
 

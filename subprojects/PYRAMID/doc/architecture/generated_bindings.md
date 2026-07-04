@@ -443,6 +443,30 @@ JSON should remain native at the Ada layer. FlatBuffers, Protobuf, and gRPC may
 use generated C/C++ shims internally while the public Ada surface stays typed.
 That is an implementation choice, not a contract exception.
 
+## Compatibility-only shim surfaces
+
+The facade-closure work (review §6.9) routed every component-facing call through
+the single typed service facade. A few lower-level shim symbols remain public
+for ABI/compatibility reasons; they are **compatibility-only generated
+implementation details** and must not be called from component business logic:
+
+| Shim surface | Where it lives | Compatibility-only status |
+|--------------|----------------|---------------------------|
+| Ada `_Json` C-ABI export shim (`*_to_json` / `*_from_json` C exports used by the gRPC/binary transports) | generated gRPC/transport code | Kept as a generated ABI shim; the public Ada surface stays typed (`Invoke_*` with `Content_Type`). |
+| `grpc_*` transport symbols — C++ `grpc_detail::*`, Ada `grpc_provided_*`, `Configure_Grpc`, `Grpc_Content_Type` | generated `*_grpc_transport.{hpp,cpp,ads}` | Owned entirely by the generated gRPC transport; selected via `Content_Type`, never invoked directly. |
+
+**The typed facade is the copied example everywhere.** Component code calls the
+generated top-level service procedure — C++ `provided::invoke*` / Ada
+`Pyramid.Services.<...>.Provided.Invoke_*` — with `Content_Type` selecting the
+codec/transport. gRPC is just a `Content_Type` value, not a separate API.
+
+Enforcement (so the leaks cannot widen): `tests/test_binding_generation_dependencies.py`
+(`check_facade_tests`) asserts the gRPC interop facade test is **absent** of
+`_Json`, `grpc_provided_`, `Configure_Grpc`, and `Grpc_Content_Type`, and
+present of the typed `Invoke_*` + `Content_Type` call shape;
+`tests/test_codegen_export_surface.py` pins the externally consumed generator
+surface. Any new component example must copy the typed facade, not these shims.
+
 ## StandardBridge Usage Pattern
 
 `tactical_objects_app` uses `StandardBridge` as the live production proof for

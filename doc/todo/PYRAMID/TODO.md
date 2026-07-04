@@ -68,7 +68,7 @@ behind explicit triggers.
 | 8 | C1 Retire `src/protobuf_support/` | S/M |
 | 9 | C2 Manifest-driven CMake completion + default flip | M |
 | 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
-| 11 | C6 Document remaining allowed facade leaks | S |
+| 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
 | 12 | C4 Retire codegen shims (after one SDK release) | S |
 | 13 | C5 Windows parity pass | S/M |
 
@@ -356,6 +356,15 @@ authored but only run on Linux. Run the `.bat` suite once a Windows
 environment is available; fix whatever falls out.
 
 ### C6. Document the remaining allowed facade leaks (review §6.9 step 8)
+
+**✅ Done 2026-07-04.** Added a "Compatibility-only shim surfaces" section to
+`doc/architecture/generated_bindings.md` documenting the `_Json` C-ABI export
+shim and the `grpc_*` transport symbols (`grpc_detail::*`, `grpc_provided_`,
+`Configure_Grpc`, `Grpc_Content_Type`) as compatibility-only generated
+implementation details, with the typed facade (`invoke*` / `Invoke_*` +
+`Content_Type`) as the copied example. Annotated the enforcing test
+(`tests/test_binding_generation_dependencies.py` docstring) tying its
+`check_facade_tests` absence-assertions to this compatibility-only policy.
 
 Facade closure steps 1–7 are done. If any shim-level API (`_Json`, `grpc_*`)
 must stay public for ABI reasons, mark it compatibility-only in generated docs
