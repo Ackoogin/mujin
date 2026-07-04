@@ -14,6 +14,7 @@ consolidates the remaining items from:
 | [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md) | **Executed 2026-07-02** (phases 0–5); carried-forward notes tracked here (C5, D-list) |
 | [`standard_alignment_plan.md`](../../plans/PYRAMID/standard_alignment_plan.md) | Stable design reference for Tactical Objects; one open design point (D-list) |
 | [`review_pyramid_bindings_pluggability.md`](../../reviews/PYRAMID/review_pyramid_bindings_pluggability.md) | Review record; facade closure steps 1–7 done, step 8 tracked here (C6) |
+| [`in_process_service_pubsub_todo.md`](../../reports/PYRAMID/in_process_service_pubsub_todo.md) | Review record for local-peer service/pub/sub facade gaps; closure items tracked in WS-E |
 | `subprojects/PYRAMID/pim/test_harness/FINDINGS.md` | Harness reference; its one open follow-up is B2 |
 
 How the plugin/codec system works lives in the architecture reference:
@@ -71,6 +72,7 @@ behind explicit triggers.
 | 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
 | 12 | C4 Retire codegen shims (after one SDK release) | S |
 | 13 | C5 Windows parity pass | S/M |
+| 14 | E1-E6 In-process service/pub/sub facade closure | M/L |
 
 C1–C3 are independent of WS-A and of each other; they can be picked up in
 parallel whenever there is slack. C4 is time-gated, C5 environment-gated.
@@ -497,6 +499,72 @@ implementation details, with the typed facade (`invoke*` / `Invoke_*` +
 Facade closure steps 1–7 are done. If any shim-level API (`_Json`, `grpc_*`)
 must stay public for ABI reasons, mark it compatibility-only in generated docs
 and tests, and make the typed facade the copied example everywhere.
+
+---
+
+## WS-E — In-process service/pub/sub facade closure
+
+Tracked from
+[`in_process_service_pubsub_todo.md`](../../reports/PYRAMID/in_process_service_pubsub_todo.md).
+The runtime already supports local peers: without a transport adapter, PCL
+dispatches services and topics in-process, and endpoint routes can be marked
+`PCL_ROUTE_LOCAL`. The remaining work is to make that shape explicit and copied
+at the generated component-facade layer.
+
+### E1. Make local-peer service routing explicit on the C++ facade
+
+- **Plan:** emit provider-side local routing (`ProvidedService::routeAllLocal()`)
+  and document it beside the existing consumer `routeAllLocal()` and remote
+  route helpers. Preserve default route behavior.
+- **Accept:** generated providers and consumers can both select local-only
+  service communication through facade methods; remote route behavior is
+  unchanged; generator tests pin the emitted methods.
+
+### E2. Prove facade-only same-executor service communication
+
+- **Plan:** add a generated-binding test with provider and consumer components
+  in one executor, no transport adapter, facade local routing, unary RPC, and
+  server-streaming RPC.
+- **Accept:** the test uses generated `ProvidedService`/`ConsumedService` only
+  from handwritten component logic and makes no raw `pcl_executor_*` service
+  calls.
+
+### E3. Promote generated pub/sub to component-facade ownership
+
+- **Plan:** emit component-facade publisher ownership for generated publish
+  topics: create/retain publisher ports during configuration and expose typed
+  `publish<Topic>(payload)` methods. Keep low-level helpers for adapters and
+  tests.
+- **Accept:** ordinary component code can publish generated topics without
+  touching `pcl_port_t*`; content-type validation and lifecycle live in the
+  binding.
+
+### E4. Prove facade-only same-executor pub/sub communication
+
+- **Plan:** add a no-transport test with two components in one executor: one
+  publishes through the component facade, the other subscribes through the
+  component facade.
+- **Accept:** handwritten component logic uses no raw
+  `pcl_container_add_subscriber`, `pcl_container_add_publisher`,
+  `pcl_port_publish`, or `pcl_msg_t`; JSON and at least one binary content type
+  deliver the expected typed payload.
+
+### E5. Classify or migrate `StandardBridge` raw PCL wiring
+
+- **Plan:** after E1-E4, either migrate `StandardBridge` to the generated
+  service/topic facade where practical or document remaining raw PCL calls as
+  framework-adapter exceptions with source-guard coverage.
+- **Accept:** copied examples and ordinary components use the facade; any raw
+  generated-service/topic PCL calls in `StandardBridge` are allowlisted with a
+  reason.
+
+### E6. Document the local-peer deployment option
+
+- **Plan:** update `cpp_component_authoring.md` with a same-executor example
+  covering local service routes, generated topic publish/subscribe, a
+  single-threaded `spinOnce` loop, and no transport adapter.
+- **Accept:** local peer, shared-memory peer, and remote transport are presented
+  as deployment options that do not change handler signatures or business logic.
 
 ---
 
