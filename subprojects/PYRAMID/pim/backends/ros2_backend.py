@@ -105,13 +105,12 @@ class Ros2Backend(codec_backends.CodecBackend):
         )
         idl_files = generate_ros2_idl(index, idl_dir, idl_service_modules)
 
-        codec_files: List[Path] = []
-        if getattr(naming, 'layout', 'pyramid') == 'pyramid':
-            # Typed wire codec: domain_model <-> pyramid_msgs ROS2 messages + rclcpp
-            # serialisation. Header-only; compiled by the ament package against the
-            # rosidl-generated pyramid_msgs headers (rclcpp only resolves under ament).
-            codec_dir = output_dir.parent / 'codec'
-            codec_files = generate_ros2_codec(index, codec_dir)
+        # Typed wire codec: domain_model <-> ROS2 messages + rclcpp
+        # serialisation. Header-only; compiled by the ament package against the
+        # rosidl-generated message headers (rclcpp only resolves under ament).
+        codec_dir = output_dir.parent / 'codec'
+        codec_files = generate_ros2_codec(
+            index, codec_dir, naming_policy=naming, package=support_package)
 
         hpp_path = output_dir / f'{support_base}.hpp'
         cpp_path = output_dir / f'{support_base}.cpp'

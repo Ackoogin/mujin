@@ -29,15 +29,43 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from proto_parser import ProtoMessage, ProtoTypeIndex  # noqa: E402
+from binding_contract import PyramidCompatNamingPolicy  # noqa: E402
 from ros2_ir import DomainField, DomainIR, pascal, ros_header_stem  # noqa: E402
 
-CODEC_NS = 'pyramid::ros2_codec'
+_DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
+
+
+def _infer_codec_package(index: ProtoTypeIndex) -> str:
+    for pf in index.files:
+        if pf.services:
+            return pf.package
+    for pf in index.files:
+        if pf.messages or pf.enums:
+            return pf.package
+    return ''
 
 
 class Ros2MarshalGenerator:
-    def __init__(self, index: ProtoTypeIndex):
+    def __init__(self, index: ProtoTypeIndex, naming_policy=None,
+                 package: str = ''):
         self.index = index
-        self.ir = DomainIR(index)
+        self.naming_policy = naming_policy or _DEFAULT_NAMING_POLICY
+        self.package = package or _infer_codec_package(index)
+        self.ir = DomainIR(index, self.naming_policy, self.package)
+
+    def _domain_type_headers(self) -> List[str]:
+        umbrella = self.naming_policy.umbrella_types_header(self.index.files)
+        if umbrella:
+            return [umbrella]
+        packages = {
+            pf.package
+            for pf in self.index.files
+            if pf.messages or pf.enums
+        }
+        return [
+            self.naming_policy.type_header_for_package(package)
+            for package in sorted(packages)
+        ]
 
     # -- helpers --------------------------------------------------------------
 
@@ -122,21 +150,25 @@ class Ros2MarshalGenerator:
 
     def generate(self, output_dir: Path) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
-        path = output_dir / 'pyramid_ros2_codec.hpp'
+        path = output_dir / self.naming_policy.ros2_codec_header(self.package)
         msgs = self.ir.emitted_messages()
+        msg_package = self.naming_policy.ros2_message_package(self.package)
+        codec_ns = self.naming_policy.ros2_codec_namespace(self.package)
+        data_model_ns = self.naming_policy.ros2_data_model_namespace(self.package)
 
         out: List[str] = []
         w = out.append
         w('// Auto-generated ROS2 marshalling + codec -- do not edit')
-        w('// pyramid::domain_model <-> pyramid_msgs ROS2 messages + rclcpp wire codec')
+        w(f'// {data_model_ns} <-> {msg_package} ROS2 messages + rclcpp wire codec')
         w('#pragma once')
         w('')
-        w('#include "pyramid_data_model_types.hpp"')
+        for header in self._domain_type_headers():
+            w(f'#include "{header}"')
         w('')
         for enum in self.index.all_enums():
-            w(f'#include "pyramid_msgs/msg/{ros_header_stem(pascal(enum.name))}.hpp"')
+            w(f'#include "{msg_package}/msg/{ros_header_stem(pascal(enum.name))}.hpp"')
         for msg in msgs:
-            w(f'#include "pyramid_msgs/msg/{ros_header_stem(pascal(msg.name))}.hpp"')
+            w(f'#include "{msg_package}/msg/{ros_header_stem(pascal(msg.name))}.hpp"')
         w('')
         w('#include <rclcpp/serialization.hpp>')
         w('#include <rclcpp/serialized_message.hpp>')
@@ -146,9 +178,9 @@ class Ros2MarshalGenerator:
         w('#include <string>')
         w('#include <utility>')
         w('')
-        w(f'namespace {CODEC_NS} {{')
+        w(f'namespace {codec_ns} {{')
         w('')
-        w('namespace domain = pyramid::domain_model;')
+        w(f'namespace domain = {data_model_ns};')
         w('')
         w('// -- rclcpp (de)serialisation helpers -----------------------------------')
         w('template <class MsgT>')
@@ -200,7 +232,7 @@ class Ros2MarshalGenerator:
             w(f'  return fromBinary{msg.name}(s.data(), s.size());')
             w('}')
             w('')
-        w(f'}}  // namespace {CODEC_NS}')
+        w(f'}}  // namespace {codec_ns}')
 
         path.write_text('\n'.join(out) + '\n', encoding='utf-8')
         return [path]
@@ -224,8 +256,9 @@ class Ros2MarshalGenerator:
         out.append('')
 
 
-def generate_ros2_codec(index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
-    return Ros2MarshalGenerator(index).generate(output_dir)
+def generate_ros2_codec(index: ProtoTypeIndex, output_dir: Path,
+                        naming_policy=None, package: str = '') -> List[Path]:
+    return Ros2MarshalGenerator(index, naming_policy, package).generate(output_dir)
 
 
 def _main(argv: List[str]) -> int:

@@ -147,6 +147,18 @@ class NamingPolicy(Protocol):
     def ros2_support_namespace(self, package: str) -> str:
         ...
 
+    def ros2_message_package(self, package: str) -> str:
+        ...
+
+    def ros2_codec_header(self, package: str) -> str:
+        ...
+
+    def ros2_codec_namespace(self, package: str) -> str:
+        ...
+
+    def ros2_data_model_namespace(self, package: str) -> str:
+        ...
+
     def ros2_envelope_type(self, package: str) -> str:
         ...
 
@@ -250,6 +262,22 @@ class PyramidCompatNamingPolicy:
         del package
         return "pyramid::transport::ros2"
 
+    def ros2_message_package(self, package: str) -> str:
+        del package
+        return "pyramid_msgs"
+
+    def ros2_codec_header(self, package: str) -> str:
+        del package
+        return "pyramid_ros2_codec.hpp"
+
+    def ros2_codec_namespace(self, package: str) -> str:
+        del package
+        return "pyramid::ros2_codec"
+
+    def ros2_data_model_namespace(self, package: str) -> str:
+        del package
+        return self.data_model_types_namespace
+
     def ros2_envelope_type(self, package: str) -> str:
         del package
         return "pyramid_ros2/PclEnvelope"
@@ -335,6 +363,18 @@ class GenericNamingPolicy:
 
     def ros2_support_namespace(self, package: str) -> str:
         return self.cpp_namespace_for_package(package) + "::transport::ros2"
+
+    def ros2_message_package(self, package: str) -> str:
+        return self._package_prefix(package) + "_msgs"
+
+    def ros2_codec_header(self, package: str) -> str:
+        return self._package_prefix(package) + "_ros2_codec.hpp"
+
+    def ros2_codec_namespace(self, package: str) -> str:
+        return self.cpp_namespace_for_package(package) + "::ros2_codec"
+
+    def ros2_data_model_namespace(self, package: str) -> str:
+        return self.cpp_type_namespace_for_package(package)
 
     def ros2_envelope_type(self, package: str) -> str:
         return self._package_prefix(package) + "_ros2/PclEnvelope"

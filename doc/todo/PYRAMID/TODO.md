@@ -61,7 +61,7 @@ behind explicit triggers.
 | 1 | ~~B1 Ada consumed-side parent package stub~~ **✅ done 2026-07-04** | S |
 | 2 | ~~B3 Ada FlatBuffers codec misses reserved-word rename~~ **✅ done 2026-07-04** | S |
 | 3 | ~~B2 Close out FlatBuffers JSON-bridge nested packages~~ **✅ done 2026-07-04** | S |
-| 4 | A1 Package-neutral ROS2 marshal codegen | M |
+| 4 | ~~A1 Package-neutral ROS2 marshal codegen~~ **✅ done 2026-07-04** | M |
 | 5 | A2 `application/ros2` registry codec plugin | M |
 | 6 | A3 Typed `RclcppRuntimeAdapter` on the live wire | M/L |
 | 7 | A4 Plain-rclcpp interop proof | S |
@@ -186,6 +186,19 @@ envelope path as the decoupled codec-over-ROS2 fallback; native typed becomes
 the default.
 
 ### A1. Make the ROS2 marshal codegen package-neutral (prerequisite)
+
+**✅ Done 2026-07-04.** Added four naming-policy accessors
+(`ros2_message_package`, `ros2_codec_header`, `ros2_codec_namespace`,
+`ros2_data_model_namespace`) to the `NamingPolicy` protocol,
+`PyramidCompatNamingPolicy` (returning today's exact `pyramid_msgs` /
+`pyramid_ros2_codec.hpp` / `pyramid::ros2_codec` / `pyramid::domain_model`
+strings), and `GenericNamingPolicy` (package-derived equivalents). Threaded a
+naming policy + package through `DomainIR`, `Ros2MarshalGenerator`, and
+`generate_ros2_codec`; `ros2_backend.py` now generates the typed codec on the
+generic layout too (gate removed) and passes `support_package`. Added
+`test_generic_ros2_typed_codec_is_package_neutral` (zero `pyramid` tokens).
+Pyramid ros2 output byte-identical (independently re-verified via
+old-vs-new `diff -qr`).
 
 `pim/ros2_marshal_codegen.py`/`pim/ros2_ir.py` are tied to
 `pyramid::domain_model`, `pyramid_msgs`, and `pyramid_ros2_codec.hpp`, so

@@ -149,6 +149,28 @@ def test_generic_ros2_generates_flat_namespace_service_transport(
     assert "pyramid" not in text.lower()
 
 
+def test_generic_ros2_typed_codec_is_package_neutral(
+    tmp_path: Path,
+) -> None:
+    proto_dir = _write_telemetry_proto(tmp_path)
+    out_dir = tmp_path / "out"
+
+    _run_generator(proto_dir, out_dir, "ros2")
+
+    codec = out_dir / "ros2" / "codec" / "example_telemetry_ros2_codec.hpp"
+    assert codec.exists()
+    text = codec.read_text(encoding="utf-8")
+
+    assert "pyramid" not in text.lower()
+    assert '#include "example_telemetry_types.hpp"' in text
+    assert '#include "example_telemetry_msgs/msg/pose.hpp"' in text
+    assert '#include "example_telemetry_msgs/msg/pose_request.hpp"' in text
+    assert "namespace example::telemetry::ros2_codec" in text
+    assert "namespace domain = example::telemetry;" in text
+    assert "example_telemetry_msgs::msg::Pose" in text
+    assert "example::telemetry::Pose" in text
+
+
 def test_generic_grpc_generates_flat_namespace_service_transport(
     tmp_path: Path,
 ) -> None:

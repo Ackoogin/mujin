@@ -39,9 +39,9 @@ from proto_parser import (  # noqa: E402
     ProtoTypeIndex,
     camel_to_lower_snake,
 )
+from binding_contract import PyramidCompatNamingPolicy  # noqa: E402
 from cpp.naming import (  # noqa: E402
     _CPP_SCALAR_MAP,
-    _cpp_ns_for_proto_type_package,
 )
 from cpp.types_gen import find_scalar_wrappers  # noqa: E402
 
@@ -66,7 +66,7 @@ CPP_TO_ROS: Dict[str, str] = {
     'bool': 'bool', 'std::string': 'string',
 }
 
-DATA_MODEL_NS = 'pyramid::domain_model'
+_DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
 
 
 def pascal(name: str) -> str:
@@ -94,8 +94,11 @@ class DomainField:
 class DomainIR:
     """Resolves proto types into the domain_model field model used for ROS2."""
 
-    def __init__(self, index: ProtoTypeIndex):
+    def __init__(self, index: ProtoTypeIndex, naming_policy=None,
+                 package: str = ''):
         self.index = index
+        self.naming_policy = naming_policy or _DEFAULT_NAMING_POLICY
+        self.package = package
         self.aliases = find_scalar_wrappers(index)  # short -> C++ scalar type
         self._pkg_of: Dict[str, str] = {}
         for pf in index.files:
@@ -120,11 +123,14 @@ class DomainIR:
 
     def domain_fqn(self, short: str) -> str:
         pkg = self._pkg_of.get(short, '')
-        ns = _cpp_ns_for_proto_type_package(pkg) if pkg else DATA_MODEL_NS
+        ns = (self.naming_policy.cpp_type_namespace_for_package(pkg)
+              if pkg
+              else self.naming_policy.ros2_data_model_namespace(self.package))
         return f'{ns}::{short}'
 
     def ros_msg_type(self, short: str) -> str:
-        return f'pyramid_msgs::msg::{pascal(short)}'
+        msg_package = self.naming_policy.ros2_message_package(self.package)
+        return f'{msg_package}::msg::{pascal(short)}'
 
     # -- field model ----------------------------------------------------------
 
