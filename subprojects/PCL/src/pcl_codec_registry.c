@@ -63,7 +63,7 @@ static pcl_status_t reserve_codec_slots(pcl_codec_registry_t* registry,
 
   next_capacity = registry->capacity ? registry->capacity * 2u : 4u;
   while (next_capacity < required) {
-    next_capacity *= 2u;
+    next_capacity *= 2u;  // GCOVR_EXCL_LINE: defensive; register grows one slot at a time so one doubling always suffices
   }
 
   next_size = (size_t)next_capacity * sizeof(*registry->codecs);

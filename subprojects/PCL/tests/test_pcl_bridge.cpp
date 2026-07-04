@@ -20,6 +20,7 @@ extern "C" {
 // Bridge creation and destruction tests
 // =======================================================================
 
+///< REQ_PCL_075: bridge create/destroy in isolation (see also test_pcl_dining.cpp).
 TEST(PclBridge, CreateDestroy) {
   auto* e = pcl_executor_create();
 
@@ -41,6 +42,7 @@ TEST(PclBridge, CreateDestroy) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_076: bridge create null-argument matrix.
 TEST(PclBridge, CreateNullArgs) {
   auto* e = pcl_executor_create();
   auto transform = [](const pcl_msg_t*, pcl_msg_t*, void*) -> pcl_status_t {
@@ -71,10 +73,12 @@ TEST(PclBridge, CreateNullArgs) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_077: bridge_container(NULL) returns NULL.
 TEST(PclBridge, ContainerNullBridge) {
   EXPECT_EQ(pcl_bridge_container(nullptr), nullptr);
 }
 
+///< REQ_PCL_078: bridge_destroy(NULL) is a no-op.
 TEST(PclBridge, DestroyNullBridge) {
   pcl_bridge_destroy(nullptr);  // Should not crash
 }
@@ -83,6 +87,7 @@ TEST(PclBridge, DestroyNullBridge) {
 // Bridge message transformation tests
 // =======================================================================
 
+///< REQ_PCL_079: bridge transform dispatch delivers to the output topic.
 TEST(PclBridge, TransformSuccess) {
   // Test that messages flow through the bridge transform
   struct Ctx {
@@ -143,6 +148,7 @@ TEST(PclBridge, TransformSuccess) {
   pcl_container_destroy(sub);
 }
 
+///< REQ_PCL_080: a non-OK transform suppresses forwarding.
 TEST(PclBridge, TransformSuppressed) {
   // Test that transform returning non-OK suppresses the message
   struct Ctx {
@@ -189,6 +195,7 @@ TEST(PclBridge, TransformSuppressed) {
   pcl_container_destroy(sub);
 }
 
+///< REQ_PCL_083: dispatch to an output topic with no subscriber logs DEBUG without crashing.
 TEST(PclBridge, NoDownstreamSubscriber) {
   // Test behavior when no subscriber on output topic (NOT_FOUND is logged)
   auto* e = pcl_executor_create();
@@ -215,6 +222,7 @@ TEST(PclBridge, NoDownstreamSubscriber) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_328: the bridge's transform user_data argument is forwarded to the transform function on every dispatch.
 TEST(PclBridge, TransformWithUserData) {
   // Test that user_data is passed to transform function
   struct TransformCtx {
@@ -257,6 +265,7 @@ TEST(PclBridge, TransformWithUserData) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_082: bridge configure path when the internal container's ports are constrained (see test_pcl_dining.cpp for the forced-overflow case).
 TEST(PclBridge, ConfigurePortOverflow) {
   // Test that bridge configure fails when ports are exhausted
   // First fill up container ports, then try to configure bridge

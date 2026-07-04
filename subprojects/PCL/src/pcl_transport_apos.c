@@ -87,8 +87,11 @@ static pcl_status_t pcl_apos_encode_frame(const pcl_template_frame_t* frame,
     case PCL_TEMPLATE_FRAME_SVC_RESP:
       size = 1u + 4u + 2u + type_len + 4u + frame->payload_size;
       break;
+    // GCOVR_EXCL_START: the template send thread only emits the three frame
+    // kinds above; defensive guard for future kinds.
     default:
       return PCL_ERR_INVALID;
+    // GCOVR_EXCL_STOP
   }
   if (size > PCL_APOS_MAX_FRAME) return PCL_ERR_NOMEM;
 
@@ -239,7 +242,7 @@ static pcl_status_t pcl_apos_hook_recv(void*                 user_data,
   waitOnMultiChannel(channels, 1, ready, &timeout, &tm_status);
   if (tm_status == TM_TIMEOUT) return PCL_ERR_TIMEOUT;
   if (tm_status != TM_SUCCESS || ready[0] != ctx->recv_lvc) {
-    return PCL_ERR_STATE;
+    return PCL_ERR_STATE;  // GCOVR_EXCL_LINE: single-channel wait cannot report a foreign channel; requires an APOS-layer fault
   }
 
   data = (uint8_t*)malloc(PCL_APOS_MAX_FRAME);
@@ -250,8 +253,11 @@ static pcl_status_t pcl_apos_hook_recv(void*                 user_data,
                             &data_size,
                             &rs_status);
   if (rs_status == RS_RESOURCE) {
+    // GCOVR_EXCL_START: only reachable when another consumer steals the
+    // message between the wait and the read; the transport owns its channel.
     free(data);
     return PCL_ERR_TIMEOUT;
+    // GCOVR_EXCL_STOP
   }
   if (rs_status != RS_SUCCESS || data_size <= 0) {
     free(data);
@@ -294,8 +300,11 @@ pcl_apos_transport_t* pcl_apos_transport_create(unsigned int    process_id,
 
   ctx->template_transport = pcl_transport_template_create(&hooks, executor);
   if (!ctx->template_transport) {
+    // GCOVR_EXCL_START: template creation only fails on heap or thread
+    // exhaustion, which is not injectable through this path.
     free(ctx);
     return 0;
+    // GCOVR_EXCL_STOP
   }
   return ctx;
 }

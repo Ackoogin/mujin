@@ -20,15 +20,18 @@ pcl_transport_t EmptyVtable() { return pcl_transport_t{}; }
 
 // -- Derivation from vtable ----------------------------------------------
 
+///< REQ_PCL_347: capability derivation from a NULL vtable returns PCL_CAP_NONE.
 TEST(PclCapabilities, NullVtableHasNoCaps) {
   EXPECT_EQ(pcl_transport_caps_from_vtable(nullptr), PCL_CAP_NONE);
 }
 
+///< REQ_PCL_348: capability derivation from a vtable with every slot NULL returns PCL_CAP_NONE.
 TEST(PclCapabilities, EmptyVtableHasNoCaps) {
   pcl_transport_t t = EmptyVtable();
   EXPECT_EQ(pcl_transport_caps_from_vtable(&t), PCL_CAP_NONE);
 }
 
+///< REQ_PCL_349: a non-NULL publish or subscribe slot derives PCL_CAP_PUBSUB.
 TEST(PclCapabilities, PublishOrSubscribeImpliesPubsub) {
   pcl_transport_t pub = EmptyVtable();
   pub.publish = reinterpret_cast<decltype(pub.publish)>(0x1);
@@ -39,6 +42,7 @@ TEST(PclCapabilities, PublishOrSubscribeImpliesPubsub) {
   EXPECT_EQ(pcl_transport_caps_from_vtable(&sub), PCL_CAP_PUBSUB);
 }
 
+///< REQ_PCL_350: a non-NULL serve or invoke_async slot derives PCL_CAP_RPC_UNARY.
 TEST(PclCapabilities, ServeOrInvokeAsyncImpliesUnary) {
   pcl_transport_t srv = EmptyVtable();
   srv.serve = reinterpret_cast<decltype(srv.serve)>(0x1);
@@ -49,6 +53,7 @@ TEST(PclCapabilities, ServeOrInvokeAsyncImpliesUnary) {
   EXPECT_EQ(pcl_transport_caps_from_vtable(&cli), PCL_CAP_RPC_UNARY);
 }
 
+///< REQ_PCL_351: a non-NULL invoke_stream or stream_send slot derives PCL_CAP_RPC_STREAM.
 TEST(PclCapabilities, InvokeStreamOrStreamSendImpliesStream) {
   pcl_transport_t cli = EmptyVtable();
   cli.invoke_stream = reinterpret_cast<decltype(cli.invoke_stream)>(0x1);
@@ -59,6 +64,7 @@ TEST(PclCapabilities, InvokeStreamOrStreamSendImpliesStream) {
   EXPECT_EQ(pcl_transport_caps_from_vtable(&srv), PCL_CAP_RPC_STREAM);
 }
 
+///< REQ_PCL_352: PCL_CAP_RPC_ACTION is never derived from a vtable, regardless of which other slots are set.
 TEST(PclCapabilities, ActionIsNeverDerived) {
   // Every slot non-NULL -- still no ACTION bit, which has no vtable slot.
   pcl_transport_t t = EmptyVtable();
@@ -72,12 +78,14 @@ TEST(PclCapabilities, ActionIsNeverDerived) {
 
 // -- Loader-resolved capabilities ----------------------------------------
 
+///< REQ_PCL_353: pcl_plugin_transport_caps(NULL, ...) fails closed with PCL_ERR_INVALID.
 TEST(PclCapabilities, LoaderNullHandleFailsClosed) {
   pcl_transport_caps_t caps = PCL_CAP_NONE;
   EXPECT_EQ(pcl_plugin_transport_caps(nullptr, nullptr, nullptr, &caps),
             PCL_ERR_INVALID);
 }
 
+///< REQ_PCL_354: the loader prefers a plugin's explicit pcl_transport_plugin_caps symbol over vtable derivation.
 TEST(PclCapabilities, LoaderUsesExplicitCapsSymbol) {
   // The capture plugin exports pcl_transport_plugin_caps declaring an ACTION
   // capability that its vtable (publish + serve only) could never imply, so a
@@ -95,6 +103,7 @@ TEST(PclCapabilities, LoaderUsesExplicitCapsSymbol) {
   pcl_plugin_unload(handle);
 }
 
+///< REQ_PCL_355: the loader falls back to vtable derivation when a plugin exports no caps symbol.
 TEST(PclCapabilities, LoaderDerivesWhenSymbolAbsent) {
   // The no-caps fixture plugin exports no caps symbol, so the loader must fall
   // back to vtable derivation: publish + invoke_async => PUBSUB | RPC_UNARY.
@@ -147,15 +156,18 @@ pcl_qos_reliability_t DeclaredReliability(const char* path) {
 
 }  // namespace
 
+///< REQ_PCL_356: the UDP plugin declares PCL_CAP_PUBSUB only.
 TEST(PclCapabilities, UdpPluginDeclaresPubsub) {
   EXPECT_EQ(DeclaredCaps(UDP_TRANSPORT_PLUGIN_PATH), PCL_CAP_PUBSUB);
 }
 
+///< REQ_PCL_357: the socket plugin declares PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY.
 TEST(PclCapabilities, SocketPluginDeclaresPubsubUnary) {
   EXPECT_EQ(DeclaredCaps(SOCKET_TRANSPORT_PLUGIN_PATH),
             PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY);
 }
 
+///< REQ_PCL_358: the shared-memory plugin declares PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM.
 TEST(PclCapabilities, ShmPluginDeclaresPubsubUnaryStream) {
   EXPECT_EQ(DeclaredCaps(SHM_TRANSPORT_PLUGIN_PATH),
             PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM);
@@ -163,21 +175,25 @@ TEST(PclCapabilities, ShmPluginDeclaresPubsubUnaryStream) {
 
 // -- Shipped generic-plugin offered-QoS matrix (§2.D.4) ------------------
 
+///< REQ_PCL_359: the UDP plugin declares PCL_QOS_RELIABILITY_BEST_EFFORT.
 TEST(PclCapabilities, UdpPluginOffersBestEffort) {
   EXPECT_EQ(DeclaredReliability(UDP_TRANSPORT_PLUGIN_PATH),
             PCL_QOS_RELIABILITY_BEST_EFFORT);
 }
 
+///< REQ_PCL_360: the socket plugin declares PCL_QOS_RELIABILITY_RELIABLE.
 TEST(PclCapabilities, SocketPluginOffersReliable) {
   EXPECT_EQ(DeclaredReliability(SOCKET_TRANSPORT_PLUGIN_PATH),
             PCL_QOS_RELIABILITY_RELIABLE);
 }
 
+///< REQ_PCL_361: the shared-memory plugin declares PCL_QOS_RELIABILITY_RELIABLE.
 TEST(PclCapabilities, ShmPluginOffersReliable) {
   EXPECT_EQ(DeclaredReliability(SHM_TRANSPORT_PLUGIN_PATH),
             PCL_QOS_RELIABILITY_RELIABLE);
 }
 
+///< REQ_PCL_362: pcl_plugin_transport_qos(handle, cfg, NULL) fails closed with PCL_ERR_INVALID on a NULL out-param.
 TEST(PclCapabilities, LoaderQosUnspecifiedWhenSymbolAbsent) {
   // The codec stub plugin exports no transport QoS symbol.
   pcl_plugin_handle_t* handle = pcl_plugin_open(SOCKET_TRANSPORT_PLUGIN_PATH);
@@ -190,6 +206,7 @@ TEST(PclCapabilities, LoaderQosUnspecifiedWhenSymbolAbsent) {
 
 // -- Endpoint required caps + supports -----------------------------------
 
+///< REQ_PCL_363: pcl_endpoint_required_caps() maps every endpoint kind to its required capability.
 TEST(PclCapabilities, EndpointRequiredCaps) {
   EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_PUBLISHER), PCL_CAP_PUBSUB);
   EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_SUBSCRIBER), PCL_CAP_PUBSUB);
@@ -199,6 +216,7 @@ TEST(PclCapabilities, EndpointRequiredCaps) {
             PCL_CAP_RPC_STREAM);
 }
 
+///< REQ_PCL_364: pcl_transport_caps_supports() reports whether a capability mask includes every required bit.
 TEST(PclCapabilities, CapsSupports) {
   EXPECT_TRUE(pcl_transport_caps_supports(
       PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY, PCL_CAP_RPC_UNARY));
@@ -224,6 +242,7 @@ pcl_endpoint_route_t RemoteRoute(const char* name, pcl_endpoint_kind_t kind,
 
 }  // namespace
 
+///< REQ_PCL_365: a remote route validates successfully when its named peer transport declares the required capability.
 TEST(PclCapabilities, ValidateRoutePassesWhenTransportHasCap) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -241,6 +260,7 @@ TEST(PclCapabilities, ValidateRoutePassesWhenTransportHasCap) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_366: a remote route fails closed with PCL_ERR_STATE and a diagnostic naming the missing capability.
 TEST(PclCapabilities, ValidateRouteFailsClosedOnMissingCap) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -259,6 +279,7 @@ TEST(PclCapabilities, ValidateRouteFailsClosedOnMissingCap) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_367: a remote route naming an unregistered peer fails closed with PCL_ERR_NOT_FOUND and a diagnostic naming the peer.
 TEST(PclCapabilities, ValidateRouteFailsClosedOnMissingPeer) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -271,6 +292,7 @@ TEST(PclCapabilities, ValidateRouteFailsClosedOnMissingPeer) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_368: a local-only route validates successfully without any transport registered.
 TEST(PclCapabilities, ValidateLocalOnlyRouteNeedsNoTransport) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -285,6 +307,7 @@ TEST(PclCapabilities, ValidateLocalOnlyRouteNeedsNoTransport) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_369: a subscriber endpoint validates successfully over a pub/sub-capable named transport.
 TEST(PclCapabilities, ValidatePubsubEndpointOverPubsubTransport) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -299,6 +322,7 @@ TEST(PclCapabilities, ValidatePubsubEndpointOverPubsubTransport) {
 
 // -- QoS floor (§2.D.4) --------------------------------------------------
 
+///< REQ_PCL_370: pcl_qos_satisfies() implements the ordered reliability floor check (unspecified < best_effort < reliable).
 TEST(PclCapabilities, QosSatisfiesIsOrderedReliability) {
   const pcl_qos_t unspec{PCL_QOS_RELIABILITY_UNSPECIFIED};
   const pcl_qos_t best{PCL_QOS_RELIABILITY_BEST_EFFORT};
@@ -317,6 +341,7 @@ TEST(PclCapabilities, QosSatisfiesIsOrderedReliability) {
   EXPECT_FALSE(pcl_qos_satisfies(unspec, best));
 }
 
+///< REQ_PCL_371: a route validates successfully when its transport's declared QoS meets the endpoint's floor.
 TEST(PclCapabilities, ValidateRoutePassesWhenTransportMeetsQosFloor) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -338,6 +363,7 @@ TEST(PclCapabilities, ValidateRoutePassesWhenTransportMeetsQosFloor) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_372: a route fails closed with a diagnostic naming both the required and offered reliability when the QoS floor is unmet.
 TEST(PclCapabilities, ValidateRouteFailsClosedWhenQosFloorUnmet) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -360,6 +386,7 @@ TEST(PclCapabilities, ValidateRouteFailsClosedWhenQosFloorUnmet) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_373: a route with a declared QoS floor fails closed when the transport's reliability is undeclared (unspecified).
 TEST(PclCapabilities, ValidateRouteFailsClosedWhenQosUndeclared) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -376,6 +403,7 @@ TEST(PclCapabilities, ValidateRouteFailsClosedWhenQosUndeclared) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_374: a route with no declared QoS floor validates on capabilities alone, ignoring the transport's offered QoS.
 TEST(PclCapabilities, ValidateRouteIgnoresQosWhenNoFloor) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -387,5 +415,105 @@ TEST(PclCapabilities, ValidateRouteIgnoresQosWhenNoFloor) {
   auto route = RemoteRoute("evidence", PCL_ENDPOINT_SUBSCRIBER, peers, 1);
   // route.qos_floor left zero-initialised (UNSPECIFIED).
   EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, nullptr, 0), PCL_OK);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_375: pcl_endpoint_required_caps() returns PCL_CAP_NONE for an unrecognised endpoint kind.
+TEST(PclCapabilities, EndpointRequiredCapsUnknownKindIsNone) {
+  // An unrecognised endpoint kind imposes no capability requirement.
+  EXPECT_EQ(pcl_endpoint_required_caps(static_cast<pcl_endpoint_kind_t>(0x7fff)),
+            PCL_CAP_NONE);
+}
+
+///< REQ_PCL_376: pcl_qos_reliability_name() returns the correct human-readable name for each reliability level, defaulting to "unspecified" for an unrecognised value.
+TEST(PclCapabilities, QosReliabilityNames) {
+  EXPECT_STREQ(pcl_qos_reliability_name(PCL_QOS_RELIABILITY_BEST_EFFORT),
+               "best_effort");
+  EXPECT_STREQ(pcl_qos_reliability_name(PCL_QOS_RELIABILITY_RELIABLE),
+               "reliable");
+  EXPECT_STREQ(pcl_qos_reliability_name(PCL_QOS_RELIABILITY_UNSPECIFIED),
+               "unspecified");
+  EXPECT_STREQ(
+      pcl_qos_reliability_name(static_cast<pcl_qos_reliability_t>(0x7fff)),
+      "unspecified");
+}
+
+///< REQ_PCL_377: pcl_executor_set_transport_qos() sets the QoS of the executor's default transport slot and rejects a NULL executor.
+TEST(PclCapabilities, SetTransportQosOnDefaultTransport) {
+  EXPECT_EQ(pcl_executor_set_transport_qos(
+                nullptr, pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_INVALID);
+
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(pcl_executor_set_transport_qos(
+                e, pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_OK);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_378: pcl_executor_register_transport_qos() rejects NULL arguments and returns PCL_ERR_NOT_FOUND for an unregistered peer.
+TEST(PclCapabilities, RegisterTransportQosUnknownPeerNotFound) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(pcl_executor_register_transport_qos(
+                nullptr, "x", pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_register_transport_qos(
+                e, nullptr, pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_register_transport_qos(
+                e, "never_registered", pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_NOT_FOUND);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_379: a remote route with no named peers validates against the executor's default transport slot, failing closed when absent or under-capable.
+TEST(PclCapabilities, ValidateRouteAgainstDefaultTransport) {
+  // A remote route with no named peers validates against the executor's
+  // default transport slot.
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // No default transport at all: fail closed, diag names the default slot.
+  auto route = RemoteRoute("evidence", PCL_ENDPOINT_SUBSCRIBER, nullptr, 0);
+  char diag[160] = "";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_ERR_NOT_FOUND);
+  EXPECT_NE(std::string(diag).find("default transport"), std::string::npos);
+
+  // Default transport with pub/sub: subscriber routes pass.
+  pcl_transport_t vt{};
+  vt.publish = [](void*, const char*, const pcl_msg_t*) { return PCL_OK; };
+  ASSERT_EQ(pcl_executor_set_transport(e, &vt), PCL_OK);
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_OK);
+
+  // A stream-provided endpoint fails closed against the pub/sub-only default
+  // transport, and the diag names the missing RPC_STREAM capability.
+  auto stream_route =
+      RemoteRoute("tiles", PCL_ENDPOINT_STREAM_PROVIDED, nullptr, 0);
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &stream_route, diag,
+                                                 sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_NE(std::string(diag).find("RPC_STREAM"), std::string::npos);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_380: a publisher endpoint routed to a unary-RPC-only transport fails closed with a diagnostic naming the missing PUBSUB capability.
+TEST(PclCapabilities, ValidatePublisherRouteFailsClosedWithoutPubsubCap) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  // A unary-RPC-only transport cannot carry a publisher endpoint.
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "grpc", &vt,
+                                                 PCL_CAP_RPC_UNARY),
+            PCL_OK);
+  const char* peers[] = {"grpc"};
+  auto route = RemoteRoute("evidence", PCL_ENDPOINT_PUBLISHER, peers, 1);
+  char diag[160] = "";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_NE(std::string(diag).find("PUBSUB"), std::string::npos);
   pcl_executor_destroy(e);
 }

@@ -151,8 +151,11 @@ pcl_status_t pcl_codec_registry_load_plugins_from_paths(
       continue;
     }
     if (!retain_codec_plugin(handle)) {
+      // GCOVR_EXCL_START: only reachable when the resident-list allocation
+      // fails; heap exhaustion is not injectable through this call path.
       pcl_plugin_unload(handle);
       return PCL_ERR_NOMEM;
+      // GCOVR_EXCL_STOP
     }
   }
 
@@ -191,8 +194,11 @@ pcl_status_t pcl_codec_registry_load_plugins_from_env(
       status = pcl_codec_registry_load_plugins_from_paths(
           registry, (const char* const*)&token_start, 1u);
       if (status != PCL_OK) {
+        // GCOVR_EXCL_START: from_paths skips bad plugins and only errors on
+        // resident-list heap exhaustion, which is not injectable here.
         pcl_free(copy);
         return status;
+        // GCOVR_EXCL_STOP
       }
       if (saved == '\0') break;
       token_start = cursor + 1;
@@ -238,8 +244,11 @@ pcl_status_t pcl_codec_registry_load_plugins_from_manifest(
     status = pcl_codec_registry_load_plugins_from_paths(
         registry, (const char* const*)&start, 1u);
     if (status != PCL_OK) {
+      // GCOVR_EXCL_START: from_paths skips bad plugins and only errors on
+      // resident-list heap exhaustion, which is not injectable here.
       fclose(file);
       return status;
+      // GCOVR_EXCL_STOP
     }
   }
 

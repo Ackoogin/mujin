@@ -80,6 +80,11 @@ PCL_TEST_PLUGIN_EXPORT const char* pcl_stub_last_config(void) {
 
 PCL_TEST_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(
     const char* config_json) {
+  /* Fault-injection hook: lets loader tests exercise the entry-returns-NULL
+     failure path without a dedicated plugin binary. */
+  if (config_json && strstr(config_json, "return_null")) {
+    return (const pcl_codec_t*)0;
+  }
   if (config_json) {
     size_t n = strlen(config_json);
     if (n >= sizeof(stub_last_config)) n = sizeof(stub_last_config) - 1u;

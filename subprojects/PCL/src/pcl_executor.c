@@ -839,8 +839,11 @@ static const char* caps_name(pcl_transport_caps_t cap) {
     case PCL_CAP_PUBSUB:     return "PUBSUB";
     case PCL_CAP_RPC_UNARY:  return "RPC_UNARY";
     case PCL_CAP_RPC_STREAM: return "RPC_STREAM";
+    // GCOVR_EXCL_START: diagnostics only run for caps an endpoint can require,
+    // and pcl_endpoint_required_caps never yields RPC_ACTION or NONE.
     case PCL_CAP_RPC_ACTION: return "RPC_ACTION";
     default:                 return "NONE";
+    // GCOVR_EXCL_STOP
   }
 }
 

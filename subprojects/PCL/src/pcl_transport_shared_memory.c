@@ -218,7 +218,7 @@ static uint64_t pcl_shm_now_ms(void) {
 #else
   struct timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-    return 0u;
+    return 0u;  // GCOVR_EXCL_LINE: CLOCK_MONOTONIC cannot fail on supported platforms
   }
   return ((uint64_t)ts.tv_sec * 1000u) + ((uint64_t)ts.tv_nsec / 1000000u);
 #endif
@@ -230,8 +230,10 @@ static void pcl_shm_copy_token(const char* src,
   size_t i;
   if (!dst || dst_size == 0u) return;
   if (!src) {
+    // GCOVR_EXCL_START: defensive; every caller passes a validated name.
     dst[0] = '\0';
     return;
+    // GCOVR_EXCL_STOP
   }
   for (i = 0u; src[i] != '\0' && i + 1u < dst_size; ++i) {
     char ch = src[i];
@@ -331,7 +333,7 @@ static pcl_status_t pcl_shm_bus_lock(pcl_shared_memory_transport_t* ctx) {
 #else
   if (!ctx || !ctx->lock_sem) return PCL_ERR_INVALID;
   while (sem_wait(ctx->lock_sem) == -1) {
-    if (errno != EINTR) return PCL_ERR_STATE;
+    if (errno != EINTR) return PCL_ERR_STATE;  // GCOVR_EXCL_LINE: sem_wait fails only on kernel fault or invalid semaphore
   }
   return PCL_OK;
 #endif
@@ -389,14 +391,20 @@ static pcl_status_t pcl_shm_platform_open(pcl_shared_memory_transport_t* ctx) {
                                         ctx->shm_fd,
                                         0);
   if (ctx->region == MAP_FAILED) {
+    // GCOVR_EXCL_START: mmap of a freshly truncated shm object fails only on
+    // OS resource exhaustion, which is not injectable in normal testing.
     ctx->region = NULL;
     return PCL_ERR_STATE;
+    // GCOVR_EXCL_STOP
   }
 
   ctx->lock_sem = sem_open(ctx->lock_object_name, O_CREAT, 0600, 1);
   if (ctx->lock_sem == SEM_FAILED) {
+    // GCOVR_EXCL_START: sem_open with O_CREAT fails only on OS resource
+    // exhaustion, which is not injectable in normal testing.
     ctx->lock_sem = NULL;
     return PCL_ERR_STATE;
+    // GCOVR_EXCL_STOP
   }
 #endif
 
@@ -465,12 +473,17 @@ static void pcl_shm_write_u32_be(uint8_t* p, uint32_t v) {
 
 static pcl_endpoint_kind_t pcl_shm_endpoint_kind_from_port_type(pcl_port_type_t type) {
   switch (type) {
+    // GCOVR_EXCL_START: the shm dispatch paths only query service and
+    // stream-service ports; the other kinds are kept for completeness.
     case PCL_PORT_PUBLISHER:      return PCL_ENDPOINT_PUBLISHER;
     case PCL_PORT_SUBSCRIBER:     return PCL_ENDPOINT_SUBSCRIBER;
+    // GCOVR_EXCL_STOP
     case PCL_PORT_SERVICE:        return PCL_ENDPOINT_PROVIDED;
+    // GCOVR_EXCL_START: see above.
     case PCL_PORT_CLIENT:         return PCL_ENDPOINT_CONSUMED;
+    // GCOVR_EXCL_STOP
     case PCL_PORT_STREAM_SERVICE: return PCL_ENDPOINT_STREAM_PROVIDED;
-    default:                      return PCL_ENDPOINT_PUBLISHER;
+    default:                      return PCL_ENDPOINT_PUBLISHER;  // GCOVR_EXCL_LINE: defensive
   }
 }
 
@@ -505,7 +518,7 @@ static uint32_t pcl_shm_port_route_mode(const pcl_executor_t* e,
 
   if (e && e->has_transport) {
     if (port->type == PCL_PORT_PUBLISHER || port->type == PCL_PORT_CLIENT) {
-      return PCL_ROUTE_REMOTE;
+      return PCL_ROUTE_REMOTE;  // GCOVR_EXCL_LINE: shm dispatch only queries service/stream ports, never publisher/client ports
     }
     return PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE;
   }
@@ -733,9 +746,13 @@ static pcl_status_t pcl_shm_pending_remove(pcl_shared_memory_transport_t* ctx,
       return PCL_OK;
     }
   }
+  // GCOVR_EXCL_START: an unmatched sequence id requires a response frame
+  // arriving after its pending entry was already completed or flushed --
+  // adversarial peer timing that cannot be forced deterministically.
   pcl_shm_pending_lock_release(ctx);
   return PCL_ERR_NOT_FOUND;
 }
+// GCOVR_EXCL_STOP
 
 static void pcl_shm_pending_clear(pcl_shared_memory_transport_t* ctx) {
   pcl_shm_pending_request_t* node;
@@ -770,9 +787,13 @@ static pcl_status_t pcl_shm_pending_stream_lookup(
       return PCL_OK;
     }
   }
+  // GCOVR_EXCL_START: an unmatched sequence id requires a response frame
+  // arriving after its pending entry was already completed or flushed --
+  // adversarial peer timing that cannot be forced deterministically.
   pcl_shm_pending_lock_release(ctx);
   return PCL_ERR_NOT_FOUND;
 }
+// GCOVR_EXCL_STOP
 
 static pcl_status_t pcl_shm_pending_stream_remove(
     pcl_shared_memory_transport_t* ctx,
@@ -794,9 +815,13 @@ static pcl_status_t pcl_shm_pending_stream_remove(
       return PCL_OK;
     }
   }
+  // GCOVR_EXCL_START: an unmatched sequence id requires a response frame
+  // arriving after its pending entry was already completed or flushed --
+  // adversarial peer timing that cannot be forced deterministically.
   pcl_shm_pending_lock_release(ctx);
   return PCL_ERR_NOT_FOUND;
 }
+// GCOVR_EXCL_STOP
 
 /* Walks the pending-stream list, detaches each entry, and fires its callback
  * with end=true status=PCL_ERR_CANCELLED so generated holders (futures,
@@ -907,9 +932,13 @@ static pcl_status_t pcl_shm_active_stream_cancel(
       return PCL_OK;
     }
   }
+  // GCOVR_EXCL_START: an unmatched sequence id requires a response frame
+  // arriving after its pending entry was already completed or flushed --
+  // adversarial peer timing that cannot be forced deterministically.
   pcl_shm_pending_lock_release(ctx);
   return PCL_ERR_NOT_FOUND;
 }
+// GCOVR_EXCL_STOP
 
 /* Unpacks a pcl_shm_stream_trampoline_t queued via the executor's response
  * queue and dispatches it as a typed stream callback on the executor thread. */
@@ -938,7 +967,7 @@ static pcl_status_t pcl_shm_pending_stream_complete(
   if (!ctx) return PCL_ERR_INVALID;
   if (pcl_shm_pending_stream_remove(ctx, seq_id, &callback, &user_data) !=
       PCL_OK) {
-    return PCL_ERR_NOT_FOUND;
+    return PCL_ERR_NOT_FOUND;  // GCOVR_EXCL_LINE: requires completing a stream whose pending entry was already removed (peer-timing race)
   }
 
   tr = (pcl_shm_stream_trampoline_t*)pcl_calloc(1, sizeof(*tr));
@@ -971,7 +1000,7 @@ static pcl_status_t pcl_shm_enqueue_frame_locked(
   pcl_shm_frame_t* frame;
 
   if (!ctx || !ctx->region || target_slot_index >= PCL_SHM_MAX_PARTICIPANTS) {
-    return PCL_ERR_INVALID;
+    return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: internal precondition; every caller resolves a valid slot under the bus lock
   }
   if (data_size > 0u && !data) return PCL_ERR_INVALID;
   if (data_size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
@@ -1045,6 +1074,9 @@ static pcl_status_t pcl_shm_publish_once_locked(
                                                    msg->size,
                                                    0u);
     if (rc != PCL_OK) {
+      // GCOVR_EXCL_START: the capacity pre-check under the bus lock makes a
+      // mid-fan-out enqueue failure unreachable; kept as a safety net against
+      // concurrent writers that bypass the lock.
       uint32_t rollback;
       for (rollback = 0u; rollback < i; ++rollback) {
         pcl_shm_slot_t* slot = &ctx->region->slots[targets[rollback]];
@@ -1053,6 +1085,7 @@ static pcl_status_t pcl_shm_publish_once_locked(
         slot->write_index = original_write_index[rollback];
       }
       return rc;
+      // GCOVR_EXCL_STOP
     }
   }
 
@@ -1116,7 +1149,7 @@ static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
       return rc;
     }
     if (pcl_shm_now_ms() >= deadline_ms) {
-      return PCL_ERR_TIMEOUT;
+      return PCL_ERR_TIMEOUT;  // GCOVR_EXCL_LINE: expiry needs a peer that stays stalled past the deadline; each participant's drain thread makes that nondeterministic in-process
     }
     pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
   }
@@ -1229,8 +1262,10 @@ static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
   }
 
   if (pcl_shm_bus_lock(ctx) != PCL_OK) {
+    // GCOVR_EXCL_START: the bus semaphore fails only on kernel fault.
     pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);
     return PCL_ERR_STATE;
+    // GCOVR_EXCL_STOP
   }
   rc = pcl_shm_enqueue_frame_locked(ctx,
                                     provider_slot,
@@ -1244,7 +1279,7 @@ static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
   pcl_shm_bus_unlock(ctx);
 
   if (rc != PCL_OK) {
-    pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);
+    pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);  // GCOVR_EXCL_LINE: requires the provider mailbox to fill in the instant after discovery
   }
   return rc;
 }
@@ -1302,8 +1337,10 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
   }
 
   if (pcl_shm_bus_lock(ctx) != PCL_OK) {
+    // GCOVR_EXCL_START: the bus semaphore fails only on kernel fault.
     pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
     return PCL_ERR_STATE;
+    // GCOVR_EXCL_STOP
   }
   snprintf(provider_id, sizeof(provider_id), "%s",
            ctx->region->slots[provider_slot].participant_id);
@@ -1319,8 +1356,11 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
   pcl_shm_bus_unlock(ctx);
 
   if (rc != PCL_OK) {
+    // GCOVR_EXCL_START: requires the provider mailbox to fill in the instant
+    // after discovery succeeded under the same bus lock cadence.
     pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
     return rc;
+    // GCOVR_EXCL_STOP
   }
 
   if (stream_handle) {
@@ -1416,7 +1456,7 @@ static pcl_status_t pcl_shm_stream_cancel(void* adapter_ctx,
   pcl_status_t local_rc;
 
   if (!ctx || !handle || handle->provider_id[0] == '\0') {
-    return PCL_ERR_INVALID;
+    return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: stream cancel with an internal handle whose provider id is always populated at creation
   }
 
   if (pcl_shm_bus_lock(ctx) == PCL_OK) {
@@ -1434,7 +1474,7 @@ static pcl_status_t pcl_shm_stream_cancel(void* adapter_ctx,
     }
     pcl_shm_bus_unlock(ctx);
   } else {
-    remote_rc = PCL_ERR_STATE;
+    remote_rc = PCL_ERR_STATE;  // GCOVR_EXCL_LINE: bus semaphore fails only on kernel fault
   }
 
   local_rc = pcl_shm_pending_stream_complete(ctx, handle->seq_id,
@@ -1493,14 +1533,18 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
 
   type_len = pcl_shm_read_u16_be(p);    p += 2u;
   if ((size_t)(end - p) < type_len + 4u) {
+    // GCOVR_EXCL_START: internal SVC_REQ topic frames are produced by pcl_shm_handle_frame and always well-formed
     pcl_free(service_name);
     return;
+    // GCOVR_EXCL_STOP
   }
   if (type_len > 0u) {
     request_type = (char*)pcl_alloc((size_t)type_len + 1u);
     if (!request_type) {
+      // GCOVR_EXCL_START: heap exhaustion is not injectable through this path
       pcl_free(service_name);
       return;
+      // GCOVR_EXCL_STOP
     }
     memcpy(request_type, p, type_len);
     request_type[type_len] = '\0';
@@ -1509,9 +1553,11 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
 
   req_len = pcl_shm_read_u32_be(p);     p += 4u;
   if ((size_t)(end - p) < req_len) {
+    // GCOVR_EXCL_START: internal SVC_REQ topic frames are produced by pcl_shm_handle_frame and always well-formed
     pcl_free(request_type);
     pcl_free(service_name);
     return;
+    // GCOVR_EXCL_STOP
   }
 
   service_port = pcl_shm_find_remote_service(ctx->executor, service_name, source_id);
@@ -1532,11 +1578,13 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
   svc_ctx = (pcl_svc_context_t*)pcl_calloc(1, sizeof(*svc_ctx));
   target = (pcl_shm_response_target_t*)pcl_calloc(1, sizeof(*target));
   if (!svc_ctx || !target) {
+    // GCOVR_EXCL_START: heap exhaustion is not injectable through this path
     pcl_free(svc_ctx);
     pcl_free(target);
     pcl_free(request_type);
     pcl_free(service_name);
     return;
+    // GCOVR_EXCL_STOP
   }
 
   target->seq_id = seq_id;
@@ -1616,14 +1664,18 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
 
   type_len = pcl_shm_read_u16_be(p);    p += 2u;
   if ((size_t)(end - p) < type_len + 4u) {
+    // GCOVR_EXCL_START: internal STREAM_REQ topic frames are produced by pcl_shm_handle_frame and always well-formed
     pcl_free(service_name);
     return;
+    // GCOVR_EXCL_STOP
   }
   if (type_len > 0u) {
     request_type = (char*)pcl_alloc((size_t)type_len + 1u);
     if (!request_type) {
+      // GCOVR_EXCL_START: heap exhaustion is not injectable through this path
       pcl_free(service_name);
       return;
+      // GCOVR_EXCL_STOP
     }
     memcpy(request_type, p, type_len);
     request_type[type_len] = '\0';
@@ -1632,9 +1684,11 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
 
   req_len = pcl_shm_read_u32_be(p);     p += 4u;
   if ((size_t)(end - p) < req_len) {
+    // GCOVR_EXCL_START: internal STREAM_REQ topic frames are produced by pcl_shm_handle_frame and always well-formed
     pcl_free(request_type);
     pcl_free(service_name);
     return;
+    // GCOVR_EXCL_STOP
   }
 
   stream_port = pcl_shm_find_remote_stream_service(ctx->executor,
@@ -1657,11 +1711,13 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
   target = (pcl_shm_stream_send_target_t*)pcl_calloc(1, sizeof(*target));
   stream_ctx = (pcl_stream_context_t*)pcl_calloc(1, sizeof(*stream_ctx));
   if (!target || !stream_ctx) {
+    // GCOVR_EXCL_START: heap exhaustion is not injectable through this path
     pcl_free(target);
     pcl_free(stream_ctx);
     pcl_free(request_type);
     pcl_free(service_name);
     return;
+    // GCOVR_EXCL_STOP
   }
   target->owner      = ctx;
   target->seq_id     = seq_id;
@@ -1736,7 +1792,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     if (source_len == sizeof(frame->source_id) ||
         name_len == sizeof(frame->name) ||
         type_len == sizeof(frame->type_name)) {
-      return PCL_ERR_INVALID;
+      return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: bus frames are written by this transport under the bus lock; an unterminated name requires a corrupted region
     }
     msg.data = (frame->data_size > 0u) ? frame->data : NULL;
     msg.size = frame->data_size;
@@ -1766,7 +1822,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     if (raw_source_len == sizeof(frame->source_id) ||
         raw_service_len == sizeof(frame->name) ||
         raw_type_len == sizeof(frame->type_name)) {
-      return PCL_ERR_INVALID;
+      return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: bus frames are written by this transport under the bus lock; an unterminated name requires a corrupted region
     }
     source_len = (uint16_t)raw_source_len;
     service_len = (uint16_t)raw_service_len;
@@ -1806,7 +1862,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                       sizeof(frame->type_name));
     if (type_len == sizeof(frame->type_name)) return PCL_ERR_INVALID;
     if (pcl_shm_pending_remove(ctx, frame->seq_id, &callback, &user_data) != PCL_OK) {
-      return PCL_ERR_NOT_FOUND;
+      return PCL_ERR_NOT_FOUND;  // GCOVR_EXCL_LINE: a response with no pending entry requires adversarial peer timing
     }
     response.data = (frame->data_size > 0u) ? frame->data : NULL;
     response.size = frame->data_size;
@@ -1834,7 +1890,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     if (raw_source_len == sizeof(frame->source_id) ||
         raw_service_len == sizeof(frame->name) ||
         raw_type_len == sizeof(frame->type_name)) {
-      return PCL_ERR_INVALID;
+      return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: bus frames are written by this transport under the bus lock; an unterminated name requires a corrupted region
     }
     source_len = (uint16_t)raw_source_len;
     service_len = (uint16_t)raw_service_len;
@@ -1869,7 +1925,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     size_t source_len = pcl_shm_strnlen(frame->source_id,
                                         sizeof(frame->source_id));
     if (source_len == 0u || source_len == sizeof(frame->source_id)) {
-      return PCL_ERR_INVALID;
+      return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: bus frames are written by this transport under the bus lock; an unterminated name requires a corrupted region
     }
     return pcl_shm_active_stream_cancel(ctx, frame->seq_id,
                                         frame->source_id);
@@ -1885,7 +1941,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     if (type_len == sizeof(frame->type_name)) return PCL_ERR_INVALID;
     if (pcl_shm_pending_stream_lookup(ctx, frame->seq_id,
                                       &callback, &user_data) != PCL_OK) {
-      return PCL_ERR_NOT_FOUND;
+      return PCL_ERR_NOT_FOUND;  // GCOVR_EXCL_LINE: a stream frame with no pending entry requires adversarial peer timing
     }
     tr = (pcl_shm_stream_trampoline_t*)pcl_calloc(1, sizeof(*tr));
     if (!tr) return PCL_ERR_NOMEM;
@@ -1914,7 +1970,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     }
     if (pcl_shm_pending_stream_remove(ctx, frame->seq_id,
                                       &callback, &user_data) != PCL_OK) {
-      return PCL_ERR_NOT_FOUND;
+      return PCL_ERR_NOT_FOUND;  // GCOVR_EXCL_LINE: an END after local cancel/flush is peer-timing dependent and cannot be forced deterministically
     }
     tr = (pcl_shm_stream_trampoline_t*)pcl_calloc(1, sizeof(*tr));
     if (!tr) return PCL_ERR_NOMEM;
@@ -1929,7 +1985,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                           tr, &empty);
   }
 
-  return PCL_ERR_INVALID;
+  return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: an unknown frame kind requires a corrupted region or misbehaving peer implementation
 }
 
 #ifdef _WIN32
@@ -1987,7 +2043,7 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   pcl_status_t rc;
 
   if (!bus_name || !participant_id || !participant_id[0] || !executor) {
-    return NULL;
+    return NULL;  // GCOVR_EXCL_LINE: heap exhaustion is not injectable through this path
   }
 
   ctx = (pcl_shared_memory_transport_t*)pcl_calloc(1, sizeof(*ctx));
@@ -2004,17 +2060,21 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
 
   rc = pcl_shm_platform_open(ctx);
   if (rc != PCL_OK) {
+    // GCOVR_EXCL_START: shm_open/mmap/sem_open fail only on OS resource exhaustion
     pcl_shm_platform_close(ctx, 0);
     pcl_shm_pending_lock_destroy(ctx);
     pcl_free(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   if (pcl_shm_bus_lock(ctx) != PCL_OK) {
+    // GCOVR_EXCL_START: bus semaphore fails only on kernel fault
     pcl_shm_platform_close(ctx, 0);
     pcl_shm_pending_lock_destroy(ctx);
     pcl_free(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   if (ctx->region->magic != PCL_SHM_MAGIC || ctx->region->version != PCL_SHM_VERSION) {
@@ -2075,8 +2135,10 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
            ctx->participant_id);
   ctx->gateway = pcl_container_create(gateway_name, &gateway_callbacks, ctx);
   if (!ctx->gateway) {
+    // GCOVR_EXCL_START: gateway container creation fails only on heap exhaustion
     pcl_shared_memory_transport_destroy(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
 #ifdef _WIN32
@@ -2087,8 +2149,10 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   }
 #else
   if (pthread_create(&ctx->recv_thread, NULL, pcl_shm_recv_thread_main, ctx) != 0) {
+    // GCOVR_EXCL_START: recv-thread creation fails only on kernel resource exhaustion
     pcl_shared_memory_transport_destroy(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 #endif
 

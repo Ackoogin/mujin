@@ -1263,3 +1263,65 @@ TEST(PclSocketTransport, ClientExRespectsTimeoutOnBlackholedHost) {
   pcl_executor_destroy(e);
   restore_logs();
 }
+
+///< REQ_PCL_115: a second server on an already-bound port fails closed and
+///< the failed create releases its listen socket during cleanup.
+TEST(PclSocketTransport, SecondServerOnSamePortFailsClosed) {
+  silence_logs();
+  LoopbackPair pair;
+  ASSERT_TRUE(pair.create());
+
+  // A duplicate server executor binding the port the pair's server used
+  // would race the (now closed) listener; instead bind a throwaway plain
+  // socket and point the duplicate server at *that* port so bind() fails
+  // deterministically.
+#ifdef _WIN32
+  SOCKET blocker = socket(AF_INET, SOCK_STREAM, 0);
+  ASSERT_NE(blocker, INVALID_SOCKET);
+#else
+  int blocker = socket(AF_INET, SOCK_STREAM, 0);
+  ASSERT_GE(blocker, 0);
+#endif
+  struct sockaddr_in addr = {};
+  addr.sin_family      = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  addr.sin_port        = 0;
+  ASSERT_EQ(bind(blocker, (struct sockaddr*)&addr, sizeof(addr)), 0);
+#ifdef _WIN32
+  int len = (int)sizeof(addr);
+#else
+  socklen_t len = sizeof(addr);
+#endif
+  ASSERT_EQ(getsockname(blocker, (struct sockaddr*)&addr, &len), 0);
+  ASSERT_EQ(listen(blocker, 1), 0);
+  const uint16_t busy_port = ntohs(addr.sin_port);
+
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+  EXPECT_EQ(pcl_socket_transport_create_server(busy_port, exec), nullptr);
+  pcl_executor_destroy(exec);
+
+#ifdef _WIN32
+  closesocket(blocker);
+#else
+  close(blocker);
+#endif
+  pair.destroy();
+  restore_logs();
+}
+
+///< REQ_PCL_190: the legacy single-shot client create (no total timeout)
+///< bounds each connect attempt with a 2-second slice and fails closed
+///< against an unroutable host.
+TEST(PclSocketTransport, LegacyClientToUnroutableHostFailsClosed) {
+  silence_logs();
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+  // 192.0.2.1 (TEST-NET-1) is reserved for documentation and never routable;
+  // the connect either errors immediately or times out on the per-attempt
+  // slice.  Either way the create fails closed within a bounded window.
+  EXPECT_EQ(pcl_socket_transport_create_client("192.0.2.1", 19999, exec),
+            nullptr);
+  pcl_executor_destroy(exec);
+  restore_logs();
+}
