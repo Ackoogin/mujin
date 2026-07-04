@@ -72,7 +72,7 @@ behind explicit triggers.
 | 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
 | 12 | C4 Retire codegen shims (after one SDK release) | S |
 | 13 | C5 Windows parity pass | S/M |
-| 14 | E1-E6 In-process service/pub/sub facade closure | M/L |
+| 14 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
 
 C1–C3 are independent of WS-A and of each other; they can be picked up in
 parallel whenever there is slack. C4 is time-gated, C5 environment-gated.
@@ -513,6 +513,15 @@ at the generated component-facade layer.
 
 ### E1. Make local-peer service routing explicit on the C++ facade
 
+**✅ Done 2026-07-04.** Generated C++ `ProvidedService` now exposes
+`routeAllLocal()` and `configureTransport(config_json)`; `ConsumedService`
+also accepts `configureTransport(config_json)`. Local config uses the same
+opaque JSON route vocabulary as remote config (`{"transport":"local"}` /
+`{"transport":"remote","peer":"..."}`), but local remains the no-plugin,
+same-executor PCL path. Generated Ada service packages gained the same route
+selection through `Transport_Config`, `Configure_Consumed_Transport`, and
+`Configure_Publisher_Transport`.
+
 - **Plan:** emit provider-side local routing (`ProvidedService::routeAllLocal()`)
   and document it beside the existing consumer `routeAllLocal()` and remote
   route helpers. Preserve default route behavior.
@@ -521,6 +530,11 @@ at the generated component-facade layer.
   unchanged; generator tests pin the emitted methods.
 
 ### E2. Prove facade-only same-executor service communication
+
+**✅ Done 2026-07-04.** Added
+`PclGeneratedComponentFacade.LocalJsonConfigRoutesServiceInProcess`, covering a
+provided component and consumed facade in one executor, no transport adapter,
+local JSON route config, unary RPC, and server-streaming RPC.
 
 - **Plan:** add a generated-binding test with provider and consumer components
   in one executor, no transport adapter, facade local routing, unary RPC, and
@@ -531,6 +545,11 @@ at the generated component-facade layer.
 
 ### E3. Promote generated pub/sub to component-facade ownership
 
+**✅ Done 2026-07-04.** Generated C++ component facades now retain typed topic
+callback state, own generated topic publisher ports, expose `add<Topic>Publisher`
+and `publish<Topic>` methods, and can route created topic ports with
+`configurePubSubTransport(config_json)`.
+
 - **Plan:** emit component-facade publisher ownership for generated publish
   topics: create/retain publisher ports during configuration and expose typed
   `publish<Topic>(payload)` methods. Keep low-level helpers for adapters and
@@ -540,6 +559,11 @@ at the generated component-facade layer.
   binding.
 
 ### E4. Prove facade-only same-executor pub/sub communication
+
+**✅ Done 2026-07-04.** Added
+`PclGeneratedComponentFacade.LocalJsonConfigRoutesPubSubInProcess`, covering two
+components in one executor, no transport adapter, facade-owned publisher and
+subscriber, local JSON route config, and typed payload delivery.
 
 - **Plan:** add a no-transport test with two components in one executor: one
   publishes through the component facade, the other subscribes through the
@@ -559,6 +583,12 @@ at the generated component-facade layer.
   reason.
 
 ### E6. Document the local-peer deployment option
+
+**✅ Done 2026-07-04.** Updated `cpp_component_authoring.md` with component
+transport configuration rules: plugin adapter setup vs generated endpoint route
+setup, local JSON route config, remote/default/named peer routes, and
+facade-owned pub/sub. Updated `transport_codec_plugin_system.md` to distinguish
+local no-plugin routing from opaque plugin `config_json`.
 
 - **Plan:** update `cpp_component_authoring.md` with a same-executor example
   covering local service routes, generated topic publish/subscribe, a

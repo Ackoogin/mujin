@@ -111,7 +111,22 @@ Two constructors are emitted, matching whichever ownership you prefer:
   on the host component.
 - Stores per-channel response-buffer state so dispatch is reentrant.
 
-`routeAllRemote(peer)` restricts every advertised RPC to a single peer.
+`routeAllLocal()` restricts every advertised RPC to callers in the same
+executor/process. `routeAllRemote(peer)` restricts every advertised RPC to a
+single named peer. `configureTransport(config_json)` accepts the same route
+selection as the runtime transport layer:
+
+```cpp
+tobj_provided_.configureTransport(R"({"transport":"local"})");
+tobj_provided_.configureTransport(R"({"transport":"remote","peer":"hmi"})");
+```
+
+`local` is not a plugin. It means "do not use a transport adapter for this
+endpoint; let PCL dispatch through the local executor." Remote socket,
+shared-memory, UDP, gRPC, and ROS2 transports are still loaded/configured at
+startup with their own opaque `config_json`; the facade JSON above only selects
+which generated endpoints use local or remote routing.
+
 Stream-end handling is internal — you never call `pcl_stream_end` directly,
 just `writer.end()` from your handler.
 
@@ -132,13 +147,6 @@ public:
       : pcl::Component("hmi_client"),
         tobj_consumed_(*this, exec, std::move(content_type)) {}
 
-  pcl_status_t routeProvidedDefault() {
-    return tobj_consumed_.routeAllRemote();      // executor's default transport
-  }
-  pcl_status_t routeProvidedTo(std::string_view peer) {
-    return tobj_consumed_.routeAllRemote(peer);  // named peer
-  }
-
   std::future<svc::Result<Identifier>>
   createRequirementAsync(const ObjectInterestRequirement& req) {
     return tobj_consumed_.objectOfInterestCreateRequirementAsync(req);
@@ -151,6 +159,16 @@ public:
       std::function<void(pcl_status_t)> on_end = {}) {
     return tobj_consumed_.objectOfInterestReadRequirementStreaming(
         q, std::move(on_frame), std::move(on_end));
+  }
+
+  pcl_status_t routeProvidedLocal() {
+    return tobj_consumed_.configureTransport(R"({"transport":"local"})");
+  }
+  pcl_status_t routeProvidedDefault() {
+    return tobj_consumed_.routeAllRemote();      // executor's default transport
+  }
+  pcl_status_t routeProvidedTo(std::string_view peer) {
+    return tobj_consumed_.routeAllRemote(peer);  // named peer
   }
 
 private:
@@ -174,6 +192,64 @@ The per-RPC API:
 `Result<T>` is a generated struct: `.status`, `.value`, `.ok()`. There is no
 synchronous `Result<T> create(...)` form — every unary call is async-shaped
 to make executor-thread coupling explicit.
+
+### Generated pub/sub on the component facade
+
+The component facade also owns generated topic wiring. For each generated topic
+constant, it emits:
+
+- `subscribe<Topic>(typed_callback)` — register a typed subscriber on the host
+  component and retain callback state.
+- `add<Topic>Publisher()` — create and retain a publisher port during
+  `on_configure()`.
+- `publish<Topic>(typed_payload)` — encode and publish through the retained
+  port.
+- `configurePubSubTransport(config_json)` — route created topic ports using the
+  same local/remote JSON shape as services.
+
+Example:
+
+```cpp
+pcl_status_t on_configure() override {
+  if (auto rc = binding_.addObjectEvidencePublisher(); rc != PCL_OK) return rc;
+  return binding_.configurePubSubTransport(R"({"transport":"local"})");
+}
+
+pcl_status_t publishEvidence(const ObjectDetail& detail) {
+  return binding_.publishObjectEvidence(detail);
+}
+```
+
+For local component-to-component pub/sub, put the publisher and subscriber
+components on the same `pcl::Executor`, call
+`configurePubSubTransport(R"({"transport":"local"})")` after the ports exist,
+and do not set a transport adapter for that route. If the executor also has a
+remote/default transport for other endpoints, the explicit local route prevents
+generated topic publishes from taking the remote default.
+
+## Component transport configuration
+
+Transport setup has two layers:
+
+1. **Adapter setup** creates remote connectivity. Plugin transports take opaque
+   `config_json` at load time, for example socket
+   `{"role":"client","host":"127.0.0.1","port":19123,"executor":...}` or shared
+   memory `{"bus_name":"mission","participant_id":"hmi","executor":...}`.
+   The resulting transport vtable is installed with `executor.setTransport(...)`
+   or `executor.registerTransport(peer, ...)`.
+2. **Endpoint route setup** selects which generated endpoints use local or
+   remote dispatch. Generated facades accept a small opaque JSON route config:
+
+   | Config | Meaning |
+   |--------|---------|
+   | `{"transport":"local"}` | Same executor/process, no transport adapter. |
+   | `{"transport":"remote"}` | Use the executor's default remote transport. |
+   | `{"transport":"remote","peer":"hmi"}` | Use a named peer registered on the executor. |
+
+Use local routes when the peer component is hosted in the same process. Use
+remote routes only after the matching transport plugin/runtime has been loaded
+and registered. Handler signatures and typed payload APIs are identical in both
+cases.
 
 ## Single-threaded executor model
 

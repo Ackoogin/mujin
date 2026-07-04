@@ -67,6 +67,26 @@ The generated topic surface is less complete at component-facade level:
   This leaks `pcl_port_t*` ownership and lower-level topic wiring into ordinary
   component code.
 
+## Implementation update — 2026-07-04
+
+The local-peer facade support items are implemented for the generated binding
+surface:
+
+- C++ `ProvidedService` and `ConsumedService` accept local/remote route selection
+  through opaque JSON (`{"transport":"local"}`,
+  `{"transport":"remote","peer":"..."}`).
+- C++ generated component facades own topic publisher ports and typed subscriber
+  callback state, with `configurePubSubTransport(config_json)` for generated
+  topic routes.
+- Ada generated service packages expose the same local/remote route selection
+  through `Transport_Config`, `Configure_Consumed_Transport`, and
+  `Configure_Publisher_Transport`.
+- Focused C++ runtime coverage proves same-executor service and pub/sub use
+  without a transport adapter.
+- The component authoring and transport plugin docs distinguish plugin adapter
+  `config_json` from generated endpoint route JSON. Local is the no-plugin
+  PCL route.
+
 `StandardBridge` remains a mixed facade/framework layer:
 
 - It uses generated dispatch, encode/decode, and publish helpers.
@@ -89,6 +109,8 @@ The generated topic surface is less complete at component-facade level:
 
 ### E1. Make local-peer service routing explicit on the C++ facade
 
+**Status:** done 2026-07-04 for C++ and Ada route/config parity.
+
 Add provider-side local routing to the generated component facade and make the
 service routing vocabulary symmetric.
 
@@ -103,6 +125,9 @@ service routing vocabulary symmetric.
 
 ### E2. Prove facade-only same-executor service communication
 
+**Status:** done 2026-07-04 via
+`PclGeneratedComponentFacade.LocalJsonConfigRoutesServiceInProcess`.
+
 Add a canonical regression for ordinary local component-to-component RPC and
 streaming.
 
@@ -115,6 +140,8 @@ streaming.
   `ConsumedService` only, with no raw `pcl_executor_*` service calls.
 
 ### E3. Promote generated pub/sub to component-facade ownership
+
+**Status:** done 2026-07-04 for generated C++ topic facade ownership.
 
 Close the remaining topic facade gap so ordinary components do not own raw PCL
 publisher ports for generated topics.
@@ -132,6 +159,9 @@ publisher ports for generated topics.
 
 ### E4. Prove facade-only same-executor pub/sub communication
 
+**Status:** done 2026-07-04 via
+`PclGeneratedComponentFacade.LocalJsonConfigRoutesPubSubInProcess`.
+
 Add local pub/sub coverage at the same abstraction level as service facade
 coverage.
 
@@ -146,6 +176,9 @@ coverage.
 
 ### E5. Classify or migrate `StandardBridge` raw PCL wiring
 
+**Status:** still open. The local support implementation did not migrate
+`StandardBridge`; this remains a narrower adapter-boundary policy item.
+
 Decide whether `StandardBridge` is a framework adapter that may keep raw PCL
 wiring, or migrate it to the component facade once pub/sub ownership exists.
 
@@ -159,6 +192,9 @@ wiring, or migrate it to the component facade once pub/sub ownership exists.
   `StandardBridge` or allowlisted with a documented reason and static coverage.
 
 ### E6. Document the local-peer deployment option
+
+**Status:** done 2026-07-04 in `cpp_component_authoring.md` and
+`transport_codec_plugin_system.md`.
 
 Make local component-to-component communication visible as a standard PYRAMID
 deployment shape.

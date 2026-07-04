@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include "pyramid_services_tactical_objects_consumed_components.hpp"
 #include "pyramid_services_tactical_objects_provided_components.hpp"
 
 #include <pcl/component.hpp>
@@ -13,6 +14,7 @@
 #include <string>
 
 namespace prov = pyramid::components::tactical_objects::services::provided;
+namespace cons = pyramid::components::tactical_objects::services::consumed;
 namespace types = pyramid::domain_model;
 
 namespace {
@@ -98,6 +100,10 @@ public:
 
   RequirementHandler& handler() { return handler_; }
 
+  pcl_status_t configureLocalTransport() {
+    return provided_.configureTransport(R"({"transport":"local"})");
+  }
+
 protected:
   pcl_status_t on_configure() override {
     return provided_.bind();
@@ -108,7 +114,118 @@ private:
   prov::ProvidedService provided_;
 };
 
+class EvidencePublisherComponent final : public pcl::Component {
+public:
+  explicit EvidencePublisherComponent(pcl::Executor& executor)
+      : pcl::Component("local_evidence_publisher"),
+        consumed_(*this, executor) {}
+
+  pcl_status_t publishEvidence(const types::ObjectDetail& evidence) {
+    return consumed_.publishObjectEvidence(evidence);
+  }
+
+protected:
+  pcl_status_t on_configure() override {
+    const pcl_status_t bind_status = consumed_.addObjectEvidencePublisher();
+    if (bind_status != PCL_OK) {
+      return bind_status;
+    }
+    return consumed_.configurePubSubTransport(R"({"transport":"local"})");
+  }
+
+private:
+  cons::ConsumedService consumed_;
+};
+
+class EvidenceSubscriberComponent final : public pcl::Component {
+public:
+  explicit EvidenceSubscriberComponent(pcl::Executor& executor)
+      : pcl::Component("local_evidence_subscriber"),
+        consumed_(*this, executor) {}
+
+  bool received = false;
+  types::ObjectDetail evidence;
+
+protected:
+  pcl_status_t on_configure() override {
+    auto* port = consumed_.subscribeObjectEvidence(
+        [this](const types::ObjectDetail& msg) {
+          evidence = msg;
+          received = true;
+        });
+    if (!port) {
+      return PCL_ERR_NOMEM;
+    }
+    return consumed_.configurePubSubTransport(R"({"transport":"local"})");
+  }
+
+private:
+  cons::ConsumedService consumed_;
+};
+
 }  // namespace
+
+TEST(PclGeneratedComponentFacade, LocalJsonConfigRoutesServiceInProcess) {
+  pcl::Executor executor;
+  RequirementComponent server{executor};
+  pcl::Component client{"local_json_config_client"};
+  prov::ConsumedService consumed{client, executor};
+
+  ASSERT_EQ(server.configure(), PCL_OK);
+  ASSERT_EQ(server.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(server), PCL_OK);
+  ASSERT_EQ(server.configureLocalTransport(), PCL_OK);
+  ASSERT_EQ(consumed.configureTransport(R"({"transport":"local"})"), PCL_OK);
+
+  const std::string id = "local-json-service-route";
+  auto delete_future = consumed.objectOfInterestDeleteRequirementAsync(id);
+  ASSERT_EQ(delete_future.wait_for(std::chrono::milliseconds(0)),
+            std::future_status::ready);
+  const auto delete_result = delete_future.get();
+  EXPECT_TRUE(delete_result.ok());
+  EXPECT_TRUE(delete_result.value.success);
+  EXPECT_EQ(server.handler().deleted_id, id);
+
+  bool ended = false;
+  types::Query query;
+  query.id.push_back(id);
+  auto handle = consumed.objectOfInterestReadRequirementStreaming(
+      query,
+      [](const types::ObjectInterestRequirement&) {},
+      [&](pcl_status_t status) {
+        EXPECT_EQ(status, PCL_OK);
+        ended = true;
+      });
+  ASSERT_TRUE(handle);
+  ASSERT_EQ(server.handler().open_id, id);
+  ASSERT_EQ(server.handler().endOpen(PCL_OK), PCL_OK);
+  EXPECT_TRUE(ended);
+}
+
+TEST(PclGeneratedComponentFacade, LocalJsonConfigRoutesPubSubInProcess) {
+  pcl::Executor executor;
+  EvidenceSubscriberComponent subscriber{executor};
+  EvidencePublisherComponent publisher{executor};
+
+  ASSERT_EQ(subscriber.configure(), PCL_OK);
+  ASSERT_EQ(subscriber.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(subscriber), PCL_OK);
+
+  ASSERT_EQ(publisher.configure(), PCL_OK);
+  ASSERT_EQ(publisher.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(publisher), PCL_OK);
+
+  types::ObjectDetail expected;
+  expected.id = "local-evidence-001";
+  expected.identity = types::StandardIdentity::Friendly;
+  expected.dimension = types::BattleDimension::Air;
+
+  ASSERT_EQ(publisher.publishEvidence(expected), PCL_OK);
+  EXPECT_TRUE(subscriber.received);
+  EXPECT_EQ(subscriber.evidence.id, expected.id);
+  EXPECT_EQ(subscriber.evidence.identity, expected.identity);
+  EXPECT_EQ(subscriber.evidence.dimension, expected.dimension);
+}
 
 TEST(PclGeneratedComponentStreamHandle,
      DestructorCancelsOpenStreamAndSuppressesCallbacks) {
