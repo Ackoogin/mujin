@@ -525,8 +525,9 @@ if(PYRAMID_ENABLE_PROTOBUF)
 
     add_custom_target(pyramid_protobuf_codegen DEPENDS ${PYRAMID_PROTOBUF_OUTPUTS})
 
-    pyramid_glob_generated(PYRAMID_PROTOBUF_SUPPORT_SRCS
-        "${PYRAMID_ROOT_DIR}/src/protobuf_support/*.cpp")
+    pyramid_binding_sources(PYRAMID_PROTOBUF_SUPPORT_SRCS
+        ROLE protobuf_service_codecs SUFFIX .cpp
+        GLOBS "${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/pyramid_services_*_protobuf_codec.cpp")
     pyramid_require_generated(PYRAMID_PROTOBUF_SUPPORT_SRCS
         "PYRAMID protobuf support sources")
     add_library(pyramid_protobuf_support STATIC
@@ -545,7 +546,7 @@ if(PYRAMID_ENABLE_PROTOBUF)
     target_include_directories(pyramid_protobuf_support
         PUBLIC
             "${PYRAMID_CPP_BINDINGS_DIR}"
-            "${PYRAMID_ROOT_DIR}/src/protobuf_support"
+            "${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp"
             "${PYRAMID_PROTOBUF_GEN_DIR}"
     )
     target_compile_definitions(pyramid_protobuf_support
@@ -584,7 +585,7 @@ if(PYRAMID_ENABLE_PROTOBUF)
         target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
             PRIVATE
                 "${PYRAMID_CPP_BINDINGS_DIR}"
-                "${PYRAMID_ROOT_DIR}/src/protobuf_support"
+                "${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp"
         )
         list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
             ${PYRAMID_CODEC_PLUGIN_TARGET})

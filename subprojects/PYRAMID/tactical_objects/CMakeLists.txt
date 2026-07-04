@@ -51,7 +51,7 @@ target_include_directories(tactical_objects_component PUBLIC
 )
 target_include_directories(tactical_objects_component PRIVATE
   ${PYRAMID_CPP_BINDINGS_DIR}
-  ${PYRAMID_ROOT_DIR}/src/protobuf_support
+  ${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp
 )
 target_link_libraries(tactical_objects_component PUBLIC
   tactical_objects
@@ -144,7 +144,7 @@ endforeach()
 target_include_directories(tactical_objects_app
     PRIVATE
         ${PYRAMID_CPP_BINDINGS_DIR}
-        ${PYRAMID_ROOT_DIR}/src/protobuf_support
+        ${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp
         ${TACTICAL_OBJECTS_GENERATED_DIR}/$<CONFIG>
 )
 
@@ -167,7 +167,7 @@ endif()
 target_include_directories(tactical_objects_test_client
     PRIVATE
         ${PYRAMID_CPP_BINDINGS_DIR}
-        ${PYRAMID_ROOT_DIR}/src/protobuf_support
+        ${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp
         ${TACTICAL_OBJECTS_GENERATED_DIR}/$<CONFIG>
 )
 

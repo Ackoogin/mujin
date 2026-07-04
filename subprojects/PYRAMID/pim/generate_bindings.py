@@ -81,6 +81,7 @@ class BindingArtifactManifest:
             'endpoint_requirements': [],
             'codec_plugins': [],
             'flatbuffers_schemas': [],
+            'protobuf_service_codecs': [],
             'protobuf_protos': [],
             'grpc_service_protos': [],
         }
@@ -205,6 +206,18 @@ class BindingArtifactManifest:
             self.add_paths(
                 'flatbuffers_schemas',
                 [path for path in paths if Path(path).suffix == '.fbs'],
+            )
+        if backend_name == 'protobuf':
+            self.add_paths(
+                'protobuf_service_codecs',
+                [
+                    path for path in paths
+                    if '_services_' in Path(path).name
+                    and (
+                        Path(path).name.endswith('_protobuf_codec.cpp')
+                        or Path(path).name.endswith('_protobuf_codec.hpp')
+                    )
+                ],
             )
 
     def write(self) -> None:

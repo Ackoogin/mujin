@@ -65,7 +65,7 @@ behind explicit triggers.
 | 5 | ~~A2 `application/ros2` registry codec plugin~~ **✅ done 2026-07-04 (ament build verified via A3)** | M |
 | 6 | ~~A3 Typed `RclcppRuntimeAdapter` on the live wire~~ **✅ done 2026-07-04 (live ROS2 build + tests)** | M/L |
 | 7 | A4 Plain-rclcpp interop proof | S |
-| 8 | C1 Retire `src/protobuf_support/` | S/M |
+| 8 | ~~C1 Retire `src/protobuf_support/`~~ **✅ done 2026-07-04 (generated per-service, live MSVC build)** | S/M |
 | 9 | C2 Manifest-driven CMake completion + default flip | M |
 | 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
 | 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
@@ -317,6 +317,35 @@ an enable-and-diff job, not greenfield emitter work.
   output is diff-verified against it, then delete.
 - **Accept:** `src/protobuf_support/` deleted; protobuf E2E tests
   (`tobj_cpp_app_client_protobuf_e2e` etc.) green from generated source.
+
+**✅ Done 2026-07-04.** Generated a local-struct <-> protobuf service codec per
+service package (`protobuf_service_codecs` manifest role; selected via
+`pyramid_binding_sources` GLOB; include path swung from `src/protobuf_support`
+to `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp`) and deleted `src/protobuf_support/`.
+Scope note: chose the **general** mechanism over exact-compat — the emitter now
+covers *all three* service packages (autonomy_backend, sensor_data_interpretation,
+tactical_objects), so the facades for the two new ones advertise
+`application/protobuf` when a codec is registered. This is the deliberate
+"robust for arbitrary contracts" choice (the current protos are test cases).
+
+The generated codec is namespace-correct where the retired hand-written file was
+**stale** (referenced flat `pyramid::domain_model::GeodeticPosition`; the real
+types moved to `pyramid::domain_model::common::`). Two real emitter defects were
+found and fixed by driving the **live MSVC build** (protobuf E2E targets):
+1. No forward declarations — helpers were emitted in declaration order, so a
+   message calling `to_proto(base)` preceded the base's definition, breaking
+   overload resolution. Now all `to_proto`/`from_proto` helpers are
+   forward-declared up front.
+2. Base types reached *only* via an inlinable `base` field were missing from the
+   emitted set (the shared service closure inlines `base`, FlatBuffers-style), so
+   e.g. `common::Requirement` had no helper. Added a protobuf-local transitive
+   base-type closure (`_message_specs_with_base_closure`).
+
+**Verified:** `pyramid_protobuf_support` (all 3 service codecs) +
+`pyramid_codec_protobuf_tactical_objects` plugin + `tactical_objects_app`/
+`_test_client` build clean on MSVC/Release; `pytest` 41 passed; non-protobuf
+generated output byte-identical except the intended facades + manifest. The
+socket-based `*_protobuf_plugin_e2e` round-trip stays Linux-CI (bash + `.so`).
 
 ### C2. Complete manifest-driven CMake and flip the default (cleanup item 4)
 

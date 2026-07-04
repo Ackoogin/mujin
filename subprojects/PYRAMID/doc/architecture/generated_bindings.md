@@ -56,7 +56,7 @@ the generated service binding layer.
 | C++ data-model types | `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_types.hpp` |
 | C++ JSON codecs | `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.{hpp,cpp}` |
 | C++ FlatBuffers codecs | `${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/*_flatbuffers_codec.*` |
-| C++ Protobuf codecs | data-model stubs in `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/*_protobuf_codec.*`; tactical service codec support in `src/protobuf_support/` |
+| C++ Protobuf codecs | data-model stubs in `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/*_protobuf_codec.*`; per-service codecs in `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/pyramid_services_*_protobuf_codec.*` |
 | C++ gRPC transport | `${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/*_grpc_*` |
 | C++ ROS2 transport | `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp/*_ros2_*` |
 | Ada service facade | `${PYRAMID_ADA_BINDINGS_DIR}/pyramid-services-*.ads/.adb` |
@@ -161,9 +161,10 @@ build-local generated files:
 - generated gRPC transport sources
 
 CMake also derives Protobuf/gRPC compiler outputs from globbed proto files.
-Non-generated Tactical Objects Protobuf support lives under
-`subprojects/PYRAMID/src/protobuf_support`; ROS2 support is generated into the
-build-local binding tree.
+The local-struct <-> protobuf service codecs are generated per service package
+into `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/pyramid_services_*_protobuf_codec.*`
+(selected via the `protobuf_service_codecs` manifest role); ROS2 support is
+likewise generated into the build-local binding tree.
 
 The build graph then refreshes the local tree through the
 `pyramid_cpp_bindings_codegen` stamp target whenever proto files or generator

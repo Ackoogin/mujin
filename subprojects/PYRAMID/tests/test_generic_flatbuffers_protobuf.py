@@ -62,6 +62,15 @@ PYRAMID_PROTOBUF_CPP_FILENAMES = {
     "pyramid_data_model_sensorproducts_protobuf_codec.hpp",
     "pyramid_data_model_sensors_protobuf_codec.hpp",
     "pyramid_data_model_tactical_protobuf_codec.hpp",
+    # Generated local-struct <-> protobuf service codecs (C1: retired the
+    # hand-maintained src/protobuf_support/ tactical_objects bridge; the
+    # generator now emits a codec per service package).
+    "pyramid_services_autonomy_backend_protobuf_codec.hpp",
+    "pyramid_services_autonomy_backend_protobuf_codec.cpp",
+    "pyramid_services_sensor_data_interpretation_protobuf_codec.hpp",
+    "pyramid_services_sensor_data_interpretation_protobuf_codec.cpp",
+    "pyramid_services_tactical_objects_protobuf_codec.hpp",
+    "pyramid_services_tactical_objects_protobuf_codec.cpp",
 }
 
 
@@ -234,3 +243,30 @@ def test_pim_flatbuffers_json_bridge_uses_full_namespace_for_nested_data_model(
     assert f"static_cast<{nested_namespace}::AUTRequirement*>(nullptr)" in text
     assert "pyramid::domain_model::common_pim_components::fromJson" not in text
     assert "pyramid::domain_model::common_pim_components::toJson" not in text
+
+
+def test_pyramid_protobuf_service_codec_is_generated_with_common_namespaces(
+    tmp_path: Path,
+) -> None:
+    """C1: the tactical_objects service protobuf codec (formerly the checked-in
+    src/protobuf_support/ bridge) is now generated on the pyramid compat layout,
+    referencing the current sub-namespaced data-model types
+    (pyramid::domain_model::common::*), not the stale flat namespace."""
+    out_dir = tmp_path / "out"
+    _run_generator(PYRAMID_ROOT / "proto" / "pyramid", out_dir, "protobuf",
+                   layout="pyramid")
+
+    hpp = out_dir / "protobuf" / "cpp" / (
+        "pyramid_services_tactical_objects_protobuf_codec.hpp")
+    cpp = out_dir / "protobuf" / "cpp" / (
+        "pyramid_services_tactical_objects_protobuf_codec.cpp")
+    assert hpp.exists() and cpp.exists()
+
+    hpp_text = hpp.read_text(encoding="utf-8")
+    cpp_text = cpp.read_text(encoding="utf-8")
+    assert "namespace pyramid::services::tactical_objects::protobuf_codec" in hpp_text
+    assert "toBinary(const pyramid::domain_model::common::GeodeticPosition&" in hpp_text
+    assert "fromBinaryGeodeticPosition(" in hpp_text
+    assert "SerializeToString" in cpp_text and "ParseFromArray" in cpp_text
+    # Must use the current sub-namespaced types, not the stale flat spelling.
+    assert "pyramid::domain_model::GeodeticPosition" not in hpp_text

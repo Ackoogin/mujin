@@ -46,7 +46,6 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 | `proto/` | Data-model and component service contracts |
 | `pim/` | Binding/code generation tooling (plus the upstream SysML/MBSE import tools) |
 | `plugins/` | Coupled gRPC/ROS2 transport plugin sources |
-| `src/protobuf_support/` | Checked-in Tactical Objects protobuf codec support |
 | `examples/` | Hand-written Ada and C++ example apps/support code |
 | `tactical_objects/` | Tactical Objects runtime, component, app, and local README |
 | `tests/` | Generated binding, transport, and Tactical Objects tests |

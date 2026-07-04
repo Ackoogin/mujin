@@ -54,21 +54,9 @@ class CppServiceGenerator(
         return name in self._enabled_backends
 
     def _service_protobuf_codec_available(self, svc_base_ns: str) -> bool:
-        """Return whether a local-struct service protobuf codec exists.
-
-        The current protobuf backend emits data-model protobuf wrappers.  The
-        generated service facade, however, needs local-struct <-> protobuf
-        conversion helpers. Those exist today as source support for
-        tactical_objects; do not emit service protobuf dispatch code for service
-        packages that do not have that bridge.
-        """
-        header = '_'.join(svc_base_ns.split('::')) + '_protobuf_codec.hpp'
-        candidates = []
-        for parent in [self._proto_input, *self._proto_input.parents]:
-            if parent.is_file():
-                parent = parent.parent
-            candidates.append(parent / 'src' / 'protobuf_support' / header)
-        return any(path.exists() for path in candidates)
+        """Return whether the protobuf backend will emit a service bridge."""
+        del svc_base_ns
+        return self._has_backend('protobuf') or self._has_backend('grpc')
 
     def _discover_data_model_proto_files(self) -> List[ProtoFile]:
         """Find parsed data-model protos for service JSON codec imports.
@@ -175,4 +163,3 @@ class CppServiceGenerator(
                 components_path, file_prefix, full_ns, parsed, all_rpcs)
             self._write_codec_plugins(output_path, parsed)
             print(f'  Generated {full_ns}')
-

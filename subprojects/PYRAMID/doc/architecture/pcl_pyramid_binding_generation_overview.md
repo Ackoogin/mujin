@@ -249,8 +249,10 @@ The generated directory is controlled by `PYRAMID_CPP_BINDINGS_DIR`. CMake then
 globs that directory for generated service facades, data-model codecs,
 FlatBuffers schemas/codecs, and generated gRPC/ROS2 transport projections
 (or, with `PYRAMID_BINDING_SOURCE_MODE=manifest`, selects sources from the
-generated `binding_manifest.json`). The checked-in Tactical Objects Protobuf
-codec support lives under `subprojects/PYRAMID/src/protobuf_support/`.
+generated `binding_manifest.json`). The local-struct <-> Protobuf service codecs
+are generated per service package into
+`${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/pyramid_services_*_protobuf_codec.*`
+(selected via the `protobuf_service_codecs` manifest role).
 The `pyramid_cpp_bindings_codegen` target owns the build-time refresh and
 reruns the generator when proto or generator inputs change.
 
@@ -271,7 +273,7 @@ delivered artifacts directly.
 | `${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/*` | gRPC transport projection |
 | `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp/*` | ROS2 transport projection |
 | `${PYRAMID_ADA_BINDINGS_DIR}/pyramid-*.ads/.adb` | Ada data-model, codec, and service facades |
-| `src/protobuf_support/*` | Tactical Objects Protobuf C++ support used by the active PCL path |
+| `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/pyramid_services_*_protobuf_codec.*` | Local-struct <-> Protobuf service codecs (per service package) |
 
 The generated service facades are the important component-facing artifact. They
 provide typed handlers, `dispatch(...)` helpers, client invocation helpers, topic
