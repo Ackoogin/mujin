@@ -5,7 +5,7 @@ This directory contains the PYRAMID platform-independent model tools: proto pars
 Two independent toolchains live here:
 
 - **The binding generator** (active pipeline): `generate_bindings.py`,
-  `proto_parser.py`, `binding_contract.py`, `cpp_codegen.py`, `ada_codegen.py`,
+  `proto_parser.py`, `binding_contract.py`, `cpp/`, `ada/`,
   `cabi_codegen.py`, `ada_cabi_codegen.py`, `ros2_idl_codegen.py`,
   `ros2_marshal_codegen.py`, `standard_topics.py`, `codec_backends.py`, and
   `backends/`. Input is `.proto`; output is generated bindings.

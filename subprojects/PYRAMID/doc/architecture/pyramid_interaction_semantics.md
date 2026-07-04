@@ -6,8 +6,8 @@ server-streaming RPC, and (future) actions — are expressed **inside the
 can derive the full interaction surface from one source of truth.
 
 It is the design reference for the contract convention; the parser
-(`pim/proto_parser.py`), the generator (`pim/cpp_codegen.py`,
-`pim/ada_codegen.py`), and the transport projections
+(`pim/proto_parser.py`), the generator (`pim/cpp/`,
+`pim/ada/`), and the transport projections
 ([generated_bindings.md](generated_bindings.md),
 [ros2_transport_semantics.md](ros2_transport_semantics.md)) implement it.
 

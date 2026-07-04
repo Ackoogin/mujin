@@ -448,6 +448,16 @@ The shims carry only the externally consumed surface (pinned by
 parties, so they stay **one SDK release**, then delete (with the export-surface
 test updated to the new module paths).
 
+**✅ Done 2026-07-04 — gate cleared by decision (no SDK consumers exist yet).**
+Deleted `pim/cpp_codegen.py` and `pim/ada_codegen.py` (no internal importer used
+them; they were purely the external-consumer grace layer). Repointed
+`tests/test_codegen_export_surface.py` to guard the public surface at its **new
+module homes** (`cpp.*`, `ada.*`, `proto_parser`, `proto_resolve`) instead of the
+shims, keeping the SDK-shipped generator's import surface pinned. Updated the
+architecture docs + `pim/README.md` that pointed to the shim files to reference
+the `pim/cpp/` and `pim/ada/` packages (historical "split verbatim from …"
+provenance comments left intact). `pytest` 41 passed.
+
 ### C5. Windows parity pass (environment-gated)
 
 Accumulated from the refactor and pub/sub work: `package_sdk.bat` packaged-SDK

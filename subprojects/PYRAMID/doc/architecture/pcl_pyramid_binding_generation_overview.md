@@ -45,7 +45,7 @@ flowchart TB
 
   subgraph Generator["Binding generation"]
     Parser["proto_parser.py<br/>ProtoFile + ProtoTypeIndex"]
-    Lang["cpp_codegen.py / ada_codegen.py<br/>typed models + services"]
+    Lang["pim/cpp/ · pim/ada/<br/>typed models + services"]
     Registry["codec_backends.py<br/>backend registry"]
     Backends["backends/*<br/>json, flatbuffers, protobuf, grpc, ros2"]
   end
@@ -353,7 +353,7 @@ ctest --test-dir build -C Release -R "(ProtoBindings|CodecDispatch|TacticalObjec
 | PYRAMID contracts | `subprojects/PYRAMID/proto/` |
 | Generator entry point | `subprojects/PYRAMID/pim/generate_bindings.py` |
 | Generator parser/index | `subprojects/PYRAMID/pim/proto_parser.py` |
-| Language emitters | `subprojects/PYRAMID/pim/cpp_codegen.py`, `subprojects/PYRAMID/pim/ada_codegen.py` |
+| Language emitters | `subprojects/PYRAMID/pim/cpp/`, `subprojects/PYRAMID/pim/ada/` |
 | Backend registry | `subprojects/PYRAMID/pim/codec_backends.py`, `subprojects/PYRAMID/pim/backends/` |
 | Generated outputs | `${binaryDir}/generated/pyramid_cpp_bindings`, `${binaryDir}/generated/pyramid_ada_bindings` (build-local) |
 | Detailed binding guide | `subprojects/PYRAMID/doc/architecture/generated_bindings.md` |

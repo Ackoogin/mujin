@@ -58,7 +58,7 @@ implementations:
 | `PyramidCompatNamingPolicy` | Preserves the current surface: `pyramid::domain_model`, `pyramid_data_model_types.hpp`, `pyramid_services_*` file prefixes, `provided`/`consumed` role inference, `Pyramid.Data_Model.*` Ada packages. |
 | `GenericNamingPolicy` | Derives names from the proto package/service/message identity. Umbrella header: none. Service facades are **role-neutral** (no provided/consumed inference). |
 
-C++ generators (`cpp_codegen.py`) accept an injected `naming_policy` (defaulting
+C++ generators (`pim/cpp/`) accept an injected `naming_policy` (defaulting
 to the pyramid-compat policy so existing call sites are unchanged). Ada type and
 codec package names were already package-derived, so the generic Ada path reuses
 them directly.
@@ -208,8 +208,8 @@ cmake --build build-all-off --target pyramid_generated_codecs
 |------|-------|
 | Neutral contract + naming policies | `subprojects/PYRAMID/pim/binding_contract.py` |
 | Generator entry point + `--contract-layout` + manifest | `subprojects/PYRAMID/pim/generate_bindings.py` |
-| C++ emitters (policy-aware) | `subprojects/PYRAMID/pim/cpp_codegen.py`, `pim/backends/*` |
-| Ada emitters + generic service facade | `subprojects/PYRAMID/pim/ada_codegen.py` (`AdaGenericServiceGenerator`) |
+| C++ emitters (policy-aware) | `subprojects/PYRAMID/pim/cpp/`, `pim/backends/*` |
+| Ada emitters + generic service facade | `subprojects/PYRAMID/pim/ada/` (`ada.generic_service_gen.AdaGenericServiceGenerator`) |
 | Topic metadata | `subprojects/PYRAMID/pim/standard_topics.py`, `pim/topic_metadata/tactical_objects_topics.json` |
 | Manifest-driven CMake helpers | `subprojects/PYRAMID/cmake/pyramid_manifest.cmake`, `cmake/pyramid_binding_sources.cmake`, `cmake/tests/` |
 | Tests | `subprojects/PYRAMID/tests/test_generic_*.py`, `test_binding_manifest.py`, `test_topic_metadata.py`, `test_manifest_cmake_helper.py`, `test_generic_ada.py` |

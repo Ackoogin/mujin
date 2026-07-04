@@ -215,7 +215,7 @@ loads every codec listed in a manifest (transport entries are skipped).
 
 ```mermaid
 flowchart LR
-  Proto["proto/**/*.proto"] --> Gen["generate_bindings.py<br/>(cpp_codegen / ada_codegen)"]
+  Proto["proto/**/*.proto"] --> Gen["generate_bindings.py<br/>(pim/cpp · pim/ada)"]
   Gen --> Facade["facade .cpp/.adb"]
   Gen --> MarshalSrc["pyramid_data_model_&lt;module&gt;_cabi_marshal.cpp"]
   Gen --> CodecSrc["*_codec_plugin.cpp (json/fb)"]
