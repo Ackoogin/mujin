@@ -18,21 +18,34 @@ extern "C" {
 
 /// \brief Function pointers that a transport adapter implements.
 ///
-/// All functions are called on the executor thread.
+/// Executor-facing functions (`publish`, `invoke_async`, `invoke_stream`,
+/// `stream_send`, `stream_end`, `stream_cancel`, and `respond`) are called from
+/// PCL business-logic paths and must not block on transport I/O, peer
+/// discovery, remote responses, or backpressure.  A transport may validate
+/// inputs, deep-copy borrowed buffers, register correlation state, enqueue work
+/// to its own worker thread(s), and return.  Blocking socket, ROS2, DDS, gRPC,
+/// shared-memory, or discovery operations belong on transport-owned worker
+/// threads.
+///
+/// Ingress from transport worker threads must be posted to executor queues with
+/// `pcl_executor_post_incoming`, `pcl_executor_post_remote_incoming`,
+/// `pcl_executor_post_service_request`, `pcl_executor_post_service_request_remote`,
+/// or `pcl_executor_post_response_msg`.  Component callbacks, service handlers,
+/// response callbacks, and stream callbacks must run on the executor thread.
 typedef struct {
   /// \brief Called when a container publishes a message.
   ///
-  /// The adapter should serialize and send it over the wire.
-  /// For intra-process, the default adapter forwards directly.
+  /// The adapter should serialize or copy enough state to enqueue the send and
+  /// return promptly.  The executor thread must not call blocking send APIs.
   pcl_status_t (*publish)(void*            adapter_ctx,
                           const char*      topic,
                           const pcl_msg_t* msg);
 
   /// \brief Called when a service request arrives from the wire.
   ///
-  /// The adapter should deserialize, dispatch to the container's handler,
-  /// then serialize and return the response.
-  /// For intra-process, the default adapter calls the handler directly.
+  /// This legacy hook is only valid when the caller is already executing on the
+  /// executor thread.  Remote ingress from worker threads must use the queued
+  /// service-request APIs instead of invoking component business logic here.
   pcl_status_t (*serve)(void*            adapter_ctx,
                         const char*      service_name,
                         const pcl_msg_t* request,
@@ -41,26 +54,26 @@ typedef struct {
   /// \brief Called once during executor setup for each subscriber port.
   ///
   /// The adapter should begin listening for messages on the given topic
-/// and either:
-/// - call pcl_executor_post_incoming() from an external I/O thread, or
-/// - call pcl_executor_dispatch_incoming() when already on the executor
-///   thread.
-///
-/// May be NULL if the adapter only handles outbound traffic.
+  /// and either:
+  /// - call pcl_executor_post_incoming() or pcl_executor_post_remote_incoming()
+  ///   from an external I/O thread, or
+  /// - call pcl_executor_dispatch_incoming() when already on the executor
+  ///   thread.
+  ///
+  /// May be NULL if the adapter only handles outbound traffic.
   pcl_status_t (*subscribe)(void*       adapter_ctx,
                             const char* topic,
                             const char* type_name);
 
   /// \brief Called when a container invokes a remote service asynchronously.
   ///
-  /// The adapter should serialize and send the request over the wire.
-  /// When the response arrives, the adapter calls the callback on the
-  /// executor thread (via pcl_executor_post_response_cb or directly if
-  /// already on that thread).
+  /// The adapter should copy the request, allocate any correlation state,
+  /// enqueue the outbound request, and return promptly.  When the response
+  /// arrives, the adapter posts the callback to the executor thread via
+  /// `pcl_executor_post_response_msg`.  Transport plugins must not invoke the
+  /// callback inline before returning from `invoke_async`.
   ///
   /// May be NULL if the adapter does not support client-side service calls.
-  /// Intra-process adapters may dispatch synchronously and invoke the
-  /// callback before returning.
   pcl_status_t (*invoke_async)(void*            adapter_ctx,
                                const char*      service_name,
                                const pcl_msg_t* request,
@@ -69,8 +82,8 @@ typedef struct {
 
   /// \brief Called to send a deferred service response.
   ///
-  /// The adapter should serialize and send the response back to the original
-  /// caller.  For intra-process, this is a no-op (response sent directly).
+  /// The adapter should copy and enqueue the response for a worker thread to
+  /// deliver to the original caller.
   /// May be NULL if the adapter does not support deferred responses.
   ///
   /// \param adapter_ctx  Adapter context.
@@ -88,9 +101,11 @@ typedef struct {
 
   /// \brief Called to invoke a streaming service (client-side).
   ///
-  /// The adapter should serialize and send the request, then call the callback
-  /// for each response message.  The callback receives end=true on the final
-  /// message, or an error status if the stream is aborted.
+  /// The adapter should copy the request, allocate any stream/correlation state,
+  /// enqueue the open request, and return promptly.  The callback receives
+  /// end=true on the final message, or an error status if the stream is
+  /// aborted.  Transport plugins must deliver callbacks on the executor thread,
+  /// not inline from this function or directly from worker threads.
   ///
   /// May be NULL if the adapter does not support streaming.
   pcl_status_t (*invoke_stream)(void*               adapter_ctx,
@@ -102,7 +117,7 @@ typedef struct {
 
   /// \brief Called to send a stream message (server-side).
   ///
-  /// The adapter should serialize and send the message to the client.
+  /// The adapter should copy and enqueue the stream frame for worker delivery.
   /// May be NULL if the adapter does not support streaming.
   pcl_status_t (*stream_send)(void*            adapter_ctx,
                               void*            stream_handle,
@@ -110,8 +125,9 @@ typedef struct {
 
   /// \brief Called to end or abort a stream (server-side).
   ///
-  /// If status is PCL_OK, the stream ended normally.  Otherwise, the stream
-  /// was aborted with the given error code.
+  /// If status is PCL_OK, the stream ended normally.  Otherwise, the stream was
+  /// aborted with the given error code.  The adapter should enqueue terminal
+  /// delivery rather than blocking the executor thread.
   /// May be NULL if the adapter does not support streaming.
   pcl_status_t (*stream_end)(void*        adapter_ctx,
                              void*        stream_handle,
@@ -119,7 +135,7 @@ typedef struct {
 
   /// \brief Called to cancel an in-flight stream (client-side).
   ///
-  /// The adapter should notify the server that the stream is cancelled.
+  /// The adapter should enqueue cancellation notification for worker delivery.
   /// May be NULL if the adapter does not support streaming.
   pcl_status_t (*stream_cancel)(void* adapter_ctx,
                                 void* stream_handle);
@@ -250,7 +266,9 @@ pcl_status_t pcl_executor_post_remote_incoming(pcl_executor_t*  e,
 /// Returns PCL_ERR_NOT_FOUND if no transport is set or the transport does not
 /// support client-side service invocation (invoke_async is NULL).
 ///
-/// The callback is fired on the executor thread when the response arrives.
+/// The callback is fired on the executor thread when the response arrives.  For
+/// transport-backed calls, the transport ABI requires the hook to queue egress
+/// and return without blocking on remote service completion.
 pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
                                        const char*      service_name,
                                        const pcl_msg_t* request,
@@ -289,6 +307,8 @@ pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
 /// or uses intra-process dispatch if no transport is set.
 ///
 /// The callback is fired for each response message; end=true on the final one.
+/// For transport-backed calls, the transport ABI requires the hook to queue the
+/// open request and return without blocking on stream completion.
 ///
 /// \param e            Executor to invoke through.
 /// \param service_name Target streaming service name.

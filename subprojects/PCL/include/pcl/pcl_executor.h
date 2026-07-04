@@ -263,7 +263,9 @@ pcl_status_t pcl_executor_invoke_service_remote(pcl_executor_t*  e,
 /// Routes the message to subscribers on the topic.
 /// If a transport adapter is set, it is used; otherwise direct dispatch.
 ///
-/// \note Executor-thread only.
+/// \note Executor-thread only.  When a transport is installed, this calls the
+///       transport's `publish` hook directly; the transport ABI requires that
+///       hook to enqueue egress and return without blocking on outgoing data.
 pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
                                   const char*      topic,
                                   const pcl_msg_t* msg);
