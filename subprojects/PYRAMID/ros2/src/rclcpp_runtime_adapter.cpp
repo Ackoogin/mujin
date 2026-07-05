@@ -9,6 +9,9 @@
 
 namespace pyramid::transport::ros2 {
 
+RclcppRuntimeAdapter::RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node)
+    : RclcppRuntimeAdapter(node, Options{}) {}
+
 RclcppRuntimeAdapter::RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node,
                                            Options options)
     : node_(node), options_(options) {}

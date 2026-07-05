@@ -23,8 +23,12 @@ class RclcppRuntimeAdapter final : public Adapter {
     bool use_envelope_wire = false;
   };
 
-  explicit RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node,
-                                Options options = {});
+  // Two overloads rather than a single `Options options = {}` default argument:
+  // GCC 11 miscompiles `= {}` for an aggregate that has a default member
+  // initializer (fixed in GCC 12). The one-argument form delegates to the
+  // two-argument form (out of line) with a default-constructed Options.
+  explicit RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node);
+  RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node, Options options);
 
   void subscribe(const TopicBinding& binding, TopicHandler handler) override;
   void advertise(const UnaryServiceBinding& binding,

@@ -46,14 +46,18 @@ extern "C" {
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <new>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #  define PYRAMID_ROS2_PLUGIN_EXPORT __declspec(dllexport)
@@ -184,6 +188,25 @@ void releaseRclcpp() {
 
 // -- Transport adapter context -------------------------------------------
 
+// One queued consumed-side RPC. The executor-facing invoke_async/invoke_stream
+// vtable entries only copy the request into one of these and enqueue it; the
+// plugin-owned worker thread runs the (bounded, blocking) ROS2 call so the
+// executor thread is never blocked on a remote service or stream completion.
+enum class Ros2WorkKind {
+  Unary,
+  Stream,
+};
+
+struct Ros2WorkItem {
+  Ros2WorkKind kind = Ros2WorkKind::Unary;
+  std::string service_name;
+  std::vector<unsigned char> request;
+  std::string request_type;  // preserved so the worker rebuilds the envelope
+  pcl_resp_cb_fn_t response_callback = nullptr;
+  pcl_stream_msg_fn_t stream_callback = nullptr;
+  void* user_data = nullptr;
+};
+
 struct Ros2TransportContext {
   pcl_executor_t* executor = nullptr;
   rclcpp::Node::SharedPtr node;
@@ -192,12 +215,187 @@ struct Ros2TransportContext {
   std::thread spin_thread;
   std::atomic<bool> spinning{false};
   bool holds_rclcpp_ref = false;  // released via releaseRclcpp() on destroy
+  // Consumed-side egress worker: owns blocking invokeRemoteUnary/Stream calls.
+  std::mutex work_mutex;
+  std::condition_variable work_cv;
+  std::deque<Ros2WorkItem> work_queue;
+  std::thread work_thread;
+  bool work_stop = false;
   pcl_transport_t transport{};
 };
 
 Ros2TransportContext* contextOf(const pcl_transport_t* transport) {
   if (!transport) return nullptr;
   return static_cast<Ros2TransportContext*>(transport->adapter_ctx);
+}
+
+// -- Executor-thread postback plumbing (mirrors the gRPC coupled plugin) ---
+//
+// The worker delivers unary responses via pcl_executor_post_response_msg (which
+// deep-copies the payload) and stream frames via a small event trampoline so
+// user callbacks always run on the executor thread, never on the worker.
+
+struct StreamEvent {
+  pcl_stream_msg_fn_t callback;
+  void* user_data;
+  bool end;
+  pcl_status_t status;
+};
+
+void streamEventCallback(const pcl_msg_t* msg, void* user_data) {
+  std::unique_ptr<StreamEvent> event(static_cast<StreamEvent*>(user_data));
+  if (!event || !event->callback) return;
+  event->callback(msg, event->end, event->status, event->user_data);
+}
+
+pcl_status_t postStreamEvent(Ros2TransportContext* ctx,
+                             pcl_stream_msg_fn_t callback,
+                             void* user_data,
+                             const pcl_msg_t* msg,
+                             bool end,
+                             pcl_status_t status) {
+  if (!ctx || !ctx->executor || !callback) return PCL_ERR_INVALID;
+  auto event = std::unique_ptr<StreamEvent>(new (std::nothrow) StreamEvent());
+  if (!event) return PCL_ERR_NOMEM;
+  event->callback = callback;
+  event->user_data = user_data;
+  event->end = end;
+  event->status = status;
+  pcl_msg_t empty{};
+  const pcl_msg_t* queued_msg = msg ? msg : &empty;
+  const pcl_status_t rc = pcl_executor_post_response_msg(
+      ctx->executor, streamEventCallback, event.get(), queued_msg);
+  if (rc == PCL_OK) {
+    event.release();
+  }
+  return rc;
+}
+
+// Thunks handed to the generated invokeRemote* helpers. The helpers call these
+// inline on the worker thread; the thunks re-post to the executor so the real
+// user callback runs on the executor thread.
+struct UnaryThunk {
+  pcl_executor_t* executor;
+  pcl_resp_cb_fn_t callback;
+  void* user_data;
+  bool posted;
+};
+
+void unaryThunkCallback(const pcl_msg_t* response, void* user) {
+  auto* t = static_cast<UnaryThunk*>(user);
+  if (!t) return;
+  t->posted = true;
+  (void)pcl_executor_post_response_msg(t->executor, t->callback, t->user_data,
+                                       response);
+}
+
+struct StreamThunk {
+  Ros2TransportContext* ctx;
+  pcl_stream_msg_fn_t callback;
+  void* user_data;
+  bool terminated;
+};
+
+void streamThunkCallback(const pcl_msg_t* msg, bool end, pcl_status_t status,
+                         void* user) {
+  auto* t = static_cast<StreamThunk*>(user);
+  if (!t) return;
+  if (end) t->terminated = true;
+  (void)postStreamEvent(t->ctx, t->callback, t->user_data, msg, end, status);
+}
+
+void ros2WorkerMain(Ros2TransportContext* ctx) {
+  for (;;) {
+    Ros2WorkItem item;
+    {
+      std::unique_lock<std::mutex> lock(ctx->work_mutex);
+      ctx->work_cv.wait(lock, [ctx] {
+        return ctx->work_stop || !ctx->work_queue.empty();
+      });
+      if (ctx->work_queue.empty()) {
+        if (ctx->work_stop) break;
+        continue;
+      }
+      item = std::move(ctx->work_queue.front());
+      ctx->work_queue.pop_front();
+    }
+
+    pcl_msg_t req{};
+    req.data = item.request.empty() ? nullptr : item.request.data();
+    req.size = static_cast<uint32_t>(item.request.size());
+    req.type_name = item.request_type.empty() ? nullptr : item.request_type.c_str();
+
+    if (item.kind == Ros2WorkKind::Unary) {
+      UnaryThunk thunk{ctx->executor, item.response_callback, item.user_data,
+                       false};
+      const pcl_status_t rc = pyramid::transport::ros2::invokeRemoteUnary(
+          *ctx->adapter, item.service_name.c_str(), &req, unaryThunkCallback,
+          &thunk);
+      if (!thunk.posted) {
+        // Bounded ROS2 failure (timeout / no service): still fire the client
+        // callback on the executor thread with an empty response.
+        pcl_msg_t empty{};
+        empty.type_name = "application/ros2";
+        (void)rc;
+        (void)pcl_executor_post_response_msg(ctx->executor,
+                                             item.response_callback,
+                                             item.user_data, &empty);
+      }
+      continue;
+    }
+
+    StreamThunk thunk{ctx, item.stream_callback, item.user_data, false};
+    const pcl_status_t rc = pyramid::transport::ros2::invokeRemoteStream(
+        *ctx->adapter, item.service_name.c_str(), &req, streamThunkCallback,
+        &thunk);
+    if (!thunk.terminated) {
+      pcl_msg_t terminal{};
+      terminal.type_name = "application/ros2";
+      (void)postStreamEvent(ctx, item.stream_callback, item.user_data,
+                            &terminal, true, rc == PCL_OK ? PCL_OK : rc);
+    }
+  }
+}
+
+bool startWorker(Ros2TransportContext* ctx) {
+  if (!ctx) return false;
+  try {
+    ctx->work_thread = std::thread(ros2WorkerMain, ctx);
+  } catch (...) {
+    return false;
+  }
+  return true;
+}
+
+// Stop the egress worker. Must run while the spin thread is still alive so an
+// in-flight (bounded) invokeRemote* call can complete before the join.
+void stopWorker(Ros2TransportContext* ctx) {
+  if (!ctx) return;
+  {
+    std::lock_guard<std::mutex> lock(ctx->work_mutex);
+    ctx->work_stop = true;
+  }
+  ctx->work_cv.notify_all();
+  if (ctx->work_thread.joinable()) {
+    ctx->work_thread.join();
+  }
+}
+
+pcl_status_t enqueueWork(Ros2TransportContext* ctx, Ros2WorkItem item) {
+  if (!ctx) return PCL_ERR_INVALID;
+  {
+    std::lock_guard<std::mutex> lock(ctx->work_mutex);
+    if (ctx->work_stop || !ctx->work_thread.joinable()) {
+      return PCL_ERR_STATE;
+    }
+    try {
+      ctx->work_queue.push_back(std::move(item));
+    } catch (...) {
+      return PCL_ERR_NOMEM;
+    }
+  }
+  ctx->work_cv.notify_one();
+  return PCL_OK;
 }
 
 void stopSpin(Ros2TransportContext* ctx) {
@@ -216,6 +414,10 @@ void stopSpin(Ros2TransportContext* ctx) {
 
 void destroyContext(Ros2TransportContext* ctx) {
   if (!ctx) return;
+  // Stop the egress worker first, while the spin thread is still alive: an
+  // in-flight invokeRemote* call is serviced by the spin thread and is bounded
+  // (~5s), so joining the worker here cannot hang.
+  stopWorker(ctx);
   stopSpin(ctx);
   if (ctx->node) {
     ctx->ros_executor.remove_node(ctx->node);
@@ -250,11 +452,25 @@ pcl_status_t ros2InvokeAsync(void* ctx_v, const char* service_name,
   if (!ctx || !ctx->adapter || !service_name || !request || !callback) {
     return PCL_ERR_INVALID;
   }
-  // Consumed (client) side: PCL invokes a remote ROS2 unary service. The adapter
-  // blocks for the response (serviced by this context's spin thread), then the
-  // support helper delivers it through the PCL callback.
-  return pyramid::transport::ros2::invokeRemoteUnary(
-      *ctx->adapter, service_name, request, callback, user_data);
+  if (request->size > 0U && !request->data) return PCL_ERR_INVALID;
+  // Consumed (client) side: copy the request and queue it. The worker owns the
+  // blocking ROS2 unary call and posts the response back on the executor thread
+  // -- the executor-facing entry never blocks on the remote service.
+  Ros2WorkItem item;
+  item.kind = Ros2WorkKind::Unary;
+  item.service_name = service_name;
+  item.response_callback = callback;
+  item.user_data = user_data;
+  if (request->type_name) item.request_type = request->type_name;
+  try {
+    if (request->size > 0U) {
+      const auto* begin = static_cast<const unsigned char*>(request->data);
+      item.request.assign(begin, begin + request->size);
+    }
+  } catch (...) {
+    return PCL_ERR_NOMEM;
+  }
+  return enqueueWork(ctx, std::move(item));
 }
 
 pcl_status_t ros2InvokeStream(void* ctx_v, const char* service_name,
@@ -266,15 +482,31 @@ pcl_status_t ros2InvokeStream(void* ctx_v, const char* service_name,
   if (!ctx || !ctx->adapter || !service_name || !request || !callback) {
     return PCL_ERR_INVALID;
   }
-  // Consumed (client) side: PCL invokes a remote ROS2 server-streaming service.
-  // The adapter opens the stream, buffers frames from the frame topic, and the
-  // support helper delivers them through the PCL stream callback.
-  return pyramid::transport::ros2::invokeRemoteStream(
-      *ctx->adapter, service_name, request, callback, user_data);
+  if (request->size > 0U && !request->data) return PCL_ERR_INVALID;
+  // Consumed (client) side: copy the request and queue it. The worker owns the
+  // blocking ROS2 server-stream call and posts each frame (and the terminal
+  // status) back on the executor thread.
+  Ros2WorkItem item;
+  item.kind = Ros2WorkKind::Stream;
+  item.service_name = service_name;
+  item.stream_callback = callback;
+  item.user_data = user_data;
+  if (request->type_name) item.request_type = request->type_name;
+  try {
+    if (request->size > 0U) {
+      const auto* begin = static_cast<const unsigned char*>(request->data);
+      item.request.assign(begin, begin + request->size);
+    }
+  } catch (...) {
+    return PCL_ERR_NOMEM;
+  }
+  return enqueueWork(ctx, std::move(item));
 }
 
 void ros2Shutdown(void* ctx_v) {
-  stopSpin(static_cast<Ros2TransportContext*>(ctx_v));
+  auto* ctx = static_cast<Ros2TransportContext*>(ctx_v);
+  stopWorker(ctx);
+  stopSpin(ctx);
 }
 
 // -- Codec vtable: passthrough envelope codec for application/ros2 --------
@@ -415,6 +647,13 @@ PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
       }
     });
   } catch (...) {
+    destroyContext(ctx);
+    return nullptr;
+  }
+
+  // Consumed-side egress worker: services queued invoke_async/invoke_stream
+  // calls off the executor thread.
+  if (!startWorker(ctx)) {
     destroyContext(ctx);
     return nullptr;
   }

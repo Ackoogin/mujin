@@ -246,7 +246,11 @@ void stopClientWorker(GrpcTransportContext* ctx) {
     ctx->client_stop = true;
   }
   ctx->client_cv.notify_all();
+  // Cancel any in-flight blocking gRPC call before joining: TryCancel() makes a
+  // wedged unary call / stream Read() return promptly with a cancelled status,
+  // so plugin teardown cannot hang indefinitely on an unresponsive peer.
   if (ctx->client_worker.joinable()) {
+    pyramid_grpc_plugin_client_cancel_all();
     ctx->client_worker.join();
   }
 }

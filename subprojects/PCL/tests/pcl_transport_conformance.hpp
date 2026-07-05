@@ -231,6 +231,178 @@ inline void expectServiceRoundTrip(const TransportPair& pair,
   pcl_container_destroy(svc_c);
 }
 
+/// \brief Group A: prove subscriber ingress runs on the executor thread.
+///
+/// Publishes once from the sender and drains the receiver by spinning it
+/// *only* on the calling thread. The subscriber records the thread id it
+/// ran on; the helper asserts it matches the calling (spin) thread and
+/// therefore never fired inline on the transport's recv/worker thread.
+///
+/// This is the load-bearing threading guarantee: a transport must deep-copy
+/// wire ingress into an executor queue and let the executor thread dispatch
+/// it, never call component business logic straight from a socket/bus/worker
+/// thread.
+inline void expectIngressRunsOnExecutorThread(
+    const TransportPair&      pair,
+    const std::string&        topic,
+    const std::string&        type_name,
+    const std::string&        payload,
+    int                       retries = 1,
+    std::chrono::milliseconds deadline = std::chrono::milliseconds(2000)) {
+  const std::thread::id spin_thread = std::this_thread::get_id();
+
+  struct SubState {
+    std::atomic<bool> received{false};
+    std::thread::id   cb_thread;
+  } state;
+
+  struct OuterCtx {
+    const TransportPair* pair;
+    std::string          topic;
+    std::string          type_name;
+    SubState*            state;
+  } outer{ &pair, topic, type_name, &state };
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* o = static_cast<OuterCtx*>(ud);
+    const char* peers[] = { o->pair->sender_peer_id.c_str() };
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, o->topic.c_str(), o->type_name.c_str(),
+        [](pcl_container_t*, const pcl_msg_t*, void* sub_ud) {
+          auto* s = static_cast<SubState*>(sub_ud);
+          s->cb_thread = std::this_thread::get_id();
+          s->received  = true;
+        }, o->state);
+    pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
+    return PCL_OK;
+  };
+
+  auto* sub_c = pcl_container_create("conf_ingress_sub", &cbs, &outer);
+  ASSERT_NE(sub_c, nullptr);
+  ASSERT_EQ(pcl_container_configure(sub_c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(sub_c),  PCL_OK);
+  ASSERT_EQ(pcl_executor_add(pair.receiver_exec, sub_c), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.data      = payload.data();
+  msg.size      = static_cast<uint32_t>(payload.size());
+  msg.type_name = type_name.c_str();
+
+  for (int attempt = 0; attempt < retries && !state.received; ++attempt) {
+    pair.sender_vtable->publish(pair.sender_vtable->adapter_ctx,
+                                topic.c_str(), &msg);
+    const auto attempt_start = std::chrono::steady_clock::now();
+    while (!state.received &&
+           std::chrono::steady_clock::now() - attempt_start < deadline / retries) {
+      pair.pumpBoth();
+    }
+  }
+
+  EXPECT_TRUE(state.received) << "subscriber did not observe the publish";
+  EXPECT_EQ(state.cb_thread, spin_thread)
+      << "subscriber ran off the executor thread -- transport dispatched "
+         "ingress inline on a worker thread instead of via an executor queue";
+
+  pcl_executor_remove(pair.receiver_exec, sub_c);
+  pcl_container_destroy(sub_c);
+}
+
+/// \brief Groups A + C: prove an async response fires on the executor thread
+///        and never inline from `invoke_async`.
+///
+/// Installs a service server on the receiver, invokes it from the sender via
+/// the vtable, and asserts:
+///   - the response callback did NOT run before `invoke_async` returned
+///     (Group C: no re-entrant business logic on the caller stack), and
+///   - the callback ran on the calling/spin thread (Group A: delivered via
+///     the executor response queue, not a transport worker thread).
+///
+/// Skips if the transport does not expose `invoke_async`.
+inline void expectResponseCallbackOnExecutorNotInline(
+    const TransportPair&      pair,
+    const std::string&        service_name,
+    const std::string&        request_payload,
+    const std::string&        response_payload,
+    std::chrono::milliseconds deadline = std::chrono::milliseconds(2000)) {
+  if (!pair.sender_vtable->invoke_async) {
+    GTEST_SKIP() << "transport does not implement invoke_async";
+  }
+  const std::thread::id spin_thread = std::this_thread::get_id();
+
+  struct SrvState {
+    std::string       response;
+    std::atomic<bool> handled{false};
+  } srv{ response_payload, false };
+
+  struct OuterCtx {
+    SrvState*   srv;
+    std::string service_name;
+  } outer{ &srv, service_name };
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* o = static_cast<OuterCtx*>(ud);
+    pcl_port_t* port = pcl_container_add_service(
+        c, o->service_name.c_str(), "SvcType",
+        [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t* resp,
+           pcl_svc_context_t*, void* svc_ud) -> pcl_status_t {
+          auto* s = static_cast<SrvState*>(svc_ud);
+          resp->data      = s->response.data();
+          resp->size      = static_cast<uint32_t>(s->response.size());
+          resp->type_name = "SvcType";
+          s->handled = true;
+          return PCL_OK;
+        }, o->srv);
+    pcl_port_set_route(port, PCL_ROUTE_REMOTE | PCL_ROUTE_LOCAL, nullptr, 0);
+    return PCL_OK;
+  };
+
+  auto* svc_c = pcl_container_create("conf_notinline_svc", &cbs, &outer);
+  ASSERT_NE(svc_c, nullptr);
+  ASSERT_EQ(pcl_container_configure(svc_c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(svc_c),  PCL_OK);
+  ASSERT_EQ(pcl_executor_add(pair.receiver_exec, svc_c), PCL_OK);
+
+  struct ClientState {
+    std::atomic<bool> got_response{false};
+    std::thread::id   cb_thread;
+  } client;
+
+  pcl_msg_t req = {};
+  req.data      = request_payload.data();
+  req.size      = static_cast<uint32_t>(request_payload.size());
+  req.type_name = "SvcType";
+
+  pcl_status_t rc = pair.sender_vtable->invoke_async(
+      pair.sender_vtable->adapter_ctx, service_name.c_str(), &req,
+      [](const pcl_msg_t*, void* ud) {
+        auto* c = static_cast<ClientState*>(ud);
+        c->cb_thread    = std::this_thread::get_id();
+        c->got_response = true;
+      },
+      &client);
+  ASSERT_EQ(rc, PCL_OK);
+
+  // Group C: the callback must not have fired synchronously inside invoke_async.
+  EXPECT_FALSE(client.got_response.load())
+      << "invoke_async fired the response callback inline -- the queue "
+         "contract requires delivery on a later executor spin";
+
+  const auto start = std::chrono::steady_clock::now();
+  while (!client.got_response &&
+         std::chrono::steady_clock::now() - start < deadline) {
+    pair.pumpBoth();
+  }
+
+  EXPECT_TRUE(client.got_response) << "client never observed the response";
+  EXPECT_EQ(client.cb_thread, spin_thread)
+      << "response callback ran off the executor thread";
+
+  pcl_executor_remove(pair.receiver_exec, svc_c);
+  pcl_container_destroy(svc_c);
+}
+
 /// \brief Verify the basic vtable shape — non-null hooks, non-null
 ///        adapter_ctx, NULL-safe getters.
 ///

@@ -2,6 +2,8 @@
 
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/serialization.hpp>
+#include <rclcpp/serialized_message.hpp>
 
 #include "pyramid_components_tactical_objects_services_provided_ros2_transport.hpp"
 #include "pyramid_ros2_transport/msg/pcl_envelope.hpp"

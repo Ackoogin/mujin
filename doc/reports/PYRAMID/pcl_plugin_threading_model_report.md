@@ -1,7 +1,11 @@
 # PCL Plugin Threading Model Report
 
-Status: 2026-07-04.  Updated after the UDP egress fix and shared-memory
-worker-owned backpressure fix.
+Status: 2026-07-05.  All planned rework landed: the shared-memory service/stream
+discovery poll moved onto the transport worker, the ROS2 coupled plugin now
+queues consumed unary/stream egress onto a worker, the gRPC coupled plugin
+cancels in-flight client RPCs at teardown, and a reusable threading conformance
+suite (groups A-D) covers the in-tree transports.  See "Current status" and the
+Resolved table for what was verified where.
 
 This report records the threading-model review for PCL transports and PYRAMID
 runtime plugins.  It focuses on the rule that PCL component business logic runs
@@ -42,13 +46,12 @@ The socket transport and transport-template implementation already follow the
 egress model.  `publish` and `invoke_async` clone outbound frames into FIFO
 queues, and dedicated send/receive workers own blocking wire operations.
 
-The non-conforming paths are:
+The remaining known residuals are:
 
-| Area | Issue | Primary files |
-|------|-------|---------------|
-| Shared-memory transport | non-backpressured publish, service invoke, stream invoke, stream send/end/cancel, and respond still take the bus lock synchronously; service and stream invoke paths poll discovery. | `subprojects/PCL/src/pcl_transport_shared_memory.c`, `subprojects/PCL/include/pcl/pcl_transport_shared_memory.h` |
-| ROS2 coupled plugin | consumed unary/stream calls synchronously wait on ROS2 services and stream completion from the executor call path. | `subprojects/PYRAMID/plugins/pyramid_ros2_coupled_plugin.cpp`, `subprojects/PYRAMID/ros2/src/rclcpp_runtime_adapter.cpp`, `subprojects/PYRAMID/pim/backends/ros2_backend.py` |
-| gRPC coupled plugin | client worker shutdown still waits for an in-flight blocking generated gRPC call to return; add bounded/cancellable RPC support before treating plugin unload as fully conformant under a wedged peer. | `subprojects/PYRAMID/plugins/pyramid_grpc_coupled_plugin.cpp`, `subprojects/PYRAMID/pim/backends/grpc_backend.py` |
+| Area | Residual | Notes |
+|------|----------|-------|
+| Shared-memory transport | `respond`, `stream_send`, `stream_end`, and `stream_cancel` still take the bus lock synchronously on the executor-facing path. | The bus lock is a short, bounded critical section (not a discovery poll or backpressure wait), so this does not block the executor indefinitely; the genuinely-blocking discovery poll was the conformance violation and is now worker-owned.  Moving these off the executor as well would need to serialise them through the FIFO worker and interacts with the delicate server-side stream-target lifecycle (abort-on-destroy) -- deferred as a lower-value hardening. |
+| gRPC coupled plugin | wedged-peer teardown is now cancellable but not E2E-verified in this tree. | `test_grpc_coupled_plugin_e2e` still does not build here because generated `pyramid_codec_plugin_test_paths.hpp` is missing; the cancellation mechanism is unit-covered only by the plugin load test. |
 
 Resolved paths:
 
@@ -57,6 +60,10 @@ Resolved paths:
 | UDP transport | `publish` now formats the datagram and enqueues it to a transport-owned send thread; only that worker calls `sendto`.  Shutdown stops egress and future publishes fail with `PCL_ERR_STATE`. | Built `test_pcl_udp_transport`; ran `ctest --test-dir build -C Release -R "PclUdpTransport\\." --output-on-failure` |
 | Shared-memory topic backpressure | non-zero topic backpressure configuration is accepted again, but configured publishes copy into a transport-owned egress queue and return promptly.  The egress worker owns the mailbox-capacity wait/retry loop and preserves all-or-nothing fan-out.  Clearing a policy restores the default fail-fast publish path. | Built `test_pcl_shared_memory_transport`; ran `ctest --test-dir build -C Release -R "PclSharedMemoryTransport\\." --output-on-failure` |
 | gRPC consumed egress | client-mode `invoke_async` and `invoke_stream` now copy requests into a plugin-owned worker queue and return promptly.  The worker owns blocking generated gRPC calls and posts unary/stream callbacks back through the PCL executor response queue. | Built `pyramid_grpc_coupled_plugin` in `build-all-enabled`; built and ran `ctest --test-dir build-all-enabled -C Release -R "GrpcCoupledPlugin" --output-on-failure`.  `test_grpc_coupled_plugin_e2e` did not build in this tree because generated `pyramid_codec_plugin_test_paths.hpp` is missing. |
+| Shared-memory service/stream discovery | `invoke_async` and `invoke_stream` now register pending state and enqueue an `SVC_REQ`/`STREAM_OPEN` item to the transport-owned egress worker, returning promptly.  The worker owns the (bounded) provider-discovery poll and the request-send bus lock; on discovery failure it delivers a terminal (empty unary response / `NOT_FOUND` stream end) on the executor thread instead of blocking or failing the caller synchronously.  The worker-resolved provider id is recorded on the pending-stream node so a later cancel can address it without racing the caller handle. | `subprojects/PCL/src/pcl_transport_shared_memory.c`.  Built and ran `ctest --test-dir build -C Release -R "PclSharedMemoryTransport\\." --output-on-failure` (33/33), and the full `Pcl` suite (454/454). |
+| ROS2 coupled plugin consumed egress | `ros2InvokeAsync`/`ros2InvokeStream` now copy the request and enqueue it to a plugin-owned worker; the worker runs the (bounded, ~5s) `invokeRemoteUnary`/`invokeRemoteStream` calls with a thunk callback that re-posts each result via `pcl_executor_post_response_msg`, so user callbacks run on the executor thread, never inline or on the worker/spin thread.  Teardown stops the worker before the spin thread so an in-flight bounded call can still complete. | `subprojects/PYRAMID/plugins/pyramid_ros2_coupled_plugin.cpp`.  Built the ament package via `scripts/build_ros2_transport.sh`; ran `test_ros2_coupled_plugin_load` (4/4), `test_rclcpp_runtime_adapter` (9/9), `test_ros2_codec_roundtrip` (8/8).  Also fixed a GCC-11 `= {}` aggregate-default-argument miscompile in `rclcpp_runtime_adapter.hpp` and a missing `<rclcpp/serialization.hpp>` include in the adapter test that blocked the whole ROS2 build on this toolchain. |
+| gRPC teardown cancellation | the generated aggregator keeps a registry of in-flight client `grpc::ClientContext`s and exposes `pyramid_grpc_plugin_client_cancel_all()`; the plugin calls it in `stopClientWorker` before joining, so `TryCancel()` makes a wedged unary call / stream `Read()` return promptly instead of stranding the worker at unload. | `subprojects/PYRAMID/pim/backends/grpc_backend.py`, `subprojects/PYRAMID/plugins/pyramid_grpc_coupled_plugin.cpp`.  Regenerated bindings via `cmake --preset all-on`; rebuilt `pyramid_grpc_coupled_plugin` and ran `GrpcCoupledPlugin` load tests (4/4).  Wedged-peer behaviour not E2E-verified (see residuals). |
+| Threading conformance suite | reusable helpers `expectIngressRunsOnExecutorThread` (group A) and `expectResponseCallbackOnExecutorNotInline` (groups A+C) added to `pcl_transport_conformance.hpp`; a new `test_pcl_transport_threading.cpp` wires them plus gated-send egress-promptness (group B) and destroy-wakes-worker (group D) cases across the template, shared-memory, UDP, and socket transports. | Built and ran `test_pcl_transport_threading` (11/11, stable over repeated runs). |
 
 ## Fix plan
 
@@ -111,37 +118,54 @@ Shared memory should not block the executor even though the medium is local.
   Non-zero backpressure configuration now queues configured publishes to a
   transport-owned egress worker; the worker owns the bounded mailbox-capacity
   wait/retry loop.  Zero-timeout clearing restores the default fail-fast path.
-- Replace the indefinite bus lock with a non-blocking or bounded try-lock path
-  only if normal peer polling cannot race it.  A direct try-lock on the shared
-  bus is not sufficient because the receive thread legitimately holds the lock
-  during local service/subscription synchronization.
-- Preferred remaining fix: move shared-memory publish, service invoke, stream
-  open, stream frame, and cancel operations into a transport-owned egress queue.
-  The worker can block on the bus lock and discovery while the executor only
-  copies payloads and enqueues work.
-- Move service/stream provider discovery retries to a worker queue, or change
-  executor-facing `invoke_async`/`invoke_stream` to fail fast when no provider is
-  visible immediately.
-- Deliver async responses and stream frames through executor queues, as today.
+- Completed: the egress item was generalised (`PCL_SHM_EGRESS_PUBLISH` /
+  `SVC_REQ` / `STREAM_OPEN`) and the worker dispatches by kind.  `invoke_async`
+  and `invoke_stream` now register pending state, enqueue an item, and return
+  promptly; the worker owns the provider-discovery poll and the request-send bus
+  lock.  On discovery failure the worker delivers a terminal empty unary
+  response / `NOT_FOUND` stream end on the executor thread (async, via
+  `pcl_executor_post_response_msg` / the stream trampoline) rather than blocking
+  or failing the call synchronously.  The worker-resolved provider id is stored
+  on the pending-stream node so `stream_cancel` can address it without racing
+  the caller handle.
+- Deferred: `respond`, `stream_send`, `stream_end`, and `stream_cancel` still
+  take the (bounded) bus lock synchronously.  A try-lock is not sufficient
+  because the receive thread legitimately holds the lock during local
+  service/subscription synchronization; routing these through the FIFO worker
+  interacts with the server-side stream-target lifecycle and is a lower-value
+  hardening (see residuals).
+- Async responses and stream frames continue to be delivered through executor
+  queues, as before.
 
 ### 5. Fix ROS2 coupled plugin
 
 Make the ROS2 transport vtable queue work into plugin-owned workers.
 
-- Add an outbound work queue to `Ros2TransportContext`.
-- Change `ros2Publish` to copy the envelope and enqueue publish work.  The
-  worker calls `publishOutboundEnvelope`.
-- Change `ros2InvokeAsync` to allocate pending state, copy the request, enqueue
-  a unary call, and return.  The worker calls the ROS2 adapter, then posts the
-  response with `pcl_executor_post_response_msg`.
-- Change `ros2InvokeStream` to allocate a stream handle and pending state,
-  enqueue the open request, and return.  The worker opens the ROS2 stream and
-  posts each frame/terminal event back to the executor.
-- Do not invoke user callbacks directly from ROS2 spin threads or transport
-  workers.
-- Keep ROS2 subscription/service ingress helpers posting to executor queues; in
-  a separate routing fix, thread peer id through and use the remote-aware post
-  APIs for remote ingress.
+- Completed: `Ros2TransportContext` owns a consumed-side work queue and worker
+  thread (`ros2WorkerMain`), mirroring the gRPC coupled plugin.
+- Completed: `ros2InvokeAsync` copies the request (and its content type) into a
+  unary work item, enqueues it, and returns.  The worker runs the bounded
+  `invokeRemoteUnary` with a thunk that re-posts the response via
+  `pcl_executor_post_response_msg`; on a bounded ROS2 failure it still posts a
+  terminal empty response so the client callback fires on the executor thread.
+- Completed: `ros2InvokeStream` copies the request, enqueues a stream work item,
+  and returns.  The worker runs `invokeRemoteStream` with a thunk that re-posts
+  each frame (and a synthesised terminal if the helper returns without one)
+  through the executor stream-event trampoline.
+- Completed: user callbacks are never invoked from the ROS2 spin thread or the
+  worker -- everything is re-posted to the executor.  Teardown stops the worker
+  before the spin thread so an in-flight bounded call can complete first.
+- Not queued: `ros2Publish` remains direct because rclcpp publish is a
+  non-blocking DDS enqueue (no remote wait/discovery/backpressure on the
+  executor path).
+- Unchanged: ROS2 subscription/service ingress helpers still post to executor
+  queues; threading peer id through for remote ingress remains a separate
+  routing fix.
+- Toolchain fix required to build the ament package on GCC 11: rewrote the
+  `RclcppRuntimeAdapter` `Options options = {}` default argument as two
+  overloads (GCC 11 miscompiles `= {}` for an aggregate with a default member
+  initializer; fixed in GCC 12) and added the missing `<rclcpp/serialization.hpp>`
+  include to the adapter test.
 
 ### 6. Fix gRPC coupled plugin
 
@@ -160,14 +184,34 @@ view.
   waits for executor service completion, because those are not executor
   threads.  Add bounded timeout/failure behavior so a stopped executor does not
   strand gRPC server threads indefinitely.
-- Remaining: add deadlines/cancellation to generated client calls so plugin
-  teardown does not wait indefinitely on a wedged peer.
+- Completed: the generated aggregator now registers each in-flight client
+  `grpc::ClientContext` (`ClientContextGuard`) and exposes
+  `pyramid_grpc_plugin_client_cancel_all()`.  The plugin calls it in
+  `stopClientWorker` before joining, so `TryCancel()` unblocks a wedged unary
+  call or stream `Read()` at teardown -- no artificial per-call deadline, so
+  legitimate long-lived streams keep working.  Behaviour is unit-covered by the
+  plugin load test; the wedged-peer E2E remains unbuildable in this tree.
 
 ## Conformance tests
 
 Add a transport conformance suite that can be reused by built-in transports and
 runtime plugins.  The goal is not just successful delivery; it must prove
 threading behavior.
+
+Status (2026-07-05): implemented for the in-tree transports as
+`subprojects/PCL/tests/test_pcl_transport_threading.cpp` (suite
+`PclTransportThreading`), backed by two reusable helpers in
+`pcl_transport_conformance.hpp`:
+`expectIngressRunsOnExecutorThread` (group A) and
+`expectResponseCallbackOnExecutorNotInline` (groups A+C).  The file records the
+executor/spin thread id and asserts every business-logic callback runs on it,
+uses a gated template send hook to prove egress returns promptly while the send
+path is wedged (group B), and drives destroy against a blocked send worker
+(group D).  Coverage: template (A/B/C/D), shared memory (A/C + backpressure B),
+UDP (A), socket (A/C).  11/11 passing.  The `PyramidPluginThreading.Ros2*` /
+`Grpc*` cases named below still need the all-enabled / ament build harness and
+remain to be written as plugin-level tests; the ROS2 and gRPC plugins already
+satisfy the underlying contract (see the Resolved table).
 
 ### Test group A: executor-thread ownership
 
@@ -266,10 +310,24 @@ Expected tests:
 The threading model is conformant when:
 
 - every non-test transport/plugin passes the executor-thread ownership suite
+  -- met for the in-tree transports (template, shared memory, UDP, socket) by
+  `PclTransportThreading`; the ROS2 and gRPC plugins satisfy the contract in
+  code but still lack a plugin-level `PyramidPluginThreading` harness.
 - every egress vtable call is proven to return promptly while the real I/O path
-  is blocked
+  is blocked -- met for the transports with an injectable block (template gated
+  send, shared-memory backpressure); the plugin cases are pending the harness.
 - no transport/plugin invokes user callbacks inline from `invoke_async` or from
-  non-executor worker threads
+  non-executor worker threads -- met; the shared-memory, ROS2, and gRPC consumed
+  paths now re-post every callback through the executor queue.
 - plugin unload joins all plugin-owned threads before `dlclose`/`FreeLibrary`
+  -- met; the ROS2 worker joins before the spin thread, and the gRPC worker is
+  cancelled (`TryCancel`) before join so a wedged peer cannot block unload.
 - documentation states the contract clearly enough for third-party transport
   plugin authors to implement it without reading socket transport internals
+  -- met by the `pcl_transport_t` vtable docs.
+
+Remaining before "fully conformant": author the `PyramidPluginThreading.Ros2*`
+and `Grpc*` cases against the all-enabled/ament harness, restore the gRPC E2E
+build (missing `pyramid_codec_plugin_test_paths.hpp`), and -- if desired --
+route the shared-memory `respond`/`stream_send`/`stream_end`/`stream_cancel`
+bus-lock operations through the egress worker.

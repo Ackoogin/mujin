@@ -106,6 +106,10 @@ typedef struct pcl_shm_pending_stream_t {
   uint32_t                          seq_id;
   pcl_stream_msg_fn_t               callback;
   void*                             user_data;
+  /* Filled in by the egress worker once it resolves the stream provider, so a
+   * client-side cancel can address the CANCEL frame without racing the caller-
+   * owned stream handle. Empty until the worker has sent the open request. */
+  char                              provider_id[PCL_SHM_MAX_ID];
   struct pcl_shm_pending_stream_t*  next;
 } pcl_shm_pending_stream_t;
 
@@ -120,12 +124,23 @@ typedef struct {
   char     topic[PCL_SHM_MAX_NAME];
 } pcl_shm_backpressure_policy_t;
 
+/* Operation carried by an egress queue node. The executor-facing vtable entry
+ * points only copy the payload and enqueue one of these; the transport-owned
+ * egress worker performs the blocking bus-lock and provider-discovery work. */
+typedef enum {
+  PCL_SHM_EGRESS_PUBLISH = 0,     /* backpressured topic publish */
+  PCL_SHM_EGRESS_SVC_REQ = 1,     /* unary service request: discover + send */
+  PCL_SHM_EGRESS_STREAM_OPEN = 2, /* streaming request: discover + send */
+} pcl_shm_egress_kind_t;
+
 typedef struct pcl_shm_egress_item_t {
   struct pcl_shm_egress_item_t* next;
-  char                          topic[PCL_SHM_MAX_NAME];
+  uint32_t                      kind;      /* pcl_shm_egress_kind_t */
+  char                          topic[PCL_SHM_MAX_NAME]; /* topic or service */
   char                          type_name[PCL_SHM_MAX_TYPE];
   uint32_t                      size;
-  uint32_t                      timeout_ms;
+  uint32_t                      timeout_ms; /* publish backpressure budget */
+  uint32_t                      seq_id;     /* correlation for svc/stream ops */
   uint8_t                       data[PCL_SHM_MAX_PAYLOAD];
 } pcl_shm_egress_item_t;
 
@@ -143,11 +158,12 @@ typedef struct pcl_shm_stream_send_target_t {
   struct pcl_shm_stream_send_target_t* next;
 } pcl_shm_stream_send_target_t;
 
-/* Client-side stream handle returned via invoke_stream out param. */
+/* Client-side stream handle returned via invoke_stream out param. The provider
+ * is resolved asynchronously by the egress worker and recorded on the pending-
+ * stream node, so the handle only needs to carry the correlation seq id. */
 typedef struct {
   pcl_shared_memory_transport_t* owner;
   uint32_t                       seq_id;
-  char                           provider_id[PCL_SHM_MAX_ID];
 } pcl_shm_stream_client_handle_t;
 
 /* Trampoline plumbed through pcl_executor_post_response_msg to deliver a
@@ -892,6 +908,49 @@ static pcl_status_t pcl_shm_pending_stream_remove(
 }
 // GCOVR_EXCL_STOP
 
+/* Records the resolved provider on the pending-stream node keyed by seq id, so
+ * a later client-side cancel can address the CANCEL frame. Called by the egress
+ * worker once discovery succeeds and the open request has been sent. */
+static void pcl_shm_pending_stream_set_provider(
+    pcl_shared_memory_transport_t* ctx,
+    uint32_t                       seq_id,
+    const char*                    provider_id) {
+  pcl_shm_pending_stream_t* node;
+  if (!ctx) return;
+  pcl_shm_pending_lock_acquire(ctx);
+  for (node = ctx->pending_stream_head; node; node = node->next) {
+    if (node->seq_id == seq_id) {
+      snprintf(node->provider_id, sizeof(node->provider_id), "%s",
+               provider_id ? provider_id : "");
+      break;
+    }
+  }
+  pcl_shm_pending_lock_release(ctx);
+}
+
+/* Copies out the resolved provider id for a pending stream. Returns non-zero
+ * when a provider has been recorded (empty until the worker resolves it). */
+static int pcl_shm_pending_stream_provider(
+    pcl_shared_memory_transport_t* ctx,
+    uint32_t                       seq_id,
+    char*                          out_id,
+    size_t                         out_size) {
+  pcl_shm_pending_stream_t* node;
+  int have = 0;
+  if (!ctx || !out_id || out_size == 0u) return 0;
+  out_id[0] = '\0';
+  pcl_shm_pending_lock_acquire(ctx);
+  for (node = ctx->pending_stream_head; node; node = node->next) {
+    if (node->seq_id == seq_id) {
+      snprintf(out_id, out_size, "%s", node->provider_id);
+      have = node->provider_id[0] != '\0';
+      break;
+    }
+  }
+  pcl_shm_pending_lock_release(ctx);
+  return have;
+}
+
 /* Walks the pending-stream list, detaches each entry, and fires its callback
  * with end=true status=PCL_ERR_CANCELLED so generated holders (futures,
  * accumulators, push-mode state) are released even if the peer never sent
@@ -1170,6 +1229,12 @@ static void pcl_shm_egress_item_free_list(pcl_shm_egress_item_t* item) {
   }
 }
 
+/* Dispatches one egress item on the transport-owned worker thread. Defined
+ * after the provider-discovery helper; forward-declared here for the worker
+ * loop. */
+static void pcl_shm_egress_process_item(pcl_shared_memory_transport_t* ctx,
+                                        pcl_shm_egress_item_t*         item);
+
 static int pcl_shm_egress_should_stop(pcl_shared_memory_transport_t* ctx) {
   int should_stop;
   pcl_shm_egress_lock_acquire(ctx);
@@ -1251,7 +1316,7 @@ static void* pcl_shm_egress_thread_main(void* arg)
       if (pcl_shm_egress_should_stop(ctx)) break;
       continue;
     }
-    (void)pcl_shm_publish_with_worker_backpressure(ctx, item);
+    pcl_shm_egress_process_item(ctx, item);
     pcl_free(item);
   }
 
@@ -1262,21 +1327,27 @@ static void* pcl_shm_egress_thread_main(void* arg)
 #endif
 }
 
-static pcl_status_t pcl_shm_enqueue_backpressured_publish(
+static pcl_status_t pcl_shm_enqueue_egress(
     pcl_shared_memory_transport_t* ctx,
-    const char*                    topic,
+    pcl_shm_egress_kind_t          kind,
+    const char*                    name,
     const pcl_msg_t*               msg,
+    uint32_t                       seq_id,
     uint32_t                       timeout_ms) {
   pcl_shm_egress_item_t* item;
 
-  if (!ctx || !topic || !msg || !msg->type_name) return PCL_ERR_INVALID;
+  if (!ctx || !name || !msg || !msg->type_name) return PCL_ERR_INVALID;
+  if (msg->size > 0u && !msg->data) return PCL_ERR_INVALID;
+  if (msg->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
 
   item = (pcl_shm_egress_item_t*)pcl_calloc(1, sizeof(*item));
   if (!item) return PCL_ERR_NOMEM;
-  snprintf(item->topic, sizeof(item->topic), "%s", topic);
+  item->kind = (uint32_t)kind;
+  snprintf(item->topic, sizeof(item->topic), "%s", name);
   snprintf(item->type_name, sizeof(item->type_name), "%s", msg->type_name);
   item->size = msg->size;
   item->timeout_ms = timeout_ms;
+  item->seq_id = seq_id;
   if (msg->size > 0u) {
     memcpy(item->data, msg->data, msg->size);
   }
@@ -1323,6 +1394,110 @@ static int pcl_shm_find_provider_slot_locked(pcl_shared_memory_transport_t* ctx,
   return found;
 }
 
+/* Blocking provider discovery, run on the egress worker. Polls the bus for a
+ * slot advertising service_name, up to PCL_SHM_DISCOVERY_RETRIES, bailing early
+ * if the transport is being torn down. Returns >0 found, 0 none, <0 ambiguous. */
+static int pcl_shm_worker_discover(pcl_shared_memory_transport_t* ctx,
+                                   const char*                    service_name,
+                                   uint32_t*                      provider_slot) {
+  uint32_t attempts;
+  int found = 0;
+  for (attempts = 0u; attempts < PCL_SHM_DISCOVERY_RETRIES; ++attempts) {
+    if (pcl_shm_egress_should_stop(ctx)) return 0;
+    if (pcl_shm_bus_lock(ctx) != PCL_OK) return 0;  // GCOVR_EXCL_LINE: bus semaphore fails only on kernel fault
+    found = pcl_shm_find_provider_slot_locked(ctx, service_name, provider_slot);
+    pcl_shm_bus_unlock(ctx);
+    if (found != 0) break;
+    pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+  }
+  return found;
+}
+
+/* Worker side of invoke_async: discover the provider, send the request frame,
+ * and on any failure deliver a terminal (empty) response so the client callback
+ * fires on the executor thread rather than blocking the caller. */
+static void pcl_shm_worker_svc_req(pcl_shared_memory_transport_t* ctx,
+                                   pcl_shm_egress_item_t*         item) {
+  uint32_t provider_slot = 0u;
+  int found = pcl_shm_worker_discover(ctx, item->topic, &provider_slot);
+  pcl_resp_cb_fn_t cb = NULL;
+  void*            ud = NULL;
+  pcl_msg_t        req;
+  pcl_msg_t        empty;
+
+  if (found > 0) {
+    pcl_status_t rc = PCL_ERR_STATE;
+    if (pcl_shm_bus_lock(ctx) == PCL_OK) {
+      rc = pcl_shm_enqueue_frame_locked(ctx, provider_slot,
+                                        PCL_SHM_FRAME_SVC_REQ,
+                                        ctx->participant_id, item->topic,
+                                        item->type_name,
+                                        item->size > 0u ? item->data : NULL,
+                                        item->size, item->seq_id);
+      pcl_shm_bus_unlock(ctx);
+    }
+    if (rc == PCL_OK) return;  /* response arrives via the recv thread */
+  }
+
+  (void)req;
+  memset(&empty, 0, sizeof(empty));
+  if (pcl_shm_pending_remove(ctx, item->seq_id, &cb, &ud) == PCL_OK && cb) {
+    (void)pcl_executor_post_response_msg(ctx->executor, cb, ud, &empty);
+  }
+}
+
+/* Worker side of invoke_stream: discover the provider, record it on the pending
+ * node (so cancel can find it), and send the open request. On failure, complete
+ * the pending stream with a terminal error delivered on the executor thread. */
+static void pcl_shm_worker_stream_open(pcl_shared_memory_transport_t* ctx,
+                                       pcl_shm_egress_item_t*         item) {
+  uint32_t     provider_slot = 0u;
+  int          found = pcl_shm_worker_discover(ctx, item->topic, &provider_slot);
+  char         provider_id[PCL_SHM_MAX_ID] = {0};
+  pcl_status_t term;
+
+  if (found > 0) {
+    pcl_status_t rc = PCL_ERR_STATE;
+    if (pcl_shm_bus_lock(ctx) == PCL_OK) {
+      snprintf(provider_id, sizeof(provider_id), "%s",
+               ctx->region->slots[provider_slot].participant_id);
+      rc = pcl_shm_enqueue_frame_locked(ctx, provider_slot,
+                                        PCL_SHM_FRAME_STREAM_REQ,
+                                        ctx->participant_id, item->topic,
+                                        item->type_name,
+                                        item->size > 0u ? item->data : NULL,
+                                        item->size, item->seq_id);
+      pcl_shm_bus_unlock(ctx);
+    }
+    if (rc == PCL_OK) {
+      pcl_shm_pending_stream_set_provider(ctx, item->seq_id, provider_id);
+      return;  /* frames + terminal status arrive via the recv thread */
+    }
+    term = rc;
+  } else {
+    term = (found < 0) ? PCL_ERR_INVALID : PCL_ERR_NOT_FOUND;
+  }
+
+  (void)pcl_shm_pending_stream_complete(ctx, item->seq_id, term);
+}
+
+static void pcl_shm_egress_process_item(pcl_shared_memory_transport_t* ctx,
+                                        pcl_shm_egress_item_t*         item) {
+  if (!ctx || !item) return;
+  switch ((pcl_shm_egress_kind_t)item->kind) {
+    case PCL_SHM_EGRESS_SVC_REQ:
+      pcl_shm_worker_svc_req(ctx, item);
+      break;
+    case PCL_SHM_EGRESS_STREAM_OPEN:
+      pcl_shm_worker_stream_open(ctx, item);
+      break;
+    case PCL_SHM_EGRESS_PUBLISH:
+    default:
+      (void)pcl_shm_publish_with_worker_backpressure(ctx, item);
+      break;
+  }
+}
+
 static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
                                     const char*      topic,
                                     const pcl_msg_t* msg) {
@@ -1338,7 +1513,8 @@ static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
 
   timeout_ms = pcl_shm_backpressure_timeout_ms(ctx, topic);
   if (timeout_ms > 0u) {
-    return pcl_shm_enqueue_backpressured_publish(ctx, topic, msg, timeout_ms);
+    return pcl_shm_enqueue_egress(ctx, PCL_SHM_EGRESS_PUBLISH, topic, msg, 0u,
+                                  timeout_ms);
   }
 
   if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
@@ -1413,14 +1589,12 @@ static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
       (pcl_shared_memory_transport_t*)adapter_ctx;
   pcl_shm_pending_request_t* pending;
   uint32_t seq_id;
-  uint32_t provider_slot = 0u;
-  uint32_t attempts;
-  int found;
   pcl_status_t rc;
 
   if (!ctx || !service_name || !request || !callback) return PCL_ERR_INVALID;
   if (request->size > 0u && !request->data) return PCL_ERR_INVALID;
   if (request->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
+  if (!request->type_name) return PCL_ERR_INVALID;
 
   pending = (pcl_shm_pending_request_t*)pcl_calloc(1, sizeof(*pending));
   if (!pending) return PCL_ERR_NOMEM;
@@ -1435,43 +1609,14 @@ static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
   ctx->pending_head = pending;
   pcl_shm_pending_lock_release(ctx);
 
-  found = 0;
-  for (attempts = 0u; attempts < PCL_SHM_DISCOVERY_RETRIES; ++attempts) {
-    if (pcl_shm_bus_lock(ctx) != PCL_OK) break;
-    found = pcl_shm_find_provider_slot_locked(ctx, service_name, &provider_slot);
-    pcl_shm_bus_unlock(ctx);
-    if (found != 0) break;
-    pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
-  }
-
-  if (found == 0) {
-    pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);
-    return PCL_ERR_NOT_FOUND;
-  }
-  if (found < 0) {
-    pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);
-    return PCL_ERR_INVALID;
-  }
-
-  if (pcl_shm_bus_lock(ctx) != PCL_OK) {
-    // GCOVR_EXCL_START: the bus semaphore fails only on kernel fault.
-    pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);
-    return PCL_ERR_STATE;
-    // GCOVR_EXCL_STOP
-  }
-  rc = pcl_shm_enqueue_frame_locked(ctx,
-                                    provider_slot,
-                                    PCL_SHM_FRAME_SVC_REQ,
-                                    ctx->participant_id,
-                                    service_name,
-                                    request->type_name,
-                                    request->data,
-                                    request->size,
-                                    seq_id);
-  pcl_shm_bus_unlock(ctx);
-
+  /* Provider discovery and the bus-lock send run on the egress worker so the
+     executor thread returns promptly. If no provider is ever found, the worker
+     delivers a terminal (empty) response to the callback on the executor
+     thread rather than blocking or failing this call synchronously. */
+  rc = pcl_shm_enqueue_egress(ctx, PCL_SHM_EGRESS_SVC_REQ, service_name,
+                              request, seq_id, 0u);
   if (rc != PCL_OK) {
-    pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);  // GCOVR_EXCL_LINE: requires the provider mailbox to fill in the instant after discovery
+    pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);
   }
   return rc;
 }
@@ -1486,16 +1631,13 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
       (pcl_shared_memory_transport_t*)adapter_ctx;
   pcl_shm_pending_stream_t* pending;
   pcl_shm_stream_client_handle_t* handle = NULL;
-  char provider_id[PCL_SHM_MAX_ID] = {0};
   uint32_t seq_id;
-  uint32_t provider_slot = 0u;
-  uint32_t attempts;
-  int found;
   pcl_status_t rc;
 
   if (!ctx || !service_name || !request || !callback) return PCL_ERR_INVALID;
   if (request->size > 0u && !request->data) return PCL_ERR_INVALID;
   if (request->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
+  if (!request->type_name) return PCL_ERR_INVALID;
 
   pending = (pcl_shm_pending_stream_t*)pcl_calloc(1, sizeof(*pending));
   if (!pending) return PCL_ERR_NOMEM;
@@ -1510,60 +1652,29 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
   ctx->pending_stream_head = pending;
   pcl_shm_pending_lock_release(ctx);
 
-  found = 0;
-  for (attempts = 0u; attempts < PCL_SHM_DISCOVERY_RETRIES; ++attempts) {
-    if (pcl_shm_bus_lock(ctx) != PCL_OK) break;
-    found = pcl_shm_find_provider_slot_locked(ctx, service_name, &provider_slot);
-    pcl_shm_bus_unlock(ctx);
-    if (found != 0) break;
-    pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
-  }
-
-  if (found == 0) {
-    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
-    return PCL_ERR_NOT_FOUND;
-  }
-  if (found < 0) {
-    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
-    return PCL_ERR_INVALID;
-  }
-
-  if (pcl_shm_bus_lock(ctx) != PCL_OK) {
-    // GCOVR_EXCL_START: the bus semaphore fails only on kernel fault.
-    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
-    return PCL_ERR_STATE;
-    // GCOVR_EXCL_STOP
-  }
-  snprintf(provider_id, sizeof(provider_id), "%s",
-           ctx->region->slots[provider_slot].participant_id);
-  rc = pcl_shm_enqueue_frame_locked(ctx,
-                                    provider_slot,
-                                    PCL_SHM_FRAME_STREAM_REQ,
-                                    ctx->participant_id,
-                                    service_name,
-                                    request->type_name,
-                                    request->data,
-                                    request->size,
-                                    seq_id);
-  pcl_shm_bus_unlock(ctx);
-
-  if (rc != PCL_OK) {
-    // GCOVR_EXCL_START: requires the provider mailbox to fill in the instant
-    // after discovery succeeded under the same bus lock cadence.
-    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
-    return rc;
-    // GCOVR_EXCL_STOP
-  }
-
+  /* Hand the caller a handle immediately; the egress worker resolves the
+     provider and records it on the pending node so a later cancel can address
+     it. Discovery and the open send are off the executor thread. */
   if (stream_handle) {
     handle = (pcl_shm_stream_client_handle_t*)pcl_calloc(1, sizeof(*handle));
     if (handle) {
       handle->owner  = ctx;
       handle->seq_id = seq_id;
-      snprintf(handle->provider_id, sizeof(handle->provider_id), "%s",
-               provider_id);
     }
     *stream_handle = handle;
+  }
+
+  rc = pcl_shm_enqueue_egress(ctx, PCL_SHM_EGRESS_STREAM_OPEN, service_name,
+                              request, seq_id, 0u);
+  if (rc != PCL_OK) {
+    // GCOVR_EXCL_START: enqueue fails only on heap exhaustion, not injectable.
+    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
+    if (stream_handle) {
+      pcl_free(handle);
+      *stream_handle = NULL;
+    }
+    return rc;
+    // GCOVR_EXCL_STOP
   }
   return PCL_STREAMING;
 }
@@ -1643,35 +1754,44 @@ static pcl_status_t pcl_shm_stream_cancel(void* adapter_ctx,
       (pcl_shared_memory_transport_t*)adapter_ctx;
   pcl_shm_stream_client_handle_t* handle =
       (pcl_shm_stream_client_handle_t*)stream_handle;
+  char provider_id[PCL_SHM_MAX_ID] = {0};
   uint32_t i;
-  pcl_status_t remote_rc = PCL_ERR_NOT_FOUND;
+  pcl_status_t remote_rc = PCL_OK;
   pcl_status_t local_rc;
 
-  if (!ctx || !handle || handle->provider_id[0] == '\0') {
-    return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: stream cancel with an internal handle whose provider id is always populated at creation
+  if (!ctx || !handle) {
+    return PCL_ERR_INVALID;  // GCOVR_EXCL_LINE: executor wraps a valid handle
   }
 
-  if (pcl_shm_bus_lock(ctx) == PCL_OK) {
-    for (i = 0; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
-      pcl_shm_slot_t* slot = &ctx->region->slots[i];
-      if (!slot->in_use) continue;
-      if (strcmp(slot->participant_id, handle->provider_id) == 0) {
-        remote_rc = pcl_shm_enqueue_frame_locked(ctx, i,
-                                                 PCL_SHM_FRAME_STREAM_CANCEL,
-                                                 ctx->participant_id, "",
-                                                 "", NULL, 0u,
-                                                 handle->seq_id);
-        break;
+  /* The provider is resolved asynchronously by the egress worker and recorded
+     on the pending node. If it has not resolved yet (or the stream already
+     completed) there is no peer to notify -- completing locally still releases
+     the client. */
+  if (pcl_shm_pending_stream_provider(ctx, handle->seq_id, provider_id,
+                                      sizeof(provider_id))) {
+    remote_rc = PCL_ERR_NOT_FOUND;
+    if (pcl_shm_bus_lock(ctx) == PCL_OK) {
+      for (i = 0; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
+        pcl_shm_slot_t* slot = &ctx->region->slots[i];
+        if (!slot->in_use) continue;
+        if (strcmp(slot->participant_id, provider_id) == 0) {
+          remote_rc = pcl_shm_enqueue_frame_locked(ctx, i,
+                                                   PCL_SHM_FRAME_STREAM_CANCEL,
+                                                   ctx->participant_id, "",
+                                                   "", NULL, 0u,
+                                                   handle->seq_id);
+          break;
+        }
       }
+      pcl_shm_bus_unlock(ctx);
+    } else {
+      remote_rc = PCL_ERR_STATE;  // GCOVR_EXCL_LINE: bus semaphore fails only on kernel fault
     }
-    pcl_shm_bus_unlock(ctx);
-  } else {
-    remote_rc = PCL_ERR_STATE;  // GCOVR_EXCL_LINE: bus semaphore fails only on kernel fault
   }
 
   local_rc = pcl_shm_pending_stream_complete(ctx, handle->seq_id,
                                              PCL_ERR_CANCELLED);
-  if (remote_rc != PCL_OK) return remote_rc;
+  if (remote_rc != PCL_OK && remote_rc != PCL_ERR_NOT_FOUND) return remote_rc;
   if (local_rc != PCL_OK && local_rc != PCL_ERR_NOT_FOUND) return local_rc;
   return PCL_OK;
 }

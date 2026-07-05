@@ -180,6 +180,26 @@ if(NOT WIN32)
 endif()
 gtest_discover_tests(test_pcl_template_transport DISCOVERY_MODE PRE_TEST)
 
+# Threading-model conformance suite (groups A-D): proves executor-thread
+# ownership, prompt egress, non-inline callbacks, and shutdown safety across
+# the template, shared-memory, UDP, and socket transports.
+add_executable(test_pcl_transport_threading test_pcl_transport_threading.cpp)
+target_link_libraries(test_pcl_transport_threading
+    PRIVATE pcl_core
+            pcl_transport_template
+            pcl_transport_shared_memory
+            pcl_transport_udp
+            pcl_transport_socket
+            GTest::gtest_main)
+target_include_directories(test_pcl_transport_threading PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(NOT WIN32)
+    target_link_libraries(test_pcl_transport_threading PRIVATE pthread)
+endif()
+if(WIN32)
+    target_link_libraries(test_pcl_transport_threading PRIVATE ws2_32)
+endif()
+gtest_discover_tests(test_pcl_transport_threading DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_pcl_apos_transport test_pcl_apos_transport.cpp)
 target_link_libraries(test_pcl_apos_transport
     PRIVATE pcl_core pcl_transport_apos GTest::gtest_main)

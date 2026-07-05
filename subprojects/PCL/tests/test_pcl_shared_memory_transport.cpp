@@ -890,7 +890,9 @@ TEST(PclSharedMemoryTransport, InterProcessAsyncServiceRoundTrip) {
   restore_logs();
 }
 
-///< REQ_PCL_189: Shared-memory invoke async without provider returns not found. PCL.036d, PCL.045.
+///< REQ_PCL_189: Shared-memory invoke async without a provider returns promptly
+///< and the worker delivers a terminal (empty) response on the executor thread
+///< rather than blocking the caller on discovery. PCL.036d, PCL.045.
 TEST(PclSharedMemoryTransport, InvokeAsyncReturnsNotFoundWithoutProvider) {
   silence_logs();
 
@@ -904,18 +906,43 @@ TEST(PclSharedMemoryTransport, InvokeAsyncReturnsNotFoundWithoutProvider) {
   route.route_mode = PCL_ROUTE_REMOTE;
   ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
 
+  struct RespState {
+    std::atomic<bool> fired{false};
+    std::atomic<uint32_t> size{0};
+  } resp_state;
+
   pcl_msg_t req = {};
   req.data = "x";
   req.size = 1;
   req.type_name = "MissingReq";
 
+  // The executor-facing call queues discovery to the transport worker and
+  // returns promptly instead of polling for a provider that never appears.
+  const auto start = std::chrono::steady_clock::now();
   EXPECT_EQ(
-      pcl_executor_invoke_async(client.exec,
-                                "missing_service",
-                                &req,
-                                [](const pcl_msg_t*, void*) {},
-                                nullptr),
-      PCL_ERR_NOT_FOUND);
+      pcl_executor_invoke_async(
+          client.exec,
+          "missing_service",
+          &req,
+          [](const pcl_msg_t* resp, void* ud) {
+            auto* s = static_cast<RespState*>(ud);
+            s->size = (resp ? resp->size : 0u);
+            s->fired = true;
+          },
+          &resp_state),
+      PCL_OK);
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+            50);
+
+  // The worker exhausts discovery, then posts a terminal empty response that the
+  // client observes on the next spin.
+  for (int i = 0; i < 200 && !resp_state.fired; ++i) {
+    pcl_executor_spin_once(client.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_TRUE(resp_state.fired);
+  EXPECT_EQ(resp_state.size.load(), 0u);
 
   client.destroy();
   restore_logs();
@@ -1177,7 +1204,9 @@ TEST(PclSharedMemoryTransport, StreamCancelAfterThreeFramesReachesServer) {
   restore_logs();
 }
 
-///< Stream invoked against a missing service returns NOT_FOUND.
+///< Stream invoked against a missing service returns promptly; the worker
+///< delivers a terminal end=NOT_FOUND on the executor thread instead of the
+///< caller polling discovery.
 TEST(PclSharedMemoryTransport, StreamReturnsNotFoundWithoutProvider) {
   silence_logs();
 
@@ -1192,16 +1221,39 @@ TEST(PclSharedMemoryTransport, StreamReturnsNotFoundWithoutProvider) {
   route.route_mode    = PCL_ROUTE_REMOTE;
   ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
 
+  struct EndState {
+    std::atomic<bool> ended{false};
+    pcl_status_t      status = PCL_OK;
+  } end_state;
+
   pcl_msg_t req = {};
   req.data      = "x";
   req.size      = 1;
   req.type_name = "StreamReq";
 
+  const auto start = std::chrono::steady_clock::now();
   EXPECT_EQ(
-      pcl_executor_invoke_stream(client.exec, "missing_stream", &req,
-                                 [](const pcl_msg_t*, bool, pcl_status_t, void*) {},
-                                 nullptr, nullptr),
-      PCL_ERR_NOT_FOUND);
+      pcl_executor_invoke_stream(
+          client.exec, "missing_stream", &req,
+          [](const pcl_msg_t*, bool end, pcl_status_t status, void* ud) {
+            auto* s = static_cast<EndState*>(ud);
+            if (end) {
+              s->status = status;
+              s->ended  = true;
+            }
+          },
+          &end_state, nullptr),
+      PCL_STREAMING);
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+            50);
+
+  for (int i = 0; i < 200 && !end_state.ended; ++i) {
+    pcl_executor_spin_once(client.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_TRUE(end_state.ended);
+  EXPECT_EQ(end_state.status, PCL_ERR_NOT_FOUND);
 
   client.destroy();
   restore_logs();
@@ -1652,6 +1704,16 @@ TEST(PclSharedMemoryTransport, AmbiguousProviderFailsClosed) {
   ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &consumed_route),
             PCL_OK);
 
+  // Let both providers' recv threads advertise the duplicate service so the
+  // worker's first discovery poll sees both slots and reports the ambiguity
+  // deterministically (rather than racing to one provider before the other
+  // has synced).
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  // Discovery now runs on the transport worker, so an ambiguous provider is
+  // reported through the callbacks on the executor thread rather than
+  // synchronously. The unary callback gets a terminal empty response; the
+  // stream callback gets a terminal end with PCL_ERR_INVALID.
   RespState resp_state;
   pcl_msg_t req = {};
   req.data = "x";
@@ -1659,16 +1721,35 @@ TEST(PclSharedMemoryTransport, AmbiguousProviderFailsClosed) {
   req.type_name = "Req";
   EXPECT_EQ(pcl_executor_invoke_async(client.exec, "dup_service", &req,
                                       resp_recorder, &resp_state),
-            PCL_ERR_INVALID);
+            PCL_OK);
 
-  // Streaming discovery hits the same ambiguity.
+  struct EndState {
+    std::atomic<bool> ended{false};
+    pcl_status_t      status = PCL_OK;
+  } end_state;
   const pcl_transport_t* vt =
       pcl_shared_memory_transport_get_transport(client.transport);
   ASSERT_NE(vt->invoke_stream, nullptr);
-  auto stream_cb = [](const pcl_msg_t*, bool, pcl_status_t, void*) {};
-  EXPECT_EQ(vt->invoke_stream(vt->adapter_ctx, "dup_service", &req, stream_cb,
-                              nullptr, nullptr),
-            PCL_ERR_INVALID);
+  EXPECT_EQ(vt->invoke_stream(
+                vt->adapter_ctx, "dup_service", &req,
+                [](const pcl_msg_t*, bool end, pcl_status_t status, void* ud) {
+                  auto* s = static_cast<EndState*>(ud);
+                  if (end) {
+                    s->status = status;
+                    s->ended  = true;
+                  }
+                },
+                &end_state, nullptr),
+            PCL_STREAMING);
+
+  for (int i = 0; i < 200 && !(resp_state.received && end_state.ended); ++i) {
+    pcl_executor_spin_once(client.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_TRUE(resp_state.received);
+  EXPECT_EQ(resp_state.size, 0u);
+  EXPECT_TRUE(end_state.ended);
+  EXPECT_EQ(end_state.status, PCL_ERR_INVALID);
 
   pcl_executor_remove(server_a.exec, ca);
   pcl_executor_remove(server_b.exec, cb);
@@ -2104,6 +2185,8 @@ TEST(PclSharedMemoryTransport, ServiceTableDedupesAndCaps) {
   consumed_route.route_mode = PCL_ROUTE_REMOTE;
   ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &consumed_route),
             PCL_OK);
+  // The local-only service is not discoverable remotely; the worker exhausts
+  // discovery and delivers a terminal empty response on the executor thread.
   RespState resp_state;
   pcl_msg_t req = {};
   req.data = "x";
@@ -2111,7 +2194,13 @@ TEST(PclSharedMemoryTransport, ServiceTableDedupesAndCaps) {
   req.type_name = "Req";
   EXPECT_EQ(pcl_executor_invoke_async(client.exec, "table_local", &req,
                                       resp_recorder, &resp_state),
-            PCL_ERR_NOT_FOUND);
+            PCL_OK);
+  for (int i = 0; i < 200 && !resp_state.received; ++i) {
+    pcl_executor_spin_once(client.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_TRUE(resp_state.received);
+  EXPECT_EQ(resp_state.size, 0u);
 
   pcl_executor_remove(server.exec, svc);
   pcl_container_destroy(svc);
@@ -2323,6 +2412,8 @@ TEST(PclSharedMemoryTransport, ServiceWithoutRouteOrTransportStaysLocal) {
   ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &consumed_route),
             PCL_OK);
 
+  // The bare server never advertises its service, so discovery on the worker
+  // finds no provider and delivers a terminal empty response asynchronously.
   RespState resp_state;
   pcl_msg_t req = {};
   req.data = "x";
@@ -2330,7 +2421,13 @@ TEST(PclSharedMemoryTransport, ServiceWithoutRouteOrTransportStaysLocal) {
   req.type_name = "Req";
   EXPECT_EQ(pcl_executor_invoke_async(client.exec, "hidden_service", &req,
                                       resp_recorder, &resp_state),
-            PCL_ERR_NOT_FOUND);
+            PCL_OK);
+  for (int i = 0; i < 200 && !resp_state.received; ++i) {
+    pcl_executor_spin_once(client.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_TRUE(resp_state.received);
+  EXPECT_EQ(resp_state.size, 0u);
 
   pcl_executor_remove(server_bare.exec, svc);
   pcl_container_destroy(svc);
