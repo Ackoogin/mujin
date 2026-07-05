@@ -119,11 +119,16 @@ static void udp_free_outbound_queue(struct pcl_udp_transport_t* ctx) {
   frame = ctx->send_head;
   ctx->send_head = NULL;
   ctx->send_tail = NULL;
+  // GCOVR_EXCL_START: teardown reclaim. The send worker drains every queued
+  // frame before it observes send_stop and exits, so the queue is already
+  // empty by the time destroy calls this; the loop body only runs if a frame
+  // is stranded (worker never started / exited early).
   while (frame) {
     pcl_udp_outbound_frame_t* next = frame->next;
     udp_free_outbound_frame(frame);
     frame = next;
   }
+  // GCOVR_EXCL_STOP
 }
 
 static pcl_status_t udp_enqueue_outbound_frame(struct pcl_udp_transport_t* ctx,
@@ -158,11 +163,15 @@ static pcl_status_t udp_enqueue_outbound_frame(struct pcl_udp_transport_t* ctx,
   SetEvent(ctx->send_event);
 #else
   pthread_mutex_lock(&ctx->send_lock);
+  // GCOVR_EXCL_START: stop-race rollback. send_stop was re-checked without the
+  // lock above; losing the race so it flips true only after acquiring the lock
+  // here is a narrow window not reachable under deterministic testing.
   if (ctx->send_stop) {
     pthread_mutex_unlock(&ctx->send_lock);
     pcl_free(frame);
     return PCL_ERR_STATE;
   }
+  // GCOVR_EXCL_STOP
   if (ctx->send_tail) {
     ctx->send_tail->next = frame;
   } else {
@@ -244,7 +253,7 @@ static void* udp_send_thread_main(void* arg)
 
     if (!frame) {
       if (ctx->send_stop) break;
-      continue;
+      continue;  // GCOVR_EXCL_LINE: guards a spurious condvar wakeup with no queued frame and no stop request.
     }
 
     if (ctx->sock != PCL_INVALID_SOCKET) {
@@ -482,6 +491,8 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   }
   ctx->send_sync_ready = 1;
 #else
+  // GCOVR_EXCL_START: pthread sync-primitive initialisation fails only on
+  // kernel resource exhaustion, which cannot be provoked under normal testing.
   if (pthread_mutex_init(&ctx->send_lock, NULL) != 0) {
     pcl_free(ctx);
     return NULL;
@@ -491,6 +502,7 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
     pcl_free(ctx);
     return NULL;
   }
+  // GCOVR_EXCL_STOP
   ctx->send_sync_ready = 1;
 #endif
 

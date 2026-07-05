@@ -554,6 +554,22 @@ PCL shall provide `pcl_alloc`/`pcl_calloc`/`pcl_realloc`/`pcl_free` routing thro
 
 **Rationale**: Buffers cross DLL/EXE boundaries between different C runtimes (MSVC plugins vs GNAT/MinGW executables); a mismatched allocator pair corrupts the heap (D1, D4).
 
+## Transport Threading Model
+
+### PCL.075 - Transport Threading-Model Contract
+Every transport adapter shall obey a uniform threading contract at the `pcl_transport_t` boundary:
+(a) inbound wire traffic shall be deep-copied off the transport's own receive/worker threads and posted to executor-owned queues, so that subscriber callbacks, service handlers, stream callbacks, and async response callbacks execute only on the executor thread while it drains those queues, never inline on a transport thread;
+(b) executor-facing egress entry points (`publish`, `invoke_async`, `invoke_stream`) shall not perform blocking I/O, remote-service waits, provider-discovery polling, or unbounded lock waits -- they may validate, copy the payload, register correlation state, enqueue work to a transport-owned worker, and return promptly;
+(c) an `invoke_async` response callback shall never fire synchronously before `invoke_async` returns; it shall be delivered on a later executor spin;
+(d) transport teardown shall wake and join any blocked worker threads before releasing resources the workers may still touch, and shall reclaim any queued-but-undelivered work.
+
+**Rationale**: D2 requires all component business logic to run on the single executor thread; D5 requires a hard I/O thread boundary. Stating the contract once, at the vtable, lets third-party adapter authors implement it correctly without reading reference-transport internals.
+
+### PCL.076 - Transport Threading-Model Conformance Suite
+PCL shall provide a reusable threading-model conformance suite -- distinct from the delivery conformance suite (PCL.072) -- that proves the PCL.075 contract for a transport: (a) subscriber ingress runs on the executor/spin thread and not inline on a transport worker; (b) an async response callback runs on the executor thread and does not fire inline from `invoke_async`; (c) executor-facing egress returns promptly while the real send path is blocked; and (d) destroy wakes and joins a blocked send worker. Every in-tree transport (template, shared memory, UDP, socket) shall pass the applicable cases.
+
+**Rationale**: A common, mechanically-checked threading bar keeps the deterministic-execution guarantee (D2, D5) from silently regressing as new transports and plugins are added.
+
 ---
 
 ## Design Decision Traceability
@@ -646,3 +662,5 @@ PCL shall provide `pcl_alloc`/`pcl_calloc`/`pcl_realloc`/`pcl_free` routing thro
 | `PCL.072` | `D3` |
 | `PCL.073` | `D1`, `D3` |
 | `PCL.074` | `D1`, `D4` |
+| `PCL.075` | `D2`, `D5` |
+| `PCL.076` | `D2`, `D5` |
