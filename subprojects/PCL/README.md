@@ -42,12 +42,19 @@ subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 | `scripts/` | GNAT static-library and coverage helpers |
 | `doc/architecture/` | Design and component-system references |
 | `doc/guides/` | Peer/transport configuration guide |
-| `doc/requirements/` | PCL HLR and LLR requirements |
+| `doc/requirements/` | PCL HLR and LLR requirements, derived-requirements register |
+| `doc/plans/` | DO-178C plans: PSAC, SDP, SVP, SCMP, SQAP (drafts) |
+| `doc/standards/` | Requirements, design, and C coding standards (drafts) |
 
 ## Documentation
 
 - [High-level requirements](doc/requirements/HLR.md)
 - [Low-level requirements](doc/requirements/LLR.md)
+- [Derived requirements register](doc/requirements/derived_requirements.md)
+- [DO-178C plans (PSAC, SDP, SVP, SCMP, SQAP)](doc/plans/)
+- [Development standards (requirements, design, C coding)](doc/standards/)
+- [DO-178C gap analysis](../../doc/reports/PCL/DO178C_GAP_ANALYSIS.md)
+- [Review checklists and records](../../doc/reviews/PCL/README.md)
 - [Component container design](doc/architecture/component_container_design.md)
 - [Component system overview](doc/architecture/08-pcl-component-system.md)
 - [PCL/PYRAMID binding generation overview](../PYRAMID/doc/architecture/pcl_pyramid_binding_generation_overview.md)
