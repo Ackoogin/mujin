@@ -332,6 +332,8 @@ struct ShmPair {
 // Group A: ingress runs on the executor thread
 // ===========================================================================
 
+///< REQ_PCL_448: the template transport dispatches subscriber ingress on the
+///< executor thread, never inline on the transport receive thread (PCL.075/076 group A).
 TEST(PclTransportThreading, TemplateIngressRunsOnExecutor) {
   silence_logs();
   TemplatePair tp;
@@ -340,6 +342,8 @@ TEST(PclTransportThreading, TemplateIngressRunsOnExecutor) {
   restore_logs();
 }
 
+///< REQ_PCL_449: the shared-memory transport dispatches subscriber ingress on
+///< the executor thread, never inline on the bus receive thread (PCL.075/076 group A).
 TEST(PclTransportThreading, SharedMemoryIngressRunsOnExecutor) {
   silence_logs();
   ShmPair sp(unique_bus("thr_shm_ingress"));
@@ -349,6 +353,8 @@ TEST(PclTransportThreading, SharedMemoryIngressRunsOnExecutor) {
   restore_logs();
 }
 
+///< REQ_PCL_450: the UDP transport dispatches subscriber ingress on the
+///< executor thread, never inline on the datagram receive thread (PCL.075/076 group A).
 TEST(PclTransportThreading, UdpIngressRunsOnExecutor) {
   silence_logs();
   const uint16_t recv_port = pick_free_udp_port();
@@ -389,6 +395,8 @@ TEST(PclTransportThreading, UdpIngressRunsOnExecutor) {
   restore_logs();
 }
 
+///< REQ_PCL_451: the socket transport dispatches subscriber ingress on the
+///< executor thread, never inline on the socket receive thread (PCL.075/076 group A).
 TEST(PclTransportThreading, SocketIngressRunsOnExecutor) {
   silence_logs();
   const uint16_t port = pick_free_udp_port();  // any free port works for TCP too
@@ -431,6 +439,8 @@ TEST(PclTransportThreading, SocketIngressRunsOnExecutor) {
 // Groups A + C: response callback on executor thread, not inline
 // ===========================================================================
 
+///< REQ_PCL_452: the template transport's invoke_async does not fire the response
+///< callback inline; it is delivered on a later executor spin (PCL.075/076 groups A+C).
 TEST(PclTransportThreading, TemplateResponseCallbackNotInline) {
   silence_logs();
   TemplatePair tp;
@@ -439,6 +449,8 @@ TEST(PclTransportThreading, TemplateResponseCallbackNotInline) {
   restore_logs();
 }
 
+///< REQ_PCL_453: the shared-memory transport's invoke_async does not fire the
+///< response callback inline; it runs on the executor thread (PCL.075/076 groups A+C).
 TEST(PclTransportThreading, SharedMemoryResponseCallbackNotInline) {
   silence_logs();
   ShmPair sp(unique_bus("thr_shm_notinline"));
@@ -448,6 +460,8 @@ TEST(PclTransportThreading, SharedMemoryResponseCallbackNotInline) {
   restore_logs();
 }
 
+///< REQ_PCL_454: the socket transport's invoke_async does not fire the response
+///< callback inline; it runs on the executor thread (PCL.075/076 groups A+C).
 TEST(PclTransportThreading, SocketResponseCallbackNotInline) {
   silence_logs();
   const uint16_t port = pick_free_udp_port();
@@ -503,6 +517,8 @@ TEST(PclTransportThreading, SocketResponseCallbackNotInline) {
 // Group B: egress returns promptly while the real send path is blocked
 // ===========================================================================
 
+///< REQ_PCL_455: with the template send hook wedged, publish copies/enqueues the
+///< frame and returns promptly instead of blocking the send worker (PCL.075/076 group B).
 TEST(PclTransportThreading, TemplatePublishQueuesWhenSendBlocks) {
   silence_logs();
   auto* exec = pcl_executor_create();
@@ -548,6 +564,8 @@ TEST(PclTransportThreading, TemplatePublishQueuesWhenSendBlocks) {
   restore_logs();
 }
 
+///< REQ_PCL_456: with the template send hook wedged, invoke_async registers state,
+///< enqueues, and returns promptly without firing the callback inline (PCL.075/076 group B).
 TEST(PclTransportThreading, TemplateInvokeQueuesWhenSendBlocks) {
   silence_logs();
   auto* exec = pcl_executor_create();
@@ -589,6 +607,8 @@ TEST(PclTransportThreading, TemplateInvokeQueuesWhenSendBlocks) {
   restore_logs();
 }
 
+///< REQ_PCL_457: a backpressure-configured shared-memory publish copies/enqueues to
+///< the egress worker and returns promptly; the worker owns the wait (PCL.075/076 group B, PCL.036g).
 TEST(PclTransportThreading, SharedMemoryPublishDoesNotSleepForBackpressure) {
   silence_logs();
   auto* exec = pcl_executor_create();
@@ -622,6 +642,8 @@ TEST(PclTransportThreading, SharedMemoryPublishDoesNotSleepForBackpressure) {
 // Group D: destroy wakes and joins a blocked send worker
 // ===========================================================================
 
+///< REQ_PCL_458: destroy wakes the blocked send worker (via the wake hook) and joins
+///< it within a bounded deadline rather than hanging (PCL.075/076 group D).
 TEST(PclTransportThreading, TemplateDestroyWakesBlockedSendWorker) {
   silence_logs();
   auto* exec = pcl_executor_create();

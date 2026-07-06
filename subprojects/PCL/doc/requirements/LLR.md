@@ -3036,3 +3036,94 @@ The APOS transport shall pass the shared service-round-trip conformance case.
 **Traces**: PCL.073, PCL.072
 
 **Verification**: `test_pcl_apos_transport.cpp::PclTransportApos_Conformance.ServiceRoundTrip`.
+
+---
+
+## 34. Transport Threading-Model Conformance
+
+These requirements verify the transport threading-model contract (PCL.075) via the
+reusable threading conformance suite (PCL.076). Two reusable helpers in
+`pcl_transport_conformance.hpp` back most cases:
+`expectIngressRunsOnExecutorThread` (records the executor/spin thread id and
+asserts the subscriber callback ran on it) and
+`expectResponseCallbackOnExecutorNotInline` (asserts the async response callback
+did not fire before `invoke_async` returned and then ran on the executor thread).
+The template transport additionally uses a gated send hook to prove egress
+promptness and destroy-wakes-worker behaviour deterministically.
+
+### REQ_PCL_448 - Template Ingress Runs On Executor Thread
+The template transport shall deep-copy inbound wire traffic into an executor queue so the subscriber callback runs on the executor thread, never inline on the transport receive thread.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateIngressRunsOnExecutor`.
+
+### REQ_PCL_449 - Shared-Memory Ingress Runs On Executor Thread
+The shared-memory transport shall dispatch subscriber ingress on the executor thread, never inline on the bus receive thread.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SharedMemoryIngressRunsOnExecutor`.
+
+### REQ_PCL_450 - UDP Ingress Runs On Executor Thread
+The UDP transport shall dispatch subscriber ingress on the executor thread, never inline on the datagram receive thread.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.UdpIngressRunsOnExecutor`.
+
+### REQ_PCL_451 - Socket Ingress Runs On Executor Thread
+The socket transport shall dispatch subscriber ingress on the executor thread, never inline on the socket receive thread.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SocketIngressRunsOnExecutor`.
+
+### REQ_PCL_452 - Template Async Response Callback Not Inline
+The template transport's `invoke_async` shall not fire the response callback before it returns; the callback shall be delivered on a later executor spin, on the executor thread.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateResponseCallbackNotInline`.
+
+### REQ_PCL_453 - Shared-Memory Async Response Callback Not Inline
+The shared-memory transport's `invoke_async` shall not fire the response callback inline; the callback shall be delivered on the executor thread.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SharedMemoryResponseCallbackNotInline`.
+
+### REQ_PCL_454 - Socket Async Response Callback Not Inline
+The socket transport's `invoke_async` shall not fire the response callback inline; the callback shall be delivered on the executor thread.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SocketResponseCallbackNotInline`.
+
+### REQ_PCL_455 - Template Publish Returns Promptly While Send Blocked
+With the template send hook wedged behind a latch, `publish` shall copy and enqueue the frame and return promptly (well under the blocked-send budget), not block on the send worker.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplatePublishQueuesWhenSendBlocks`.
+
+### REQ_PCL_456 - Template Invoke-Async Returns Promptly While Send Blocked
+With the template send hook wedged, `invoke_async` shall register correlation state, enqueue the request, and return promptly without firing the callback inline.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateInvokeQueuesWhenSendBlocks`.
+
+### REQ_PCL_457 - Backpressured Shared-Memory Publish Does Not Block Executor
+When a shared-memory topic has a non-zero backpressure budget, the executor-facing `publish` shall copy and enqueue the frame to the egress worker and return promptly; the mailbox-capacity wait shall be owned by the worker, not the executor thread.
+
+**Traces**: PCL.075, PCL.076, PCL.036g
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SharedMemoryPublishDoesNotSleepForBackpressure`.
+
+### REQ_PCL_458 - Template Destroy Wakes And Joins Blocked Send Worker
+With a frame queued behind a wedged send hook, `pcl_transport_template_destroy()` shall wake the blocked send worker (via the `wake` hook) and join it within a bounded deadline rather than hanging.
+
+**Traces**: PCL.075, PCL.076
+
+**Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateDestroyWakesBlockedSendWorker`.

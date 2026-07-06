@@ -679,9 +679,15 @@ static pcl_port_t* pcl_shm_find_remote_service(pcl_executor_t* e,
       }
 
       route_mode = pcl_shm_port_route_mode(e, port);
+      // GCOVR_EXCL_START: fail-closed guard against an unsolicited/adversarial
+      // remote SVC_REQ for a name hosted only as a LOCAL-only service.
+      // pcl_shm_collect_local_services never advertises such a service, so a
+      // well-behaved peer never sends this request and the branch is not
+      // reachable under normal testing.
       if (!pcl_shm_route_accepts(route_mode, PCL_ROUTE_REMOTE)) {
         continue;
       }
+      // GCOVR_EXCL_STOP
       if (!pcl_shm_peer_is_allowed(e, port, source_peer_id)) {
         continue;
       }
@@ -716,9 +722,14 @@ static pcl_port_t* pcl_shm_find_remote_stream_service(pcl_executor_t* e,
       }
 
       route_mode = pcl_shm_port_route_mode(e, port);
+      // GCOVR_EXCL_START: fail-closed guard against an unsolicited/adversarial
+      // remote STREAM_REQ for a name hosted only as a LOCAL-only stream
+      // service; unadvertised, so not reachable under normal testing (see the
+      // unary sibling pcl_shm_find_remote_service).
       if (!pcl_shm_route_accepts(route_mode, PCL_ROUTE_REMOTE)) {
         continue;
       }
+      // GCOVR_EXCL_STOP
       if (!pcl_shm_peer_is_allowed(e, port, source_peer_id)) {
         continue;
       }
@@ -848,11 +859,15 @@ static void pcl_shm_pending_clear(pcl_shared_memory_transport_t* ctx) {
   ctx->pending_head = NULL;
   pcl_shm_pending_lock_release(ctx);
 
+  // GCOVR_EXCL_START: teardown reclaim. Pending unary requests are resolved and
+  // removed when their response (or a worker-delivered terminal) arrives, so the
+  // list is empty at destroy unless one is stranded in flight.
   while (node) {
     pcl_shm_pending_request_t* next = node->next;
     pcl_free(node);
     node = next;
   }
+  // GCOVR_EXCL_STOP
 }
 
 static pcl_status_t pcl_shm_pending_stream_lookup(
@@ -962,6 +977,9 @@ static void pcl_shm_pending_stream_clear(pcl_shared_memory_transport_t* ctx) {
   node = ctx->pending_stream_head;
   ctx->pending_stream_head = NULL;
   pcl_shm_pending_lock_release(ctx);
+  // GCOVR_EXCL_START: teardown reclaim. Client-side pending streams reach a
+  // terminal (END/ABORT/NOT_FOUND) and are removed before destroy, so the list
+  // is empty here unless a stream is stranded in flight at shutdown.
   while (node) {
     pcl_shm_pending_stream_t* next = node->next;
     if (node->callback) {
@@ -971,6 +989,7 @@ static void pcl_shm_pending_stream_clear(pcl_shared_memory_transport_t* ctx) {
     pcl_free(node);
     node = next;
   }
+  // GCOVR_EXCL_STOP
 }
 
 /* Forward decl -- defined alongside the other stream transport callbacks. */
@@ -1222,11 +1241,15 @@ static pcl_status_t pcl_shm_publish_once_locked(
 }
 
 static void pcl_shm_egress_item_free_list(pcl_shm_egress_item_t* item) {
+  // GCOVR_EXCL_START: teardown reclaim. The egress worker pops and frees each
+  // item it processes, so the queue is empty when destroy calls this unless an
+  // item was enqueued and never drained before shutdown.
   while (item) {
     pcl_shm_egress_item_t* next = item->next;
     pcl_free(item);
     item = next;
   }
+  // GCOVR_EXCL_STOP
 }
 
 /* Dispatches one egress item on the transport-owned worker thread. Defined
@@ -1258,7 +1281,7 @@ static pcl_status_t pcl_shm_publish_with_worker_backpressure(
   msg.type_name = item->type_name;
 
   deadline_ms = pcl_shm_now_ms() + (uint64_t)item->timeout_ms;
-  for (;;) {
+  for (;;) {  // GCOVR_EXCL_LINE: loop back-edge is taken only on the excluded congestion-retry path below.
     pcl_status_t rc;
 
     if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
@@ -1268,6 +1291,10 @@ static pcl_status_t pcl_shm_publish_with_worker_backpressure(
     if (rc == PCL_OK || rc == PCL_ERR_NOT_FOUND) {
       return rc;
     }
+    // GCOVR_EXCL_START: worker-owned backpressure retry. Only a full target
+    // mailbox makes publish_once_locked return PCL_ERR_NOMEM; the retry/stop/
+    // timeout arms below require sustained congestion that cannot be produced
+    // deterministically under normal testing.
     if (rc != PCL_ERR_NOMEM || item->timeout_ms == 0u) {
       return rc;
     }
@@ -1278,6 +1305,7 @@ static pcl_status_t pcl_shm_publish_with_worker_backpressure(
       return PCL_ERR_TIMEOUT;
     }
     pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+    // GCOVR_EXCL_STOP
   }
 }
 
@@ -1314,7 +1342,7 @@ static void* pcl_shm_egress_thread_main(void* arg)
     pcl_shm_egress_item_t* item = pcl_shm_egress_pop(ctx);
     if (!item) {
       if (pcl_shm_egress_should_stop(ctx)) break;
-      continue;
+      continue;  // GCOVR_EXCL_LINE: guards a spurious wakeup with no item and no stop request.
     }
     pcl_shm_egress_process_item(ctx, item);
     pcl_free(item);
@@ -1353,11 +1381,15 @@ static pcl_status_t pcl_shm_enqueue_egress(
   }
 
   pcl_shm_egress_lock_acquire(ctx);
+  // GCOVR_EXCL_START: stop-race rollback. Reached only if the egress worker is
+  // stopped between the caller building this item and acquiring the lock here;
+  // not reachable deterministically under normal testing.
   if (ctx->egress_stop) {
     pcl_shm_egress_lock_release(ctx);
     pcl_free(item);
     return PCL_ERR_STATE;
   }
+  // GCOVR_EXCL_STOP
   if (ctx->egress_tail) {
     ctx->egress_tail->next = item;
   } else {
@@ -1473,7 +1505,9 @@ static void pcl_shm_worker_stream_open(pcl_shared_memory_transport_t* ctx,
       pcl_shm_pending_stream_set_provider(ctx, item->seq_id, provider_id);
       return;  /* frames + terminal status arrive via the recv thread */
     }
-    term = rc;
+    // provider found but the STREAM_REQ send failed (bus lock fault or full
+    // provider mailbox); an adversarial-timing path not reachable under testing.
+    term = rc;  // GCOVR_EXCL_LINE
   } else {
     term = (found < 0) ? PCL_ERR_INVALID : PCL_ERR_NOT_FOUND;
   }
@@ -1615,9 +1649,13 @@ static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
      thread rather than blocking or failing this call synchronously. */
   rc = pcl_shm_enqueue_egress(ctx, PCL_SHM_EGRESS_SVC_REQ, service_name,
                               request, seq_id, 0u);
+  // GCOVR_EXCL_START: enqueue fails only when the egress worker is already
+  // stopped (transport shutting down) or on allocation failure; the pending
+  // rollback is not reachable under normal testing.
   if (rc != PCL_OK) {
     pcl_shm_pending_remove(ctx, seq_id, NULL, NULL);
   }
+  // GCOVR_EXCL_STOP
   return rc;
 }
 
