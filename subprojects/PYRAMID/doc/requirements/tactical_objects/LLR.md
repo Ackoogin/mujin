@@ -47,7 +47,7 @@ See [`HLR_COVERAGE.md`](../../../../../doc/reports/PYRAMID/tactical_objects/HLR_
 
 **Traces**: TOBJ.018, TOBJ.042
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` submits an ordered batch and verifies emitted events preserve processing order.
+**Verification**: `Test_Runtime.cpp` submits an ordered batch and verifies emitted events preserve processing order.
 
 ### REQ_TACTICAL_OBJECTS_006 - Source Reference Association
 Each correlated object shall retain all distinct source references that contributed to it.
@@ -214,28 +214,28 @@ Inactive zones shall be excluded from zone relationship results outside their va
 
 **Traces**: TOBJ.001, TOBJ.002, TOBJ.003
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` creates an object via `createObject()`, retrieves it, and verifies all fields and provenance marker.
+**Verification**: `Test_Runtime.cpp` creates an object via `createObject()`, retrieves it, and verifies all fields and provenance marker.
 
 ### REQ_TACTICAL_OBJECTS_027 - Direct Update
 `TacticalObjectsRuntime::updateObject()` shall apply partial field updates to an existing object, bump its version, and re-index spatial if position changed.
 
 **Traces**: TOBJ.002, TOBJ.041
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` updates an object field and verifies the change, version increment, and spatial consistency.
+**Verification**: `Test_Runtime.cpp` updates an object field and verifies the change, version increment, and spatial consistency.
 
 ### REQ_TACTICAL_OBJECTS_028 - Direct Delete
 `TacticalObjectsRuntime::deleteObject()` shall remove the object from all component tables and indexes.
 
 **Traces**: TOBJ.001
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` deletes an object and verifies it is absent from store and spatial index.
+**Verification**: `Test_Runtime.cpp` deletes an object and verifies it is absent from store and spatial index.
 
 ### REQ_TACTICAL_OBJECTS_029 - Both Paths Queryable Together
 Objects created via evidence (correlation) and via direct CRUD shall be queryable through the same `QueryEngine`.
 
 **Traces**: TOBJ.007, TOBJ.008
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` creates objects via both paths and verifies a single query returns both.
+**Verification**: `Test_Runtime.cpp` creates objects via both paths and verifies a single query returns both.
 
 ---
 
@@ -246,21 +246,21 @@ Objects created via evidence (correlation) and via direct CRUD shall be queryabl
 
 **Traces**: Design D7
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` creates the runtime directly and performs ingest, query, and zone update operations.
+**Verification**: `Test_Runtime.cpp` creates the runtime directly and performs ingest, query, and zone update operations.
 
 ### REQ_TACTICAL_OBJECTS_031 - Stale Object Expiry
 `TacticalObjectsRuntime::tick()` shall mark or retire objects whose freshest observation exceeds the configured stale timeout.
 
 **Traces**: TOBJ.017
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` advances time past the configured timeout and verifies the object becomes stale or retired.
+**Verification**: `Test_Runtime.cpp` advances time past the configured timeout and verifies the object becomes stale or retired.
 
 ### REQ_TACTICAL_OBJECTS_032 - Capability Snapshot
 `TacticalObjectsRuntime` shall produce a capability snapshot containing counts, supported geometry types, and correlation configuration state.
 
 **Traces**: TOBJ.043
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` initializes the runtime and verifies the capability snapshot contains configured values.
+**Verification**: `Test_Runtime.cpp` initializes the runtime and verifies the capability snapshot contains configured values.
 
 ---
 
@@ -317,14 +317,14 @@ The runtime shall publish internal domain events on `pyramid::core::event::Event
 
 **Traces**: TOBJ.045
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` subscribes to the event bus and verifies each event is emitted for the corresponding operation.
+**Verification**: `Test_Runtime.cpp` subscribes to the event bus and verifies each event is emitted for the corresponding operation.
 
 ### REQ_TACTICAL_OBJECTS_040 - Missing Information Diagnostics
 The runtime shall identify and log missing or incomplete information that blocks confident classification, correlation, military classification completeness, or zone reasoning.
 
 **Traces**: TOBJ.044
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` injects a logger, submits incomplete data, and verifies diagnostics identify the missing information and expected severity.
+**Verification**: `Test_Runtime.cpp` injects a logger, submits incomplete data, and verifies diagnostics identify the missing information and expected severity.
 
 ### REQ_TACTICAL_OBJECTS_041 - UUID Serialization Boundary
 The codec shall serialize and deserialize internal `UUID` values in a stable canonical string form.
@@ -356,7 +356,7 @@ Processing the same observation batch in the same order shall produce the same c
 
 **Traces**: TOBJ.022, TOBJ.024
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` processes identical batches in two fresh runtimes and compares resulting object IDs, lineage shape, and versions.
+**Verification**: `Test_Runtime.cpp` processes identical batches in two fresh runtimes and compares resulting object IDs, lineage shape, and versions.
 
 ### REQ_TACTICAL_OBJECTS_045 - Memory-Reasonable Sparse Storage
 An object with no zone, behavior, or military classification components shall not allocate entries in those component tables.
@@ -423,14 +423,14 @@ The runtime shall store and return behavior pattern and intent hypothesis fields
 
 **Traces**: TOBJ.015
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` creates or updates an object with behavior fields and verifies they round-trip through retrieval and query.
+**Verification**: `Test_Runtime.cpp` creates or updates an object with behavior fields and verifies they round-trip through retrieval and query.
 
 ### REQ_TACTICAL_OBJECTS_054 - Operational State Storage
 The runtime and query path shall store and query operational state values and their freshness.
 
 **Traces**: TOBJ.016
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` updates an object's operational state and freshness, then verifies state-based query and retrieval return the expected values.
+**Verification**: `Test_Runtime.cpp` updates an object's operational state and freshness, then verifies state-based query and retrieval return the expected values.
 
 ### REQ_TACTICAL_OBJECTS_055 - Zone Semantic Typing
 `ZoneEngine` shall preserve semantic zone type such as AOI, patrol area, restricted area, no-go area, kill box, phase line, boundary, route corridor, and sensor coverage area, and expose it in retrieval and query results.
@@ -462,7 +462,7 @@ The runtime and query path shall store and query operational state values and th
 
 **Traces**: TOBJ.050
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` registers a measurement criterion against an interest requirement and verifies the quality assessment uses the criterion.
+**Verification**: `Test_Runtime.cpp` registers a measurement criterion against an interest requirement and verifies the quality assessment uses the criterion.
 
 ### REQ_TACTICAL_OBJECTS_063 - Progress Reporting
 `TacticalObjectsRuntime` shall report progress against each active Object_Interest_Requirement, including partial fulfilment, remaining gaps, and estimated completeness.
@@ -476,14 +476,14 @@ The runtime and query path shall store and query operational state values and th
 
 **Traces**: TOBJ.052
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` submits probability density data for an object within a region and verifies it is stored and retrievable.
+**Verification**: `Test_Runtime.cpp` submits probability density data for an object within a region and verifies it is stored and retrievable.
 
 ### REQ_TACTICAL_OBJECTS_065 - Capability Progression Prediction
 `TacticalObjectsRuntime` shall predict how its Capability will change over time and with use, taking account of expected information source availability and operational constraints.
 
 **Traces**: TOBJ.053
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` configures the runtime with known source availability changes and verifies the capability progression prediction reflects expected degradation or improvement.
+**Verification**: `Test_Runtime.cpp` configures the runtime with known source availability changes and verifies the capability progression prediction reflects expected degradation or improvement.
 
 ---
 
@@ -494,14 +494,14 @@ The runtime and query path shall store and query operational state values and th
 
 **Traces**: TOBJ.046
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` submits an AOI-based requirement under two capability configurations and verifies the achievability result changes accordingly.
+**Verification**: `Test_Runtime.cpp` submits an AOI-based requirement under two capability configurations and verifies the achievability result changes accordingly.
 
 ### REQ_TACTICAL_OBJECTS_059 - Tactical Object Solution Determination
 The runtime shall determine an object solution for a tactical object requirement, including intended object types, area of interest, timing, and predicted quality or completeness.
 
 **Traces**: TOBJ.047
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` submits a tactical object requirement and verifies the returned solution contains the expected AOI, object criteria, and predicted-quality fields.
+**Verification**: `Test_Runtime.cpp` submits a tactical object requirement and verifies the returned solution contains the expected AOI, object criteria, and predicted-quality fields.
 
 ### REQ_TACTICAL_OBJECTS_060 - Derived Evidence Requirement
 When additional evidence is needed to satisfy a tactical object requirement, the runtime shall derive one or more component-agnostic `Object_Solution_Evidence_Requirement` records that describe the needed evidence or supporting information without naming another PRA component.
@@ -515,7 +515,7 @@ The runtime shall retain traceability links between a source tactical object req
 
 **Traces**: TOBJ.049
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` submits an AOI requirement, records derived evidence requirements and subsequent observations, and verifies the resulting correlated object can be traced back to the source requirement.
+**Verification**: `Test_Runtime.cpp` submits an AOI requirement, records derived evidence requirements and subsequent observations, and verifies the resulting correlated object can be traced back to the source requirement.
 
 ---
 

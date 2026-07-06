@@ -349,7 +349,7 @@ ctest --test-dir build -C Release -R "(ProtoBindings|CodecDispatch|TacticalObjec
 | Area | Files |
 |------|-------|
 | PCL runtime API | `subprojects/PCL/include/pcl/pcl_container.h`, `subprojects/PCL/include/pcl/pcl_executor.h`, `subprojects/PCL/include/pcl/pcl_transport.h` |
-| PCL architecture | `subprojects/PCL/doc/architecture/08-pcl-component-system.md`, `subprojects/PCL/doc/architecture/component_container_design.md` |
+| PCL architecture | `subprojects/PCL/doc/architecture/pcl-component-system.md`, `subprojects/PCL/doc/architecture/component_container_design.md` |
 | PYRAMID contracts | `subprojects/PYRAMID/proto/` |
 | Generator entry point | `subprojects/PYRAMID/pim/generate_bindings.py` |
 | Generator parser/index | `subprojects/PYRAMID/pim/proto_parser.py` |

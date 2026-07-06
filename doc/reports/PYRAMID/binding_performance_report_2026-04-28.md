@@ -277,9 +277,11 @@ The fix now:
 - serializes protobuf arrays using native varint-delimited message framing
 - removes the JSON shim from the C++ tactical-object service codec hot path
 
-Relevant code:
+Relevant code (as measured; the hand-maintained `src/protobuf_support/` codec
+was retired 2026-07-04 in favour of generated per-service protobuf codecs —
+see `doc/todo/PYRAMID/TODO.md` item C1):
 
-- [`subprojects/PYRAMID/src/protobuf_support/pyramid_services_tactical_objects_protobuf_codec.cpp`](../../../subprojects/PYRAMID/src/protobuf_support/pyramid_services_tactical_objects_protobuf_codec.cpp)
+- `subprojects/PYRAMID/src/protobuf_support/pyramid_services_tactical_objects_protobuf_codec.cpp` (deleted; now generated into `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp`)
 
 ## Verification
 

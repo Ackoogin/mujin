@@ -159,11 +159,14 @@ Examples:
 
 ## Envelope Model
 
-> **Current vs target.** The envelope below is the *current* ROS2 wire model: a
-> generic transport that carries opaque codec bytes. The *target* is native ROS2
-> IDL — typed `.msg`/`.srv`/`.action` generated from the `.proto` contracts — so
-> ROS2 tooling and non-PYRAMID nodes interoperate directly. See
-> `doc/plans/PYRAMID/transport_plugins.md` §1.
+> **Fallback wire.** The envelope below is the *fallback* ROS2 wire model: a
+> generic transport that carries opaque codec bytes. Since 2026-07-04 the
+> *default* wire is native ROS2 IDL — typed `pyramid_msgs` messages generated
+> from the `.proto` contracts — so ROS2 tooling and non-PYRAMID nodes
+> interoperate directly (see "typed `pyramid_msgs` wire" under the delivered
+> items below). The envelope remains selectable via
+> `RclcppRuntimeAdapter::Options::use_envelope_wire` and still carries array
+> topics and the unary/stream service framing described in this section.
 
 The shared support layer carries PCL payloads inside a transport envelope with:
 

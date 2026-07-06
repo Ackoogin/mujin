@@ -46,6 +46,7 @@ Tactical Objects is the current proving-ground component.
 | JSON | `application/json` | active | default path; runtime codec plugin available |
 | FlatBuffers | `application/flatbuffers` | active | C++ native; Ada typed API may use shim; runtime codec plugin available |
 | Protobuf | `application/protobuf` | active | direct generated codec plus runtime registry codec plugin (`pyramid_codec_protobuf_tactical_objects`); proven by `tobj_cpp_app_client_protobuf_plugin_e2e` |
+| ROS2 typed | `application/ros2` | active (ament build only) | generated `*_ros2_codec_plugin.cpp` registry codec plugins backed by `pyramid_ros2_codec.hpp`; build inside the ament package (rclcpp/`pyramid_msgs` only resolve there); envelope passthrough remains the fallback |
 
 ### Transport projections
 
@@ -53,7 +54,7 @@ Tactical Objects is the current proving-ground component.
 |-----------|--------|-------|
 | PCL | active baseline | production proving path |
 | gRPC | active optional projection | direct generated C++ transport works; coupled plugin is runtime-functional both ways (server ingress + client `invoke_async`/`invoke_stream`), proven by `test_grpc_coupled_plugin_e2e` |
-| ROS2 | active optional projection (envelope wire) | generated `bindRos2(...)` hooks/constants, `rclcpp` runtime adapter, coupled plugin both ways with reproducible fresh-tree ament build and plugin-loaded live E2E; typed `pyramid_msgs` wire switch still pending (see `doc/plans/PYRAMID/transport_plugins.md`) |
+| ROS2 | active optional projection (typed `pyramid_msgs` topic wire default) | generated `bindRos2(...)` hooks/constants, `rclcpp` runtime adapter, coupled plugin both ways with reproducible fresh-tree ament build and plugin-loaded live E2E; typed topic wire delivered 2026-07-04 (TODO WS-A) with plain-rclcpp interop proof; envelope wire selectable via `RclcppRuntimeAdapter::Options::use_envelope_wire` and still carries array topics and unary/stream service framing |
 | PCL shared-memory bus | active | generated Tactical Objects services run over the bus in the `tobj_shared_memory_example` showcase (provided + consumed bindings, gateway container) |
 
 ## Current Proof Matrix
@@ -73,7 +74,8 @@ Tactical Objects is the current proving-ground component.
 | Ada socket active-find JSON/FlatBuffers | `tobj_ada_active_find_e2e`, `tobj_ada_active_find_flatbuffers_e2e` |
 | Real app Ada active-find JSON/FlatBuffers | `tobj_ada_active_find_app_e2e`, `tobj_ada_active_find_app_flatbuffers_e2e` |
 | ROS2 semantic projection | `test_ros2_transport_semantics`, `tobj_ros2_facade_e2e` |
-| ROS2 rclcpp adapter runtime | `test_rclcpp_runtime_adapter` |
+| ROS2 rclcpp adapter runtime (typed wire + envelope fallback + plain-rclcpp interop) | `test_rclcpp_runtime_adapter` |
+| ROS2 typed codec round-trip | `test_ros2_codec_roundtrip` |
 | ROS2 coupled plugin (load shape + live traffic via `colcon test`) | `test_ros2_coupled_plugin_load` |
 | PCL shared-memory bus | `test_pcl_shared_memory_transport`; Tactical Objects services over the bus in `tobj_shared_memory_example` |
 | Binding generator dependency hygiene | `pyramid_binding_generation_dependencies` |
@@ -126,9 +128,10 @@ Use this table in reviews:
 The following are still not complete (transport-side items are tracked with
 plans in `doc/plans/PYRAMID/transport_plugins.md`):
 
-- typed `pyramid_msgs` ROS2 wire: the generated native IDL + marshal codec are
-  round-trip verified, but the live ROS2 transport still carries the
-  pass-through envelope
+- ROS2 typed-wire coverage: the typed `pyramid_msgs` wire (default since
+  2026-07-04) covers scalar-message pub/sub topics; array topics fall back to
+  the envelope wire (no array `.msg` wrapper yet) and unary/stream services
+  still use the `PclService`/`PclOpenStream` envelope framing
 - ROS2 action mapping for long-running / feedback-style workflows
 - staging the ROS2 coupled plugin's shared runtime dependency outside the
   colcon install tree

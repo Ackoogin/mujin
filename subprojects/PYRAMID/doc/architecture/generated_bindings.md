@@ -390,6 +390,7 @@ threading model.
 | JSON | `application/json` | baseline active path |
 | FlatBuffers | `application/flatbuffers` | active path |
 | Protobuf | `application/protobuf` | active PCL path |
+| ROS2 typed | `application/ros2` | active on the ROS2 path; generated `*_ros2_codec_plugin.cpp` registry codecs backed by `pyramid_ros2_codec.hpp`, built inside the ament package only (rclcpp/`pyramid_msgs` resolve there) |
 
 Adding a codec means:
 
@@ -418,7 +419,7 @@ There are two transport categories:
 | PCL UDP | Uses generated payload helpers for pub/sub traffic | Available pub/sub-oriented path |
 | PCL shared memory | Uses generated payload helpers over shared-memory transport | Foundation present |
 | gRPC bundle | Generated gRPC/protobuf service framing; selected with `--backends grpc`, not by runtime `content_type` alone | Generated C++ transport support and smoke/interop coverage |
-| ROS2 bundle | ROS2 envelope carries `content_type` plus payload bytes, preserving codec selection inside the envelope | Generated Tactical Objects projection, C++ facade hooks, shared support layer, fake-adapter and `rclcpp` proofs |
+| ROS2 bundle | Typed `pyramid_msgs` topic wire by default (`application/ros2` typed codec); envelope wire (opaque `content_type` + payload bytes) selectable as fallback and still used for array topics and unary/stream service framing | Generated Tactical Objects projection, C++ facade hooks, shared support layer, fake-adapter and `rclcpp` proofs incl. plain-rclcpp interop |
 
 Transport code owns endpoint binding, routing, framing, and I/O thread handoff.
 It must not own payload semantics or codec-specific handler interfaces.
@@ -426,12 +427,17 @@ It must not own payload semantics or codec-specific handler interfaces.
 ROS2 current-state summary:
 
 - Implemented: generated Tactical Objects ROS2 transport projection, generated
-  `bindRos2(...)` C++ hooks, generated Ada endpoint constants/specs, generic
-  envelope support, direct `rclcpp` runtime adapter, pub/sub, unary service,
-  streaming service, outbound publish, and executor-thread handoff tests.
-- Not yet implemented: ROS2 action mapping, Ada ROS2 runtime beyond generated
-  constants/specs, and top-level plain-CMake integration for the ament package
-  build.
+  `bindRos2(...)` C++ hooks, generated Ada endpoint constants/specs, typed
+  `pyramid_msgs` topic wire (default since 2026-07-04, with plain-rclcpp
+  interop proof), generic envelope support (selectable fallback; still carries
+  array topics and service framing), direct `rclcpp` runtime adapter, pub/sub,
+  unary service, streaming service, outbound publish, and executor-thread
+  handoff tests.
+- Not yet implemented: typed array-topic `.msg` wrappers, typed service
+  framing (unary/stream services use the envelope-based
+  `PclService`/`PclOpenStream`), ROS2 action mapping, Ada ROS2 runtime beyond
+  generated constants/specs, and top-level plain-CMake integration for the
+  ament package build.
 
 For the canonical ROS2 naming, envelope, streaming, and threading rules, use
 [ros2_transport_semantics.md](ros2_transport_semantics.md).

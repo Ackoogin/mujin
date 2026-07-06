@@ -1,6 +1,6 @@
 ﻿# PYRAMID Technical Standard Component Responsibilities
 
-- Source: `ref/20250224-PYRAMID_Technical_Standard_V1-O.md`
+- Source: `ref/20250224-PYRAMID_Technical_Standard_V1-O.md` (unversioned local copy of the PYRAMID Technical Standard; `ref/` is gitignored, obtain the standard separately)
 - Scope: Components in `5.4.2.x` with responsibilities in `5.4.2.x.4`
 - Responsibility ID format: `PYR-RESP-####` (globally unique)
 

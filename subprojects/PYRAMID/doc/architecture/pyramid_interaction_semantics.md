@@ -261,9 +261,9 @@ from stamped options. Migration to full deletion remains available in order:
    methods instead of `topics_for_service()`; keep the emitted
    `subscribe*` / `publish*` / `kTopic*` surface byte-for-byte so existing
    components and tests are unaffected.
-4. **Delete `standard_topics.py`** and its imports in `cpp_codegen.py` /
-   `ada_codegen.py` once the generated output matches the pre-migration
-   snapshot.
+4. **Delete `standard_topics.py`** and its imports in the `pim/cpp/` /
+   `pim/ada/` generator packages once the generated output matches the
+   pre-migration snapshot.
 5. **Regenerate and diff.** The generated bindings for the proving path
    (Tactical Objects) must be unchanged; that diff is the migration's
    correctness proof.
@@ -277,7 +277,7 @@ Each projection consumes the resolved pattern uniformly:
 | Unary / void | service request/response | unary rpc | `srv/PclService` |
 | Server-stream | streamed service | server-streaming rpc | open service + `frames` topic |
 | Client-stream / bidi | (future) | native streaming rpc | (future) |
-| Publish / subscribe | port pub/sub on topic wire-name | n/a (or wrapped) | `msg/PclEnvelope` on mapped topic |
+| Publish / subscribe | port pub/sub on topic wire-name | n/a (or wrapped) | typed `pyramid_msgs` message on mapped topic (default); `msg/PclEnvelope` fallback for array topics / envelope mode |
 | Action | (future) | n/a | ROS2 action (currently unimplemented) |
 
 This closes two gaps called out in

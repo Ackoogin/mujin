@@ -1,6 +1,10 @@
 # AME ROS2 Node PCL Migration Status
 
-## Current Status (2026-04-21)
+> **Tracking:** the remaining items below are tracked in
+> [`doc/todo/AME/TODO.md`](../../todo/AME/TODO.md) ("PCL Integration
+> Compliance"). This document holds the detail and definition-of-done.
+
+## Current Status (2026-04-21; remaining items re-verified still open 2026-07-06)
 
 The AME component-layer migration to PCL is complete. The remaining work is no
 longer the original port migration; it is the ROS2 wrapper compliance gap left

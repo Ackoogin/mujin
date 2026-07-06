@@ -743,7 +743,7 @@ graph BT
 | QueryEngine | `include/query/QueryEngine.h` | `src/query/QueryEngine.cpp` | `Test_QueryEngine.cpp` |
 | InterestManager | `include/interest/InterestManager.h` | `src/interest/InterestManager.cpp` | `Test_InterestManager.cpp` |
 | TacticalHistory | `include/history/TacticalHistory.h` | `src/history/TacticalHistory.cpp` | `Test_TacticalHistory.cpp` |
-| Runtime | `include/TacticalObjectsRuntime.h` | `src/TacticalObjectsRuntime.cpp` | `Test_TacticalObjectsRuntime.cpp` |
+| Runtime | `include/TacticalObjectsRuntime.h` | `src/TacticalObjectsRuntime.cpp` | `Test_Runtime.cpp` |
 | Codec | `include/TacticalObjectsCodec.h` | `src/TacticalObjectsCodec.cpp` | `Test_TacticalObjectsCodec.cpp` |
 | Component | `include/TacticalObjectsComponent.h` | `src/TacticalObjectsComponent.cpp` | `Test_TacticalObjectsComponent.cpp` |
 

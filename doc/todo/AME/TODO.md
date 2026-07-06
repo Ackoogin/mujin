@@ -4,6 +4,27 @@ All vertical slice steps (1-8) and extensions 1-6 are complete, including multi-
 
 ---
 
+## PCL Integration Compliance (open; item 1 is an urgent correctness fix)
+
+The AME component-layer migration to PCL is complete; what remains is the
+ROS2 wrapper compliance gap left by the direct-call compatibility bridges.
+Detail, rationale, and definition-of-done live in
+[`pcl_migration_plan.md`](../../plans/AME/pcl_migration_plan.md).
+
+| # | Item | Notes |
+|---|------|-------|
+| 1 | **Fix `ExecutorNode` ingress race** — `~/load_bt` / `~/stop_execution` call `loadAndExecute()` / `haltExecution()` directly from ROS2 service callbacks, racing `on_tick()` on the PCL executor thread | **Urgent correctness fix.** Add `enqueueBtXml()` / `enqueueHalt()` to `ExecutorComponent`, drain in `on_tick()`, drop `exec_mutex_` |
+| 2 | Route ROS2 world-model writes through PCL ingress | `WorldModelComponent::setFact()` is mutex-protected but sidesteps the single-writer executor model |
+| 3 | Remove `PlannerNode` detached planning thread | Route the ROS2 action to the existing PCL `plan` service |
+| 4 | AME ROS2 PCL transport | `pcl_transport_t` backed by ROS2 so AME PCL ports surface as ROS2 topics/services; then strip the direct bypass services/publishers |
+| 5 | Compatibility-test focus | Executor enqueue serialization, bridge-over-ingress, transport mapping, `combined_main` smoke |
+
+Related deferred trigger on the PYRAMID side: "AME contract canonicalization"
+(`doc/todo/PYRAMID/TODO.md`, WS-D), which would let AME consume the generated
+ROS2 bindings directly.
+
+---
+
 ## Extension 7: Temporal Planning (not started)
 
 PDDL 2.1 durative actions with STN conversion. See [`temporal_extension_research.md`](../../research/AME/temporal_extension_research.md) for planner evaluation.

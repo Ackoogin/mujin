@@ -110,7 +110,7 @@ build\tests\Release\test_observability.exe
 build\tests\Release\test_world_model.exe --gtest_filter=WorldModel.SetAndGetFact
 ```
 
-All 73 tests should pass across: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser, integration (BT nodes), end-to-end pipeline, and observability (Layers 1-5).
+The full CTest suite should pass. It spans PCL, PYRAMID, Tactical Objects, AME core (WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser), integration (BT nodes), end-to-end pipeline, observability (Layers 1-5), generated bindings, and transport adapters -- 715 registered tests at last count; use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
 
 ## Run the demo
 
