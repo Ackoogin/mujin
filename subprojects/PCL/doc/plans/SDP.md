@@ -30,7 +30,7 @@ PCL uses an incremental life cycle with the following per-change flow:
    `../requirements/derived_requirements.md` and fed back to the (future)
    system safety process.
 2. **Design.** Architecture-level design lives in `../architecture/`
-   (`component_container_design.md`, `08-pcl-component-system.md`) and the
+   (`component_container_design.md`, `pcl-component-system.md`) and the
    public headers (`include/pcl/*.h`), which are the authoritative interface
    specification. Design changes update these before or with the code.
 3. **Coding.** Strict C17, zero external dependencies, no STL, per the
@@ -67,7 +67,7 @@ The design description comprises:
 - Design decisions D1–D9 in `HLR.md` (the architectural commitments).
 - `../architecture/component_container_design.md` — container/executor
   internals, data structures, state machine.
-- `../architecture/08-pcl-component-system.md` — component-system overview.
+- `../architecture/pcl-component-system.md` — component-system overview.
 - Public headers — interface contracts, threading rules, ownership rules
   (documented per function).
 

@@ -6,6 +6,12 @@ state that is *not* mutex-protected so the implicit single-threaded-mutator
 contract is visible.
 
 Generated: 2026-05-21
+Updated: 2026-07-06 -- re-audited the locks added by the 2026-07-04/05
+threading-model rework (SHM egress worker `egress_lock`, UDP send worker
+`send_lock`); see "Addendum (2026-07-06)". The rework itself is recorded in
+[`../PYRAMID/pcl_plugin_threading_model_report.md`](../PYRAMID/pcl_plugin_threading_model_report.md),
+which also covers the PYRAMID plugin (gRPC/ROS2) threading outside this
+audit's PCL-source scope.
 
 Scope: `subprojects/PCL/src/pcl_executor.c`, `pcl_transport_socket.c`,
 `pcl_transport_shared_memory.c`, `pcl_transport_template.c`,
@@ -27,14 +33,17 @@ their own.
 | socket transport | `pending_lock` | mutex | `pending_head` correlation table, `next_seq_id` |
 | SHM transport | `pending_lock` | process-local mutex | `pending_head`, `pending_stream_head`, `active_stream_targets`, `next_seq_id` |
 | SHM transport | `lock_sem` / `lock_handle` (bus_lock) | inter-process semaphore / named mutex | `region->slots[]`, `region->participant_count` |
+| SHM transport | `egress_lock` + `egress_cv` *(added 2026-07-04)* | producer-consumer | `egress_head/tail` worker queue, `egress_stop` |
 | template transport | `send_lock` + `send_cond` / `send_event` | producer-consumer | `send_head/tail` outbound queue |
 | template transport | `pending_lock` | mutex | `pending_head` correlation, `peer_aliases`, `peer_id` buffer, `next_seq_id` |
+| UDP transport | `send_lock` + `send_cond` / `send_event` *(added 2026-07-04)* | producer-consumer | `send_head/tail` outbound queue, `send_stop` |
 | UDP transport | `recv_stop`, `recv_running` | `volatile int` flags | recv-thread stop signaling |
 
-`pcl_transport_udp.c` is single-flag synchronised: it has one receiver thread
-and a `volatile int recv_stop` flag, no critical sections, no condvars. The
-recv thread polls the flag between blocking `recvfrom` calls (made bounded
-via `SO_RCVTIMEO`). Safe by inspection.
+`pcl_transport_udp.c` was single-flag synchronised when first audited; the
+2026-07-04 rework added an outbound send worker with a `send_lock`-protected
+queue (see the addendum). The recv thread is still stopped via the
+`volatile int recv_stop` flag polled between blocking `recvfrom` calls (made
+bounded via `SO_RCVTIMEO`).
 
 ## Executor Lock Ordering
 
@@ -151,9 +160,52 @@ destroy:
 runs entirely outside `pending_lock` (the list is detached first), so calls
 into the executor cannot reenter back through any transport lock.
 
+## Addendum (2026-07-06): Locks Added By The Threading-Model Rework
+
+The 2026-07-04/05 rework (recorded in
+`doc/reports/PYRAMID/pcl_plugin_threading_model_report.md`) moved blocking
+egress off the executor thread in the SHM and UDP transports. Both new locks
+follow the same producer-consumer shape as the audited socket/template
+`send_lock` and were re-audited by code inspection on 2026-07-06.
+
+### SHM `egress_lock` + `egress_cv`
+
+Protects the egress worker queue (`egress_head/tail`) and `egress_stop`.
+
+```
+publish / invoke_async / invoke_stream (executor thread):
+  pending_lock  -> register entry            -> release   (invoke paths only)
+  egress_lock   -> enqueue item, signal cv   -> release   (never under pending_lock)
+
+egress worker (pcl_shm_egress_thread_main):
+  egress_lock   -> cv-wait, pop one item     -> release
+  process_item:  bus_lock -> discovery/send  -> release   (never under egress_lock)
+  backpressure retry loop: bus_lock and egress_lock (should_stop check)
+                 acquired strictly in sequence, each released before the next
+
+destroy:
+  egress_lock -> egress_stop=1, signal -> release; join worker;
+  egress_lock -> free remaining queue  -> release
+```
+
+`pending_lock`, `egress_lock`, and `bus_lock` are only ever acquired
+sequentially -- the enqueue path releases `pending_lock` before taking
+`egress_lock`, and the worker releases `egress_lock` before taking
+`bus_lock` -- so the lock-order graph stays edge-free.
+
+### UDP `send_lock` + `send_cond` / `send_event`
+
+Protects the new outbound frame queue (`send_head/tail`) and `send_stop`.
+The producer (executor thread) enqueues under `send_lock` with a
+stop-race rollback; the send worker pops one frame under `send_lock`,
+releases, then calls `sendto` with no lock held. Destroy signals
+`send_stop` under the lock, joins the worker, then frees any stranded
+frames. No path holds `send_lock` together with any other lock.
+
 ## Cross-Module Lock-Order Graph
 
-Drawing every "if I hold X, can I take Y" edge across all five modules:
+Drawing every "if I hold X, can I take Y" edge across all five modules
+(re-checked 2026-07-06 including the addendum locks):
 
 ```
                           (none -- no nested locks across modules)
@@ -166,8 +218,10 @@ socket.send_lock          ----->  (nothing)
 socket.pending_lock       ----->  (nothing)
 shm.pending_lock          ----->  (nothing)
 shm.bus_lock              ----->  (nothing)
+shm.egress_lock           ----->  (nothing)
 template.send_lock        ----->  (nothing)
 template.pending_lock     ----->  (nothing)
+udp.send_lock             ----->  (nothing)
 ```
 
 Every lock is acquired around a bounded, lockless-callbacks critical section
@@ -258,7 +312,9 @@ use-after-free more than deadlock:
   `recv_stop`, joins the recv thread *before* tearing down the gateway
   container or the bus mapping. `pcl_shm_active_streams_abort` then runs
   after recv has stopped, so no concurrent stream registration is possible.
-  **Correct order.**
+  Since 2026-07-04 it also stops and joins the egress worker (stop flag +
+  cv signal under `egress_lock`, join, then drain the queue) before the bus
+  teardown. **Correct order.**
 - `pcl_transport_template_destroy` (lines 919-1021) clears default + alias
   executor slots, signals `send_stop`, calls `hooks.wake` so the engineer's
   `recv_blocking` returns, joins both threads, drains pending entries
@@ -298,6 +354,7 @@ No regressions detected.
 | Recent set_peer_id + recv_thread race | Fixed (e3a9b2c) | Verified |
 | Alias-rebinding clobber on destroy | Fixed (403f9b3) | Verified, covered by new test |
 | set_peer_id partial-write under OOM | Fixed (18b7236) | Verified |
+| SHM `egress_lock` / UDP `send_lock` added by the 2026-07-04 threading rework | -- | Re-audited 2026-07-06 (addendum): producer-consumer shape, no nesting, lock-order graph still empty |
 
 No code changes are recommended off the back of this audit. The two
 unprotected routing tables are deliberate design choices; if they become a

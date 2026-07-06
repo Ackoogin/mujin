@@ -1,4 +1,4 @@
-# 08 -- PCL Component System Architecture
+# PCL Component System Architecture
 
 This document provides Mermaid diagrams illustrating the PYRAMID Composition Library (PCL)
 component system: its layered architecture, communication patterns, and deployment

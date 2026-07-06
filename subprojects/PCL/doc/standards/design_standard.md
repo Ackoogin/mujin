@@ -18,7 +18,7 @@ The controlled design description consists of:
 |----------|------|
 | Design decisions D1–D9 (`../requirements/HLR.md`) | Binding architectural commitments |
 | `../architecture/component_container_design.md` | Container/executor internals: state machine, data structures, queues |
-| `../architecture/08-pcl-component-system.md` | Component-system overview and composition model |
+| `../architecture/pcl-component-system.md` | Component-system overview and composition model |
 | `include/pcl/*.h` header contracts | Interface specification: per-function arguments, ownership, threading, status codes |
 | `doc/reports/PCL/MUTEX_AUDIT.md` | Concurrency design record: lock hierarchy, unprotected-state contracts |
 

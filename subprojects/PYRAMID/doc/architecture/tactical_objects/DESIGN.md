@@ -590,7 +590,7 @@ tests/tactical_objects/
   Test_QueryEngine.cpp
   Test_InterestManager.cpp
   Test_TacticalHistory.cpp
-  Test_TacticalObjectsRuntime.cpp
+  Test_Runtime.cpp
   Test_TacticalObjectsCodec.cpp
   Test_TacticalObjectsComponent.cpp
 ```
@@ -655,7 +655,7 @@ The first implementation cut may defer:
 7. `Test_QueryEngine.cpp`
 8. `Test_InterestManager.cpp`
 9. `Test_TacticalHistory.cpp`
-10. `Test_TacticalObjectsRuntime.cpp`
+10. `Test_Runtime.cpp`
 11. `Test_TacticalObjectsCodec.cpp`
 12. `Test_TacticalObjectsComponent.cpp`
 

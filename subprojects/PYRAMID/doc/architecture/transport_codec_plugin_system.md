@@ -15,9 +15,12 @@ that is also complete both ways (pub/sub, consumed unary + streaming, safe
 lifecycle, reproducible ament build). The transport **capability model** (caps
 declaration, compose-time validation, QoS floor, manifest-driven per-endpoint
 routing) is in place. Native ROS2 IDL (`.msg`/`.srv`) and the `domain_model`↔ROS2
-marshalling/wire codec are generated and round-trip-verified; switching the live
-ROS2 transport from the pass-through envelope to that typed codec is the headline
-remaining item. Current capability and remaining work are tracked in
+marshalling/wire codec are generated and round-trip-verified, and since
+2026-07-04 the typed `pyramid_msgs` wire is the **default** live ROS2 path:
+`application/ros2` is a real registry codec (generated typed codec plugins built
+inside the ament package) and `RclcppRuntimeAdapter` publishes/subscribes typed
+messages, with the pass-through envelope selectable as a fallback. Current
+capability and remaining work are tracked in
 `doc/plans/PYRAMID/transport_plugins.md`.
 
 This isolates churn (a wire-format or transport change ships as a new plugin, not
@@ -47,7 +50,7 @@ flowchart TB
     CodecSO["CODEC .so<br/>json | flatbuffers"]
     TransSO["TRANSPORT .so<br/>socket | shm | udp"]
     Grpc["coupled gRPC target<br/>both-ways (gated)"]
-    Ros2["coupled ROS2 target<br/>both-ways, envelope (gated)"]
+    Ros2["coupled ROS2 target<br/>both-ways, typed wire (gated)"]
   end
 
   Marshal -- "pyramid_&lt;T&gt;_c" --> CodecReg
@@ -358,7 +361,7 @@ mapping and the `pyramid_msgs` interface package.
 | Codec config pass-through (`config_json`) | ✅ | ✅ |
 | Fail closed with no transport plugin | ✅ | ✅ |
 | Fail closed with no codec plugin (incl. scalar aliases) | ✅ | ✅ |
-| Coupled target plugin (codec+transport, one content_type) | gRPC both-ways; ROS2 both-ways (envelope) | — |
+| Coupled target plugin (codec+transport, one content_type) | gRPC both-ways; ROS2 both-ways (typed wire default, envelope fallback) | — |
 | Transport capability model (caps + compose-time validation + QoS + manifest routing) | ✅ | ✅ |
 
 **Plugin binding v1 is complete**: clients link core libs only, transport + codec
@@ -387,11 +390,17 @@ ament build (`scripts/build_ros2_transport.sh`, no committed generated files),
 plugin-loaded live E2E (`colcon test` green), and `pcl_transport_plugin_teardown`
 unload discipline. **Native ROS2 IDL + marshalling are done**: real `.msg`/`.srv`
 (the `pyramid_msgs` package) and a `domain_model`↔`pyramid_msgs` `rclcpp` wire
-codec (`pyramid_ros2_codec.hpp`), round-trip verified for every type. The live
-ROS2 transport still carries the *pass-through envelope* (`PclEnvelope` /
-`PclService` / `PclOpenStream`); switching it to the typed codec (codec-plugin
-registration + typed adapter), plus ROS2 actions, is the remaining transport work
-— see `doc/plans/PYRAMID/transport_plugins.md`.
+codec (`pyramid_ros2_codec.hpp`), round-trip verified for every type. Since
+2026-07-04 the **typed wire is the live default**: `application/ros2` is a real
+registry codec (generated `*_ros2_codec_plugin.cpp` targets built inside the
+ament package) and `RclcppRuntimeAdapter` publishes/subscribes typed
+`pyramid_msgs` messages keyed by `TopicBinding::ros2_message_type`, verified by
+a plain-`rclcpp` interop test (no PYRAMID framing on the wire). The typed wire
+covers pub/sub topics; the *pass-through envelope* (`PclEnvelope` /
+`PclService` / `PclOpenStream`) remains selectable via
+`RclcppRuntimeAdapter::Options::use_envelope_wire` and still carries array
+topics and the unary/stream service framing. ROS2 actions remain deferred —
+see `doc/plans/PYRAMID/transport_plugins.md`.
 
 **Architectural note — gRPC protobuf marshalling and Ada.** Ada consumes gRPC
 the same way it consumes socket/shm: the gRPC coupled plugin is loaded as the PCL
@@ -401,8 +410,8 @@ codec registry. There is no Ada-specific gRPC JSON shim in the active path.
 uses the standard generated service API with `application/protobuf` payload
 encoding.
 
-**Current capability and remaining transport work** (putting the typed ROS2 codec
-on the live wire, ROS2 actions, deferred capability adapters) are tracked in:
+**Current capability and remaining transport work** (ROS2 actions, deferred
+capability adapters) are tracked in:
 [`doc/plans/PYRAMID/transport_plugins.md`](../../../../doc/plans/PYRAMID/transport_plugins.md).
 
 ### Known gap — manifest-routed *remote* ingress / peer identity (deferred)

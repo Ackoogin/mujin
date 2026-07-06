@@ -29,7 +29,7 @@ Reviewed surfaces:
 - Component authoring guide:
   [`cpp_component_authoring.md`](../../../subprojects/PYRAMID/doc/architecture/cpp_component_authoring.md)
 - PCL component/executor model:
-  [`08-pcl-component-system.md`](../../../subprojects/PCL/doc/architecture/08-pcl-component-system.md)
+  [`pcl-component-system.md`](../../../subprojects/PCL/doc/architecture/pcl-component-system.md)
 - Tactical Objects bridge and examples under
   [`subprojects/PYRAMID/tactical_objects/`](../../../subprojects/PYRAMID/tactical_objects/) and
   [`subprojects/PYRAMID/examples/cpp/`](../../../subprojects/PYRAMID/examples/cpp/)
