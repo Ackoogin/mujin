@@ -225,13 +225,19 @@ either level and are cheaper to address early:
    OOM test suite helps). A static-pool or bounded-arena allocation mode behind
    `pcl_alloc` would materially simplify the argument, and bounded capacities
    (PCL.008, PCL.013) already point that way.
-2. **Runtime plugin loading (`dlopen`) — PCL.064-070.** Field-loadable /
-   dynamically-linked code is a major certification complication. For the
-   certified configuration, provide a **static-registration build option** (all
-   transports/codecs linked and registered at build time, loader compiled out)
-   so the plugin path can be classified as deactivated code in the airborne
-   configuration. Keep the manifest-driven composition for non-certified
-   deployments.
+2. **Runtime plugin loading (`dlopen`) — PCL.064-070.** *(Position refined
+   2026-07-06 — see PSAC 3.3.1.)* Dynamic linking is certifiable when
+   bounded: the deployment's specific plugins can be used and tested as
+   enumerated, DAL-verified CC1 configuration items, with the routing
+   manifest treated as certified configuration data (option-selectable /
+   field-loadable software provisions, §2.5.2/2.5.5; cf. DO-297), loading
+   confined to initialization (current behaviour), and the fail-closed
+   loader verified as airborne software. Missing for that route: a binary
+   integrity/compatibility check in the loader (manifest-pinned hash /
+   part number) — today only the ABI version is gated. A
+   **static-registration build option** remains needed as the alternative
+   configuration, and is forced on targets with no dynamic loader
+   (bare-metal ASAAC/APOS).
 3. **UDP transport synchronization uses `volatile int` flags,** not C11 atomics.
    "Safe by inspection" (per the mutex audit) is not a portable data-race-freedom
    argument; convert to `stdatomic.h` or protect with the existing mutex shim.

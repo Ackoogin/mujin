@@ -91,7 +91,7 @@ Phase 1 open item; until then section 6 is the deviation register.
 | ID | Rule | Deviation | Rationale / plan |
 |----|------|-----------|------------------|
 | DEV-01 | 4.3 | `pcl_transport_udp.c` uses `volatile int` flags for thread signalling | Safe-by-inspection per mutex audit, but not a portable data-race-freedom argument. Plan: convert to `stdatomic.h` (gap analysis section 4.3). Accepted until then. |
-| DEV-02 | 1.4 | `pcl_plugin_loader.c` uses platform dynamic loading (`dlopen`/`LoadLibrary`) | Required by PCL.064–070 for non-certified deployments. Excluded (deactivated) from the certified configuration per PSAC 3.2/3.3. |
+| DEV-02 | 1.4 | `pcl_plugin_loader.c` uses platform dynamic loading (`dlopen`/`LoadLibrary`) | Required by PCL.064–070. In the certified configuration it is either deactivated (PSAC 3.3.1 Option A) or airborne software under the bounded-composition conditions (Option B: enumerated CC1 plugin set, controlled manifest, init-time-only load, integrity check). |
 
 ## 7. Enforcement
 

@@ -55,28 +55,58 @@ The airborne-software boundary for the certified configuration is:
 | `src/pcl_alloc.c`, `pcl_container.c`, `pcl_executor.c`, `pcl_log.c`, `pcl_bridge.c` | Yes | Core runtime |
 | `src/pcl_capabilities.c`, `pcl_transport_routing.c` | Yes | Compose-time validation |
 | Reference transports (`pcl_transport_socket.c`, `_udp.c`, `_shared_memory.c`, `_template.c`, `_apos.c`) | Per deployment | Only the transports a deployment routes to are airborne software; the rest are excluded from the certified part list |
-| `src/pcl_codec_registry.c`, `src/pcl_plugin_loader.c` + `*_plugin.c` shims | **Deactivated in the certified configuration** | Runtime `dlopen` composition is for non-certified deployments; the certified configuration requires a static-registration build (see 3.3) |
+| `src/pcl_codec_registry.c`, `src/pcl_plugin_loader.c` + `*_plugin.c` shims | Per composition option (3.3.1) | Option A deactivates them; Option B includes the loader and the deployment's enumerated plugins as airborne software |
 | C++ wrappers (`include/pcl/*.hpp`) | No | Separate item; consumers carry their own assurance argument |
 | Ada binding (`bindings/ada/`) | No | Separate item, same rationale |
 | Tests, examples, scripts, template/conformance harnesses | No | Verification environment, not airborne software |
 
 ### 3.3 Special Considerations
 
-1. **Field-loadable software / dynamic linking.** The plugin loader
-   (PCL.064–PCL.070) is a certification complication. Planned mitigation: a
-   static-registration build option that links and registers transports at
-   build time and compiles the loader out, so the `dlopen` path is
-   deactivated code in the airborne configuration. This build option does not
-   exist yet (open item, gap analysis section 4.2).
-2. **Dynamic memory during ACTIVE operation.** Message ingress deep-copies
+#### 3.3.1 Composition options for the certified configuration
+
+The plugin loader (PCL.064–PCL.070) supports two certifiable configurations;
+each embedding programme selects one in its own PSAC:
+
+- **Option A — static registration.** Transports/codecs are linked and
+  registered at build time and the loader is compiled out, making the
+  `dlopen` path deactivated code. Lowest-cost argument, and the only option
+  on targets without a dynamic loader (bare-metal ASAAC/APOS provides none).
+  The static-registration build option does not exist yet (open item).
+- **Option B — bounded dynamic composition.** The deployment's specific
+  plugins are used and verified, per the DO-178C provisions for
+  option-selectable and field-loadable software (§2.5.2/2.5.5; cf. DO-297
+  loadable applications). Conditions:
+  (a) the plugin set is enumerated: each plugin binary is a CC1
+      configuration item, developed and verified to the applicable DAL, and
+      listed in the certified part list — no path exists for loading
+      anything else;
+  (b) the routing manifest is certified configuration data, change-controlled
+      like option-selectable software, and every *selected* combination is
+      verified;
+  (c) loading and compose-time validation complete during initialization,
+      before any container goes ACTIVE — never in operation (current PCL
+      behaviour);
+  (d) the loader verifies binary integrity and compatibility identity
+      (e.g. manifest-pinned hash and part number) before use — **not yet
+      implemented**: today the loader gates only the ABI version (open
+      item);
+  (e) the platform dynamic loader is part of the certified platform's
+      assurance argument;
+  (f) the load path is verified on target.
+  Under Option B the loader is airborne software; its fail-closed behaviour
+  (PCL.065, PCL.067, PCL.070) is already requirement-traced and at 100%
+  host statement coverage.
+#### 3.3.2 Other special considerations
+
+1. **Dynamic memory during ACTIVE operation.** Message ingress deep-copies
    and queue nodes allocate from the heap. The bounded-memory argument, or a
    bounded-arena mode behind `pcl_alloc`, is an open item (gap analysis
    section 4.1).
-3. **Target environment.** All current verification evidence is host-based
+2. **Target environment.** All current verification evidence is host-based
    (Linux/GCC, Windows/MSVC + GNAT). Credit-seeking testing must be repeated
    on the target computer or a justified target-representative environment
    (the APOS binding indicates an ASAAC/APOS RTOS target).
-4. **Tool qualification.** gcovr (structural coverage) and
+3. **Tool qualification.** gcovr (structural coverage) and
    GoogleTest/CTest (test pass/fail) outputs are used for verification
    credit; both need TQL-5 qualification or documented independent checking
    of their output (see SVP section 7).
