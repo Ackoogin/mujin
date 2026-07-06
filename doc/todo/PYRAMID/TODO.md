@@ -15,6 +15,7 @@ consolidates the remaining items from:
 | [`standard_alignment_plan.md`](../../plans/PYRAMID/standard_alignment_plan.md) | Stable design reference for Tactical Objects; one open design point (D-list) |
 | [`review_pyramid_bindings_pluggability.md`](../../reviews/PYRAMID/review_pyramid_bindings_pluggability.md) | Review record; facade closure steps 1–7 done, step 8 tracked here (C6) |
 | [`in_process_service_pubsub_todo.md`](../../reports/PYRAMID/in_process_service_pubsub_todo.md) | Review record for local-peer service/pub/sub facade gaps; closure items tracked in WS-E |
+| [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **New plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
 | `subprojects/PYRAMID/pim/test_harness/FINDINGS.md` | Harness reference; its one open follow-up is B2 |
 
 How the plugin/codec system works lives in the architecture reference:

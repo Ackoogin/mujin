@@ -70,4 +70,5 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 | [doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md](doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md) | Component responsibility map and standard responsibility IDs |
 | [standard alignment plan](../../doc/plans/PYRAMID/standard_alignment_plan.md) | Tactical Objects alignment with the generated PYRAMID proto interface |
 | [transport/codec plugins — capability & remaining work](../../doc/plans/PYRAMID/transport_plugins.md) | Current transport/codec plugin capability and the remaining work |
+| [split & PIM migration plan](../../doc/plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | Proposed capability/consumers subproject split, and the Tactical Objects gap analysis for moving onto the `pim/test` PIM Osprey port-grammar contract |
 | [tactical_objects/README.md](tactical_objects/README.md) | Tactical Objects runtime, app, and test usage |
