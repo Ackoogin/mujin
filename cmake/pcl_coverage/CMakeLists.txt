@@ -28,8 +28,13 @@ set(WORKSPACE_ROOT "${CMAKE_SOURCE_DIR}/../..")
 set(PCL_ROOT "${WORKSPACE_ROOT}/subprojects/PCL")
 
 add_library(pcl_core STATIC
+  ${PCL_ROOT}/src/pcl_alloc.c
+  ${PCL_ROOT}/src/pcl_capabilities.c
+  ${PCL_ROOT}/src/pcl_codec_registry.c
   ${PCL_ROOT}/src/pcl_container.c
   ${PCL_ROOT}/src/pcl_executor.c
+  ${PCL_ROOT}/src/pcl_plugin_loader.c
+  ${PCL_ROOT}/src/pcl_transport_routing.c
   ${PCL_ROOT}/src/pcl_log.c
   ${PCL_ROOT}/src/pcl_bridge.c
 )
@@ -40,9 +45,11 @@ set_target_properties(pcl_core PROPERTIES
   C_STANDARD 11
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON
 )
 find_package(Threads REQUIRED)
 target_link_libraries(pcl_core PRIVATE Threads::Threads)
+target_link_libraries(pcl_core PUBLIC ${CMAKE_DL_LIBS})
 
 # -- PCL socket transport library ----------------------------------------
 add_library(pcl_transport_socket STATIC
@@ -151,6 +158,7 @@ function(add_pcl_test name src)
   gtest_discover_tests(${name} DISCOVERY_MODE PRE_TEST)
 endfunction()
 
+add_pcl_test(test_pcl_alloc       test_pcl_alloc.cpp)
 add_pcl_test(test_pcl_lifecycle   test_pcl_lifecycle.cpp)
 add_pcl_test(test_pcl_executor    test_pcl_executor.cpp)
 add_pcl_test(test_pcl_log         test_pcl_log.cpp)
@@ -215,6 +223,111 @@ target_include_directories(test_pcl_apos_transport PRIVATE
   ${PCL_ROOT}/bindings/apos)
 gtest_discover_tests(test_pcl_apos_transport DISCOVERY_MODE PRE_TEST)
 
+# Threading-model conformance suite (PCL.075/PCL.076)
+add_executable(test_pcl_transport_threading
+  ${PCL_ROOT}/tests/test_pcl_transport_threading.cpp)
+target_link_libraries(test_pcl_transport_threading
+  PRIVATE pcl_core
+          pcl_transport_template
+          pcl_transport_shared_memory
+          pcl_transport_udp
+          pcl_transport_socket
+          GTest::gtest_main)
+target_include_directories(test_pcl_transport_threading PRIVATE ${PCL_ROOT}/tests)
+gtest_discover_tests(test_pcl_transport_threading DISCOVERY_MODE PRE_TEST)
+
+# Codec registry tests
+add_pcl_test(test_pcl_codec_registry test_pcl_codec_registry.cpp)
+
+# Reference transport plugins + test plugins for loader/capabilities/routing tests
+add_library(pcl_transport_socket_plugin MODULE
+  ${PCL_ROOT}/src/pcl_transport_socket_plugin.c)
+target_link_libraries(pcl_transport_socket_plugin PRIVATE pcl_transport_socket Threads::Threads)
+
+add_library(pcl_transport_udp_plugin MODULE
+  ${PCL_ROOT}/src/pcl_transport_udp_plugin.c)
+target_link_libraries(pcl_transport_udp_plugin PRIVATE pcl_transport_udp Threads::Threads)
+
+add_library(pcl_transport_shared_memory_plugin MODULE
+  ${PCL_ROOT}/src/pcl_transport_shared_memory_plugin.c)
+target_link_libraries(pcl_transport_shared_memory_plugin PRIVATE pcl_transport_shared_memory Threads::Threads)
+
+add_library(pcl_transport_capture_plugin MODULE ${PCL_ROOT}/tests/pcl_transport_capture_plugin.c)
+target_link_libraries(pcl_transport_capture_plugin PRIVATE pcl_core)
+
+add_library(pcl_codec_stub_plugin MODULE ${PCL_ROOT}/tests/pcl_codec_stub_plugin.c)
+target_link_libraries(pcl_codec_stub_plugin PRIVATE pcl_core)
+
+add_library(pcl_codec_badabi_plugin MODULE ${PCL_ROOT}/tests/pcl_codec_badabi_plugin.c)
+target_link_libraries(pcl_codec_badabi_plugin PRIVATE pcl_core)
+
+add_library(pcl_transport_nocaps_plugin MODULE ${PCL_ROOT}/tests/pcl_transport_nocaps_plugin.c)
+target_link_libraries(pcl_transport_nocaps_plugin PRIVATE pcl_core)
+
+add_library(pcl_transport_wrongabi_plugin MODULE ${PCL_ROOT}/tests/pcl_transport_wrongabi_plugin.c)
+target_link_libraries(pcl_transport_wrongabi_plugin PRIVATE pcl_core)
+
+add_library(pcl_transport_noentry_plugin MODULE ${PCL_ROOT}/tests/pcl_transport_noentry_plugin.c)
+target_link_libraries(pcl_transport_noentry_plugin PRIVATE pcl_core)
+
+# Plugin loader tests
+add_executable(test_pcl_plugin_loader ${PCL_ROOT}/tests/test_pcl_plugin_loader.cpp)
+target_link_libraries(test_pcl_plugin_loader PRIVATE pcl_core GTest::gtest_main)
+target_compile_definitions(test_pcl_plugin_loader PRIVATE
+  CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
+  STUB_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_stub_plugin>"
+  BADABI_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_badabi_plugin>"
+  SOCKET_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_socket_plugin>"
+  SHM_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_shared_memory_plugin>"
+  UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"
+  WRONGABI_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_wrongabi_plugin>"
+  NOENTRY_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_noentry_plugin>"
+)
+add_dependencies(test_pcl_plugin_loader
+  pcl_transport_capture_plugin
+  pcl_codec_stub_plugin
+  pcl_codec_badabi_plugin
+  pcl_transport_socket_plugin
+  pcl_transport_shared_memory_plugin
+  pcl_transport_udp_plugin
+  pcl_transport_wrongabi_plugin
+  pcl_transport_noentry_plugin
+)
+gtest_discover_tests(test_pcl_plugin_loader DISCOVERY_MODE PRE_TEST)
+
+# Routing manifest tests
+add_executable(test_pcl_transport_routing ${PCL_ROOT}/tests/test_pcl_transport_routing.cpp)
+target_link_libraries(test_pcl_transport_routing PRIVATE pcl_core GTest::gtest_main)
+target_include_directories(test_pcl_transport_routing PRIVATE ${PCL_ROOT}/src)
+target_compile_definitions(test_pcl_transport_routing PRIVATE
+  CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
+  UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"
+)
+add_dependencies(test_pcl_transport_routing
+  pcl_transport_capture_plugin
+  pcl_transport_udp_plugin
+)
+gtest_discover_tests(test_pcl_transport_routing DISCOVERY_MODE PRE_TEST)
+
+# Capabilities/QoS tests
+add_executable(test_pcl_capabilities ${PCL_ROOT}/tests/test_pcl_capabilities.cpp)
+target_link_libraries(test_pcl_capabilities PRIVATE pcl_core GTest::gtest_main)
+target_compile_definitions(test_pcl_capabilities PRIVATE
+  CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
+  NOCAPS_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_nocaps_plugin>"
+  UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"
+  SOCKET_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_socket_plugin>"
+  SHM_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_shared_memory_plugin>"
+)
+add_dependencies(test_pcl_capabilities
+  pcl_transport_capture_plugin
+  pcl_transport_nocaps_plugin
+  pcl_transport_udp_plugin
+  pcl_transport_socket_plugin
+  pcl_transport_shared_memory_plugin
+)
+gtest_discover_tests(test_pcl_capabilities DISCOVERY_MODE PRE_TEST)
+
 # C++ wrapper tests
 add_executable(test_pcl_cpp_wrappers ${PCL_ROOT}/tests/test_pcl_cpp_wrappers.cpp)
 target_link_libraries(test_pcl_cpp_wrappers PRIVATE pcl_core GTest::gtest_main)
@@ -226,8 +339,13 @@ gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)
 # sharing the same gcda, causes branch-counter overflow (GCC bug #68080) and
 # makes gcovr misreport line 428 as uncovered.
 add_library(pcl_core_oom STATIC
+  ${PCL_ROOT}/src/pcl_alloc.c
+  ${PCL_ROOT}/src/pcl_capabilities.c
+  ${PCL_ROOT}/src/pcl_codec_registry.c
   ${PCL_ROOT}/src/pcl_container.c
   ${PCL_ROOT}/src/pcl_executor.c
+  ${PCL_ROOT}/src/pcl_plugin_loader.c
+  ${PCL_ROOT}/src/pcl_transport_routing.c
   ${PCL_ROOT}/src/pcl_log.c
   ${PCL_ROOT}/src/pcl_bridge.c
 )
@@ -240,6 +358,7 @@ set_target_properties(pcl_core_oom PROPERTIES
   C_EXTENSIONS OFF
 )
 target_link_libraries(pcl_core_oom PRIVATE Threads::Threads)
+target_link_libraries(pcl_core_oom PUBLIC ${CMAKE_DL_LIBS})
 
 if(NOT MSVC)
   add_executable(test_pcl_oom ${PCL_ROOT}/tests/test_pcl_oom.cpp)
