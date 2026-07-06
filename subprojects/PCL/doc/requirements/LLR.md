@@ -149,7 +149,7 @@ Parameter setters and getters shall handle NULL container, NULL key, and NULL va
 ### REQ_PCL_019 - Port Creation During Configure
 Ports created during `on_configure` shall succeed and return non-NULL handles.
 
-**Traces**: PCL.007
+**Traces**: PCL.006, PCL.007
 
 **Verification**: `test_pcl_lifecycle.cpp::CreatedDuringConfigure` adds a publisher in on_configure and verifies success.
 
@@ -170,7 +170,7 @@ Exceeding `PCL_MAX_PORTS` (64) shall return NULL for publisher, subscriber, and 
 ### REQ_PCL_022 - Port Creation Null Arguments
 Port creation with NULL mandatory arguments (topic, type, callback, handler) shall return NULL.
 
-**Traces**: PCL.045
+**Traces**: PCL.006, PCL.045
 
 **Verification**: `test_pcl_robustness.cpp::PortCreationNullArgs` tests all NULL combinations for publisher, subscriber, and service.
 
@@ -308,7 +308,7 @@ Adding more than the executor's container capacity shall return `PCL_ERR_NOMEM`.
 ### REQ_PCL_040 - Invoke Service Found
 `pcl_executor_invoke_service()` shall dispatch to the registered handler and return PCL_OK.
 
-**Traces**: PCL.023
+**Traces**: PCL.011, PCL.023
 
 **Verification**: `test_pcl_robustness.cpp::InvokeServiceFound`.
 
@@ -340,7 +340,7 @@ The first `spin_once()` call shall use a reasonable default delta time.
 ### REQ_PCL_044 - Intra-Process Pub/Sub
 `pcl_executor_dispatch_incoming()` shall deliver a message to the subscriber callback matching the topic.
 
-**Traces**: PCL.022, PCL.010
+**Traces**: PCL.010, PCL.022, PCL.030
 
 **Verification**: `test_pcl_executor.cpp::IntraProcessPubSub` dispatches a message and verifies receipt.
 
@@ -492,14 +492,14 @@ Destroying an executor with queued response callbacks (including those with data
 ### REQ_PCL_164 - Invoke Async Routes Through Transport
 `pcl_executor_invoke_async()` shall route the service request through the transport adapter's `invoke_async` function pointer when a transport is set.
 
-**Traces**: PCL.030a
+**Traces**: PCL.011a, PCL.030a
 
 **Verification**: `test_pcl_robustness.cpp::InvokeAsyncRoutesViaTransport`.
 
 ### REQ_PCL_165 - Invoke Async Intra-Process Fallback
 `pcl_executor_invoke_async()` shall fall back to intra-process synchronous dispatch when no transport is set or when the transport's `invoke_async` is NULL. The service handler shall be invoked immediately and the callback fired before returning.
 
-**Traces**: PCL.030a, PCL.022
+**Traces**: PCL.011a, PCL.022, PCL.030a
 
 **Verification**: `test_pcl_robustness.cpp::InvokeAsyncIntraProcessFallback`.
 
@@ -1107,14 +1107,14 @@ When `pcl_socket_client_opts_t::auto_reconnect` is non-zero, the receive thread 
 
 **Traces**: PCL.032, PCL.036e
 
-**Verification**: Existing client connect tests against `"127.0.0.1"` exercise the getaddrinfo path via `ClientCreationAndDestroy` and `ClientExRetryConnectsToDelayedServer`.
+**Verification**: `test_pcl_socket_transport.cpp::ClientCreationAndDestroy` and `test_pcl_socket_transport.cpp::ClientExRetryConnectsToDelayedServer` exercise the getaddrinfo resolution path against `"127.0.0.1"`.
 
 ### REQ_PCL_197 - TCP Keepalive Enabled On Connected Sockets
 Every connected TCP socket (client-connect and server-accept) shall have `SO_KEEPALIVE` enabled. On Linux, `TCP_KEEPIDLE`, `TCP_KEEPINTVL`, and `TCP_KEEPCNT` shall be tuned so silent peer death is detected within approximately eight seconds.
 
 **Traces**: PCL.031, PCL.032, PCL.036e
 
-**Verification**: Implicit -- covered by `AutoReconnectAfterServerRestart` which depends on timely peer-death detection.
+**Verification**: `test_pcl_socket_transport.cpp::AutoReconnectAfterServerRestart` depends on timely peer-death detection via the keepalive settings.
 
 ### REQ_PCL_198 - UDP Transport Creation
 `pcl_udp_transport_create(local_port, remote_host, remote_port, executor)` shall bind a UDP socket on `local_port` (0 = ephemeral), resolve `remote_host:remote_port`, spawn a receive thread, and expose a `pcl_transport_t` vtable with `publish`, `subscribe`, and `shutdown` populated. It shall return NULL for NULL `remote_host` or NULL `executor`.
@@ -3127,3 +3127,35 @@ With a frame queued behind a wedged send hook, `pcl_transport_template_destroy()
 **Traces**: PCL.075, PCL.076
 
 **Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateDestroyWakesBlockedSendWorker`.
+
+## 35. Deferred Service Responses
+
+### REQ_PCL_459 - Deferred Service Response Round Trip
+A service handler may save its `pcl_svc_context_t` and return `PCL_PENDING`; a later call to `pcl_service_respond()` with that context shall deliver the response to the original caller's callback.
+
+**Traces**: PCL.011b
+
+**Verification**: `test_pcl_robustness.cpp::DeferredServiceResponse`, `test_pcl_executor.cpp::InvokeAsyncIntraProcessPendingResponse`.
+
+### REQ_PCL_460 - Deferred Response Null Safety And Context Release
+`pcl_service_respond()` shall return `PCL_ERR_INVALID` for a NULL context or NULL response, and the saved service context shall be releasable without leaking when the handler never responds.
+
+**Traces**: PCL.011b, PCL.045
+
+**Verification**: `test_pcl_robustness.cpp::ServiceRespondNullArgs`, `test_pcl_robustness.cpp::ServiceContextFree`.
+
+### REQ_PCL_461 - Deferred Response Through Transport
+When the request arrived through a transport with a `respond` vtable slot, `pcl_service_respond()` shall route the deferred response back through that transport.
+
+**Traces**: PCL.011b
+
+**Verification**: `test_pcl_robustness.cpp::ServiceRespondWithTransport`.
+
+## 36. Status Code Discrimination
+
+### REQ_PCL_462 - Status Codes Discriminate Failure Modes
+Each documented status code shall be returned by at least one exercised public API path: `PCL_OK` (any successful call), `PCL_ERR_INVALID` (NULL/invalid arguments), `PCL_ERR_STATE` (invalid lifecycle transition), `PCL_ERR_TIMEOUT` (graceful-shutdown timeout), `PCL_ERR_CALLBACK` (lifecycle callback failure), `PCL_ERR_NOMEM` (allocation failure or capacity overflow), `PCL_ERR_NOT_FOUND` (unknown topic/service/peer), and `PCL_ERR_PORT_CLOSED` (publish while inactive).
+
+**Traces**: PCL.047
+
+**Verification**: `test_pcl_lifecycle.cpp::InvalidTransitionsRejected` (ERR_STATE), `test_pcl_robustness.cpp::PublishOnInactiveContainerReturnsClosed` (ERR_PORT_CLOSED), `test_pcl_robustness.cpp::ParamOverflowReturnsNomem` (ERR_NOMEM), `test_pcl_robustness.cpp::DispatchToUnknownTopicReturnsNotFound` (ERR_NOT_FOUND), `test_pcl_robustness.cpp::GracefulShutdownTimeout` (ERR_TIMEOUT), `test_pcl_lifecycle.cpp::CallbackFailureAbortsTransition` (ERR_CALLBACK), `test_pcl_lifecycle.cpp::NullHandlesReturnError` (ERR_INVALID).
