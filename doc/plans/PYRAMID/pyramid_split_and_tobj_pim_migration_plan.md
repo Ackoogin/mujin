@@ -17,7 +17,22 @@ service as `Create` / `Read` / `Update` / `Cancel`.
 
 **Status:** proposed — not yet scheduled. Open decisions are listed at the
 end of each part; nothing below changes generator output or build behaviour
-until the phases run.
+until the phases run. **All open decisions (D1.1, D1.3, D2.1–D2.6) were
+resolved on 2026-07-07** — resolutions are recorded inline at each decision
+and consolidated in the "Decision resolutions" section below.
+
+## Decision resolutions (2026-07-07)
+
+| ID | Resolution | Note |
+|----|-----------|------|
+| D1.1 | **`PYRAMID_COMPONENTS`** | As recommended |
+| D1.3 | **Promote `pim/test/` to `PYRAMID_COMPONENTS/contracts/pim/`**, leaving a reduced synthetic fixture behind for generator tests | Departs from the "keep under capability" recommendation — commits to the split now rather than deferring it |
+| D2.1 | **Re-enable `pMatchingObjects` for Osprey** | As recommended |
+| D2.2 | **Hybrid: the Request port carries the criteria; the information port emits details tagged with the matching requirement id for tracing** | Refines the recommendation — correlation-by-requirement-id, not pure flat-topic + client-side ID filtering |
+| D2.3 | **Add `policy` to the common `ObjectDetailRequest`/`Requirement`** | As recommended — active-find is a common capability |
+| D2.4 | **Client-supplied UUIDs everywhere**; `Ack.identifier` echoes | As recommended |
+| D2.5 | **`pTPTrackControl` / `pTPRadarTrackData` out of scope** | As recommended — stamp kinds when radar integration picks them up |
+| D2.6 | **Frozen compat** for the legacy contract until first external consumer confirms migration, then retire | As recommended |
 
 ---
 
@@ -159,16 +174,18 @@ when `PYRAMID_PROTO_DIR` targets `pim/test`).
   knobs; keep them working (with deprecation notes) through P2, remove in
   a later release.
 - **Naming**: `PYRAMID_COMPONENTS` vs `PYRAMID_APPS` vs folding Tactical
-  Objects into its own `TACTICAL_OBJECTS` subproject. Recommendation:
-  `PYRAMID_COMPONENTS` (it holds several components plus examples, not
+  Objects into its own `TACTICAL_OBJECTS` subproject. **Resolved (D1.1):
+  `PYRAMID_COMPONENTS`** (it holds several components plus examples, not
   only apps); revisit per-component repos only when a second real
-  component ships. (Decision D1.1)
+  component ships.
 - **`pim/test/` ownership** (Decision D1.3): it is simultaneously the
-  generator's proving fixture and Part 2's production-bound contract. Keep
-  it under the capability while it is MBSE-regenerated from
-  `pim/mbse/test.json`; if/when the Osprey contract becomes a delivered
-  artifact, promote it to `PYRAMID_COMPONENTS/contracts/pim/` and leave a
-  reduced synthetic fixture behind for generator tests.
+  generator's proving fixture and Part 2's production-bound contract.
+  **Resolved (D1.3): promote it to `PYRAMID_COMPONENTS/contracts/pim/`**
+  and leave a reduced synthetic fixture behind for generator tests. (This
+  departs from keeping it under the capability: the split is taken now
+  rather than deferred until the Osprey contract is a delivered artifact —
+  P4's capability-test re-pinning therefore targets the synthetic fixture
+  from the outset.)
 
 ---
 
@@ -317,8 +334,8 @@ design avoided.
 | `ReadRequirement(Query) → stream ObjectInterestRequirement` | `Read(Query) → stream Requirement-wrapper` | Same shape; `Query` is id-list + `one_shot` in both trees |
 | `UpdateRequirement(...) → Ack` | `Update(Requirement-wrapper) → Ack` | Same shape; payload becomes the requirement wrapper |
 | `DeleteRequirement(Identifier) → Ack` | `Cancel(Identifier) → Ack` | Semantic shift: **cancellation, not deletion** — the A-GRA-derived pattern retains cancelled request objects for history/debrief; runtime must cancel the interest but keep the requirement record with a cancelled/rejected transition (harness already sequence-checks cancel → requirement transition) |
-| `Matching_Objects_Service.ReadMatch(Query) → stream ObjectMatch` | Information port (if D2.1 = re-enable): `Read(Empty) → stream ObjectMatch` | **Query parameter disappears** — information ports take no argument. Server-side match filtering moves to client-side filtering by header ids (flat-topic, filter-by-ID discipline), or matching stays query-driven via Object_Of_Interest requirements. No per-query streams |
-| `Specific_Object_Detail_Service.ReadDetail(Query) → stream ObjectDetail` | `Specific_Object_Detail_Service.Read(Empty) → stream ObjectDetail` wrapper | Same Query loss. If query-driven detail reads must survive, the model needs a Request port carrying `ObjectDetailRequest` criteria (the data model already defines it — evidence the modelled intent is criteria-carrying requests). Decision D2.2 |
+| `Matching_Objects_Service.ReadMatch(Query) → stream ObjectMatch` | Information port (D2.1 = re-enable): `Read(Empty) → stream ObjectMatch` | **Query parameter disappears** from the information port — but per D2.2 the criteria are carried by the paired Request port and each `ObjectMatch` tick is tagged with the originating requirement id, so consumers correlate by requirement id rather than filter blindly on header ids. No per-query streams |
+| `Specific_Object_Detail_Service.ReadDetail(Query) → stream ObjectDetail` | criteria-carrying Request port (`ObjectDetailRequest`) + `Specific_Object_Detail_Service.Read(Empty) → stream ObjectDetail` wrapper | Per D2.2 the Request port is in scope from the start: it carries the `ObjectDetailRequest` criteria (the data model already defines it), and the information-port detail ticks carry the matching requirement id for tracing |
 | publish `standard.entity_matches` (`ObjectMatch[]`) | `pim_osprey.matching_objects.information` | wire-name change ripples to every consumer/config; array topics use the stream-of-element convention already |
 | publish `standard.evidence_requirements` (`ObjectEvidenceRequirement`) | consumed Request port `Object_Solution_Evidence`: publish `TOBCreateTrackRadarRequest` on `pim_osprey.object_solution_evidence.request`, subscribe requirement transitions | evidence flow becomes a proper correlated request/requirement pair (acceptance + progress observable) instead of a fire-and-forget topic |
 | consume `standard.object_evidence` (`ObjectDetail`) | consumed Information port `Object_Evidence`: subscribe `pim_osprey.object_evidence.information` | direct analogue |
@@ -435,23 +452,23 @@ now against the real app).
 
 | Step | Work | Acceptance gate |
 |------|------|-----------------|
-| M0 | Resolve decisions D2.1–D2.6 (below) | recorded in this doc |
+| M0 | Resolve decisions D2.1–D2.6 (below) | ✅ done 2026-07-07 — recorded in this doc (§2.5 + Decision resolutions) |
 | M1 | Model edits: stamp port kinds (G1), re-enable/leave `pMatchingObjects` per D2.1, add missing fields/refinements (G4); regenerate `pim/test/` | regeneration drift is exactly the intended new services/fields; wrapper oneofs carry the interest variants; viability + comms harness green; Ada object-compile stays 174/174 (plus new units) |
 | M2 | Part 1 P1 lands (per-contract CMake seam) | legacy build byte-identical via compat invocation |
 | M3 | New adapter (`PimBridge` or `StandardBridge` v2) on the generated facade + `tactical_objects_app` variant hosting the Osprey contract; legacy app untouched | app serves Create/Read/Update/Cancel + information topics over JSON; facade-only (no raw PCL) — E5 satisfied for the new path |
 | M4 | Port clients/examples/tests; run legacy and PIM apps side by side; conformance parity matrix (JSON/FB/protobuf codecs × socket/shm transports × C++/Ada clients, plus gRPC + typed-ROS2 smoke) | parity matrix green; sequence checks (create→acceptance, cancel→transition) green; legacy suite still green untouched |
 | M5 | Switchover: PIM contract becomes the shipped Tactical Objects surface; `standard_alignment_plan.md` rewritten as the new-current-state reference (legacy sections marked historical); decide legacy contract retirement vs frozen-compat (D2.6) | docs updated; TODO E5 + the "Tactical Objects bulk-detail" WS-D row re-evaluated against the new stream design |
 
-## 2.5 Open decisions
+## 2.5 Open decisions — resolved 2026-07-07
 
-| ID | Decision | Recommendation |
-|----|----------|----------------|
-| D2.1 | Re-enable `pMatchingObjects` for Osprey (structure override) vs drop the match stream | Re-enable — keeps the compact high-rate path (G2) |
-| D2.2 | Query-parameterised detail/match reads: accept flat-topic + client-side ID filtering, or add a criteria-carrying Request port using `ObjectDetailRequest` | Flat-topic + ID filtering for the stream; add the Request port only if a consumer demonstrably needs server-side criteria (the data model is ready either way) |
-| D2.3 | Home for `DataPolicy` (Query/Obtain → ReadCurrent/ActiveFind) | Add `policy` to `ObjectDetailRequest`/`Requirement` in the model — active-find is a common capability, not radar-specific |
-| D2.4 | Requirement id policy: server-assigned (via `Ack.identifier`, RPC routes) vs client-supplied `Entity.id` (PUBSUB routes) | Client-supplied UUIDs everywhere (A-GRA discipline); `Ack.identifier` echoes it, keeping one rule across transports |
-| D2.5 | Scope of `pTPTrackControl` / `pTPRadarTrackData` (Osprey radar/track ports) in this migration | Out of scope for legacy parity; stamp kinds when the radar integration work picks them up |
-| D2.6 | Legacy contract fate after switchover | Frozen compat (matches the `standard_topics.py` precedent): legacy app + suite kept building until the first external consumer confirms migration, then retire |
+| ID | Decision | Resolution |
+|----|----------|------------|
+| D2.1 | Re-enable `pMatchingObjects` for Osprey (structure override) vs drop the match stream | **Re-enable** — keeps the compact high-rate path (G2) |
+| D2.2 | Query-parameterised detail/match reads: accept flat-topic + client-side ID filtering, or add a criteria-carrying Request port using `ObjectDetailRequest` | **Hybrid: the Request port carries the criteria; the information port then emits the details tagged with the matching requirement id for tracing.** Correlation is by requirement id, not client-side header filtering — so the criteria-carrying Request port (using `ObjectDetailRequest`) is in scope from the start, and detail/match stream ticks carry the originating requirement id so consumers correlate rather than filter blindly. |
+| D2.3 | Home for `DataPolicy` (Query/Obtain → ReadCurrent/ActiveFind) | **Add `policy` to `ObjectDetailRequest`/`Requirement`** in the model — active-find is a common capability, not radar-specific |
+| D2.4 | Requirement id policy: server-assigned (via `Ack.identifier`, RPC routes) vs client-supplied `Entity.id` (PUBSUB routes) | **Client-supplied UUIDs everywhere** (A-GRA discipline); `Ack.identifier` echoes it, keeping one rule across transports |
+| D2.5 | Scope of `pTPTrackControl` / `pTPRadarTrackData` (Osprey radar/track ports) in this migration | **Out of scope** for legacy parity; stamp kinds when the radar integration work picks them up |
+| D2.6 | Legacy contract fate after switchover | **Frozen compat** (matches the `standard_topics.py` precedent): legacy app + suite kept building until the first external consumer confirms migration, then retire |
 
 ## 2.6 What this does *not* require
 
