@@ -406,8 +406,10 @@ Representative sequence (DCA vignette from the OV-1):
    drain-mode stop of the run, run record retained for MD.
 
 A fully message-identified version of this shape (FIND_SEARCH tasking →
-Routes/VI route lifecycle → PO/EO sensor control → track report, plus the
-approval-gated replan variant) is worked through in
+PO/EO sensor control with route control delegated down the sensing chain —
+Sensing places the pose/coverage requirement on Routes, which flies it via
+the VI route lifecycle — → track report, plus tiered contingency variants
+including an approval-gated replan) is worked through in
 [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md).
 
 ### 5.3 Genuine gaps (where AME needs new capability, not just translation)
