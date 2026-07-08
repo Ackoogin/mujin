@@ -12,6 +12,11 @@ AME.
 message-level worked example (planning → routing + EO/PO sensor control) with
 sequence diagrams, PYR-RESP conformance matrix, and a service-over-pub/sub
 alignment analysis for the PCL/PYRAMID bindings.
+[`ams_gra_starter_kit_review.md`](ams_gra_starter_kit_review.md) (2026-07-08)
+— review of the sibling **AMS GRA** hello-world starter kit: a public
+LA-CAL/OMS/UCI simulation environment relevant to the onboard MS leg and the
+"OMS/CAL access may be controlled" risk below, plus MEL data-plane mappings
+onto PCL.
 **Inputs reviewed:** `A-GRA_MessageDefinitions_v5_0_a.xsd` (155,020 lines, 8.6 MB),
 `A-GRA_SecurityMarkings_v5_0_a.xsd` (5,472 lines), ASK 5.0a Start Here Guide
 (public release, 21 APR 2026), and the eight interface-volume PDFs from the
@@ -780,6 +785,11 @@ contract. Phases 3–4 are where genuinely new capability lives.
   specification (DDS settings, topic mappings, IDL, QoS) referenced but not
   included in the public ASK drop; OMS/CAL access may be controlled. Actual
   compliance work has external-artefact dependencies to confirm early.
+  *Update 2026-07-08:* the OMS/CAL leg is partially mitigated for
+  prototyping — the AMS GRA hello-world starter kit ships a public LA-CAL
+  (WebSocket+JSON) implementation and UCI simulation environment; see
+  [`ams_gra_starter_kit_review.md`](ams_gra_starter_kit_review.md) §5.
+  EXI/DMS remains unmitigated.
 - **Standard churn.** 5.0a is the first public release (Apr 2026), two
   commits in the repo; field numbering/versioning discipline for regenerated
   protos must be designed in from the start (deterministic field numbers from
@@ -800,6 +810,7 @@ contract. Phases 3–4 are where genuinely new capability lives.
 ## 9. References
 
 - Worked E2E example (companion doc): [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md)
+- AMS GRA starter kit review (companion doc): [`ams_gra_starter_kit_review.md`](ams_gra_starter_kit_review.md)
 - A-GRA repository: https://github.com/open-arsenal/a-gra (Schema/, Documentation/, ASK 5.0a Start Here Guide); local copy at `doc/research/AME/a-gra-main/`
 - USAF A-GRA/CCA reporting: [The Aviationist](https://theaviationist.com/2026/02/14/usaf-integrates-a-gra-architecture-mission-autonomy-ccas/), [ExecutiveGov](https://www.executivegov.com/articles/air-force-a-gra-cca-open-architecture)
 - In-repo: `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.autonomy.proto`,
