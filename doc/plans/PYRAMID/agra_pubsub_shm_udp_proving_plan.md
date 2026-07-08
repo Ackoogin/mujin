@@ -328,3 +328,120 @@ To be filled per phase on execution, in the style of the pubsub plan's
 progress ledger (commands run, pass/fail, counts, diffs). Empty at
 plan-authoring time (2026-07-08); §1 above records the pre-plan baseline
 evidence.
+
+### Phase A — executed 2026-07-08
+
+New harness: `subprojects/PYRAMID/pim/test_harness/routed_egress_shm_test.cpp`
++ `build_routed_egress_test.sh`/`.bat`. Reuses the existing `pim/test`
+contract's `pim_osprey.sensor_products` request/requirement/information
+topics (the same vehicle `components_comms_test.cpp` already exercises
+in-process) driven through the generated `publish*`/`subscribe*` helpers and
+the JSON codec, but routed via `pcl_transport_routing_load` loading the real
+`libpcl_transport_shared_memory_plugin.so` from a hand-authored manifest
+(`contract_routing_manifest.py` is tuned for the NULL-vtable
+`contract_transport_plugin.c` stub and doesn't emit `bus_name`/
+`participant_id` config, so this harness writes its own manifest text
+per `pcl_transport_routing.h`'s documented grammar).
+
+Two scenarios, both green on Linux from a clean build
+(`bash build_routed_egress_test.sh`):
+
+1. **Two executors, one process, one SHM bus.** Each executor loads its own
+   instance of the SHM plugin via `pcl_transport_routing_load`, sharing a
+   `bus_name`. Full request/requirement/information round trip plus the
+   cancel-transition conformance check, all delivered over the real bus (not
+   local dispatch) — verified by asserting on both sides' observed state, not
+   just the publish-call return code.
+2. **Same routing setup split across two OS processes**, `fork()` +
+   `execv()` of the harness binary itself with `--role=provider|consumer`
+   (mirroring `pcl_shm_peer_helper.cpp`'s spawn/ready-file/result-file
+   synchronization pattern, but driving the manifest-routed generated
+   helpers instead of the direct transport API). Both processes exit 0 and
+   their result files confirm the request, information, and both
+   requirement transitions (create + cancel) crossed the real inter-process
+   SHM bus.
+
+**Seam bug found and root-caused (harness/manifest-authoring level, not a
+PCL defect):** naming both sides' local transport peer alias `shm_peer`
+made the same-process scenario silently drop every subscriber-side message.
+`pcl_executor_validate_endpoint_route` requires a route's peer names to
+match a *locally-registered* transport peer (confirmed intentional and
+pinned by `test_pcl_capabilities.cpp`'s `ValidateRouteFailsClosedOnMissingPeer`/
+`ValidatePubsubEndpointOverPubsubTransport`), while the executor's runtime
+ingress filter (`peer_is_allowed` in `pcl_executor.c`) compares route peer
+names against the *remote sender's* participant identity, since the SHM
+plugin posts `pcl_executor_post_remote_incoming(exec, frame->source_id,
+topic, msg)`. Those are two different namespaces that happen to share one
+field. The fix (in the harness's manifest generation, not PCL): alias each
+side's local transport peer name after its *counterpart's* actual
+`participant_id` (e.g. the consumer's manifest registers its SHM transport
+under the local alias `"provider"`), which satisfies both checks at once for
+a two-party correlated pair. Recorded here as a real, load-bearing
+authoring convention for any future manifest (hand-authored or generated)
+that routes a shared multi-participant bus transport (SHM today; would also
+apply to any future N:1 pub/sub bus plugin) — `contract_routing_manifest.py`
+does not need to change for this plan's remaining phases since Phase B/C's
+manifests will be hand/harness-authored the same way, but this is a D-list
+candidate if/when route derivation is taught to target SHM.
+
+**Regression check:** `build_contract_routing_test.sh`
+(`contract_routing_validation=pass transports=2`) and `build_comms_test.sh`
+(JSON + FlatBuffers rounds, 0 failures) both re-ran green after this change;
+no generated-output diffs outside the new harness's own scratch
+directories (`generated_routed_egress/`, `routed_egress_scratch/`, both
+gitignored).
+
+**Accept criteria met:** contract-generated payloads (via the existing
+`pim_osprey` contract, not a new one) observed crossing a real SHM bus
+between two processes, loaded from a routing manifest driving the real
+plugin; existing in-process comms test still green; no generated-output
+diffs outside the harness. Phase A's purpose — de-risking the
+container-port -> executor-route -> plugin-egress -> remote-executor-ingress
+-> subscriber-callback seam before the new A-GRA contract work stacks on
+it — is discharged: the seam works via the manifest-routing path, provided
+the peer-alias convention above is followed.
+
+**Carried note:** Windows parity (`build_routed_egress_test.bat`) authored,
+not run, in this Linux environment — same carried note as the rest of this
+plan's Windows story.
+
+### Phase B — executed 2026-07-08
+
+New tree: `subprojects/PYRAMID/pim/agra_example/` (5 proto files: vendored
+`pyramid.options`/`pyramid.data_model.{base,common}`, new
+`pyramid.data_model.agra` with `MA_Action`/`MA_ActionPlan`, and the
+`agra.mission_autonomy` provided / `agra.c2_station` consumed service
+files per §3.2/§3.3) + `README.md` (A-GRA correspondence table, MA-L1-013
+topic-naming note) + `pim/test_agra_example.py` (checksum guard + parser
+classification tests).
+
+`python3 pim/generate_bindings.py pim/agra_example <out> --languages cpp
+--backends json` -- clean: 5 proto files, 38 messages, 7 enums, 4 services,
+16 files generated, `binding_manifest.json`'s `topics`/`endpoint_requirements`
+carry exactly the three topics from §3.3 with the right floors:
+
+```
+agra.ma_action.request            reliable
+agra.ma_action.requirement         reliable
+agra.ma_action_plan.information    best_effort
+```
+
+`--languages ada` generation also clean (13 files); object-compiling those
+requires GNAT/gprbuild, not installed in this environment -- carried note,
+same as the plan's other Ada/Windows items (matches the existing
+`pyramid_ada_all` carried-note convention in `CLAUDE.md`).
+
+`python3 -m unittest subprojects.PYRAMID.pim.test_proto_parser
+subprojects.PYRAMID.pim.test_agra_example` -- 6 tests, OK: both services
+classify correctly with options present (request/information, correct
+topic + QoS incl. the BEST_EFFORT stamp surviving into `ProtoRpc.qos`);
+identically with a copy of the provided-side proto stripped of every
+`pyramid_op` option block (classifier fallback); the three vendored files
+are byte-identical (sha256) to their `pim/test/` originals.
+
+**Accept criteria met:** generation clean for C++ and Ada (object-compile
+bar carried as a note, per above); manifest endpoint requirements as
+specified; legacy (`proto/`) and `pim/test/` untouched and regenerate
+byte-identical throughout (this phase only added new files under
+`pim/agra_example/` and `pim/test_agra_example.py` -- `git status` confirms
+no modification to any existing generated-output-affecting file).
