@@ -359,6 +359,12 @@ artefacts is a standing requirement throughout.
 
 ### Progress ledger — 2026-07-02
 
+> **Reviewed 2026-07-08:** every ledger claim below was re-verified against
+> the tree with the harness suites re-run green (details in
+> [`agra_pubsub_shm_udp_proving_plan.md`](agra_pubsub_shm_udp_proving_plan.md)
+> §1). The follow-on data-plane proof — an A-GRA-vocabulary example contract
+> over the real shared-memory and UDP transports — is planned there.
+
 Phases 0-5 have been implemented using the recommended **C1 + A,
 layered** option. Phases 0-3 were committed as
 `7e97368` (`Implement PYRAMID pubsub contract phases 0-3`); Phases 4-5 are
