@@ -445,3 +445,52 @@ specified; legacy (`proto/`) and `pim/test/` untouched and regenerate
 byte-identical throughout (this phase only added new files under
 `pim/agra_example/` and `pim/test_agra_example.py` -- `git status` confirms
 no modification to any existing generated-output-affecting file).
+
+### Phase C — executed 2026-07-08
+
+New harness: `subprojects/PYRAMID/pim/test_harness/agra_shm_comms_test.cpp`
++ `build_agra_shm_comms_test.sh`/`.bat`. MissionAutonomy (`ma`) and
+C2Station (`c2`) processes, each its own executor + routing manifest
+loading the real SHM plugin (same peer-alias-matches-counterpart-
+participant-id convention Phase A established), driving the A-GRA example
+contract's correlated request/requirement pair cross-process:
+
+1. C2 publishes `MA_Action` (FIND_SEARCH, target AOI-1, EMCON/keep-out
+   constraints) on `agra.ma_action.request`, correlated by id `action-1`.
+2. MA observes it and publishes three requirement transitions on
+   `agra.ma_action.requirement` (acceptance RECEIVED -> progress
+   IN_PROGRESS -> COMPLETED), all bearing id `action-1`; C2 observes each.
+3. C2 publishes the cancel variant for a second, concurrently-tracked
+   action (`action-2`) on the same flat topic; MA publishes the CANCELLED
+   transition (id `action-2`); C2 observes it.
+4. Correlation/conformance checks: action-1's log has >=3 transitions
+   ending COMPLETED and never contains CANCELLED; action-2's log ends
+   CANCELLED and never contains COMPLETED -- proving correlation is by
+   Entity.id on a flat topic space, not accidental ordering.
+5. The whole sequence runs twice, fresh bus + fresh processes each time:
+   JSON codec first, then FlatBuffers.
+
+**Seam found and fixed in the build script (packaging, not a PCL/generator
+defect):** `mission_autonomy` (provided) and `c2_station` (consumed) are
+two distinct generated packages, and each package's JSON/FlatBuffers codec
+plugin exports the identical `extern "C" pcl_codec_plugin_entry` symbol --
+statically linking both packages' plugin sources into one binary collides
+at link time. Fixed by building four small per-role/per-codec `.so`s
+(`lib{ma,c2}_agra_{json,flatbuffers}_codec.so`) and `dlopen`ing the
+role-appropriate one per process via `pcl_plugin_load_codec`, the same
+mechanism `components_comms_test.cpp` already uses for its single
+FlatBuffers plugin -- just applied to JSON too, since here there are two
+packages instead of one.
+
+`bash build_agra_shm_comms_test.sh` -- clean generate, all four codec
+`.so`s and the harness build cleanly, JSON and FlatBuffers runs both
+green (0 failures), stable across 3 repeated runs. Regression check:
+`build_contract_routing_test.sh` and `build_routed_egress_test.sh`
+(Phase A) both re-ran green afterwards.
+
+**Accept criteria met:** green on Linux from a clean generate; compose-time
+validation passes using only contract-derived endpoint requirements
+(RELIABLE floor) against the real SHM plugin's declared caps/QoS (no
+NULL-vtable stub involved anywhere in this harness); `.bat` parity
+authored (carried note, not run, same as the rest of this plan's Windows
+story).
