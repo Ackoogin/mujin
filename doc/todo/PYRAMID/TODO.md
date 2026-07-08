@@ -11,7 +11,8 @@ consolidates the remaining items from:
 | [`transport_plugins.md`](../../plans/PYRAMID/transport_plugins.md) | Capability statement + detail for the ROS2 typed-wire work (WS-A) and deferred transport items |
 | [`architecture_cleanup_plan.md`](../../plans/PYRAMID/architecture_cleanup_plan.md) | Detail for the structural cleanup items (WS-C); items 1–2 executed |
 | [`generator_refactor_plan.md`](../../plans/PYRAMID/generator_refactor_plan.md) | **Executed 2026-07-03**; its recorded follow-ups are tracked here (B1, C4, C5, D-list) |
-| [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md) | **Executed 2026-07-02** (phases 0–5); carried-forward notes tracked here (C5, D-list) |
+| [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md) | **Executed 2026-07-02** (phases 0–5, re-verified green 2026-07-08); carried-forward notes tracked here (C5, D-list) |
+| [`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md) | **New plan (2026-07-08, not yet scheduled):** A-GRA example contract pub/sub over real SHM + UDP transports, data-plane proof (phases A–E); includes the 2026-07-08 status review of the pubsub plan |
 | [`standard_alignment_plan.md`](../../plans/PYRAMID/standard_alignment_plan.md) | Stable design reference for Tactical Objects; one open design point (D-list) |
 | [`review_pyramid_bindings_pluggability.md`](../../reviews/PYRAMID/review_pyramid_bindings_pluggability.md) | Review record; facade closure steps 1–7 done, step 8 tracked here (C6) |
 | [`in_process_service_pubsub_todo.md`](../../reports/PYRAMID/in_process_service_pubsub_todo.md) | Review record for local-peer service/pub/sub facade gaps; closure items tracked in WS-E |
