@@ -600,3 +600,67 @@ scenario with the word `reliable` swapped to `best_effort` in the
 manifest text, which duplicates rather than adds evidence. Noted here
 per the plan's requirement to record the policy explicitly rather than
 leave it implicit.
+
+### Phase E — executed 2026-07-08 (plan-terminal)
+
+New harness: `subprojects/PYRAMID/pim/test_harness/agra_mixed_route_test.cpp`
++ `build_agra_mixed_route_test.sh`/`.bat`. MissionAutonomy and C2Station
+each load **two transports from one routing manifest**:
+
+```
+transport <peer>    libpcl_transport_shared_memory_plugin.so {"bus_name":"agra_mixed_<run>","participant_id":"<own>"}
+transport info_udp   libpcl_transport_udp_plugin.so           {"remote_host":"127.0.0.1","remote_port":<peer_port>,"local_port":<own_port>,"peer_id":"info_udp"}
+
+route agra.ma_action.request           subscriber|publisher  <peer>     reliable
+route agra.ma_action.requirement       publisher|subscriber  <peer>     reliable
+route agra.ma_action_plan.information  publisher|subscriber  info_udp  best_effort
+```
+
+(`<peer>` follows Phase A/C's counterpart-participant-id alias convention
+for the shared SHM bus; `info_udp` is an arbitrary shared label, per
+Phase D's finding that UDP's peer identity is a purely local config
+value.) One invocation runs, per codec (JSON then FlatBuffers):
+
+1. A replay of Phase D's negative gate (compose-time only, throwaway
+   executor): the RELIABLE `agra.ma_action.requirement` topic over the
+   real UDP plugin still fails closed (`PCL_ERR_STATE`, diagnostic naming
+   both reliabilities) -- carried forward rather than assumed.
+2. Both processes load their manifest and assert
+   `pcl_transport_routing_transport_count(routing) == 2`.
+3. The complete worked-example sequence: C2 tasks `MA_Action` (FIND_SEARCH,
+   AOI-1, EMCON/keep-out) over the **SHM** correlated pair; MA responds
+   with RECEIVED -> IN_PROGRESS -> COMPLETED transitions (also over SHM)
+   and, once tasking is underway, publishes the `MA_ActionPlan` product
+   over **UDP** (re-published across attempts to absorb datagram loss, as
+   Phase D established); C2 publishes the cancel variant for a second,
+   concurrently-tracked action over SHM and observes the CANCELLED
+   transition; correlation-by-id and non-conflation checks from Phase C
+   are reused verbatim, plus a check that the UDP-received plan's
+   `action_id` correlates to the SHM-tasked action.
+
+`bash build_agra_mixed_route_test.sh` -- clean generate, negative gate
+replay passes, both codec runs green (0 failures) with both processes
+reporting `transports=2` and non-empty transition/information counts
+(bytes demonstrably moved on **both** legs, not just one), stable across
+3 repeated runs. Regression check: `build_contract_routing_test.sh`,
+`build_comms_test.sh`, `build_routed_egress_test.sh` (Phase A),
+`build_agra_shm_comms_test.sh` (Phase C), and `build_agra_udp_proof_test.sh`
+(Phase D) all re-ran green afterwards; `git status` after the full sweep
+shows only this phase's new files -- legacy `proto/` and `pim/test/`
+untouched throughout the entire plan's execution.
+
+**Accept (plan-terminal) criteria met:** `agra_mixed_route_test` green on
+Linux from a clean checkout (generate -> compose-time validation -> run);
+`transports=2` **with bytes moved on both** (SHM: 4 requirement
+transitions per run; UDP: information topic received, `>=1` per run);
+sequence checks pass; negative gate replayed; legacy + `pim/test`
+byte-identical (only this plan's own new files are untracked/changed).
+Ada parity is carried, not discharged, in this environment (no
+GNAT/gprbuild -- consistent with every earlier phase's carried note and
+`CLAUDE.md`'s own `pyramid_ada_all` note); Windows parity
+(`.bat` scripts) is authored, not run, for the same reason throughout.
+
+This closes the plan end to end: after Phase E there exists a concrete,
+regenerable, A-GRA-vocabulary contract whose correlated-pair and
+information topics demonstrably run over two real transports with
+contract-derived routing and QoS, as §5 of this plan anticipated.
