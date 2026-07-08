@@ -542,3 +542,61 @@ deployer to notice. This is a design gap in the generator/facade layer
 remaining phases (D/E) need to resolve to reach their own accept criteria
 -- recorded here as a carried follow-up, candidate for the D-list
 alongside this plan's other carried notes.
+
+### Phase D — executed 2026-07-08
+
+New harness: `subprojects/PYRAMID/pim/test_harness/agra_udp_proof_test.cpp`
++ `build_agra_udp_proof_test.sh`/`.bat`. Two scenarios against the same
+generated bindings Phase C used:
+
+1. **Negative gate (compose-time only, single process):** a manifest
+   routing `agra.ma_action.requirement` (RELIABLE-stamped in the contract)
+   publisher-kind over the real `libpcl_transport_udp_plugin.so`
+   (BEST_EFFORT-declared) is loaded via `pcl_transport_routing_load` and
+   asserted to fail closed: `rc == PCL_ERR_STATE` (not a parse/config
+   error), diagnostic names both reliabilities and the offending endpoint
+   (`endpoint 'agra.ma_action.requirement' requires reliability 'reliable'
+   but peer 'peer_udp' offers 'best_effort'`), and the failed load leaves
+   nothing registered (`pcl_transport_routing_transport_count() == 0`).
+   First exercise of the transport-codec-plugin-system's §5.4
+   reconciliation rule against a real BEST_EFFORT transport.
+2. **Positive proof (two processes, real datagrams):** `agra.ma_action_plan.information`
+   (the contract's BEST_EFFORT-stamped topic -- the contractually
+   legitimate floor for this transport) round-trips over real UDP on
+   per-run-unique loopback ports (`20000 + f(pid)`): MA publishes three
+   `MA_ActionPlan` objects (re-published across 5 attempts, 50ms apart, to
+   absorb UDP's inherent datagram loss on the *positive* leg without
+   masking a real delivery failure), C2 subscribes, decodes, and verifies
+   content (`action_id`, `summary`) end to end.
+
+**A genuine simplification vs. SHM, not a new bug:** UDP's `peer_id` is a
+purely local config label the transport itself stamps on every
+`pcl_executor_post_remote_incoming` call (`pcl_transport_udp.c`'s
+`ctx->peer_id`, default `"default"`, overridable via the `peer_id` config
+key) -- it is never derived from the sender's actual address. Because this
+transport is strictly point-to-point (one `remote_host`/`remote_port`
+target, unlike SHM's shared multi-participant bus), the local manifest
+peer alias and the ingress `peer_id` can simply be the same chosen string
+(`"peer_udp"` here) on both sides -- Phase A's counterpart-alias
+convention is an SHM-specific workaround for a shared-bus transport, not
+a general rule for every transport plugin.
+
+`bash build_agra_udp_proof_test.sh` -- clean generate, both scenarios
+green (0 failures), stable across 3 repeated runs. Regression check:
+`build_contract_routing_test.sh` and `build_agra_shm_comms_test.sh`
+(Phase C) both re-ran green afterwards.
+
+**Deploy-time downgrade path (documented, not built as a mechanism):** the
+plan's §4 Phase D.3 calls for documenting the explicit operator choice to
+carry the RELIABLE-shaped correlated pair over UDP by writing
+`best_effort` as the route's reliability floor -- i.e. a deploy-time
+policy decision at the manifest layer (`route agra.ma_action.request
+publisher <peer> best_effort` instead of `reliable`), never a silent
+default. This harness does not add a third scenario for it: the negative
+gate above already demonstrates the mechanism (the route's floor keyword
+is exactly this knob) from the failing side; exercising it from the
+passing side would just be the same `agra_udp_proof_test` positive
+scenario with the word `reliable` swapped to `best_effort` in the
+manifest text, which duplicates rather than adds evidence. Noted here
+per the plan's requirement to record the policy explicitly rather than
+leave it implicit.
