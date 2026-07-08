@@ -362,8 +362,11 @@ artefacts is a standing requirement throughout.
 > **Reviewed 2026-07-08:** every ledger claim below was re-verified against
 > the tree with the harness suites re-run green (details in
 > [`agra_pubsub_shm_udp_proving_plan.md`](agra_pubsub_shm_udp_proving_plan.md)
-> §1). The follow-on data-plane proof — an A-GRA-vocabulary example contract
-> over the real shared-memory and UDP transports — is planned there.
+> §1). **Executed 2026-07-08:** that plan's follow-on data-plane proof — an
+> A-GRA-vocabulary example contract over the real shared-memory and UDP
+> transports, phases A-E — is complete (§6 there is the evidence ledger);
+> this plan's §7 "mostly renaming, not re-plumbing" bridge argument now has
+> a concrete contract artefact behind it (`pim/agra_example/`).
 
 Phases 0-5 have been implemented using the recommended **C1 + A,
 layered** option. Phases 0-3 were committed as

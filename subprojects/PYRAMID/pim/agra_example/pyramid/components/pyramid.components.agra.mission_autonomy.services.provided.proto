@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package pyramid.components.agra.mission_autonomy.services.provided;
+
+import "google/protobuf/empty.proto";
+import "pyramid/options/pyramid.options.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.agra.proto";
+
+// Request port 'pMAAction' (provided): the A-GRA C2/ActionRequest-2
+// correlated pair, C2 -> MA. See
+// doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md §3.2/§3.3.
+message MAAction_Service_Request {
+  oneof payload {
+    pyramid.data_model.agra.MA_Action ma_action = 1;
+    pyramid.data_model.base.Identifier cancel = 2;
+  }
+}
+
+// Requirement transitions carry Achievement's acceptance layer
+// (RECEIVED/REJECTED + reason) so a status transition -- the
+// MA_ActionStatus analogue -- is an ordinary requirement transition, per
+// the pubsub plan's §3 mapping.
+message MAAction_Service_Requirement {
+  oneof payload {
+    pyramid.data_model.common.Requirement ma_action_status = 1;
+  }
+}
+
+// Request port 'pMAAction' (provided) refining MAAction: the correlated
+// request/requirement pair, stamped RELIABLE (intended transport: SHM).
+service MAAction_Service {
+  rpc Create(MAAction_Service_Request) returns (pyramid.data_model.common.Ack) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "agra.ma_action.request"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
+  rpc Read(pyramid.data_model.common.Query) returns (stream MAAction_Service_Requirement) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: PUBLISH
+      topic: "agra.ma_action.requirement"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
+  rpc Update(MAAction_Service_Requirement) returns (pyramid.data_model.common.Ack) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "agra.ma_action.request"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
+  rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "agra.ma_action.request"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
+}
+
+// Information port 'pMAActionPlan' (provided): the Data-1 publication C2
+// reads before approving. Deliberately stamped BEST_EFFORT -- see plan
+// §3.3 -- to exercise the §5.4 reconciliation rule (contract floor <=
+// transport ceiling) against a real BEST_EFFORT transport (intended
+// transport: UDP).
+message MAActionPlan_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_ActionPlan ma_action_plan = 1;
+  }
+}
+
+service MAActionPlan_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MAActionPlan_Service_Information) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: PUBLISH
+      topic: "agra.ma_action_plan.information"
+      qos: { reliability: BEST_EFFORT durability: VOLATILE depth: 10 }
+    };
+  }
+}
