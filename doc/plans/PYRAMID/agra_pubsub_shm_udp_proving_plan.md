@@ -494,3 +494,51 @@ validation passes using only contract-derived endpoint requirements
 NULL-vtable stub involved anywhere in this harness); `.bat` parity
 authored (carried note, not run, same as the rest of this plan's Windows
 story).
+
+### Follow-up observation: the RPC/pub-sub seam duality (found during Phase C)
+
+Every `rpc Create/Read/Update/Cancel` method in the 4-rpc Request shape
+generates **two independent, coexisting bindings**, not one:
+
+1. **RPC seam** -- `invoke*`/`dispatch*`, `pcl_container_add_service`,
+   `pcl_executor_invoke_async`, endpoint kind `consumed`/`provided`, keyed
+   by the raw service name (e.g. `ma_action.create`).
+2. **Pub/sub seam** -- `publish*`/`subscribe*`, `pcl_container_add_publisher`/
+   `add_subscriber`, `pcl_executor_publish_port`, endpoint kind
+   `publisher`/`subscriber`, keyed by the topic string (e.g.
+   `agra.ma_action.request`).
+
+Both appear side by side in `binding_manifest.json` for the identical rpc
+(confirmed for `MAAction_Service.Create`: `ma_action.create` rows with
+kind `consumed`/`provided` *and* `agra.ma_action.request` rows with kind
+`publisher`/`subscriber`). The `pyramid.options.pyramid_op` pattern stamp
+(`SUBSCRIBE`/`PUBLISH` vs `UNARY`) is advisory metadata about which seam a
+deployment *intends* to wire -- it does not disable the other, and nothing
+reconciles a manifest that routes both for the same rpc. Every harness in
+this plan (and `contract_routing_manifest.py`'s `service_route`
+derivation) only ever exercises one seam per rpc; the other stays
+generated but dormant and untested.
+
+**The ideal shape is one of two things, not the current dual-generation
+with no declared relationship between the halves:**
+
+- **(a) Bindings always use service/RPC semantics internally and project
+  to pub/sub at the transport layer** -- i.e. the generated facade exposes
+  one API surface (service-shaped: request/response with correlation), and
+  the routing/transport layer is what decides whether that gets realised
+  as a unary RPC call or as a publish + correlated-subscribe pair
+  underneath, transparently to handwritten component code; or
+- **(b) both seams are generated but explicitly interchangeable** -- a
+  single facade method whose backing wire mechanics (RPC vs pub/sub) are a
+  route-config choice (in the same spirit as WS-E's `configureTransport`/
+  `configurePubSubTransport` local-vs-remote choice), with the generator
+  and/or a compose-time check making clear that routing both seams for the
+  same rpc is redundant/conflicting rather than silently allowed.
+
+Today it is neither: two independently generated, independently routable
+bindings for the same contract element, whose relationship is left to the
+deployer to notice. This is a design gap in the generator/facade layer
+(`generate_bindings.py` / the WS-E facade work), not something this plan's
+remaining phases (D/E) need to resolve to reach their own accept criteria
+-- recorded here as a carried follow-up, candidate for the D-list
+alongside this plan's other carried notes.
