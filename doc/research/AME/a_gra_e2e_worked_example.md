@@ -49,11 +49,14 @@ PCL/PYRAMID binding system are treated separately in
   activity requires and places it on Routes, which flies it via the Vehicle
   Interface route-plan lifecycle (`RoutePlan` upload → validate → activate).
 
-One nominal pass, then two contingency variants: (a) EO field-of-regard
+One nominal pass, then three mid-execution variants: (a) EO field-of-regard
 degrades mid-search → **Sensing-local** re-position via Routes, invisible to
 the mission planner; (b) EO fails outright → escalation up the requirement
 chain → AME contingency replan (return to rally point), held for approval per
-`MA_ApprovalPolicy`.
+`MA_ApprovalPolicy`; (c) **pop-up classification tasking** — candidate
+detections spawn new sensing actions whose route requirements were not known
+at plan time, absorbed by Sensing/Routes arbitration without a mission
+replan (§5c).
 
 ---
 
@@ -426,12 +429,12 @@ placements — review §6.8.
 
 ---
 
-## 5. Contingency variants: tiered recovery under delegated route control
+## 5. Mid-execution dynamics: tiered recovery and pop-up tasking
 
-Delegation restructures contingency handling into **tiers**: each component
-first recovers within its own solution envelope, and escalates up the
-requirement chain only when its envelope is exhausted. The recovery ladder
-for this thread:
+Delegation restructures mid-execution change handling into **tiers**: each
+component first absorbs change within its own solution envelope, and
+escalates up the requirement chain only when its envelope is exhausted. The
+ladder for this thread:
 
 | Tier | Component | Recovery within envelope | Escalates when |
 |---|---|---|---|
@@ -440,10 +443,15 @@ for this thread:
 | 2 | SDI | swap interpretation solution / provision dependency (PYR-RESP-0631/0632) | no solution for the requirement |
 | 3 | Tasks (AME) | replan against updated facts; contingency goals | `plan_success=false` → C2 (new tasking) |
 
+The same ladder governs *opportunity* handling, not just failure: pop-up
+tasking (§5c) enters at tiers 1–2 as solution elaboration and rises to
+tier 3 only when the goal structure changes.
+
 Revision 1's single contingency (EO turret restriction → AME replans transit
 to a second waypoint) was a **tier-3 handling of a tier-1 problem**; it now
-lands at tier 1. Two variants below: one that stays at tier 1, one that
-escalates to tier 3.
+lands at tier 1. Three variants below: one that stays at tier 1, one that
+escalates to tier 3, and one nominal-dynamics case (pop-up classification)
+that never leaves the chain.
 
 ### 5a. EO field-of-regard degrades → Sensing-local re-position (tier 1)
 
@@ -548,6 +556,92 @@ This is the review's §6.1 *Triggered Autonomous Contingency Re-Plan* sequence
   delegation it must now be checked against routes originated by *two*
   placers (Sensing and Tasks).
 
+### 5c. Pop-up classification: non-a-priori route requirements, no mission replan
+
+Routes' workload is not fixed at plan time. Mid-search, SDI reports two
+candidate detections (obj-A, obj-B) in AOI-1; neither can be confirmed or
+dismissed as suspect-1 without a classification pass, and each pass needs
+its own vantage geometry — none of which existed when the plan (or the
+Phase-A candidate route) was produced.
+
+The load-bearing question is **whose plan changes**. Under delegation the
+answer is Sensing's, not AME's: classifying what the search turns up is
+*elaboration of the same interpretation solution* — "locate the suspect
+vehicle in AOI-1" cannot be discharged without classifying candidates — so
+the new activities and their positioning needs arise, and are arbitrated,
+entirely inside the chain:
+
+```mermaid
+sequenceDiagram
+    participant AME as AME core
+    participant SDI as Sensor Data Interp.
+    participant SEN as Sensing
+    participant RT as Routes
+    participant FA as Flight Autonomy (VI)
+    participant BR as agra_c2_bridge
+
+    SDI->>SDI: candidate detections obj-A, obj-B →<br/>elaborate solution: classification passes (0632/0635)
+    SDI->>SEN: update ObjectEvidenceProvisionRequirement<br/>(+ classification evidence of obj-A, obj-B)
+    Note over SEN: re-sequence activities (0620):<br/>coverage legs + classify passes;<br/>pre-conditions → vantage per pass (0622)
+    SEN->>RT: revise standing PositioningRequirement set:<br/>R1 maintain coverage AOI-1 (priority: normal)<br/>R2 classify vantage obj-A (priority: high, quality criteria)<br/>R3 classify vantage obj-B (priority: high)
+    RT->>RT: multi-requirement route solve (0599, plural);<br/>cost collation (0604); per-requirement feasibility (0598)
+    RT->>FA: revised RoutePlan vN+1 (upload → validate →<br/>activation swap) — or waypoint control mode<br/>within approved corridor
+    RT-->>BR: route product changed
+    BR->>BR: policy check: within approved ActionPlan envelope<br/>⇒ pre-approved (§5a gate)
+    BR-->>AME: (nothing — placement still IN_PROGRESS,<br/>no fact refuted, no replan)
+```
+
+**Where prioritisation lives.** Routes *solves* the multi-requirement
+routing problem but does not *rank tasks*: priority and quality criteria
+arrive attached to each `PositioningRequirement` (Measurement_Criterion,
+PYR-RESP-0596), set by Sensing from its activity sequencing — which is in
+turn conditioned by A-GRA's operator-adjustable **Execution Priority List /
+Constraint Priority List** machinery (review §5.3 item 8), mapped down by
+the bridge as policy. When the standing set is jointly infeasible (both
+classification passes cannot be flown before coverage goes stale), Routes
+reports per-requirement feasibility (PYR-RESP-0598) and **Sensing** makes
+the trade (sequence obj-A first, defer a coverage leg) — escalating up the
+§5 ladder only if it cannot.
+
+**Does the A-GRA routing surface handle non-a-priori routes?** The VI
+surface is plan-artifact-only: there is no "insert detour" or "add
+requirement" message. A route changes by uploading a **revised RoutePlan
+version**, re-validating, and swapping activation
+(`MA_MissionPlanActivationCommand` BySubPlan) — the same mechanics as §5a —
+with the registered failsafe plan's version maintained in step (review
+§6.4). For high-tempo terminal positioning (final classify approach
+geometry), Routes may instead drop to the VI **control modes**
+(waypoint-following / HSA / curve-following under Control Mode
+Authorization; review §5.3 item 6, §6.4) inside an approved manoeuvre
+corridor, rather than re-issuing full plan artifacts per adjustment. Both
+are Routes-internal choices; A-GRA sees versioned kinematic products either
+way (`MA_RoutePlan` revisions to C2 for visibility). Practical discipline:
+Routes should **batch revisions with hysteresis** — one revised RoutePlan
+absorbing several requirement updates — since every artifact cycle costs
+validation latency and, outside the pre-approved envelope, an operator
+round-trip.
+
+**When a mission replan *is* the right cycle.** Escalate to AME when the
+*goal structure* changes, not merely the solution:
+
+1. **Classification resolves the goal** — obj-A confirmed as suspect-1
+   simply sets `(located suspect-1)` CONFIRMED via Tactical Objects and the
+   existing plan advances; all candidates dismissed eventually refutes the
+   search assumption and triggers the normal replan-on-refuted-fact path.
+2. **C2 policy demands per-entity tasks** — if each new contact must become
+   a reportable task of its own (per-entity `MA_TaskStatus`, or a follow-on
+   `MA_Action` per contact), the bridge raises goals and AME replans so the
+   work is planned, approved, and reported at mission level rather than
+   buried inside a sensing solution.
+3. **Cross-action conflicts** — a classification vantage that competes with
+   a time-critical goal elsewhere in the *same plan* is Tasks' arbitration
+   (PYR-RESP-0764 `satisfy_dependencies_between_derived_needs`), invisible
+   to Sensing, which only sees its own requirement.
+
+The replan cycle is the **escalation path, not the default** — the
+delegation dividend is precisely that the mission planner is not re-entered
+for every pop-up contact.
+
 ---
 
 ## 6. Identified message summary
@@ -589,7 +683,7 @@ profile.
 | `pyramid.components.tactical_objects.{Object_Of_Interest_Service, Specific_Object_Detail_Service, Matching_Objects_Service}` | **exists** |
 | `InterpretationType` value for EO/ground-object location (only `LOCATE_SEA_SURFACE_OBJECTS` today) | **NEW** enum value |
 | `Manual_Track_Requirement_Service` on sensor_data_interpretation | **NEW** service |
-| `pyramid.data_model.routing.PositioningRequirement` (pose **and coverage** forms) + `routes` component contract (Positioning_Requirement_Service, Route product) — placed by **Sensing** (derived) or **Tasks** (direct positional goals) | **NEW** component |
+| `pyramid.data_model.routing.PositioningRequirement` (pose **and coverage** forms) + `routes` component contract (Positioning_Requirement_Service, Route product) — placed by **Sensing** (derived) or **Tasks** (direct positional goals); a revisable *standing set* of concurrent requirements, each carrying priority/measurement criteria, with per-requirement feasibility feedback (§5c) | **NEW** component |
 | Routes `hold_activation` policy knob (approval gate at route activation, §5a) | **NEW** |
 | Sensing component (provision-dependency provider, solution pre-conditions → PositioningRequirement, PO egress) | **NEW** (may be fused with SDI initially) |
 | A-GRA egress adapters: PO (MS), RoutePlan lifecycle (VI), DMS wrapper | **NEW**, bridge-local |
@@ -642,7 +736,7 @@ apply to every component and are exercised by the MECL/capability sweep.)
 | Responsibility | Where |
 |---|---|
 | PYR-RESP-0629 `capture_requirements` (051-R01) | `InterpretationRequirement` (locate vehicle in AOI-1) |
-| PYR-RESP-0632 `determine_solution` (051-R04) | interpretation pipeline selection |
+| PYR-RESP-0632 `determine_solution` (051-R04) | interpretation pipeline selection; solution elaboration for pop-up candidates (§5c) |
 | PYR-RESP-0634 `determine_solution_dependencies` (051-R06) | `Sensor_Data_Provision_Dependency` → `ObjectEvidenceProvisionRequirement` on Sensing (**the first delegation hop**) |
 | PYR-RESP-0635 `coordinate_solution` (051-R07) | drive collect→detect→locate |
 | PYR-RESP-0636 `identify_progress_of_solution` (051-R08) | requirement `Achievement` back to AME (aggregated) |
@@ -654,7 +748,7 @@ apply to every component and are exercised by the MECL/capability sweep.)
 | Responsibility | Where |
 |---|---|
 | PYR-RESP-0616/0618 capture sensing requirements/constraints (050-R01/R03) | EO coverage of AOI-1, passive-only, keep-out |
-| PYR-RESP-0620 `determine_sensing_solution` (050-R05) | search pattern / activity selection behind `PO_Command` |
+| PYR-RESP-0620 `determine_sensing_solution` (050-R05) | search pattern / activity selection behind `PO_Command`; re-sequencing to interleave pop-up classification passes (§5c) |
 | PYR-RESP-0622 `identify_sensing_solution_pre-conditions` (050-R07) | **pose/coverage pre-condition → `PositioningRequirement` on Routes (the second delegation hop, §2.1)** |
 | PYR-RESP-0623 `coordinate_sensing_solution` (050-R08) | sequencing position→search→track; issuing `PO_Command` |
 | PYR-RESP-0624 `identify_progress_of_sensing_solution` (050-R09) | `PO_Activity`/`PO_CommandStatus` + Routes `Achievement` consumption |
@@ -666,15 +760,16 @@ apply to every component and are exercised by the MECL/capability sweep.)
 
 | Responsibility | Where |
 |---|---|
-| PYR-RESP-0595 `capture_positioning_requirements` (048-R01) | `PositioningRequirement` from **Sensing** (vantage/coverage, §4B; hold profile, §4C) or **Tasks** (rally point, §5b) |
+| PYR-RESP-0595 `capture_positioning_requirements` (048-R01) | `PositioningRequirement` from **Sensing** (vantage/coverage, §4B; hold profile, §4C; classification vantages, §5c) or **Tasks** (rally point, §5b) |
+| PYR-RESP-0596 `capture_measurement_criteria` (048-R02) | per-requirement priority/quality criteria from the placer (§5c arbitration input) |
 | PYR-RESP-0597 `capture_routing_constraints` (048-R03) | keep-out volume from ActionConstraints |
-| PYR-RESP-0599 `determine_route` (048-R05) | route to vantage within Vehicle_Capability; candidate route at plan time |
+| PYR-RESP-0599 `determine_route` (048-R05) | route within Vehicle_Capability; candidate route at plan time; multi-requirement solve across the standing set (coverage + classification vantages, §5c) |
 | PYR-RESP-0600 `identify_pre-conditions` (048-R06) | route-level pre-conditions (e.g. climb profile before transit leg) |
 | PYR-RESP-0601 `command_route` (048-R07) | `RoutePlan` upload + activation toward FA (activation gate, §5a) |
 | PYR-RESP-0602 `determine_route_progress` (048-R08) | `RoutePlanExecutionStatus`/`MA_PositionReport` → `Achievement` to the placer |
 | PYR-RESP-0603 `determine_routing_continuity` (048-R09) | continuity check across the tier-1 vantage change (§5a) |
 | PYR-RESP-0604 `collate_route_cost` (048-R10) | route cost into Sensing solution quality → plan quality |
-| PYR-RESP-0598 `identify_whether_requirement_remains_achievable` (048-R04) | feasibility feedback to Sensing (tier-0 escalation) |
+| PYR-RESP-0598 `identify_whether_requirement_remains_achievable` (048-R04) | per-requirement feasibility feedback to Sensing (tier-0 escalation; §5c infeasible-set trade) |
 
 ### Vehicle Guidance (COMP-070) — FA side of the VI
 
