@@ -472,3 +472,142 @@ To be filled per phase on execution, in the proving plan's ledger style
 plan-authoring time (2026-07-09); §1's duality description and D2's
 missing-`update`-variant finding constitute the pre-plan baseline
 evidence.
+
+### Phase 0 — executed 2026-07-09
+
+**A-GRA example contract fix.** Added an `update` oneof variant of type
+`MAAction_Service_Requirement` (field 3) to `MAAction_Service_Request` in
+both `pim/agra_example/pyramid/components/pyramid.components.agra.mission_autonomy.services.provided.proto`
+and the mirrored `pyramid.components.agra.c2_station.services.consumed.proto`
+(the two files carry byte-identical message bodies for `MAAction_Service_Request`/
+`MAAction_Service_Requirement` today -- literal copy-paste, no import between
+them -- so the same field was added to both by hand, keeping them in sync).
+`test_agra_example.py` has no assertion on the wrapper's exact variant set
+(checked: its two classification tests assert `port_kind`/`topic`/`qos`
+only), so no test edit was needed there; `classify_port_service`'s
+`update.request_type == read.response_type` invariant is untouched by the
+new variant (`Update`'s request type was already `MAAction_Service_Requirement`),
+so `MAAction_Service.port_kind` stays `"request"`.
+
+**D2 projectability computation.** Added to `binding_contract.py`, next to
+`_topic_from_rpc`/`topics_for_proto_service`:
+- `CommandProjectability` (frozen dataclass): `service_name`, `rpc_name`,
+  `request_type`, `wrapper_type`, `projectable`, `reason`, `variant_field`.
+- `command_projectability_for_service(index, pf, service)` /
+  `command_projectability_for_file(index, pf)`: classify each
+  Create/Update/Cancel rpc of a `port_kind == "request"` service. The
+  wrapper is resolved by the grammar-wide naming convention
+  `<ServiceName>_Request` (verified against every service in the tree, not
+  assumed), not by trusting `Create`'s own request type -- so a
+  wrapper-name mismatch is itself detected (`reason="no_wrapper"`) rather
+  than silently reusing whatever `Create` happens to point at. A request
+  type matching more than one `oneof` variant field of the same type
+  classifies `reason="ambiguous_variant"` (not projectable) rather than
+  picking one arbitrarily -- the "matches exactly one variant" reading of
+  D2/Phase 0's task text.
+- `BindingContract` gained an additive `command_projectability: Dict[str,
+  Tuple[CommandProjectability, ...]]` field (default `{}`), populated by a
+  new `_build_command_projectability()` helper called from `build_contract()`.
+  `topics_for_proto_service`, `topics_for_proto_file`,
+  `TopicSpecResolver.topics_for_proto` are untouched -- same signatures,
+  same first-rpc-wins topic derivation as before Phase 0; classification is
+  computed alongside, not folded into, the existing topic dict. Confirmed
+  no other caller constructs `BindingContract` positionally (only
+  `build_contract()` does) and no `topics_for_proto*` caller needed changes
+  (`cpp/components_gen.py`, `cpp/service_header_gen.py`,
+  `cpp/service_impl_gen.py`, `cpp/codec_plugin_gen.py`, `ada/naming.py`,
+  `backends/ros2_backend.py` all go through `TopicSpecResolver.topics_for_proto`,
+  whose signature/behaviour is unchanged).
+
+**Design choice not fully pinned by the plan text, made explicitly:** the
+wrapper message is resolved by name convention
+(`_request_wrapper_type_name` = `<ServiceName>_Request`), not by "whatever
+type `Create`'s rpc uses." Both give the same answer on every
+grammar-conforming service seen (`Create`'s request type equals the
+convention-derived wrapper name in A-GRA and all of `pim/test/`), but the
+convention-derived approach also gives a distinct, honest
+`reason="no_wrapper"` outcome if `Create`'s own request type were ever *not*
+the service's `_Request` message (a genuine grammar violation) -- treated as
+a wrapper-resolution failure for every command, per D2's "wrapper doesn't
+exist/parse as expected" clause, rather than as a vacuous truth via
+`Create`'s own type. No contract in the tree exercises this distinction
+today; noted for anyone reusing this function.
+
+**Tests** (`subprojects/PYRAMID/pim/test_binding_contract.py`, new module,
+7 test cases across 3 classes):
+- `AgraExampleProjectabilityTest`: both `MAAction_Service` definitions
+  (provided + consumed) classify fully projectable post-fix (`Create` ->
+  `is_wrapper`, `Update` -> `matches_variant`/`update`, `Cancel` ->
+  `matches_variant`/`cancel`); `build_contract()` records it under the
+  expected `command_projectability` key.
+- `PimTestUniformProjectabilityTest`: `SPRRequirement_Service`
+  (`pim/test/.../pyramid.components.pim_osprey.sensor_products.services.provided.proto`,
+  the fixture named in this task) classifies `Create`/`Cancel` projectable,
+  `Update` not (`reason="no_match"`); a second test sweeps every
+  `port_kind == "request"` service across the whole `pim/test/` tree and
+  confirms the same Update-non-projectable / Create+Cancel-projectable
+  pattern holds uniformly (D2's grammar-wide claim, checked rather than
+  trusted).
+- `ConflictingVariantProjectabilityTest`: synthetic inline `.proto` fixture
+  (tempfile, parsed via `parse_proto`, same convention as
+  `test_proto_parser.py`) with a wrapper carrying two `Identifier`-typed
+  oneof variants (`cancel`, `cancel_dup`); `Cancel`'s request type collides
+  with both, classifies `reason="ambiguous_variant"`, not projectable. A
+  second case renames the wrapper message so the naming convention no
+  longer resolves it; every command classifies `reason="no_wrapper"`.
+
+`python3 -m unittest subprojects.PYRAMID.pim.test_proto_parser
+subprojects.PYRAMID.pim.test_agra_example
+subprojects.PYRAMID.pim.test_binding_contract` -- run from the repo root
+per the proving plan's own invocation convention (`generate_bindings.py`
+carries no separate test runner; `python3 -m unittest` against dotted
+module paths is the established command, confirmed in the proving plan's
+Phase 0/B ledger entries). 13 tests total, all OK: 3 (`test_proto_parser`)
++ 3 (`test_agra_example`) + 7 (`test_binding_contract`, the new module).
+
+**Regeneration byte-identity.** Captured a before/after pair (this session
+had no prior generated-output tree checked in, so "before" = a scratch
+generation from the pre-Phase-0 tree, "after" = the same generation
+post-Phase-0):
+- `pim/test/` -> `--languages cpp,ada --backends json,flatbuffers`: 388
+  files both before and after; `diff -rq` clean (0 differences).
+- legacy `proto/` -> same flags: 65 files both before and after; `diff -rq`
+  clean (0 differences).
+- `pim/agra_example/` -> same flags: 54 files generated cleanly (exit 0);
+  `binding_manifest.json`'s `topics` section still carries exactly the
+  three A-GRA topics from Phase B (`agra.ma_action.request`/`.requirement`
+  RELIABLE, `agra.ma_action_plan.information` BEST_EFFORT) -- unchanged by
+  Phase 0, confirming the `interactions` manifest section stays Phase 1's
+  job. Spot-checked the generated C++ struct: `MAAction_Service_Request`
+  now carries `tl::optional<MAAction_Service_Requirement> update;`
+  alongside the existing `ma_action`/`cancel` fields.
+
+**Phase C harness regression.** Built `pcl_core`,
+`pcl_transport_shared_memory_plugin`, and `flatc` from a fresh
+`cmake --preset flatbuffers-only` configure at the repo root (no prior
+build tree existed in this environment; build completed in a few minutes,
+no long-running fetches beyond flatbuffers/googletest already resolved at
+configure time). `bash build_agra_shm_comms_test.sh` -- clean generate, all
+four codec `.so`s and the harness built cleanly, JSON and FlatBuffers runs
+both green (`PASS (0 failure(s))`), same correlation/non-conflation
+results as the proving plan's Phase C (`action-1`: 3 transitions
+RECEIVED/IN_PROGRESS/COMPLETED; `action-2`: 1 transition CANCELLED).
+Regression check: `bash build_contract_routing_test.sh` (Phase A) re-ran
+green (`contract_routing_validation=pass transports=2`).
+
+**Carried note:** GNAT/gprbuild not installed in this environment, so Ada
+object-compile for the regenerated `pim/agra_example/` tree is carried,
+not run -- same convention as Phases B/C of the proving plan and
+`CLAUDE.md`'s `pyramid_ada_all` note. Ada generation itself (13 -> now
+included in the combined 54-file cpp+ada run above) is clean.
+
+**Accept criteria met:** projectability computed and tested (13 new
+tests); A-GRA example regenerates clean with the new `update` variant and
+both `MAAction_Service` definitions classify fully projectable;
+`pim/test/` (388 files) and legacy `proto/` (65 files) regenerate
+byte-identical to pre-Phase-0 output; `build_agra_shm_comms_test.sh`
+re-ran green after the contract change. No changes outside this phase's
+scope: `git status` after all regeneration and test runs shows only the
+two A-GRA proto files, `binding_contract.py`, and the new
+`test_binding_contract.py` modified/added (build directories and harness
+scratch output are all pre-existing `.gitignore` entries).

@@ -76,6 +76,43 @@ class BindingTopic:
 
 
 @dataclass(frozen=True)
+class CommandProjectability:
+    """D2's per-command pub/sub projectability classification.
+
+    For one `Create`/`Update`/`Cancel` rpc of a Request-shape service: can
+    the rpc's request type be carried as the wire payload of the service's
+    `.request` topic? Two ways to say yes (D2):
+
+    - the request type *is* the service's `_Request` wrapper message
+      (``reason="is_wrapper"``, e.g. `Create` in every contract today), or
+    - the request type matches exactly one of the wrapper's `oneof` variant
+      field types (``reason="matches_variant"``, `variant_field` names it,
+      e.g. `Cancel` -> the `cancel` variant).
+
+    Anything else is not projectable: no wrapper message resolves
+    (``reason="no_wrapper"``), the request type appears in more than one
+    variant field -- an ill-formed wrapper (``reason="ambiguous_variant"``)
+    -- or it appears in none (``reason="no_match"``, e.g. `Update` against
+    every wrapper in the tree before this plan's Phase 0 A-GRA fix).
+
+    This is computed independently of `topics_for_proto_service`'s
+    first-rpc-wins `.request` topic derivation -- an additive record layered
+    on top, not a replacement for it. `topics_for_proto_service` keeps
+    projecting whichever rpc it processes first onto the topic regardless of
+    this classification; Phase 1 is where the manifest/facade start
+    consuming `projectable` to change behaviour.
+    """
+
+    service_name: str
+    rpc_name: str
+    request_type: str
+    wrapper_type: str
+    projectable: bool
+    reason: str
+    variant_field: str = ""
+
+
+@dataclass(frozen=True)
 class EndpointRequirement:
     """One routeable endpoint requirement derived from the proto contract."""
 
@@ -104,6 +141,13 @@ class BindingContract:
     endpoint_requirements: Tuple[EndpointRequirement, ...] = ()
     schema_ids: Dict[str, str] = field(default_factory=dict)
     naming_policy: "NamingPolicy" = field(default=None)
+    # Phase 0 (D2): per-command pub/sub projectability, keyed the same way as
+    # service_topics (see _service_key). Additive -- Phase 1 is the first
+    # consumer; nothing in this contract's existing fields or behaviour
+    # depends on it.
+    command_projectability: Dict[str, Tuple[CommandProjectability, ...]] = field(
+        default_factory=dict
+    )
 
 
 class NamingPolicy(Protocol):
@@ -601,6 +645,142 @@ def topics_for_proto_service(
     return subscribe, publish
 
 
+def _request_wrapper_type_name(service: ProtoService) -> str:
+    """The `_Request` wrapper message name for a Request-shape service.
+
+    Grammar-wide naming convention, not a guess from any one rpc: every
+    Request-shape service in the tree (A-GRA example and all of `pim/test/`)
+    names its wrapper `<ServiceName>_Request` (`MAAction_Service` ->
+    `MAAction_Service_Request`, `SPRRequirement_Service` ->
+    `SPRRequirement_Service_Request`, ...).
+    """
+    return f"{service.name}_Request"
+
+
+def _oneof_variant_types(
+    index: ProtoTypeIndex,
+    wrapper_msg: ProtoMessage,
+    wrapper_package: str,
+) -> Dict[str, List[str]]:
+    """Fully-qualified oneof variant field type -> field name(s) using it.
+
+    More than one field name against a type means that type is an
+    *ambiguous* variant match (an ill-formed wrapper -- two variants of the
+    same payload type); callers must treat that as non-projectable rather
+    than pick one of the field names arbitrarily.
+    """
+    variants: Dict[str, List[str]] = {}
+    for oo in wrapper_msg.oneofs:
+        for f in oo.fields:
+            fqn = _fully_qualified_type(index, f.type, wrapper_package)
+            if not fqn:
+                continue
+            variants.setdefault(fqn, []).append(f.name)
+    return variants
+
+
+def command_projectability_for_service(
+    index: ProtoTypeIndex,
+    pf: ProtoFile,
+    service: ProtoService,
+) -> Tuple[CommandProjectability, ...]:
+    """Classify each Create/Update/Cancel rpc's D2 pub/sub projectability.
+
+    Only meaningful for Request-shape services (`service.port_kind ==
+    "request"`); other services yield an empty tuple. This is an additive
+    classification computed alongside `topics_for_proto_service`'s topic
+    derivation, not a replacement for it -- `topics_for_proto_service`'s
+    first-rpc-wins `.request` topic mapping is untouched by this function's
+    result.
+    """
+    if service.port_kind != "request":
+        return ()
+
+    wrapper_fqn = _fully_qualified_type(
+        index, _request_wrapper_type_name(service), pf.package,
+    )
+    wrapper_msg = index.resolve_message(wrapper_fqn) if wrapper_fqn else None
+    variants: Dict[str, List[str]] = {}
+    if wrapper_msg is not None:
+        wrapper_package = wrapper_fqn.rsplit(".", 1)[0] if "." in wrapper_fqn else ""
+        variants = _oneof_variant_types(index, wrapper_msg, wrapper_package)
+
+    results: List[CommandProjectability] = []
+    for rpc in service.rpcs:
+        if rpc.name not in ("Create", "Update", "Cancel"):
+            continue
+
+        request_fqn = (
+            _fully_qualified_type(index, rpc.request_type, pf.package)
+            or rpc.request_type
+        )
+
+        if wrapper_msg is None:
+            results.append(CommandProjectability(
+                service_name=service.name,
+                rpc_name=rpc.name,
+                request_type=request_fqn,
+                wrapper_type=wrapper_fqn,
+                projectable=False,
+                reason="no_wrapper",
+            ))
+            continue
+
+        if request_fqn == wrapper_fqn:
+            results.append(CommandProjectability(
+                service_name=service.name,
+                rpc_name=rpc.name,
+                request_type=request_fqn,
+                wrapper_type=wrapper_fqn,
+                projectable=True,
+                reason="is_wrapper",
+            ))
+            continue
+
+        matches = variants.get(request_fqn, [])
+        if len(matches) == 1:
+            results.append(CommandProjectability(
+                service_name=service.name,
+                rpc_name=rpc.name,
+                request_type=request_fqn,
+                wrapper_type=wrapper_fqn,
+                projectable=True,
+                reason="matches_variant",
+                variant_field=matches[0],
+            ))
+        elif len(matches) > 1:
+            results.append(CommandProjectability(
+                service_name=service.name,
+                rpc_name=rpc.name,
+                request_type=request_fqn,
+                wrapper_type=wrapper_fqn,
+                projectable=False,
+                reason="ambiguous_variant",
+            ))
+        else:
+            results.append(CommandProjectability(
+                service_name=service.name,
+                rpc_name=rpc.name,
+                request_type=request_fqn,
+                wrapper_type=wrapper_fqn,
+                projectable=False,
+                reason="no_match",
+            ))
+
+    return tuple(results)
+
+
+def command_projectability_for_file(
+    index: ProtoTypeIndex,
+    pf: ProtoFile,
+) -> Tuple[CommandProjectability, ...]:
+    """Aggregate `command_projectability_for_service` over one file's services."""
+    result: List[CommandProjectability] = []
+    for service in pf.services:
+        result.extend(command_projectability_for_service(index, pf, service))
+    return tuple(result)
+
+
 def topics_for_proto_file(
     pf: ProtoFile,
 ) -> Tuple[Dict[str, BindingTopic], Dict[str, BindingTopic]]:
@@ -731,6 +911,20 @@ def _build_service_closures(
     return closures
 
 
+def _build_command_projectability(
+    service_modules: List[ProtoFile],
+    proto_files: List[ProtoFile],
+) -> Dict[str, Tuple[CommandProjectability, ...]]:
+    index = ProtoTypeIndex(proto_files)
+    result: Dict[str, Tuple[CommandProjectability, ...]] = {}
+    for pf in service_modules:
+        for service in pf.services:
+            projectability = command_projectability_for_service(index, pf, service)
+            if projectability:
+                result[_service_key(pf.package, service)] = projectability
+    return result
+
+
 def naming_policy_for_layout(layout: str) -> NamingPolicy:
     if layout == "pyramid":
         return PyramidCompatNamingPolicy()
@@ -772,6 +966,9 @@ def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract
         endpoint_requirements=_build_endpoint_requirements(service_modules),
         schema_ids=schema_ids,
         naming_policy=policy,
+        command_projectability=_build_command_projectability(
+            service_modules, list(proto_files),
+        ),
     )
 
 
