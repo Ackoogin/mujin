@@ -21,6 +21,7 @@ message MAAction_Service_Request {
   oneof payload {
     pyramid.data_model.agra.MA_Action ma_action = 1;
     pyramid.data_model.base.Identifier cancel = 2;
+    MAAction_Service_Requirement update = 3;
   }
 }
 

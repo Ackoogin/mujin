@@ -31,6 +31,7 @@ pcl_transport_caps_t pcl_endpoint_required_caps(pcl_endpoint_kind_t kind) {
     case PCL_ENDPOINT_CONSUMED:
       return PCL_CAP_RPC_UNARY;
     case PCL_ENDPOINT_STREAM_PROVIDED:
+    case PCL_ENDPOINT_STREAM_CONSUMED:
       return PCL_CAP_RPC_STREAM;
     default:
       return PCL_CAP_NONE;

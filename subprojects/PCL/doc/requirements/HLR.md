@@ -530,6 +530,16 @@ A failed manifest load shall leave nothing installed: transports already stood u
 
 **Rationale**: D9 -- partial composition after a failed load is worse than no composition.
 
+### PCL.078 - Manifest-Driven Remote Streaming Invoke and Gateway Discovery
+The manifest grammar shall support a `stream_consumed` endpoint kind, distinct from `consumed`, for the client side of a server-streaming rpc; `pcl_endpoint_required_caps(PCL_ENDPOINT_STREAM_CONSUMED)` shall require `PCL_CAP_RPC_STREAM` (not `PCL_CAP_RPC_UNARY`, which `consumed` requires), so a `stream_consumed` route to a transport lacking streaming support fails closed at compose time rather than only at first invocation. `pcl_executor_invoke_stream()` shall consult the per-endpoint route table installed by `pcl_transport_routing_load()` before falling back to the legacy single executor-wide transport, dispatching a `stream_consumed`-routed endpoint's remote invocation through its named peer's transport exactly as `pcl_executor_invoke_async()` already does for `consumed`-routed unary invocation. `pcl_transport_routing_get_gateway()` shall let a caller retrieve the "gateway" container (see PCL.068) a routing manifest's named peer transport exposes for dispatching inbound `provided`/`stream_provided` requests, returning `PCL_OK` with a NULL container for peers whose transport exposes none (not an error) and `PCL_ERR_NOT_FOUND` for an unrecognized peer id; the manifest loader itself shall not configure, activate, or add this container to the executor, since not every deployment provides rpc-realized endpoints at all.
+
+**Rationale**: D8 -- a manifest may route different endpoints (unary or streaming) to different named transports; a client-side invocation path that only ever consults the single legacy `e->transport` field cannot honour that per-endpoint choice for streaming calls, silently falling through to an always-failing intra-process lookup for any endpoint actually routed remotely. Conflating streaming and unary client routes under one `consumed` kind (requiring only `PCL_CAP_RPC_UNARY`) would let a manifest compose successfully against a unary-only peer for a streaming endpoint, failing only once the stream is actually invoked -- `stream_consumed` closes that gap the same way `PCL_ENDPOINT_STREAM_PROVIDED` already does on the provider side. D9 -- a component providing an rpc-realized endpoint over a gateway-pattern transport (shared-memory, socket) needs a way to obtain and wire that container without the manifest loader having to guess whether a given deployment intends to serve such endpoints at all.
+
+### PCL.077 - Manifest Exclusive Realization Groups
+The routing manifest grammar shall support an `exclusive <group_name> <side_a_endpoints> <side_b_endpoints>` directive declaring two mutually-exclusive named sides of endpoints for one logical leg. `pcl_transport_routing_load()` shall accept any number of same-side endpoints routed together, and shall fail closed (`PCL_ERR_STATE`) with a diagnostic naming the group and the two conflicting endpoints when the manifest routes at least one endpoint from each of a declared group's two sides. This check shall be performed once, after the entire manifest has been parsed, so it is independent of whether a group's `exclusive` declaration appears before or after the `route` lines for its member endpoints within the file. An endpoint named in no `exclusive` group shall be unaffected by this check, and a manifest with no `exclusive` stanzas shall behave exactly as before this directive existed.
+
+**Rationale**: D9 -- a deployment that routes both realizations of one logical leg (e.g. an rpc-shaped and a pub/sub-shaped carrier of the same transaction) is a duplicate-delivery-path configuration error, and D9 already establishes that compose-time is where such errors must surface, not runtime. D8 -- which realization runs is deployment data (a manifest line), not code, so the manifest grammar is the right place to declare and enforce the constraint between them.
+
 ## Transport Template and Conformance
 
 ### PCL.071 - Transport Template Scaffold
@@ -658,6 +668,7 @@ PCL shall provide a reusable threading-model conformance suite -- distinct from 
 | `PCL.068` | `D3`, `D8` |
 | `PCL.069` | `D8` |
 | `PCL.070` | `D9` |
+| `PCL.077` | `D8`, `D9` |
 | `PCL.071` | `D2`, `D3`, `D5` |
 | `PCL.072` | `D3` |
 | `PCL.073` | `D1`, `D3` |

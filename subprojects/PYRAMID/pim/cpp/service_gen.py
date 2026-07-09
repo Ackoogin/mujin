@@ -25,6 +25,7 @@ from .naming import (
     _find_proto_root,
 )
 from .components_gen import ComponentsFacadeEmitterMixin
+from .interaction_facade_gen import InteractionFacadeEmitterMixin
 from .codec_plugin_gen import CodecPluginEmitterMixin
 from .generic_gen import GenericServiceEmitterMixin
 from .service_header_gen import ServiceHeaderEmitterMixin
@@ -35,6 +36,7 @@ class CppServiceGenerator(
         ServiceHeaderEmitterMixin,
         ServiceImplEmitterMixin,
         ComponentsFacadeEmitterMixin,
+        InteractionFacadeEmitterMixin,
         CodecPluginEmitterMixin,
         GenericServiceEmitterMixin,
 ):

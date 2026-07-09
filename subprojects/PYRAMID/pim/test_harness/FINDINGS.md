@@ -67,6 +67,18 @@ Reproduce: `./viability_check.sh` (or `.bat`); comms test:
 - The hardcoded topic catalog concern noted here was since resolved:
   `standard_topics.py` is now data-driven
   (`pim/topic_metadata/tactical_objects_topics.json`).
+- **RESOLVED: the RPC/pub-sub seam duality this file's Phase C section
+  below flags** (every `Create/Read/Update/Cancel` rpc generating both an
+  RPC seam and a pub/sub seam with nothing reconciling a manifest routing
+  both) is resolved by
+  `doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md` (Phases 0-5,
+  2026-07-09): a transaction-shaped C++ facade makes the two seams
+  interchangeable realizations of one interaction, selected per leg at
+  compose time via a manifest `exclusive` group, fail-closed against
+  dual-routing. See `agra_seam_interchange_test.cpp`/
+  `build_agra_seam_interchange_test.sh` (Phase 5's terminal cross-process
+  proof, this same directory) and that plan's own evidence ledger for
+  full detail.
 
 ## Files
 

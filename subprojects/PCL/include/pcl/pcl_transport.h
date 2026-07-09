@@ -291,6 +291,16 @@ int pcl_executor_endpoint_route_exists(const pcl_executor_t* e,
                                        const char*           endpoint_name,
                                        pcl_endpoint_kind_t   endpoint_kind);
 
+/// \brief Report whether a route is already installed for an endpoint under
+///        any \ref pcl_endpoint_kind_t, not just a specific one.
+///
+/// Lets a caller check "is this endpoint name routed at all" (e.g. D5
+/// exclusive-group enforcement, which treats a name as routed regardless of
+/// which kind carried the route) without needing to know the kind in
+/// advance. Returns non-zero when any route exists for the name.
+int pcl_executor_endpoint_route_exists_any_kind(const pcl_executor_t* e,
+                                                const char*           endpoint_name);
+
 /// \brief Remove a per-endpoint route previously installed via
 ///        \ref pcl_executor_set_endpoint_route.
 ///

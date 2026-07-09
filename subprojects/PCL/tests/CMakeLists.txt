@@ -74,10 +74,14 @@ target_include_directories(test_pcl_transport_routing PRIVATE ${PCL_ROOT_DIR}/sr
 target_compile_definitions(test_pcl_transport_routing PRIVATE
     CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
     UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"
+    SHM_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_shared_memory_plugin>"
+    NOCAPS_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_nocaps_plugin>"
 )
 add_dependencies(test_pcl_transport_routing
     pcl_transport_capture_plugin
     pcl_transport_udp_plugin
+    pcl_transport_shared_memory_plugin
+    pcl_transport_nocaps_plugin
 )
 gtest_discover_tests(test_pcl_transport_routing DISCOVERY_MODE PRE_TEST)
 

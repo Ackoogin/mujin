@@ -40,7 +40,7 @@ class SpecEmitterMixin:
 
     def _write_spec(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]],
-                    type_pkgs: List[str]):
+                    type_pkgs: List[str], pf: Path = None):
         entity_types_for_arrays = sorted({
             _proto_type_to_ada(_short_type(rpc.response_type))
             for _, rpc in all_rpcs if rpc.server_streaming
@@ -308,5 +308,7 @@ class SpecEmitterMixin:
             f.write(f'      Response_Buf  : out System.Address;\n')
             f.write(f'      Response_Size : out Natural);\n')
             f.write(f'\n')
+            if pf is not None:
+                self._write_interaction_facade_spec(f, pf, parsed)
             f.write(f'end {pkg_name};\n')
 

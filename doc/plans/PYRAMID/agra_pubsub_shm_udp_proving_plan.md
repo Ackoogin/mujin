@@ -543,6 +543,11 @@ remaining phases (D/E) need to resolve to reach their own accept criteria
 -- recorded here as a carried follow-up, candidate for the D-list
 alongside this plan's other carried notes.
 
+*Update 2026-07-09:* this follow-up now has its own plan —
+[`rpc_pubsub_interchangeability_plan.md`](rpc_pubsub_interchangeability_plan.md)
+(interaction facade, per-leg realization choice, compose-time
+exclusivity).
+
 ### Phase D — executed 2026-07-08
 
 New harness: `subprojects/PYRAMID/pim/test_harness/agra_udp_proof_test.cpp`

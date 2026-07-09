@@ -77,6 +77,7 @@ class ComponentsFacadeEmitterMixin:
             f.write('#include <stdexcept>\n')
             f.write('#include <string>\n')
             f.write('#include <string_view>\n')
+            f.write('#include <unordered_map>\n')
             f.write('#include <utility>\n')
             f.write('#include <vector>\n\n')
 
@@ -555,8 +556,9 @@ class ComponentsFacadeEmitterMixin:
             for svc_name, rpc in all_rpcs:
                 svc_const = _rpc_service_const(
                     svc_name, rpc, duplicate_rpc_names)
+                kind = 'PCL_ENDPOINT_STREAM_CONSUMED' if rpc.server_streaming else 'PCL_ENDPOINT_CONSUMED'
                 f.write('        if (auto rc = executor_->setEndpointRoute(\n')
-                f.write(f'                {svc_const}, PCL_ENDPOINT_CONSUMED,\n')
+                f.write(f'                {svc_const}, {kind},\n')
                 f.write('                PCL_ROUTE_REMOTE); rc != PCL_OK) return rc;\n')
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
@@ -567,8 +569,9 @@ class ComponentsFacadeEmitterMixin:
             for svc_name, rpc in all_rpcs:
                 svc_const = _rpc_service_const(
                     svc_name, rpc, duplicate_rpc_names)
+                kind = 'PCL_ENDPOINT_STREAM_CONSUMED' if rpc.server_streaming else 'PCL_ENDPOINT_CONSUMED'
                 f.write('        if (auto rc = executor_->routeRemote(\n')
-                f.write(f'                {svc_const}, peer_id); rc != PCL_OK) return rc;\n')
+                f.write(f'                {svc_const}, peer_id, {kind}); rc != PCL_OK) return rc;\n')
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
@@ -577,8 +580,9 @@ class ComponentsFacadeEmitterMixin:
             for svc_name, rpc in all_rpcs:
                 svc_const = _rpc_service_const(
                     svc_name, rpc, duplicate_rpc_names)
+                kind = 'PCL_ENDPOINT_STREAM_CONSUMED' if rpc.server_streaming else 'PCL_ENDPOINT_CONSUMED'
                 f.write('        if (auto rc = executor_->routeLocal(\n')
-                f.write(f'                {svc_const}); rc != PCL_OK) return rc;\n')
+                f.write(f'                {svc_const}, {kind}); rc != PCL_OK) return rc;\n')
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
@@ -892,6 +896,9 @@ class ComponentsFacadeEmitterMixin:
             f.write('        state.on_frame(frame);\n')
             f.write('    }\n')
             f.write('}\n\n')
+
+            self._write_interaction_facade(
+                f, full_ns, parsed, all_topics, is_provided, duplicate_rpc_names)
 
             f.write(f'}} // namespace {full_ns}\n')
 

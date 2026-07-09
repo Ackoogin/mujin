@@ -88,8 +88,8 @@ TEST(PclCapabilities, LoaderNullHandleFailsClosed) {
 ///< REQ_PCL_354: the loader prefers a plugin's explicit pcl_transport_plugin_caps symbol over vtable derivation.
 TEST(PclCapabilities, LoaderUsesExplicitCapsSymbol) {
   // The capture plugin exports pcl_transport_plugin_caps declaring an ACTION
-  // capability that its vtable (publish + serve only) could never imply, so a
-  // returned ACTION bit proves the explicit symbol was consulted.
+  // capability that its vtable could never imply (no vtable slot exists for
+  // it), so a returned ACTION bit proves the explicit symbol was consulted.
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
   ASSERT_EQ(pcl_plugin_load_transport(CAPTURE_PLUGIN_PATH, "{}",
@@ -98,7 +98,8 @@ TEST(PclCapabilities, LoaderUsesExplicitCapsSymbol) {
 
   pcl_transport_caps_t caps = PCL_CAP_NONE;
   ASSERT_EQ(pcl_plugin_transport_caps(handle, "{}", transport, &caps), PCL_OK);
-  EXPECT_EQ(caps, PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_ACTION);
+  EXPECT_EQ(caps, PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM |
+                      PCL_CAP_RPC_ACTION);
 
   pcl_plugin_unload(handle);
 }
@@ -213,6 +214,8 @@ TEST(PclCapabilities, EndpointRequiredCaps) {
   EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_PROVIDED), PCL_CAP_RPC_UNARY);
   EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_CONSUMED), PCL_CAP_RPC_UNARY);
   EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_STREAM_PROVIDED),
+            PCL_CAP_RPC_STREAM);
+  EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_STREAM_CONSUMED),
             PCL_CAP_RPC_STREAM);
 }
 

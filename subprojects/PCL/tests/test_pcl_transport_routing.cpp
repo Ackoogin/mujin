@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <pcl/pcl_capabilities.h>
+#include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_plugin.h>
 #include <pcl/pcl_plugin_loader.h>
@@ -538,5 +539,462 @@ TEST(PclTransportRouting, FailsClosedWhenRouteTableExhausted) {
   EXPECT_NE(std::string(diag).find("set failed"), std::string::npos);
   EXPECT_EQ(routing, nullptr);
   std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// D5 two-sided `exclusive` grammar (doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md
+// §3 D5): a group declares two named sides, e.g. the rpc realization
+// (multiple command endpoints) vs. the pub/sub realization (one topic
+// endpoint) of the same logical leg. Any number of same-side endpoints route
+// together freely; routing from both sides is a compose-time error.
+
+///< REQ_PCL_463: a route completing both sides of a declared `exclusive` group (one side-A endpoint + one side-B endpoint routed) fails closed with PCL_ERR_STATE and a diagnostic naming the group and both endpoints.
+TEST(PclTransportRouting, ExclusiveGroupTwoSidedConflictFailsClosed) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +
+      "route agra.ma_action.request publisher recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// A pre-existing route installed before this manifest load (e.g. by an
+// earlier manifest load into the same executor, or programmatically) must
+// still be caught by exclusivity: the D5 fail-closed guarantee applies to
+// the executor's live route table, not just to routes this one load
+// happens to declare together.
+///< REQ_PCL_474: an `exclusive` group conflict is detected against a pre-existing route installed on the executor before this manifest load began, not just against routes this load itself installs.
+TEST(PclTransportRouting, ExclusiveGroupConflictDetectedAgainstPreExistingRoute) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // Side A (ma_action.create) is routed programmatically before this
+  // manifest load ever runs -- e.g. a prior manifest load into the same
+  // executor, or a default wired up in code.
+  pcl_endpoint_route_t prior;
+  memset(&prior, 0, sizeof(prior));
+  prior.endpoint_name = "ma_action.create";
+  prior.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  prior.route_mode    = PCL_ROUTE_LOCAL;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &prior), PCL_OK);
+
+  // This manifest declares the exclusive group and routes only side B
+  // (agra.ma_action.request) -- it never mentions ma_action.create at all,
+  // so a check scoped to only this load's own routes would miss the
+  // conflict entirely.
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route agra.ma_action.request publisher recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+  // The failed load must not leave its own (side B) route installed, and
+  // the pre-existing side-A route must survive untouched.
+  ASSERT_EQ(e->endpoint_route_count, 1u);
+  EXPECT_STREQ(e->endpoint_routes[0].endpoint_name, "ma_action.create");
+  EXPECT_EQ(e->endpoint_routes[0].route_mode, (uint32_t)PCL_ROUTE_LOCAL);
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// A concrete port route (pcl_port_set_route(), the mechanism
+// pcl::Port::routeRemote() et al. use -- typical for a publisher/provided
+// port configured directly at bind() time) is a second live route store
+// entirely separate from the endpoint route table
+// pcl_executor_set_endpoint_route() populates. Exclusivity must catch a
+// conflict against this store too, not just the endpoint route table
+// REQ_PCL_474 already covers.
+///< REQ_PCL_475: an exclusive group conflict is detected against a concrete port route (pcl_port_set_route()), a second live route store distinct from the endpoint route table REQ_PCL_474 covers.
+TEST(PclTransportRouting, ExclusiveGroupConflictDetectedAgainstConcretePortRoute) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // Side B (agra.ma_action.request) is a publisher port routed directly
+  // via pcl_port_set_route() before this manifest load ever runs --
+  // never touching e->endpoint_routes at all.
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    pcl_port_t* port = pcl_container_add_publisher(c, "agra.ma_action.request", "Msg");
+    if (!port) return PCL_ERR_NOMEM;
+    return pcl_port_set_route(port, PCL_ROUTE_LOCAL, nullptr, 0u);
+  };
+  auto* c = pcl_container_create("port_routed_node", &cbs, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  // This manifest declares the exclusive group and routes only side A
+  // (ma_action.create) -- it never mentions agra.ma_action.request at
+  // all, so a check scoped to the endpoint route table alone would miss
+  // this conflict.
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+///< REQ_PCL_464: multiple same-side endpoints of one `exclusive` group (all three rpc command endpoints) route together successfully with no side-B member routed.
+TEST(PclTransportRouting, ExclusiveGroupMultipleSameSideEndpointsRouteTogether) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +
+      "route ma_action.update consumed recorder\n" +
+      "route ma_action.cancel consumed recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+  ASSERT_NE(routing, nullptr);
+  EXPECT_NE(pcl_executor_get_transport_for_peer(e, "recorder"), nullptr);
+  pcl_transport_routing_destroy(routing);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_465: an endpoint named in no `exclusive` group is unaffected by exclusivity, even when a group is declared and routed alongside it.
+TEST(PclTransportRouting, ExclusiveGroupLeavesUngroupedEndpointUnaffected) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +
+      // Unrelated endpoint, member of no group: routing it alongside a
+      // routed group member (ma_action.create, side A) must not trip
+      // exclusivity.
+      "route object_evidence publisher recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+  ASSERT_NE(routing, nullptr);
+  pcl_transport_routing_destroy(routing);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_466: a malformed `exclusive` line (missing side B) fails closed with PCL_ERR_INVALID and a diagnostic naming the missing clause.
+TEST(PclTransportRouting, ExclusiveGroupFailsClosedOnMalformedLine) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const auto path = WriteManifest(
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update\n");
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_NE(std::string(diag).find("exclusive line needs"), std::string::npos)
+      << diag;
+  EXPECT_EQ(routing, nullptr);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// A second malformed shape: a doubled comma leaves an empty member in the
+// middle of one side's endpoint list -- also fails closed rather than
+// silently dropping it (a trailing comma with nothing after it is not
+// ambiguous the same way, since there is no token left to misparse; the
+// doubled-comma-mid-list shape is the one that would otherwise silently
+// produce a phantom empty endpoint name).
+///< REQ_PCL_467: an `exclusive` line with an empty endpoint name in a side's list (doubled comma) fails closed with PCL_ERR_INVALID and a diagnostic naming the group and side.
+TEST(PclTransportRouting, ExclusiveGroupFailsClosedOnEmptyListMember) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const auto path = WriteManifest(
+      "exclusive ma_action.request_leg ma_action.create,,ma_action.update agra.ma_action.request\n");
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("side A"), std::string::npos) << diag;
+  EXPECT_EQ(routing, nullptr);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_469: a two-sided conflict fails closed even when both conflicting `route` lines appear BEFORE the `exclusive` line that groups them -- the check is order-independent, not declare-before-use.
+TEST(PclTransportRouting, ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      // Both conflicting routes appear before the `exclusive` declaration.
+      "route ma_action.create consumed recorder\n" +
+      "route agra.ma_action.request publisher recorder\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+  // Both routes -- installed successfully at parse time -- must be rolled
+  // back once the final exclusivity pass fails the whole load.
+  EXPECT_EQ(e->endpoint_route_count, 0u);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// Rollback must cover exclusive-group routes too: routes installed for a
+// group's side A must be cleared when a later, unrelated line fails -- same
+// guarantee REQ_PCL_421 proves for plain routes, exercised here with a
+// declared `exclusive` group in play.
+///< REQ_PCL_468: routes installed for an `exclusive` group's side are rolled back when a later manifest line fails for an unrelated reason, leaving the executor's route table empty.
+TEST(PclTransportRouting, ExclusiveGroupRoutesRolledBackWhenLaterLineFails) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +  // valid: side A, installs a route
+      "route ma_action.update consumed recorder\n" +  // valid: side A, installs a route
+      "route object_evidence wobble recorder\n";      // malformed kind: fails
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(routing, nullptr);
+  // Both routes installed for the group's side A must have been rolled back.
+  EXPECT_EQ(e->endpoint_route_count, 0u);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// ---------------------------------------------------------------------------
+// Manifest-routed streaming invoke (rpc_pubsub_interchangeability_plan.md
+// Phase 5, PCL.078 / REQ_PCL_470): pcl_executor_invoke_stream() must consult
+// the per-endpoint route table pcl_transport_routing_load() installs, the
+// same way pcl_executor_invoke_async() already does -- before this fix it
+// only ever checked the legacy single executor-wide transport, so a
+// manifest-routed streaming endpoint silently fell through to the
+// intra-process fallback and failed with PCL_ERR_NOT_FOUND.
+// ---------------------------------------------------------------------------
+
+///< REQ_PCL_470: a streaming invoke for a manifest-routed `stream_consumed`
+///< endpoint dispatches through the named peer's transport (PCL_STREAMING,
+///< and the transport's own invoke_stream is actually called) rather than
+///< falling through to the always-empty intra-process fallback.
+TEST(PclTransportRouting, StreamingInvokeDispatchesThroughRoutedTransport) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_plugin_handle_t* probe = pcl_plugin_open(CAPTURE_PLUGIN_PATH);
+  ASSERT_NE(probe, nullptr);
+  auto reset = reinterpret_cast<void (*)(void)>(
+      pcl_plugin_symbol(probe, "pcl_capture_reset"));
+  auto stream_count = reinterpret_cast<uint32_t (*)(void)>(
+      pcl_plugin_symbol(probe, "pcl_capture_invoke_stream_count"));
+  ASSERT_NE(reset, nullptr);
+  ASSERT_NE(stream_count, nullptr);
+  reset();
+
+  // The capture plugin declares PCL_CAP_RPC_STREAM (it implements
+  // invoke_stream), so a stream_consumed route to it composes -- capability
+  // *rejection* for a stream-incapable peer is
+  // StreamingRouteRejectsStreamIncapableTransport below.
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "route some.read stream_consumed recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+
+  const char payload[] = "query";
+  pcl_msg_t req{};
+  req.data = payload;
+  req.size = sizeof(payload);
+  req.type_name = "application/json";
+  pcl_stream_context_t* ctx = nullptr;
+  const pcl_status_t rc = pcl_executor_invoke_stream(
+      e, "some.read", &req,
+      [](const pcl_msg_t*, bool, pcl_status_t, void*) {}, nullptr, &ctx);
+
+  EXPECT_EQ(rc, PCL_STREAMING);
+  EXPECT_EQ(stream_count(), 1u);
+
+  std::remove(path.c_str());
+  pcl_plugin_unload(probe);
+  pcl_transport_routing_destroy(routing);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_470: a stream_consumed route to a transport that is unary-only
+///< (publish + invoke_async, no invoke_stream -- exactly the "unary-only
+///< peer" scenario a stream_consumed/consumed kind conflation would have let
+///< through) fails closed with a diagnostic naming RPC_STREAM, leaving
+///< nothing installed. Before this fix, PCL_ENDPOINT_STREAM_CONSUMED did not
+///< exist: a streaming client route was indistinguishable from a unary one
+///< (both PCL_ENDPOINT_CONSUMED, requiring only PCL_CAP_RPC_UNARY), so this
+///< exact peer composed successfully and only failed once the stream was
+///< actually invoked at runtime.
+TEST(PclTransportRouting, StreamingRouteRejectsStreamIncapableTransport) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport unary_only ") + NOCAPS_TRANSPORT_PLUGIN_PATH +
+      "\n" + "route some.read stream_consumed unary_only\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  EXPECT_NE(std::string(diag).find("RPC_STREAM"), std::string::npos) << diag;
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// ---------------------------------------------------------------------------
+// Gateway container discovery (rpc_pubsub_interchangeability_plan.md Phase 5,
+// PCL.078 / REQ_PCL_471): a manifest-driven peer whose transport plugin
+// exposes a gateway container (shared-memory, socket) must be discoverable
+// through the routing handle so a provider component can wire it into the
+// executor itself -- the loader does not do this automatically (see
+// pcl_transport_routing.h's doc comment for why).
+// ---------------------------------------------------------------------------
+
+///< REQ_PCL_471: a manifest-routed peer whose transport exposes a gateway
+///< container (shared memory) is discoverable via
+///< pcl_transport_routing_get_gateway(), and the returned container is a
+///< real, usable pcl_container_t (configure/activate/add all succeed).
+TEST(PclTransportRouting, GetGatewayReturnsUsableContainerForShmPeer) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const std::string body =
+      std::string("transport shm_peer ") + SHM_TRANSPORT_PLUGIN_PATH +
+      " {\"bus_name\":\"routing_gateway_test_bus\",\"participant_id\":\"a\"}\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+
+  pcl_container_t* gateway = nullptr;
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "shm_peer", &gateway),
+            PCL_OK);
+  ASSERT_NE(gateway, nullptr);
+  EXPECT_EQ(pcl_container_configure(gateway), PCL_OK);
+  EXPECT_EQ(pcl_container_activate(gateway), PCL_OK);
+  EXPECT_EQ(pcl_executor_add(e, gateway), PCL_OK);
+
+  std::remove(path.c_str());
+  pcl_transport_routing_destroy(routing);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_471: a peer whose transport exposes no gateway symbol (the test
+///< capture plugin) returns PCL_OK with a NULL container -- not an error.
+TEST(PclTransportRouting, GetGatewayReturnsNullForPluginWithoutGateway) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, nullptr, 0),
+            PCL_OK);
+
+  pcl_container_t* gateway = reinterpret_cast<pcl_container_t*>(0x1);
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "recorder", &gateway),
+            PCL_OK);
+  EXPECT_EQ(gateway, nullptr);
+
+  std::remove(path.c_str());
+  pcl_transport_routing_destroy(routing);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_471: an unrecognized peer id fails closed with
+///< PCL_ERR_NOT_FOUND, and NULL/invalid arguments fail with PCL_ERR_INVALID.
+TEST(PclTransportRouting, GetGatewayFailsClosedOnUnknownPeerAndBadArgs) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, nullptr, 0),
+            PCL_OK);
+
+  pcl_container_t* gateway = nullptr;
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "no_such_peer", &gateway),
+            PCL_ERR_NOT_FOUND);
+  EXPECT_EQ(pcl_transport_routing_get_gateway(nullptr, "recorder", &gateway),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "recorder", nullptr),
+            PCL_ERR_INVALID);
+
+  std::remove(path.c_str());
+  pcl_transport_routing_destroy(routing);
   pcl_executor_destroy(e);
 }

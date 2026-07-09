@@ -12,6 +12,7 @@
 #include <string.h>
 
 #define PCL_ROUTING_MAX_PEERS 8u
+#define PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS 16u
 
 typedef struct {
   pcl_plugin_handle_t*   handle;
@@ -24,6 +25,17 @@ typedef struct {
   pcl_endpoint_kind_t endpoint_kind;
 } pcl_routing_route_t;
 
+/* A declared `exclusive` group: two named sides (rpc-shaped vs. pub/sub-
+   shaped realizations of one logical leg, in this codebase's usage, but the
+   grammar itself is contract-agnostic -- just two named endpoint sets). */
+typedef struct {
+  char     name[64];
+  char     side_a[PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS][64];
+  uint32_t side_a_count;
+  char     side_b[PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS][64];
+  uint32_t side_b_count;
+} pcl_routing_exclusive_group_t;
+
 struct pcl_transport_routing_t {
   pcl_executor_t*          executor;  /* borrowed; used to unregister on destroy */
   pcl_routing_transport_t* transports;
@@ -32,6 +44,9 @@ struct pcl_transport_routing_t {
   pcl_routing_route_t*     routes;    /* endpoint routes installed on the executor */
   size_t                   route_count;
   size_t                   route_capacity;
+  pcl_routing_exclusive_group_t* groups;  /* declared `exclusive` stanzas */
+  size_t                          group_count;
+  size_t                          group_capacity;
 };
 
 static void set_diag(char* diag, size_t diag_size, const char* fmt, ...) {
@@ -48,6 +63,7 @@ static int kind_from_str(const char* s, pcl_endpoint_kind_t* out) {
   if (strcmp(s, "provided") == 0)             { *out = PCL_ENDPOINT_PROVIDED; return 1; }
   if (strcmp(s, "consumed") == 0)             { *out = PCL_ENDPOINT_CONSUMED; return 1; }
   if (strcmp(s, "stream_provided") == 0)      { *out = PCL_ENDPOINT_STREAM_PROVIDED; return 1; }
+  if (strcmp(s, "stream_consumed") == 0)      { *out = PCL_ENDPOINT_STREAM_CONSUMED; return 1; }
   return 0;
 }
 
@@ -94,6 +110,23 @@ static pcl_status_t routing_push_route(pcl_transport_routing_t* r,
            sizeof(r->routes[r->route_count].endpoint_name), "%s", endpoint_name);
   r->routes[r->route_count].endpoint_kind = endpoint_kind;
   r->route_count++;
+  return PCL_OK;
+}
+
+/* Record a declared `exclusive` group (copied by value; the caller's stack
+   copy is transient). */
+static pcl_status_t routing_push_group(pcl_transport_routing_t*             r,
+                                       const pcl_routing_exclusive_group_t* group) {
+  if (r->group_count == r->group_capacity) {
+    size_t new_cap = r->group_capacity ? r->group_capacity * 2u : 4u;
+    pcl_routing_exclusive_group_t* grown = (pcl_routing_exclusive_group_t*)realloc(
+        r->groups, new_cap * sizeof(*grown));
+    if (!grown) return PCL_ERR_NOMEM;
+    r->groups        = grown;
+    r->group_capacity = new_cap;
+  }
+  r->groups[r->group_count] = *group;
+  r->group_count++;
   return PCL_OK;
 }
 
@@ -208,6 +241,134 @@ static pcl_status_t handle_transport_line(pcl_executor_t*          e,
   return PCL_OK;
 }
 
+/* Split a comma-separated endpoint-name list in place into `out`/`out_count`,
+   bounded by `max_count`. Fails closed on an empty member (leading/trailing/
+   doubled comma) or an oversized list -- both are malformed input, not a
+   silently-truncated one. */
+static pcl_status_t split_endpoint_list(char*                list_str,
+                                        char                 out[][64],
+                                        uint32_t*             out_count,
+                                        uint32_t              max_count,
+                                        const char*           group_name,
+                                        const char*           which_side,
+                                        char*                 diag,
+                                        size_t                diag_size) {
+  char* p = list_str;
+  *out_count = 0u;
+  while (p && *p) {
+    char* comma = strchr(p, ',');
+    if (comma) *comma = '\0';
+    if (*p == '\0') {
+      set_diag(diag, diag_size, "exclusive '%s': empty endpoint name in %s",
+               group_name, which_side);
+      return PCL_ERR_INVALID;
+    }
+    if (*out_count >= max_count) {
+      set_diag(diag, diag_size, "exclusive '%s': too many endpoints in %s",
+               group_name, which_side);
+      return PCL_ERR_INVALID;
+    }
+    snprintf(out[*out_count], 64, "%s", p);
+    (*out_count)++;
+    p = comma ? comma + 1 : NULL;
+  }
+  if (*out_count == 0u) {
+    set_diag(diag, diag_size, "exclusive '%s': %s has no endpoints",
+             group_name, which_side);
+    return PCL_ERR_INVALID;
+  }
+  return PCL_OK;
+}
+
+static pcl_status_t handle_exclusive_line(pcl_transport_routing_t* r,
+                                          char*                    cursor,
+                                          char*                    diag,
+                                          size_t                   diag_size) {
+  char* group_name = next_token(&cursor);
+  char* side_a_s   = next_token(&cursor);
+  char* side_b_s   = next_token(&cursor);
+  pcl_routing_exclusive_group_t group;
+  pcl_status_t rc;
+  size_t i;
+
+  if (!group_name || !side_a_s || !side_b_s) {
+    set_diag(diag, diag_size,
+             "exclusive line needs <group_name> <side_a_endpoints> <side_b_endpoints>");
+    return PCL_ERR_INVALID;
+  }
+
+  /* Declare-before-use requires group identity to be unambiguous: reject a
+     redeclared group name rather than silently shadowing the first. */
+  for (i = 0; i < r->group_count; ++i) {
+    if (strcmp(r->groups[i].name, group_name) == 0) {
+      set_diag(diag, diag_size, "exclusive '%s': group already declared", group_name);
+      return PCL_ERR_INVALID;
+    }
+  }
+
+  memset(&group, 0, sizeof(group));
+  snprintf(group.name, sizeof(group.name), "%s", group_name);
+
+  rc = split_endpoint_list(side_a_s, group.side_a, &group.side_a_count,
+                           PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS, group_name, "side A",
+                           diag, diag_size);
+  if (rc != PCL_OK) return rc;
+  rc = split_endpoint_list(side_b_s, group.side_b, &group.side_b_count,
+                           PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS, group_name, "side B",
+                           diag, diag_size);
+  if (rc != PCL_OK) return rc;
+
+  return routing_push_group(r, &group);
+}
+
+/* First endpoint name in [list, list+count) that is routed on the executor
+   under any kind, or NULL if none. Queries the live executor rather than
+   just `r->routes` (the routes this manifest load itself installed): by
+   the time this runs, the executor already reflects both this load's own
+   routes AND anything routed before this load started (a previous
+   manifest load into the same executor, or a direct programmatic
+   pcl_executor_set_endpoint_route call) -- the D5 fail-closed guarantee
+   must hold against that pre-existing state too, not just against routes
+   this one manifest happens to declare together. */
+static const char* route_matching_list(const pcl_transport_routing_t* r,
+                                       const char                    list[][64],
+                                       uint32_t                       count) {
+  uint32_t i;
+  for (i = 0; i < count; ++i) {
+    if (pcl_executor_endpoint_route_exists_any_kind(r->executor, list[i])) {
+      return list[i];
+    }
+  }
+  return NULL;
+}
+
+/* D5 compose-time exclusivity: checked once, after the whole manifest has
+   been parsed (not incrementally per `route` line), so the result is
+   independent of whether a manifest's `exclusive` declaration appears
+   before or after the `route` lines for its members -- a route line
+   processed while its group was not yet declared must not silently bypass
+   the check. For every declared group, fail closed if *both* sides have at
+   least one routed member; any number of same-side endpoints routed
+   together, and endpoints in no group, are unaffected. */
+static pcl_status_t validate_exclusivity(const pcl_transport_routing_t* r,
+                                         char*                          diag,
+                                         size_t                          diag_size) {
+  size_t i;
+  for (i = 0; i < r->group_count; ++i) {
+    const pcl_routing_exclusive_group_t* g = &r->groups[i];
+    const char* a_hit = route_matching_list(r, g->side_a, g->side_a_count);
+    const char* b_hit = route_matching_list(r, g->side_b, g->side_b_count);
+
+    if (a_hit && b_hit) {
+      set_diag(diag, diag_size,
+               "exclusive '%s': '%s' and '%s' are routed from opposite sides",
+               g->name, a_hit, b_hit);
+      return PCL_ERR_STATE;
+    }
+  }
+  return PCL_OK;
+}
+
 static pcl_status_t handle_route_line(pcl_executor_t*          e,
                                       pcl_transport_routing_t* r,
                                       char*                    cursor,
@@ -285,6 +446,10 @@ static pcl_status_t handle_route_line(pcl_executor_t*          e,
     return rc;
     // GCOVR_EXCL_STOP
   }
+  /* D5 compose-time exclusivity is validated once, after the whole manifest
+     is parsed (validate_exclusivity, called from pcl_transport_routing_load)
+     -- not here per-line, so it does not depend on `exclusive` declaration
+     order relative to this route's line. */
   /* Compose-time validation: caps + QoS floor, fail closed. */
   return pcl_executor_validate_endpoint_route(e, &route, diag, diag_size);
 }
@@ -326,6 +491,8 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
 
     if (strcmp(directive, "transport") == 0) {
       rc = handle_transport_line(e, r, cursor, diag, diag_size);
+    } else if (strcmp(directive, "exclusive") == 0) {
+      rc = handle_exclusive_line(r, cursor, diag, diag_size);
     } else if (strcmp(directive, "route") == 0) {
       rc = handle_route_line(e, r, cursor, diag, diag_size);
     } else {
@@ -336,6 +503,10 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
   }
 
   fclose(file);
+
+  if (rc == PCL_OK) {
+    rc = validate_exclusivity(r, diag, diag_size);
+  }
 
   if (rc != PCL_OK) {
     pcl_transport_routing_destroy(r);
@@ -359,6 +530,9 @@ void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
     }
   }
   free(routing->routes);
+  /* Declared groups are pure manifest-level bookkeeping -- never registered
+     on the executor, so nothing to unregister, just free the array. */
+  free(routing->groups);
   for (i = 0; i < routing->count; ++i) {
     /* Unregister from the executor BEFORE unloading the library, or the executor
        is left holding vtable function pointers into a dlclose'd .so. */
@@ -375,4 +549,45 @@ void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
 
 size_t pcl_transport_routing_transport_count(const pcl_transport_routing_t* routing) {
   return routing ? routing->count : 0u;
+}
+
+/* Known optional plugin-exported gateway accessors (see pcl_plugin.h's
+   PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL for the established precedent of an
+   optional, dlsym-resolved extra a transport plugin may or may not export).
+   Not every transport type has a gateway symbol here -- only those with a
+   real gateway-container pattern; unlisted/no-match transports correctly
+   fall through to "no gateway", not an error. */
+static const char* const kRoutingGatewaySymbols[] = {
+  "pcl_shm_transport_plugin_gateway",
+  "pcl_socket_transport_plugin_gateway",
+};
+
+typedef pcl_container_t* (*pcl_routing_gateway_fn)(const pcl_transport_t*);
+
+pcl_status_t pcl_transport_routing_get_gateway(
+    const pcl_transport_routing_t* routing,
+    const char*                    peer_id,
+    pcl_container_t**              out_gateway) {
+  size_t i;
+  if (!out_gateway) return PCL_ERR_INVALID;
+  *out_gateway = NULL;
+  if (!routing || !peer_id) return PCL_ERR_INVALID;
+
+  for (i = 0; i < routing->count; ++i) {
+    if (strcmp(routing->transports[i].peer_id, peer_id) == 0) {
+      size_t si;
+      for (si = 0; si < sizeof(kRoutingGatewaySymbols) / sizeof(kRoutingGatewaySymbols[0]);
+           ++si) {
+        void* sym = pcl_plugin_symbol(routing->transports[i].handle,
+                                      kRoutingGatewaySymbols[si]);
+        if (sym) {
+          pcl_routing_gateway_fn fn = (pcl_routing_gateway_fn)sym;
+          *out_gateway = fn(routing->transports[i].vtable);
+          return PCL_OK;
+        }
+      }
+      return PCL_OK;  /* peer found; its transport just has no gateway */
+    }
+  }
+  return PCL_ERR_NOT_FOUND;
 }

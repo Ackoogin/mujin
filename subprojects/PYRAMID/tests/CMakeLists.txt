@@ -162,6 +162,191 @@ target_include_directories(test_pcl_generated_component_stream_handle PRIVATE
 gtest_discover_tests(test_pcl_generated_component_stream_handle
     DISCOVERY_MODE PRE_TEST)
 
+# ---------------------------------------------------------------------------
+# Interaction facade (rpc_pubsub_interchangeability_plan.md, Phase 2:
+# RequestPortClient / InformationPortSink). Exercises the generated facade
+# against two proto trees the main pyramid_cpp_bindings_codegen pipeline
+# does not cover:
+#   - pim/agra_example/  -- the fully-projectable A-GRA MAAction_Service
+#     (Phase 0 gave it an 'update' variant), used for the positive rpc/
+#     pub/sub submit()/transitions() cases.
+#   - tests/interaction_facade_fixture/ -- a small test-owned fixture (not
+#     part of pim/test/'s byte-identity-protected tree) whose Update command
+#     has no wrapper variant, used for D2's non-projectable-command negative
+#     case.
+# Both are generated at configure time (JSON backend only -- no FlatBuffers/
+# flatc dependency needed for this target), mirroring the top-level
+# PYRAMID_GENERATE_CPP_BINDINGS execute_process() pattern in the root
+# CMakeLists.txt, just against these two additional roots.
+# ---------------------------------------------------------------------------
+
+set(PYRAMID_AGRA_EXAMPLE_DIR ${PYRAMID_ROOT_DIR}/pim/agra_example)
+set(PYRAMID_INTERACTION_FIXTURE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/interaction_facade_fixture)
+# Both trees generate into the SAME output directory (not one each): the
+# fixture carries its own copies of pyramid.data_model.base/common.proto
+# (byte-identical to pim/agra_example's, following the same per-tree-copy
+# convention pim/test/ and pim/agra_example/ already use relative to each
+# other), so generating both into one directory overwrites the shared
+# pyramid_data_model_{base,common}_*.{hpp,cpp} with identical content rather
+# than producing two distinct copies. Two copies in two directories, both on
+# this target's include path, would each define pyramid::domain_model::base
+# et al. and violate ODR the moment a single translation unit -- this test
+# file -- includes generated headers from both trees.
+set(PYRAMID_AGRA_EXAMPLE_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated_agra_example)
+
+file(MAKE_DIRECTORY ${PYRAMID_AGRA_EXAMPLE_GEN_DIR})
+
+# Generate the fixture FIRST, A-GRA example SECOND (order matters): both
+# runs write tree-scoped aggregate artifacts into the same directory --
+# the umbrella pyramid_data_model_types.hpp (re-exports every data-model
+# package's types into pyramid::domain_model, scoped to whichever tree was
+# just scanned) and binding_manifest.json chief among them -- and the later
+# run's copy wins. A-GRA's tree (base+common+agra) is a strict superset of
+# the fixture's (base+common only), so generating it last leaves the
+# umbrella complete for both; the reverse order leaves it missing the
+# `agra` sub-namespace re-exports the A-GRA sources (including the
+# generated pyramid_data_model_agra_cabi_marshal.cpp this target also
+# compiles) need.
+execute_process(
+    COMMAND ${PYRAMID_PYTHON} ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py
+            ${PYRAMID_INTERACTION_FIXTURE_DIR} ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}
+            --languages cpp --backends json
+    RESULT_VARIABLE _pyramid_fixture_gen_rc
+    OUTPUT_VARIABLE _pyramid_fixture_gen_out
+    ERROR_VARIABLE _pyramid_fixture_gen_err
+)
+if(NOT _pyramid_fixture_gen_rc EQUAL 0)
+    message(FATAL_ERROR
+        "Failed to generate interaction-facade negative-fixture bindings:\n"
+        "${_pyramid_fixture_gen_out}\n${_pyramid_fixture_gen_err}")
+endif()
+
+execute_process(
+    COMMAND ${PYRAMID_PYTHON} ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py
+            ${PYRAMID_AGRA_EXAMPLE_DIR} ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}
+            --languages cpp --backends json
+    RESULT_VARIABLE _pyramid_agra_gen_rc
+    OUTPUT_VARIABLE _pyramid_agra_gen_out
+    ERROR_VARIABLE _pyramid_agra_gen_err
+)
+if(NOT _pyramid_agra_gen_rc EQUAL 0)
+    message(FATAL_ERROR
+        "Failed to generate A-GRA example bindings for interaction facade "
+        "tests:\n${_pyramid_agra_gen_out}\n${_pyramid_agra_gen_err}")
+endif()
+
+# Runtime-loadable JSON codec plugins, one per generated package (D2/D5's
+# terminology aside, this is a plain PCL fact: every generated invoke*/
+# publish* helper routes its wire payload through
+# pyramid_try_registry_encode()/decode(), which consults
+# pcl_codec_registry_default() -- there is no static-codec fallback. The
+# _codec.cpp files compiled directly into the test executable below define
+# toJson()/fromJson() free functions only; they register nothing. Only a
+# loaded codec *plugin* .so registers a pcl_codec_t vtable into the
+# registry (pcl_plugin_load_codec(), called from the test's
+# CodecLoaderEnvironment::SetUp()). mission_autonomy (provided),
+# c2_station (consumed), and interaction_facade_fixture/widget (consumed)
+# are three distinct generated packages, each exporting the identical
+# extern "C" pcl_codec_plugin_entry symbol -- exactly the collision
+# agra_shm_comms_test.cpp (Phase C of the proving plan) hit and solved the
+# same way: one small .so per package, dlopen'd at runtime, never linked
+# directly into the executable that also links the package's own typed
+# wrapper sources.
+add_library(pyramid_codec_json_agra_mission_autonomy MODULE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_agra_mission_autonomy_json_codec_plugin.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_mission_autonomy_services_provided_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_mission_autonomy_services_provided_cabi_marshal.cpp
+)
+target_link_libraries(pyramid_codec_json_agra_mission_autonomy PRIVATE
+    pcl_core nlohmann_json::nlohmann_json)
+target_include_directories(pyramid_codec_json_agra_mission_autonomy PRIVATE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR})
+
+add_library(pyramid_codec_json_agra_c2_station MODULE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_agra_c2_station_json_codec_plugin.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_c2_station_services_consumed_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_c2_station_services_consumed_cabi_marshal.cpp
+)
+target_link_libraries(pyramid_codec_json_agra_c2_station PRIVATE
+    pcl_core nlohmann_json::nlohmann_json)
+target_include_directories(pyramid_codec_json_agra_c2_station PRIVATE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR})
+
+add_library(pyramid_codec_json_interaction_facade_fixture_widget MODULE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_interaction_facade_fixture_widget_json_codec_plugin.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_interaction_facade_fixture_widget_services_consumed_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_interaction_facade_fixture_widget_services_consumed_cabi_marshal.cpp
+)
+target_link_libraries(pyramid_codec_json_interaction_facade_fixture_widget PRIVATE
+    pcl_core nlohmann_json::nlohmann_json)
+target_include_directories(pyramid_codec_json_interaction_facade_fixture_widget PRIVATE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR})
+
+add_executable(test_pcl_generated_interaction_facade
+    test_pcl_generated_interaction_facade.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_agra_mission_autonomy_provided.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_agra_c2_station_consumed.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_mission_autonomy_services_provided_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_c2_station_services_consumed_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_interaction_facade_fixture_widget_consumed.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_interaction_facade_fixture_widget_services_consumed_codec.cpp
+    # C-ABI marshalling (to_c/from_c/_free): the generated service impl
+    # .cpp's pyramid_cabi_encode()/pyramid_cabi_decode() codec-registration
+    # trampolines call these unconditionally (mirroring how
+    # pyramid_generated_codecs PUBLIC-links pyramid_generated_marshal for
+    # the main proto/ tree's tests below).
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_mission_autonomy_services_provided_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_c2_station_services_consumed_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_interaction_facade_fixture_widget_services_consumed_cabi_marshal.cpp
+)
+target_link_libraries(test_pcl_generated_interaction_facade PRIVATE
+    pcl_core
+    nlohmann_json::nlohmann_json
+    GTest::gtest_main
+)
+target_include_directories(test_pcl_generated_interaction_facade PRIVATE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}
+)
+# Compile-time paths to the three codec plugin .so's above (mirrors
+# CAPTURE_PLUGIN_PATH/UDP_TRANSPORT_PLUGIN_PATH's pattern in
+# subprojects/PCL/tests/CMakeLists.txt), consumed by
+# CodecLoaderEnvironment::SetUp() to dlopen and register them before any
+# test runs.
+target_compile_definitions(test_pcl_generated_interaction_facade PRIVATE
+    AGRA_MISSION_AUTONOMY_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_mission_autonomy>"
+    AGRA_C2_STATION_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_c2_station>"
+    INTERACTION_FACADE_FIXTURE_WIDGET_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_interaction_facade_fixture_widget>"
+)
+add_dependencies(test_pcl_generated_interaction_facade
+    pyramid_codec_json_agra_mission_autonomy
+    pyramid_codec_json_agra_c2_station
+    pyramid_codec_json_interaction_facade_fixture_widget
+)
+gtest_discover_tests(test_pcl_generated_interaction_facade
+    DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_plugin_only_fail_closed
     test_plugin_only_fail_closed.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp

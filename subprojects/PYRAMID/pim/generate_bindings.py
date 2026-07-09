@@ -78,6 +78,7 @@ class BindingArtifactManifest:
             'services': [],
             'topics': [],
             'endpoint_requirements': [],
+            'interactions': [],
             'codec_plugins': [],
             'flatbuffers_schemas': [],
             'protobuf_service_codecs': [],
@@ -190,6 +191,37 @@ class BindingArtifactManifest:
             f"{entry['source']}:{entry['endpoint_name']}:{entry['kind']}"
             for entry in entries
         }
+
+    def add_interactions(self, contract) -> None:
+        def endpoint_entry(ep) -> dict:
+            entry = {'endpoint_name': ep.endpoint_name, 'kind': ep.kind}
+            if ep.rpc_name:
+                entry['rpc_name'] = ep.rpc_name
+            if ep.projectable is not None:
+                entry['projectable'] = ep.projectable
+            if ep.reason:
+                entry['reason'] = ep.reason
+            return entry
+
+        entries = []
+        for service_key, interaction in sorted(contract.interactions.items()):
+            legs = [
+                {
+                    'name': leg.name,
+                    'group_name': leg.group_name,
+                    'side_a': [endpoint_entry(ep) for ep in leg.side_a],
+                    'side_b': [endpoint_entry(ep) for ep in leg.side_b],
+                }
+                for leg in interaction.legs
+            ]
+            entries.append({
+                'service_key': interaction.service_key,
+                'service_name': interaction.service_name,
+                'port_kind': interaction.port_kind,
+                'legs': legs,
+            })
+        self._data['interactions'] = entries
+        self._seen['interactions'] = {entry['service_key'] for entry in entries}
 
     def record_generated(self, role: str, callback) -> None:
         before = _output_file_snapshot(self._output_dir)
@@ -684,6 +716,7 @@ def main():
     manifest.add_selected_backend_protos(backend_names, proto_files)
     manifest.add_contract_topics(contract)
     manifest.add_endpoint_requirements(contract)
+    manifest.add_interactions(contract)
 
     total = 0
     remaining_backends = list(backend_names)

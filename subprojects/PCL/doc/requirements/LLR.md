@@ -3159,3 +3159,123 @@ Each documented status code shall be returned by at least one exercised public A
 **Traces**: PCL.047
 
 **Verification**: `test_pcl_lifecycle.cpp::InvalidTransitionsRejected` (ERR_STATE), `test_pcl_robustness.cpp::PublishOnInactiveContainerReturnsClosed` (ERR_PORT_CLOSED), `test_pcl_robustness.cpp::ParamOverflowReturnsNomem` (ERR_NOMEM), `test_pcl_robustness.cpp::DispatchToUnknownTopicReturnsNotFound` (ERR_NOT_FOUND), `test_pcl_robustness.cpp::GracefulShutdownTimeout` (ERR_TIMEOUT), `test_pcl_lifecycle.cpp::CallbackFailureAbortsTransition` (ERR_CALLBACK), `test_pcl_lifecycle.cpp::NullHandlesReturnError` (ERR_INVALID).
+
+## 37. Manifest Routing Exclusivity
+
+Two-sided `exclusive <group_name> <side_a_endpoints> <side_b_endpoints>` groups
+(PCL.077): mutual exclusivity is between the two named *sides* of one logical
+leg, not between individual members -- any number of same-side endpoints
+route together freely; the violation is routing anything from *both* sides.
+See design decision D5 ("Compose-time exclusivity") in
+`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md`.
+
+### REQ_PCL_463 - Exclusive Group Two-Sided Conflict Fails Closed
+A `route` line that completes both sides of a declared `exclusive` group (one side-A endpoint and one side-B endpoint both routed) shall fail closed with `PCL_ERR_STATE` and a diagnostic naming the group and both conflicting endpoints.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupTwoSidedConflictFailsClosed`.
+
+### REQ_PCL_464 - Exclusive Group Multiple Same-Side Endpoints Route Together
+Any number of same-side endpoints of one declared `exclusive` group (e.g. all three rpc command endpoints of a request leg) shall route together successfully with no side-B member routed.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupMultipleSameSideEndpointsRouteTogether`.
+
+### REQ_PCL_465 - Exclusive Group Leaves Ungrouped Endpoint Unaffected
+An endpoint named in no `exclusive` group shall be unaffected by exclusivity checking, even when routed alongside a group whose declared members are also routed.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupLeavesUngroupedEndpointUnaffected`.
+
+### REQ_PCL_466 - Exclusive Group Fails Closed On Malformed Line
+An `exclusive` line missing a clause (group name, side A, or side B) shall fail closed with `PCL_ERR_INVALID` and a diagnostic naming the missing clause.
+
+**Traces**: PCL.077, PCL.070
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupFailsClosedOnMalformedLine`.
+
+### REQ_PCL_467 - Exclusive Group Fails Closed On Empty List Member
+An `exclusive` line with an empty endpoint name inside a side's comma-separated list (a doubled comma) shall fail closed with `PCL_ERR_INVALID` and a diagnostic naming the group and the affected side.
+
+**Traces**: PCL.077, PCL.070
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupFailsClosedOnEmptyListMember`.
+
+### REQ_PCL_468 - Exclusive Group Routes Rolled Back When Later Line Fails
+Routes installed for a declared `exclusive` group's side shall be rolled back, along with everything else this manifest installed, when a later manifest line fails for an unrelated reason.
+
+**Traces**: PCL.077, PCL.070
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupRoutesRolledBackWhenLaterLineFails`.
+
+### REQ_PCL_469 - Exclusive Group Conflict Detected Regardless Of Declaration Order
+A two-sided `exclusive` group conflict shall be detected and fail closed with `PCL_ERR_STATE` regardless of whether the conflicting `route` lines appear before or after the group's `exclusive` declaration in the manifest file.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder`.
+
+### REQ_PCL_474 - Exclusive Group Conflict Detected Against Pre-Existing Route
+A two-sided `exclusive` group conflict shall be detected and fail closed with `PCL_ERR_STATE` even when one side's routed member was installed before the current `pcl_transport_routing_load()` call began -- by an earlier manifest load into the same executor, or by a direct programmatic `pcl_executor_set_endpoint_route()` call -- and the current manifest only routes the opposite side, never mentioning the pre-existing side's endpoint at all.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedAgainstPreExistingRoute`. Found in PR review of REQ_PCL_467-469's original fix: `validate_exclusivity()` scanned only `r->routes` (the endpoint routes this one manifest load itself installed) rather than the executor's live route table, so a group conflict split across two separate loads -- or a manifest-routed side against a programmatically-installed one -- composed successfully and left both realizations active, silently bypassing the D5 fail-closed guarantee. Fixed by adding `pcl_executor_endpoint_route_exists_any_kind()` (a kind-agnostic sibling of the existing `pcl_executor_endpoint_route_exists()`, since an exclusive group's side members are plain endpoint names with no fixed kind) and querying the live executor instead of the manifest-load-scoped route list; since every route this load installs is itself applied to the executor before `validate_exclusivity()` runs, querying the executor directly subsumes the old `r->routes`-only check without needing to keep both.
+
+### REQ_PCL_475 - Exclusive Group Conflict Detected Against Concrete Port Route
+A two-sided `exclusive` group conflict shall be detected and fail closed with `PCL_ERR_STATE` even when one side's routed member is a concrete port routed directly via `pcl_port_set_route()` (the mechanism `pcl::Port::routeRemote()` et al. use, typically applied to a publisher/provided port at bind() time) rather than through `pcl_executor_set_endpoint_route()`'s endpoint route table -- the two are distinct, independently-queryable live route stores, and a name routed through either one counts as "routed" for exclusivity purposes.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedAgainstConcretePortRoute`. Found in PR review of REQ_PCL_474's fix: `pcl_executor_endpoint_route_exists_any_kind()` only scanned `e->endpoint_routes`, missing the second route store `port_route_mode()` already consults (`pcl_port_t::route_configured`/`route_mode`, populated by `copy_route_config()` via `pcl_port_set_route()`) -- a manifest could route the opposite side of a group whose other side was already concretely port-routed and pass exclusivity, leaving both realizations active exactly as REQ_PCL_474 was meant to prevent. Fixed by extending `pcl_executor_endpoint_route_exists_any_kind()` to additionally scan every container's ports on the executor for a `route_configured` port matching the name, so it now covers both stores with the same single query `validate_exclusivity()` already calls.
+
+## Manifest-Driven Remote Streaming Invoke and Gateway Discovery
+
+Found and fixed during
+`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md` Phase 5 (the
+terminal cross-process proof harness): the first attempt anywhere in this
+codebase to route a `provided`/`stream_provided`-kind endpoint through
+`pcl_transport_routing_load()` and actually carry real cross-process traffic
+over it surfaced gaps neither the low-level SHM transport tests (which
+never exercise the manifest loader for RPC-serving endpoints) nor any prior
+manifest-driven harness (which only ever routed pub/sub topics) had reason to
+catch. REQ_PCL_470's `PCL_ENDPOINT_STREAM_CONSUMED` kind and REQ_PCL_472's
+capability gate were themselves found in PR review of the first cut of this
+fix (which routed the streaming client side under the pre-existing
+`consumed` kind) rather than in the original diagnosis.
+
+### REQ_PCL_470 - Manifest-Routed Streaming Invoke Dispatches Remotely
+`pcl_executor_invoke_stream()` shall dispatch a streaming service invocation through the named peer transport a `stream_consumed`-kind route table entry designates, before considering the legacy single executor-wide transport or the intra-process fallback -- mirroring `pcl_executor_invoke_async()`'s existing two-tier (per-endpoint route, then legacy transport) structure, but keyed on `PCL_ENDPOINT_STREAM_CONSUMED` rather than the unary `PCL_ENDPOINT_CONSUMED` (see REQ_PCL_472).
+
+**Traces**: PCL.078
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingInvokeDispatchesThroughRoutedTransport`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (run1: request leg AND requirement leg both rpc-realized, cross-process over shared memory, JSON and FlatBuffers) -- before this fix, `transitions()`'s underlying `maactionReadStreaming()` call returned an invalid `StreamHandle` for every manifest-routed cross-process streaming invoke, since `pcl_executor_invoke_stream()` only ever consulted `e->has_transport`/`e->transport`, never the route table `pcl_transport_routing_load()` populates. Full PCL regression suite re-runs green, proving the fix is additive.
+
+### REQ_PCL_472 - Stream-Consumed Routes Require RPC_STREAM Capability
+A manifest `route` line of kind `stream_consumed` shall fail closed with `PCL_ERR_STATE` and a diagnostic naming `RPC_STREAM` when routed to a transport that does not declare `PCL_CAP_RPC_STREAM`, even when that transport declares `PCL_CAP_RPC_UNARY` (i.e. is unary-rpc-capable but not streaming-capable) -- `stream_consumed` and `consumed` are distinct endpoint kinds precisely so `pcl_endpoint_required_caps()` can require the correct capability for each, rather than a streaming client route being satisfied by `PCL_CAP_RPC_UNARY` alone and only failing once actually invoked.
+
+**Traces**: PCL.078
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingRouteRejectsStreamIncapableTransport` (routes against the existing unary-only `pcl_transport_nocaps_plugin` -- publish + invoke_async only, no invoke_stream); `PclCapabilities.EndpointRequiredCaps` (`PCL_ENDPOINT_STREAM_CONSUMED` maps to `PCL_CAP_RPC_STREAM`, not `PCL_CAP_RPC_UNARY`). Also exercised for real via `contract_routing_manifest.py`/`build_contract_routing_test.sh`: before this fix and its companion QoS-floor fix (both raised in the same PR review), the generated manifest routed `*.read`'s consumed side as plain `consumed` and dropped its reliability floor; `contract_routing_validation` now fails closed exactly as this REQ requires until the routed peer (there, `contract_transport_plugin.c`'s `"mode":"rpc"` config) is updated to actually declare `PCL_CAP_RPC_STREAM`.
+
+**Follow-on generator fixes (same PR review round)**, downstream consumers of the new `PCL_ENDPOINT_STREAM_CONSUMED` kind that also needed updating to stay consistent with it, none of which are PCL library behaviour themselves:
+- `contract_routing_manifest.py`'s reliability-floor join (the P2 fix above) initially passed through `EndpointRequirement.reliability`'s "unspecified" sentinel (an endpoint with no declared QoS floor) as a literal manifest token; `pcl_transport_routing.c`'s `reliability_from_str()` only accepts `reliable`/`best_effort`, so this would have failed closed even the common no-floor case. Fixed by only emitting the token for the two real values.
+- `subprojects/PYRAMID/pim/cpp/components_gen.py`'s `ConsumedService::routeAllRemote()`/`routeAllLocal()`/no-arg `routeAllRemote()` (the file-wide facade `MaactionRequestPortClient`'s `consumedService()` accessor exposes) hardcoded `PCL_ENDPOINT_CONSUMED` for every rpc uniformly; a component routing a server-streaming `Read` through it would install the route under the wrong kind and `pcl_executor_invoke_stream()` would silently miss it. Fixed to select `PCL_ENDPOINT_STREAM_CONSUMED` when `rpc.server_streaming`. Verified by a new `pim/test_stream_consumed_routing.py` (generates the A-GRA example bindings and asserts the emitted route calls use the correct kind per rpc) plus re-running the full C++ regression suite and every `agra_*`/routing harness.
+- `subprojects/PYRAMID/pim/ada/service_body_gen.py`'s generated `Configure_Consumed_Transport` had the identical hardcoded-kind gap; fixed analogously, plus the missing `PCL_ENDPOINT_STREAM_CONSUMED` literal added to `subprojects/PCL/bindings/ada/pcl_bindings.ads`'s `Pcl_Endpoint_Kind` mirror (positional order preserved, matching the C enum's `pragma Convention(C, ...)` encoding). Verified by clean Python-level regeneration only (no GNAT/gprbuild in this environment to compile-verify, consistent with Phase 4's own carried-note limitation).
+
+### REQ_PCL_473 - Explicit Local Route Bypasses Legacy Transport Fallback
+An endpoint with an explicit `PCL_ROUTE_LOCAL` route entry shall be dispatched intra-process by `pcl_executor_invoke_async()`/`pcl_executor_invoke_stream()` without ever consulting the legacy single executor-wide transport (`e->has_transport`/`e->transport`), even when such a default transport is also registered on the executor. A `PCL_ROUTE_LOCAL` route is a deliberate override, not merely the absence of a remote route, so it must not fall through to a fallback that exists only for endpoints with no route table entry at all.
+
+**Traces**: PCL.078
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.InvokeAsyncExplicitLocalRouteBypassesDefaultTransport`, `test_pcl_streaming.cpp::PclStreaming.InvokeStreamExplicitLocalRouteBypassesDefaultTransport`. Found in PR review of the REQ_PCL_470 fix: `pcl_executor_invoke_stream()`'s new route-table lookup faithfully mirrored `pcl_executor_invoke_async()`'s pre-existing structure, including this pre-existing gap in the older function -- an explicit `PCL_ROUTE_LOCAL` route fell through a "handled below" comment straight into the legacy transport fallback check before ever reaching intra-process dispatch. Fixed symmetrically in both functions via a `route_forces_local` flag set when `route->route_mode == PCL_ROUTE_LOCAL`, gating the legacy fallback check with `!route_forces_local &&` rather than restructuring the fallback's position, so the intra-process dispatch code stays in one place. Full PCL regression suite and every `agra_*`/routing harness re-run green, proving the fix is additive.
+
+### REQ_PCL_471 - Routing-Manifest Gateway Container Discovery
+`pcl_transport_routing_get_gateway(routing, peer_id, out_gateway)` shall return `PCL_OK` with the named peer's transport's gateway container (if its plugin exports one of the known optional gateway-accessor symbols) or `PCL_OK` with `*out_gateway = NULL` (if it exports none -- not an error), and `PCL_ERR_NOT_FOUND` when no transport was loaded for `peer_id`. The routing manifest loader itself shall not add this container to the executor; a component providing a `provided`/`stream_provided` endpoint over such a transport is responsible for retrieving, configuring, activating, and adding it.
+
+**Traces**: PCL.078
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.GetGatewayReturnsUsableContainerForShmPeer`, `.GetGatewayReturnsNullForPluginWithoutGateway`, `.GetGatewayFailsClosedOnUnknownPeerAndBadArgs`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (the provider/MA role of every rpc-realized-request-leg scenario: run1 and run3, JSON and FlatBuffers) -- before this fix, inbound `SVC_REQ`/`STREAM_REQ` frames arriving over the shared-memory bus at a manifest-routed provider were silently dropped (nothing was registered to receive the internal gateway-subscriber topic those frames are re-posted to), so the provider process never observed the command at all and the consumer's pending RPC call hung until timeout.
