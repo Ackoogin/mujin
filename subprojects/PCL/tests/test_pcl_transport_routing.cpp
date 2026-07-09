@@ -540,3 +540,152 @@ TEST(PclTransportRouting, FailsClosedWhenRouteTableExhausted) {
   std::remove(path.c_str());
   pcl_executor_destroy(e);
 }
+
+// D5 two-sided `exclusive` grammar (doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md
+// §3 D5): a group declares two named sides, e.g. the rpc realization
+// (multiple command endpoints) vs. the pub/sub realization (one topic
+// endpoint) of the same logical leg. Any number of same-side endpoints route
+// together freely; routing from both sides is a compose-time error.
+
+///< REQ_PCL_463: a route completing both sides of a declared `exclusive` group (one side-A endpoint + one side-B endpoint routed) fails closed with PCL_ERR_STATE and a diagnostic naming the group and both endpoints.
+TEST(PclTransportRouting, ExclusiveGroupTwoSidedConflictFailsClosed) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +
+      "route agra.ma_action.request publisher recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_464: multiple same-side endpoints of one `exclusive` group (all three rpc command endpoints) route together successfully with no side-B member routed.
+TEST(PclTransportRouting, ExclusiveGroupMultipleSameSideEndpointsRouteTogether) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +
+      "route ma_action.update consumed recorder\n" +
+      "route ma_action.cancel consumed recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+  ASSERT_NE(routing, nullptr);
+  EXPECT_NE(pcl_executor_get_transport_for_peer(e, "recorder"), nullptr);
+  pcl_transport_routing_destroy(routing);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_465: an endpoint named in no `exclusive` group is unaffected by exclusivity, even when a group is declared and routed alongside it.
+TEST(PclTransportRouting, ExclusiveGroupLeavesUngroupedEndpointUnaffected) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +
+      // Unrelated endpoint, member of no group: routing it alongside a
+      // routed group member (ma_action.create, side A) must not trip
+      // exclusivity.
+      "route object_evidence publisher recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+  ASSERT_NE(routing, nullptr);
+  pcl_transport_routing_destroy(routing);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_466: a malformed `exclusive` line (missing side B) fails closed with PCL_ERR_INVALID and a diagnostic naming the missing clause.
+TEST(PclTransportRouting, ExclusiveGroupFailsClosedOnMalformedLine) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const auto path = WriteManifest(
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update\n");
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_NE(std::string(diag).find("exclusive line needs"), std::string::npos)
+      << diag;
+  EXPECT_EQ(routing, nullptr);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// A second malformed shape: a doubled comma leaves an empty member in the
+// middle of one side's endpoint list -- also fails closed rather than
+// silently dropping it (a trailing comma with nothing after it is not
+// ambiguous the same way, since there is no token left to misparse; the
+// doubled-comma-mid-list shape is the one that would otherwise silently
+// produce a phantom empty endpoint name).
+///< REQ_PCL_467: an `exclusive` line with an empty endpoint name in a side's list (doubled comma) fails closed with PCL_ERR_INVALID and a diagnostic naming the group and side.
+TEST(PclTransportRouting, ExclusiveGroupFailsClosedOnEmptyListMember) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const auto path = WriteManifest(
+      "exclusive ma_action.request_leg ma_action.create,,ma_action.update agra.ma_action.request\n");
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("side A"), std::string::npos) << diag;
+  EXPECT_EQ(routing, nullptr);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// Rollback must cover exclusive-group routes too: routes installed for a
+// group's side A must be cleared when a later, unrelated line fails -- same
+// guarantee REQ_PCL_421 proves for plain routes, exercised here with a
+// declared `exclusive` group in play.
+///< REQ_PCL_468: routes installed for an `exclusive` group's side are rolled back when a later manifest line fails for an unrelated reason, leaving the executor's route table empty.
+TEST(PclTransportRouting, ExclusiveGroupRoutesRolledBackWhenLaterLineFails) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n" +  // valid: side A, installs a route
+      "route ma_action.update consumed recorder\n" +  // valid: side A, installs a route
+      "route object_evidence wobble recorder\n";      // malformed kind: fails
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(routing, nullptr);
+  // Both routes installed for the group's side A must have been rolled back.
+  EXPECT_EQ(e->endpoint_route_count, 0u);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}

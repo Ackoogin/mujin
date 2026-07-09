@@ -530,6 +530,11 @@ A failed manifest load shall leave nothing installed: transports already stood u
 
 **Rationale**: D9 -- partial composition after a failed load is worse than no composition.
 
+### PCL.077 - Manifest Exclusive Realization Groups
+The routing manifest grammar shall support an `exclusive <group_name> <side_a_endpoints> <side_b_endpoints>` directive declaring two mutually-exclusive named sides of endpoints for one logical leg. `pcl_transport_routing_load()` shall accept any number of same-side endpoints routed together, and shall fail closed (`PCL_ERR_STATE`) with a diagnostic naming the group and the two conflicting endpoints when a `route` line would route an endpoint on one side while an endpoint on the group's other side already has a route installed. An `exclusive` group shall be declared before any `route` line for one of its member endpoints. An endpoint named in no `exclusive` group shall be unaffected by this check, and a manifest with no `exclusive` stanzas shall behave exactly as before this directive existed.
+
+**Rationale**: D9 -- a deployment that routes both realizations of one logical leg (e.g. an rpc-shaped and a pub/sub-shaped carrier of the same transaction) is a duplicate-delivery-path configuration error, and D9 already establishes that compose-time is where such errors must surface, not runtime. D8 -- which realization runs is deployment data (a manifest line), not code, so the manifest grammar is the right place to declare and enforce the constraint between them.
+
 ## Transport Template and Conformance
 
 ### PCL.071 - Transport Template Scaffold
@@ -658,6 +663,7 @@ PCL shall provide a reusable threading-model conformance suite -- distinct from 
 | `PCL.068` | `D3`, `D8` |
 | `PCL.069` | `D8` |
 | `PCL.070` | `D9` |
+| `PCL.077` | `D8`, `D9` |
 | `PCL.071` | `D2`, `D3`, `D5` |
 | `PCL.072` | `D3` |
 | `PCL.073` | `D1`, `D3` |

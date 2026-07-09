@@ -3159,3 +3159,54 @@ Each documented status code shall be returned by at least one exercised public A
 **Traces**: PCL.047
 
 **Verification**: `test_pcl_lifecycle.cpp::InvalidTransitionsRejected` (ERR_STATE), `test_pcl_robustness.cpp::PublishOnInactiveContainerReturnsClosed` (ERR_PORT_CLOSED), `test_pcl_robustness.cpp::ParamOverflowReturnsNomem` (ERR_NOMEM), `test_pcl_robustness.cpp::DispatchToUnknownTopicReturnsNotFound` (ERR_NOT_FOUND), `test_pcl_robustness.cpp::GracefulShutdownTimeout` (ERR_TIMEOUT), `test_pcl_lifecycle.cpp::CallbackFailureAbortsTransition` (ERR_CALLBACK), `test_pcl_lifecycle.cpp::NullHandlesReturnError` (ERR_INVALID).
+
+## 37. Manifest Routing Exclusivity
+
+Two-sided `exclusive <group_name> <side_a_endpoints> <side_b_endpoints>` groups
+(PCL.077): mutual exclusivity is between the two named *sides* of one logical
+leg, not between individual members -- any number of same-side endpoints
+route together freely; the violation is routing anything from *both* sides.
+See design decision D5 ("Compose-time exclusivity") in
+`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md`.
+
+### REQ_PCL_463 - Exclusive Group Two-Sided Conflict Fails Closed
+A `route` line that completes both sides of a declared `exclusive` group (one side-A endpoint and one side-B endpoint both routed) shall fail closed with `PCL_ERR_STATE` and a diagnostic naming the group and both conflicting endpoints.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupTwoSidedConflictFailsClosed`.
+
+### REQ_PCL_464 - Exclusive Group Multiple Same-Side Endpoints Route Together
+Any number of same-side endpoints of one declared `exclusive` group (e.g. all three rpc command endpoints of a request leg) shall route together successfully with no side-B member routed.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupMultipleSameSideEndpointsRouteTogether`.
+
+### REQ_PCL_465 - Exclusive Group Leaves Ungrouped Endpoint Unaffected
+An endpoint named in no `exclusive` group shall be unaffected by exclusivity checking, even when routed alongside a group whose declared members are also routed.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupLeavesUngroupedEndpointUnaffected`.
+
+### REQ_PCL_466 - Exclusive Group Fails Closed On Malformed Line
+An `exclusive` line missing a clause (group name, side A, or side B) shall fail closed with `PCL_ERR_INVALID` and a diagnostic naming the missing clause.
+
+**Traces**: PCL.077, PCL.070
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupFailsClosedOnMalformedLine`.
+
+### REQ_PCL_467 - Exclusive Group Fails Closed On Empty List Member
+An `exclusive` line with an empty endpoint name inside a side's comma-separated list (a doubled comma) shall fail closed with `PCL_ERR_INVALID` and a diagnostic naming the group and the affected side.
+
+**Traces**: PCL.077, PCL.070
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupFailsClosedOnEmptyListMember`.
+
+### REQ_PCL_468 - Exclusive Group Routes Rolled Back When Later Line Fails
+Routes installed for a declared `exclusive` group's side shall be rolled back, along with everything else this manifest installed, when a later manifest line fails for an unrelated reason.
+
+**Traces**: PCL.077, PCL.070
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupRoutesRolledBackWhenLaterLineFails`.

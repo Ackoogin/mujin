@@ -19,7 +19,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import parse_proto, parse_proto_tree, ProtoTypeIndex
-from binding_contract import command_projectability_for_service, build_contract
+from binding_contract import (
+    command_projectability_for_service,
+    build_contract,
+    interaction_for_service,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 AGRA_ROOT = REPO_ROOT / "subprojects" / "PYRAMID" / "pim" / "agra_example"
@@ -235,6 +239,151 @@ class ConflictingVariantProjectabilityTest(unittest.TestCase):
             all(not p.projectable for p in by_rpc.values()), by_rpc
         )
         self.assertTrue(all(p.reason == "no_wrapper" for p in by_rpc.values()))
+
+
+class InteractionModelTest(unittest.TestCase):
+    """Tests for Phase 1's `Interaction`/`InteractionLeg`/`InteractionEndpoint`
+    model (doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md, D5/§2.3).
+
+    An `Interaction` groups the rpc (side A) and topic (side B) realizations
+    of each leg of a Request or Information port -- purely a view over
+    `topics_for_proto_service` + `command_projectability_for_service`, keyed
+    the same way as `service_topics`/`command_projectability`.
+    """
+
+    def test_agra_request_service_yields_two_legs_with_expected_sides(self):
+        files = parse_proto_tree(AGRA_ROOT)
+        pf = next(
+            pf for pf in files
+            if pf.package == "pyramid.components.agra.mission_autonomy.services.provided"
+        )
+        service = next(s for s in pf.services if s.name == "MAAction_Service")
+        index = ProtoTypeIndex(files)
+
+        interaction = interaction_for_service(index, pf, service)
+        self.assertIsNotNone(interaction)
+        self.assertEqual(interaction.port_kind, "request")
+        self.assertEqual(
+            interaction.service_key,
+            "pyramid.components.agra.mission_autonomy.services.provided.MAAction_Service",
+        )
+
+        legs_by_name = {leg.name: leg for leg in interaction.legs}
+        self.assertEqual(set(legs_by_name), {"request", "requirement"})
+
+        request_leg = legs_by_name["request"]
+        self.assertEqual(
+            request_leg.group_name,
+            f"{interaction.service_key}.request_leg",
+        )
+        # Side A: the three command endpoints, all fully projectable
+        # post-Phase-0 (the A-GRA example gained an `update` variant).
+        side_a_names = {ep.endpoint_name for ep in request_leg.side_a}
+        self.assertEqual(
+            side_a_names, {"ma_action.create", "ma_action.update", "ma_action.cancel"}
+        )
+        for ep in request_leg.side_a:
+            self.assertEqual(ep.kind, "provided")
+            self.assertTrue(ep.projectable, (ep.endpoint_name, ep.reason))
+        # Side B: the single `.request` topic endpoint.
+        self.assertEqual(len(request_leg.side_b), 1)
+        self.assertEqual(request_leg.side_b[0].endpoint_name, "agra.ma_action.request")
+        self.assertEqual(request_leg.side_b[0].kind, "subscriber")
+
+        requirement_leg = legs_by_name["requirement"]
+        self.assertEqual(
+            requirement_leg.group_name,
+            f"{interaction.service_key}.requirement_leg",
+        )
+        self.assertEqual(len(requirement_leg.side_a), 1)
+        self.assertEqual(requirement_leg.side_a[0].endpoint_name, "ma_action.read")
+        self.assertEqual(requirement_leg.side_a[0].rpc_name, "Read")
+        self.assertEqual(len(requirement_leg.side_b), 1)
+        self.assertEqual(
+            requirement_leg.side_b[0].endpoint_name, "agra.ma_action.requirement"
+        )
+        self.assertEqual(requirement_leg.side_b[0].kind, "publisher")
+
+    def test_agra_information_service_yields_single_leg(self):
+        files = parse_proto_tree(AGRA_ROOT)
+        pf = next(
+            pf for pf in files
+            if pf.package == "pyramid.components.agra.mission_autonomy.services.provided"
+        )
+        service = next(s for s in pf.services if s.name == "MAActionPlan_Service")
+        index = ProtoTypeIndex(files)
+
+        interaction = interaction_for_service(index, pf, service)
+        self.assertIsNotNone(interaction)
+        self.assertEqual(interaction.port_kind, "information")
+        self.assertEqual(len(interaction.legs), 1)
+
+        leg = interaction.legs[0]
+        self.assertEqual(leg.name, "information")
+        self.assertEqual(leg.group_name, f"{interaction.service_key}.information_leg")
+        self.assertEqual(len(leg.side_a), 1)
+        self.assertEqual(leg.side_a[0].rpc_name, "Read")
+        self.assertEqual(len(leg.side_b), 1)
+        self.assertEqual(leg.side_b[0].endpoint_name, "agra.ma_action_plan.information")
+
+    def test_build_contract_records_interactions(self):
+        files = parse_proto_tree(AGRA_ROOT)
+        contract = build_contract(files, "pyramid")
+        key = "pyramid.components.agra.mission_autonomy.services.provided.MAAction_Service"
+        self.assertIn(key, contract.interactions)
+        self.assertEqual(contract.interactions[key].port_kind, "request")
+
+    def test_pim_test_non_projectable_update_still_in_side_a(self):
+        # D2/Phase 1: projectability gates whether the pub/sub side is safe
+        # to use for a specific command -- it does not remove the command
+        # from the rpc side's membership. SPRRequirement_Service's Update is
+        # uniformly non-projectable across pim/test/ (see
+        # PimTestUniformProjectabilityTest) and must still appear in the
+        # request leg's side A, flagged non-projectable.
+        pf = parse_proto(PIM_TEST_SPR_PROTO)
+        service = next(s for s in pf.services if s.name == "SPRRequirement_Service")
+        index = ProtoTypeIndex([pf])
+
+        interaction = interaction_for_service(index, pf, service)
+        self.assertIsNotNone(interaction)
+        request_leg = next(leg for leg in interaction.legs if leg.name == "request")
+
+        side_a_by_rpc = {ep.rpc_name: ep for ep in request_leg.side_a}
+        self.assertEqual(set(side_a_by_rpc), {"Create", "Update", "Cancel"})
+
+        update_ep = side_a_by_rpc["Update"]
+        self.assertEqual(update_ep.endpoint_name, "spr_requirement.update")
+        self.assertFalse(update_ep.projectable)
+        self.assertEqual(update_ep.reason, "no_match")
+
+        # Create/Cancel remain projectable in the same side A.
+        self.assertTrue(side_a_by_rpc["Create"].projectable)
+        self.assertTrue(side_a_by_rpc["Cancel"].projectable)
+
+    def test_non_request_non_information_service_yields_no_interaction(self):
+        # A service with no recognised port_kind (free-form / grammar-
+        # nonconforming) is out of scope for this plan (D7) and must yield
+        # no Interaction at all, not a partially-populated one.
+        source = CONFLICTING_VARIANT_PROTO.replace(
+            "service Widget_Service {",
+            "service Widget_Service {\n  // no Create/Read/Update/Cancel shape below is altered;"
+            " port_kind classification is unaffected by this comment.\n",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "conflict.proto"
+            path.write_text(source, encoding="utf-8")
+            pf = parse_proto(path)
+        service = next(s for s in pf.services if s.name == "Widget_Service")
+        index = ProtoTypeIndex([pf])
+        # Sanity: this fixture is still a request-shape port (unchanged from
+        # ConflictingVariantProjectabilityTest) -- confirms an Interaction
+        # *is* built for a normal request-shape service before testing the
+        # negative case below via an explicit port_kind override.
+        self.assertEqual(service.port_kind, "request")
+        self.assertIsNotNone(interaction_for_service(index, pf, service))
+
+        service.port_kind = "neutral"
+        self.assertIsNone(interaction_for_service(index, pf, service))
 
 
 if __name__ == "__main__":

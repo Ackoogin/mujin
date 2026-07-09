@@ -3,7 +3,7 @@
 > **Generated file.** Regenerate with `python3 subprojects/PCL/scripts/gen_hlr_coverage.py`.
 > Do not hand-edit; fix `HLR.md`/`LLR.md` or the test requirement tags and regenerate.
 
-Generated: 2026-07-06
+Generated: 2026-07-09
 
 End-to-end traceability: **Test -> LLR -> HLR** for all PCL requirements.
 
@@ -164,7 +164,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
 | PCL.069 | Routing Manifest | 317, 416, 417, 418, 419, 425 | test_pcl_transport_routing |
-| PCL.070 | Routing Atomicity and Fail-Closed Diagnostics | 275, 318, 319, 416, 420, 421, 422, 423, 424, 425, 426, 427, 428 | test_pcl_transport_routing |
+| PCL.070 | Routing Atomicity and Fail-Closed Diagnostics | 275, 318, 319, 416, 420, 421, 422, 423, 424, 425, 426, 427, 428, 466, 467, 468 | test_pcl_transport_routing |
 ## Transport Template and Conformance
 
 | HLR | Description | LLR(s) | Test File(s) |
@@ -183,15 +183,20 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 |-----|-------------|--------|--------------|
 | PCL.075 | Transport Threading-Model Contract | 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458 | test_pcl_transport_threading |
 | PCL.076 | Transport Threading-Model Conformance Suite | 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458 | test_pcl_transport_threading |
+## Manifest-Driven Endpoint Routing
+
+| HLR | Description | LLR(s) | Test File(s) |
+|-----|-------------|--------|--------------|
+| PCL.077 | Manifest Exclusive Realization Groups | 463, 464, 465, 466, 467, 468 | test_pcl_transport_routing |
 
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| HLRs | 90 |
-| LLRs | 377 |
-| LLRs with at least one verifying test file | 377 |
+| HLRs | 91 |
+| LLRs | 383 |
+| LLRs with at least one verifying test file | 383 |
 | Distinct test files carrying REQ_PCL tags | 17 |
 | HLRs with no tracing LLR | 0 |
 | LLRs with no test evidence | 0 |

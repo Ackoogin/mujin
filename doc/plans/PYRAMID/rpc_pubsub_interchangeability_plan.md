@@ -631,3 +631,245 @@ scope: `git status` after all regeneration and test runs shows only the
 two A-GRA proto files, `binding_contract.py`, and the new
 `test_binding_contract.py` modified/added (build directories and harness
 scratch output are all pre-existing `.gitignore` entries).
+
+### Phase 1 — executed 2026-07-09
+
+**Part A -- PCL `exclusive` routing grammar.** Extended the manifest
+line-based parser (`subprojects/PCL/src/pcl_transport_routing.c`) with a
+`handle_exclusive_line()` following `handle_transport_line`/
+`handle_route_line`'s exact conventions: `next_token`/`trim` tokenizing,
+`set_diag` diagnostics, fail-closed-with-rollback via the existing
+`pcl_transport_routing_load` loop (verified by reading it -- any non-`PCL_OK`
+return from a line handler breaks the loop and calls
+`pcl_transport_routing_destroy`, which now also frees the new group array).
+Storage is a new growable `pcl_routing_exclusive_group_t` array
+(`groups`/`group_count`/`group_capacity`) on `pcl_transport_routing_t`,
+realloc-doubled exactly like `routing_push`/`routing_push_route`; each group
+holds two bounded endpoint-name lists (`side_a`/`side_b`,
+`PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS = 16`) parsed by a new
+`split_endpoint_list()` helper shared by both sides, which fails closed on
+an empty list member (a doubled comma) or an oversized list rather than
+silently truncating.
+
+Enforcement lives entirely in `handle_route_line()`: after a route is
+recorded in `r->routes` (so rollback covers it on any later failure), a new
+`check_exclusivity()` checks whether the just-routed endpoint is a member of
+either side of any declared group and, if so, whether the group's *other*
+side already has a routed member (`route_matching_list()`, a linear scan
+over `r->routes` -- no new executor API, exactly as scoped). Two-sided
+conflicts fail closed with `PCL_ERR_STATE` naming the group and both
+endpoints; any number of same-side endpoints route together with zero
+overhead when no groups are declared (the check is a no-op loop over
+`group_count == 0`). Declared groups are never registered on the executor
+(pure manifest bookkeeping), so `pcl_transport_routing_destroy` just frees
+the array -- no unregister step needed, unlike transports/routes.
+
+Header (`subprojects/PCL/include/pcl/pcl_transport_routing.h`): grammar
+`\code` block extended with the `exclusive <group_name> <side_a_endpoints>
+<side_b_endpoints>` directive, the two-sided semantics, and the
+declare-before-use ordering requirement, plus a worked example routing all
+three A-GRA command endpoints together and showing the rejected pub/sub
+route as a comment. `PCL_ERR_STATE`'s doc-comment gained the exclusivity
+case.
+
+Six new tests in `subprojects/PCL/tests/test_pcl_transport_routing.cpp`
+(`ExclusiveGroup*`, following the file's `WriteManifest`/diag-buffer/
+`EXPECT_NE(...find(...))` style): two-sided conflict fails closed naming
+group + both endpoints; three same-side command endpoints route together
+successfully; an ungrouped endpoint is unaffected by a group routed
+alongside it; a malformed `exclusive` line (missing side B) fails closed;
+a doubled comma (empty list member) fails closed -- note a *trailing* comma
+alone does not manufacture a phantom empty member with this tokenizer (the
+loop condition stops before processing text past the last comma), so the
+malformed-input case that actually exercises the empty-member branch is a
+doubled comma mid-list, not a trailing one, documented in the test; and a
+rollback case (two side-A routes installed, then an unrelated malformed
+route line) proving the group's routes are cleared along with everything
+else, mirroring `REQ_PCL_421`'s existing coverage for the general case.
+
+**Part B -- requirements traceability.** `REQ_PCL_463`-`REQ_PCL_468` added to
+`subprojects/PCL/doc/requirements/LLR.md` as a new "## 37. Manifest Routing
+Exclusivity" section (appended at the end of the file rather than
+renumbering sections 32-36 -- LLR.md's `## NN.` headers are prose-only
+organisation the coverage generator does not parse, so out-of-sequence
+placement carries no tooling risk; verified by reading
+`gen_hlr_coverage.py`, which only tracks section boundaries from `HLR.md`).
+`PCL.069`/`PCL.070` (checked against `HLR.md`) cover the manifest grammar
+and general fail-closed atomicity but do not state the two-sided-mutual-
+exclusivity rule itself, so per `doc/standards/requirements_standard.md`
+a new HLR was added: **`PCL.077` - Manifest Exclusive Realization Groups**,
+placed physically after `PCL.070` in `HLR.md` (same "Manifest-Driven
+Endpoint Routing" section) but keeping the next-free number `077` --
+following the existing `PCL.057` precedent of a later-numbered HLR
+inserted earlier in the document. Traces to `D8`/`D9` (added to the Design
+Decision Traceability table), the same pair `PCL.069`/`PCL.070` trace to --
+D8 because which realization runs is manifest data, D9 because a dual-
+routed leg is exactly the "unprovable configuration must fail at compose
+time" case D9 already states generally. All six new LLRs trace to
+`PCL.077`; the three that are also malformed-input/rollback cases
+additionally trace to `PCL.070`, matching the existing pattern (e.g.
+`REQ_PCL_420` traces `PCL.070, PCL.063`).
+`grep -rhoE "REQ_PCL_[0-9]+" subprojects/PCL | sort -t_ -k3 -n -u | tail -3`
+showed `REQ_PCL_462` as the highest allocated on this branch at execution
+time (462, not the 463 the task text anticipated -- re-checked per the
+task's own instruction not to assume), so `463`-`468` were the six free
+numbers used. `python3 subprojects/PCL/scripts/gen_hlr_coverage.py --check`
+regenerated `doc/reports/PCL/HLR_COVERAGE.md` cleanly: 91 HLRs (was 90), 383
+LLRs (was 377), zero trace gaps. `doc/reports/PCL/COVERAGE_REPORT.md` (the
+gcovr statement-coverage snapshot) was **not** regenerated: `gcovr` is not
+installed in this environment (`gcov` is present, `gcovr` is not), and
+regenerating it is a separate full-coverage build across all 21 PCL test
+binaries per `cmake/pcl_coverage/CMakeLists.txt`, out of scope for this
+phase's build request -- carried, consistent with the GNAT-absent carried-
+note convention elsewhere in this plan's ledger.
+
+**Part C -- declared interactions + manifest emission.**
+`subprojects/PYRAMID/pim/binding_contract.py` gained `InteractionEndpoint`/
+`InteractionLeg`/`Interaction` frozen dataclasses and an
+`interaction_for_service()`/`_build_interactions()` pair (mirroring
+`command_projectability_for_service`/`_build_command_projectability`'s
+structure exactly), wired into `BindingContract.interactions` (additive,
+default `{}`) via `build_contract()`. `interaction_for_service()` is purely
+a grouping over `topics_for_proto_service()` (topic derivation) and
+`command_projectability_for_service()` (Phase 0's per-command flags) --
+neither is recomputed. A Request-shape service yields up to two legs
+(`request`: side A = `Create`/`Update`/`Cancel` service endpoints with their
+Phase 0 projectability, side B = the `.request` topic; `requirement`: side
+A = the `Read` service endpoint, side B = the `.requirement` topic); an
+Information-shape service yields one `information` leg (side A = `Read`,
+side B = the `.information` topic). Group names are
+`f"{service_key}.{leg_name}_leg"` (`_leg_group_name()`), documented as the
+single source of truth for the convention so `contract_routing_manifest.py`
+(and any future manifest generator) can reproduce it from
+`binding_manifest.json` data alone without a stored group name.
+
+`generate_bindings.py`: `'interactions': []` added to
+`BindingArtifactManifest.__init__`'s `_data` dict alongside
+`'endpoint_requirements'`; a new `add_interactions()` method (same
+plain-dict-entries pattern as `add_endpoint_requirements`, conditionally
+including `rpc_name`/`projectable`/`reason` only when meaningful) called
+immediately after `manifest.add_endpoint_requirements(contract)` in
+`main()`. (First pass wired the constructor key and the method but missed
+the call site; caught by the byte-identity regeneration check below, which
+showed zero `interactions` entries in every generated manifest until the
+call was added -- worth recording since it is exactly the kind of gap a
+regeneration diff is supposed to catch.)
+
+`test_harness/contract_routing_manifest.py` rewritten to read `interactions`
+from `binding_manifest.json` instead of scanning the flat
+`endpoint_requirements` list. It selects the first Request-shape
+interaction whose request leg's side A is the *consumed* role (matching
+what every existing caller of this script exercises -- a consumer-side test
+component), emits one `exclusive` group per leg (declared before that leg's
+route lines), and routes exactly one side per leg. **Default-side design
+choice** (the plan text's "default = the pattern stamp" was ambiguous here,
+per the task's own framing): D1/D5's `pattern` stamp does not resolve to a
+single side cleanly -- a request leg's stamp differs by role (`PUBLISH` for
+a consumed-role component, `SUBSCRIBE` for provided) and the requirement
+leg's stamp is the request leg's inverse, so "the stamp" alone does not pick
+one side per leg independent of which role generated the manifest. Resolved
+to the conservative choice named in the task: route the rpc/service side
+("rpc") by default for both legs, overridable per leg with a new repeatable
+`--realize <leg>=rpc|pubsub` flag (`<leg>` in `request`/`requirement`/
+`information`). This *is* a behaviour change from before Phase 1: the old
+script free-routed one rpc endpoint (only the first of `Create`/`Update`/
+`Cancel` it found, via a flat scan) **and** both pub/sub topics for the same
+interaction simultaneously -- exactly the unreconciled dual-seam pattern D5
+makes a compose-time error. Picking one side per leg is required, not
+incidental; noted explicitly in the script's module docstring. The
+three-positional-argument CLI (`binding_manifest plugin_path out_manifest`)
+is unchanged; `--realize` is purely additive.
+
+**Tests.** `subprojects/PYRAMID/pim/test_binding_contract.py` gained an
+`InteractionModelTest` class (5 new tests): the A-GRA example's
+`MAAction_Service` yields exactly `request`+`requirement` legs with the
+expected side-A/side-B membership (all three command endpoints on side A,
+correct `group_name`, projectability flags all `True` post-Phase-0) and the
+correct single `information` leg for `MAActionPlan_Service`;
+`build_contract()` records interactions keyed like `service_topics`; a
+`pim/test/` contract's `SPRRequirement_Service` (the fixture named in this
+task) shows `Update` present in the request leg's side A with
+`projectable=False, reason="no_match"` alongside `Create`/`Cancel` at
+`projectable=True` -- proving projectability gates pub/sub-side safety
+without removing the command from the rpc side; and a service with no
+recognised `port_kind` yields no `Interaction` at all (D7 scope: free-form
+services untouched).
+
+`python3 -m unittest subprojects.PYRAMID.pim.test_proto_parser
+subprojects.PYRAMID.pim.test_agra_example
+subprojects.PYRAMID.pim.test_binding_contract` -- 18 tests, all OK (13
+carried from Phase 0 + 5 new).
+
+**Regeneration byte-identity.** Same before/after methodology as Phase 0
+(`git stash` of the Part C Python changes for the "before" generation, `git
+stash pop` for "after", since no generated-output tree is checked into this
+repo): `pim/test/` (884 files), legacy `proto/` (158 files), and
+`pim/agra_example/` (114 files), each with `--languages cpp,ada --backends
+json,flatbuffers`. `diff -rq` before/after showed exactly one differing file
+per tree, `binding_manifest.json`; a key-by-key JSON comparison confirmed
+every other key byte-identical and the only new key is `interactions`
+(`pim/test/`: 40 interaction entries; `proto/`: 0, since the legacy tree has
+no grammar-conforming `port_kind` services; `pim/agra_example/`: 4). One
+unrelated pre-existing nondeterminism was found and ruled out during this
+check: two Ada/C generic-CABI files
+(`pyramid-data_model-generic_pim-generic_pkg-cabi.ads`,
+`pyramid_data_model_generic_pim_generic_cabi.h`) reordered two struct
+declarations between runs; reproduced by generating the **same** pre-Phase-1
+code twice and diffing those two runs against each other (no Phase 1 code
+involved), confirming it is unrelated set-iteration-order nondeterminism in
+the existing generator, not a regression introduced here -- noted, not
+fixed (out of this phase's scope).
+
+**PCL build + tests.** `cmake --preset flatbuffers-only` (fresh configure,
+no prior build tree in this environment) then `cmake --build --preset
+flatbuffers-only-release --parallel $(nproc)` -- full build green, no
+warnings in `pcl_transport_routing.c`. `./test_pcl_transport_routing
+--gtest_filter="*Exclusive*"` -- 6/6 new tests pass. Full binary re-run --
+**23/23 tests pass** (17 pre-existing + 6 new), zero regressions.
+
+**Harness regression.** `bash
+subprojects/PYRAMID/pim/test_harness/build_contract_routing_test.sh` --
+green (`contract_routing_validation=pass transports=2`); inspected the
+generated `contract_routes.pcl` and confirmed the `exclusive` line precedes
+its members' `route` lines and all three `sdi_data_processing_dependency`
+command endpoints route together under one group with no conflict. Manually
+exercised `--realize request=pubsub` against the same generated
+`binding_manifest.json` and re-ran the compiled validation harness directly
+-- also `PCL_OK`, confirming the override selects the other side correctly.
+`bash subprojects/PYRAMID/pim/test_harness/build_agra_shm_comms_test.sh`
+(Phase C, unaffected by Part C's script changes but re-run per the task's
+regression bar) -- green, same JSON/FlatBuffers, two-process,
+correlation/non-conflation results as Phase 0's ledger entry.
+
+**Design choices recorded (beyond the default-side call above):**
+- `exclusive` group declaration order enforcement (declare-before-use) is
+  documented in the header, matching the `transport`-before-`route`
+  convention, but is not separately mechanically enforced the way an
+  unknown `route` peer is (`PCL_ERR_NOT_FOUND`) -- a `route` line for a
+  group member that appears *before* the `exclusive` declaration simply
+  will not find the group yet and is not checked against it. Scoped this
+  way because the task instructions asked for this to be documented, not
+  necessarily enforced as a distinct error path, and no existing manifest
+  in the tree (hand-authored or generated) has a reason to misorder these
+  lines. Flagged here in case future work wants a stricter check.
+- `contract_routing_manifest.py`'s interaction selection (first
+  Request-shape interaction with a *consumed*-role request leg) is a
+  judgement call preserving the old script's implicit "consumer-side test
+  component" framing as closely as a coherent single-interaction pick
+  allows; the old script's two independent flat-list scans could (and in
+  the `pim/test/` tree, did) pick a service endpoint and a topic pair from
+  *different* logical interactions, which the new interactions-based
+  approach cannot do by construction.
+
+**Accept criteria met:** dual-routing a leg fails closed at
+`pcl_transport_routing_load()` with a diagnostic naming the group and both
+endpoints (`ExclusiveGroupTwoSidedConflictFailsClosed`); routing all three
+RPC command endpoints together succeeds
+(`ExclusiveGroupMultipleSameSideEndpointsRouteTogether`); generated
+manifests carry `interactions` (40/0/4 entries across the three trees) and
+`contract_routing_manifest.py` emits the corresponding `exclusive` groups;
+`build_contract_routing_test.sh` and `build_agra_shm_comms_test.sh` both
+re-ran green. `git status` after all builds/regeneration/tests shows only
+the ten files listed above as Part A/B/C changes (build trees and harness
+scratch output are pre-existing `.gitignore` entries; `build-flatbuffers-only/`
+retained on disk, gitignored, in case it is useful for review).

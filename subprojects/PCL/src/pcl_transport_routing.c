@@ -12,6 +12,7 @@
 #include <string.h>
 
 #define PCL_ROUTING_MAX_PEERS 8u
+#define PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS 16u
 
 typedef struct {
   pcl_plugin_handle_t*   handle;
@@ -24,6 +25,17 @@ typedef struct {
   pcl_endpoint_kind_t endpoint_kind;
 } pcl_routing_route_t;
 
+/* A declared `exclusive` group: two named sides (rpc-shaped vs. pub/sub-
+   shaped realizations of one logical leg, in this codebase's usage, but the
+   grammar itself is contract-agnostic -- just two named endpoint sets). */
+typedef struct {
+  char     name[64];
+  char     side_a[PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS][64];
+  uint32_t side_a_count;
+  char     side_b[PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS][64];
+  uint32_t side_b_count;
+} pcl_routing_exclusive_group_t;
+
 struct pcl_transport_routing_t {
   pcl_executor_t*          executor;  /* borrowed; used to unregister on destroy */
   pcl_routing_transport_t* transports;
@@ -32,6 +44,9 @@ struct pcl_transport_routing_t {
   pcl_routing_route_t*     routes;    /* endpoint routes installed on the executor */
   size_t                   route_count;
   size_t                   route_capacity;
+  pcl_routing_exclusive_group_t* groups;  /* declared `exclusive` stanzas */
+  size_t                          group_count;
+  size_t                          group_capacity;
 };
 
 static void set_diag(char* diag, size_t diag_size, const char* fmt, ...) {
@@ -94,6 +109,23 @@ static pcl_status_t routing_push_route(pcl_transport_routing_t* r,
            sizeof(r->routes[r->route_count].endpoint_name), "%s", endpoint_name);
   r->routes[r->route_count].endpoint_kind = endpoint_kind;
   r->route_count++;
+  return PCL_OK;
+}
+
+/* Record a declared `exclusive` group (copied by value; the caller's stack
+   copy is transient). */
+static pcl_status_t routing_push_group(pcl_transport_routing_t*             r,
+                                       const pcl_routing_exclusive_group_t* group) {
+  if (r->group_count == r->group_capacity) {
+    size_t new_cap = r->group_capacity ? r->group_capacity * 2u : 4u;
+    pcl_routing_exclusive_group_t* grown = (pcl_routing_exclusive_group_t*)realloc(
+        r->groups, new_cap * sizeof(*grown));
+    if (!grown) return PCL_ERR_NOMEM;
+    r->groups        = grown;
+    r->group_capacity = new_cap;
+  }
+  r->groups[r->group_count] = *group;
+  r->group_count++;
   return PCL_OK;
 }
 
@@ -208,6 +240,139 @@ static pcl_status_t handle_transport_line(pcl_executor_t*          e,
   return PCL_OK;
 }
 
+/* Split a comma-separated endpoint-name list in place into `out`/`out_count`,
+   bounded by `max_count`. Fails closed on an empty member (leading/trailing/
+   doubled comma) or an oversized list -- both are malformed input, not a
+   silently-truncated one. */
+static pcl_status_t split_endpoint_list(char*                list_str,
+                                        char                 out[][64],
+                                        uint32_t*             out_count,
+                                        uint32_t              max_count,
+                                        const char*           group_name,
+                                        const char*           which_side,
+                                        char*                 diag,
+                                        size_t                diag_size) {
+  char* p = list_str;
+  *out_count = 0u;
+  while (p && *p) {
+    char* comma = strchr(p, ',');
+    if (comma) *comma = '\0';
+    if (*p == '\0') {
+      set_diag(diag, diag_size, "exclusive '%s': empty endpoint name in %s",
+               group_name, which_side);
+      return PCL_ERR_INVALID;
+    }
+    if (*out_count >= max_count) {
+      set_diag(diag, diag_size, "exclusive '%s': too many endpoints in %s",
+               group_name, which_side);
+      return PCL_ERR_INVALID;
+    }
+    snprintf(out[*out_count], 64, "%s", p);
+    (*out_count)++;
+    p = comma ? comma + 1 : NULL;
+  }
+  if (*out_count == 0u) {
+    set_diag(diag, diag_size, "exclusive '%s': %s has no endpoints",
+             group_name, which_side);
+    return PCL_ERR_INVALID;
+  }
+  return PCL_OK;
+}
+
+static pcl_status_t handle_exclusive_line(pcl_transport_routing_t* r,
+                                          char*                    cursor,
+                                          char*                    diag,
+                                          size_t                   diag_size) {
+  char* group_name = next_token(&cursor);
+  char* side_a_s   = next_token(&cursor);
+  char* side_b_s   = next_token(&cursor);
+  pcl_routing_exclusive_group_t group;
+  pcl_status_t rc;
+  size_t i;
+
+  if (!group_name || !side_a_s || !side_b_s) {
+    set_diag(diag, diag_size,
+             "exclusive line needs <group_name> <side_a_endpoints> <side_b_endpoints>");
+    return PCL_ERR_INVALID;
+  }
+
+  /* Declare-before-use requires group identity to be unambiguous: reject a
+     redeclared group name rather than silently shadowing the first. */
+  for (i = 0; i < r->group_count; ++i) {
+    if (strcmp(r->groups[i].name, group_name) == 0) {
+      set_diag(diag, diag_size, "exclusive '%s': group already declared", group_name);
+      return PCL_ERR_INVALID;
+    }
+  }
+
+  memset(&group, 0, sizeof(group));
+  snprintf(group.name, sizeof(group.name), "%s", group_name);
+
+  rc = split_endpoint_list(side_a_s, group.side_a, &group.side_a_count,
+                           PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS, group_name, "side A",
+                           diag, diag_size);
+  if (rc != PCL_OK) return rc;
+  rc = split_endpoint_list(side_b_s, group.side_b, &group.side_b_count,
+                           PCL_ROUTING_MAX_GROUP_SIDE_MEMBERS, group_name, "side B",
+                           diag, diag_size);
+  if (rc != PCL_OK) return rc;
+
+  return routing_push_group(r, &group);
+}
+
+/* True if `name` appears in the bounded endpoint-name list [list, list+count). */
+static int name_in_list(const char list[][64], uint32_t count, const char* name) {
+  uint32_t i;
+  for (i = 0; i < count; ++i) {
+    if (strcmp(list[i], name) == 0) return 1;
+  }
+  return 0;
+}
+
+/* First endpoint name already routed on `r` that appears in [list, list+count),
+   or NULL if none. Used to find "the other side's already-routed member". */
+static const char* route_matching_list(const pcl_transport_routing_t* r,
+                                       const char                    list[][64],
+                                       uint32_t                       count) {
+  size_t i;
+  for (i = 0; i < r->route_count; ++i) {
+    if (name_in_list(list, count, r->routes[i].endpoint_name)) {
+      return r->routes[i].endpoint_name;
+    }
+  }
+  return NULL;
+}
+
+/* D5 compose-time exclusivity: `endpoint_name` was just routed. If it is a
+   member of either side of a declared `exclusive` group and the group's
+   OTHER side already has a routed member, fail closed naming the group and
+   both conflicting endpoints. Endpoints in no group, and any number of
+   same-side endpoints routed together, are unaffected. */
+static pcl_status_t check_exclusivity(const pcl_transport_routing_t* r,
+                                      const char*                    endpoint_name,
+                                      char*                          diag,
+                                      size_t                          diag_size) {
+  size_t i;
+  for (i = 0; i < r->group_count; ++i) {
+    const pcl_routing_exclusive_group_t* g = &r->groups[i];
+    int in_a = name_in_list(g->side_a, g->side_a_count, endpoint_name);
+    int in_b = name_in_list(g->side_b, g->side_b_count, endpoint_name);
+    const char* other = NULL;
+
+    if (in_a) other = route_matching_list(r, g->side_b, g->side_b_count);
+    else if (in_b) other = route_matching_list(r, g->side_a, g->side_a_count);
+    else continue;
+
+    if (other) {
+      set_diag(diag, diag_size,
+               "exclusive '%s': '%s' and '%s' are routed from opposite sides",
+               g->name, endpoint_name, other);
+      return PCL_ERR_STATE;
+    }
+  }
+  return PCL_OK;
+}
+
 static pcl_status_t handle_route_line(pcl_executor_t*          e,
                                       pcl_transport_routing_t* r,
                                       char*                    cursor,
@@ -285,6 +450,12 @@ static pcl_status_t handle_route_line(pcl_executor_t*          e,
     return rc;
     // GCOVR_EXCL_STOP
   }
+  /* D5 compose-time exclusivity: fail closed if this route completes both
+     sides of a declared `exclusive` group. The route is already recorded in
+     r->routes above, so the top-level loop's rollback-on-failure clears it
+     (and anything else this manifest installed) on this error path too. */
+  rc = check_exclusivity(r, endpoint, diag, diag_size);
+  if (rc != PCL_OK) return rc;
   /* Compose-time validation: caps + QoS floor, fail closed. */
   return pcl_executor_validate_endpoint_route(e, &route, diag, diag_size);
 }
@@ -326,6 +497,8 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
 
     if (strcmp(directive, "transport") == 0) {
       rc = handle_transport_line(e, r, cursor, diag, diag_size);
+    } else if (strcmp(directive, "exclusive") == 0) {
+      rc = handle_exclusive_line(r, cursor, diag, diag_size);
     } else if (strcmp(directive, "route") == 0) {
       rc = handle_route_line(e, r, cursor, diag, diag_size);
     } else {
@@ -359,6 +532,9 @@ void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
     }
   }
   free(routing->routes);
+  /* Declared groups are pure manifest-level bookkeeping -- never registered
+     on the executor, so nothing to unregister, just free the array. */
+  free(routing->groups);
   for (i = 0; i < routing->count; ++i) {
     /* Unregister from the executor BEFORE unloading the library, or the executor
        is left holding vtable function pointers into a dlclose'd .so. */

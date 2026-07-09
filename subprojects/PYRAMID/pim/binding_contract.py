@@ -113,6 +113,71 @@ class CommandProjectability:
 
 
 @dataclass(frozen=True)
+class InteractionEndpoint:
+    """One member of an interaction leg's side (Phase 1, D5/§2.3 of the plan).
+
+    A thin projection of `EndpointRequirement`/`BindingTopic` identity onto
+    the PCL routing grammar's `<endpoint_name> <kind>` shape -- not a new
+    source of truth. `rpc_name` is set for service-side (rpc) members and
+    empty for topic members. `projectable`/`reason` carry Phase 0's
+    per-command classification (`CommandProjectability`) for the request
+    leg's `Create`/`Update`/`Cancel` members; both are `None`/`""` where
+    projectability does not apply (`Read` members, topic members).
+    """
+
+    endpoint_name: str
+    kind: str
+    rpc_name: str = ""
+    projectable: Optional[bool] = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class InteractionLeg:
+    """One directed leg of an `Interaction`: two mutually-exclusive realizations.
+
+    `group_name` is the deterministic name of the PCL `exclusive` group this
+    leg compiles to (see D5): `f"{service_key}.{leg_name}_leg"`, where
+    `service_key` is the same string `_service_key` produces elsewhere in
+    this module (e.g. `pyramid.components.agra.mission_autonomy.services.provided.MAAction_Service`)
+    and `leg_name` is `"request"` / `"requirement"` / `"information"`. This
+    convention must be reproducible from `binding_manifest.json` data alone
+    -- `contract_routing_manifest.py` (and any future manifest generator)
+    recomputes it rather than reading a stored group name, so the naming
+    rule is documented here as the single source of truth for it.
+
+    `side_a` is the rpc/service realization (one or more service endpoints
+    -- multiple for the request leg's `Create`/`Update`/`Cancel`, exactly one
+    for the requirement/information leg's `Read`); `side_b` is the single
+    pub/sub topic realization.
+    """
+
+    name: str  # "request" | "requirement" | "information"
+    group_name: str
+    side_a: Tuple[InteractionEndpoint, ...]
+    side_b: Tuple[InteractionEndpoint, ...]
+
+
+@dataclass(frozen=True)
+class Interaction:
+    """One Request or Information port's contract element (plan §2.1).
+
+    A Request-shape service (`port_kind == "request"`) yields one
+    `Interaction` with two legs (`request`, `requirement`); an
+    Information-shape service (`port_kind == "information"`) yields one
+    `Interaction` with a single `information` leg. Grouping only -- every
+    endpoint referenced here also appears in `BindingContract.endpoint_requirements`;
+    this is a view over that data keyed by leg, not a new source of truth
+    (see D5, Phase 1 of `doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md`).
+    """
+
+    service_key: str
+    service_name: str
+    port_kind: str  # "request" | "information"
+    legs: Tuple[InteractionLeg, ...]
+
+
+@dataclass(frozen=True)
 class EndpointRequirement:
     """One routeable endpoint requirement derived from the proto contract."""
 
@@ -148,6 +213,11 @@ class BindingContract:
     command_projectability: Dict[str, Tuple[CommandProjectability, ...]] = field(
         default_factory=dict
     )
+    # Phase 1 (D5): declared interactions (Request/Information ports grouped
+    # into legs with two sides each), keyed the same way as service_topics /
+    # command_projectability (see _service_key). Additive -- nothing in this
+    # contract's existing fields or behaviour depends on it.
+    interactions: Dict[str, "Interaction"] = field(default_factory=dict)
 
 
 class NamingPolicy(Protocol):
@@ -781,6 +851,125 @@ def command_projectability_for_file(
     return tuple(result)
 
 
+def _leg_group_name(service_key: str, leg_name: str) -> str:
+    """Deterministic PCL `exclusive` group name for one interaction leg.
+
+    `f"{service_key}.{leg_name}_leg"` -- this must stay reproducible from
+    `binding_manifest.json`'s `interactions` section alone (see
+    `InteractionLeg.group_name`'s docstring): `contract_routing_manifest.py`
+    and any future manifest generator recompute it from `service_key` +
+    `leg["name"]` rather than trusting a stored value, so the convention
+    lives here as the single source of truth.
+    """
+    return f"{service_key}.{leg_name}_leg"
+
+
+def _find_topic_by_role_suffix(
+    sub_topics: Dict[str, BindingTopic],
+    pub_topics: Dict[str, BindingTopic],
+    wire_name_suffix: str,
+) -> Optional[BindingTopic]:
+    """The one topic (subscribe or publish side) whose wire name ends with
+    `wire_name_suffix` (`.request` / `.requirement` / `.information`) -- the
+    same suffix convention `_topic_for_role` uses to derive these wire names
+    and `contract_routing_manifest.py` already matches against today."""
+    for topic in (*sub_topics.values(), *pub_topics.values()):
+        if topic.wire_name.endswith(wire_name_suffix):
+            return topic
+    return None
+
+
+def interaction_for_service(
+    index: ProtoTypeIndex,
+    pf: ProtoFile,
+    service: ProtoService,
+) -> Optional[Interaction]:
+    """Build the Phase 1 `Interaction` for one service (D5), or `None` if the
+    service is not a grammar-conforming Request/Information port, or is
+    missing an rpc/topic a leg needs (e.g. a Request-shape service with no
+    command rpcs and no `Read` rpc yields no legs at all).
+
+    Purely a grouping over `topics_for_proto_service`'s topic derivation and
+    `command_projectability_for_service`'s Phase 0 classification -- neither
+    is recomputed nor overridden here.
+    """
+    if service.port_kind not in ("request", "information"):
+        return None
+
+    service_key = _service_key(pf.package, service)
+    sub_topics, pub_topics = topics_for_proto_service(pf, service)
+    projectability = {
+        cp.rpc_name: cp
+        for cp in command_projectability_for_service(index, pf, service)
+    }
+
+    def topic_endpoint(topic: BindingTopic) -> InteractionEndpoint:
+        kind = "publisher" if topic.direction == "publish" else "subscriber"
+        return InteractionEndpoint(endpoint_name=topic.wire_name, kind=kind)
+
+    def rpc_endpoint(rpc: ProtoRpc) -> InteractionEndpoint:
+        cp = projectability.get(rpc.name)
+        return InteractionEndpoint(
+            endpoint_name=_rpc_wire_name(service, rpc),
+            kind=_service_endpoint_kind(pf.package, rpc),
+            rpc_name=rpc.name,
+            projectable=cp.projectable if cp else None,
+            reason=cp.reason if cp else "",
+        )
+
+    if service.port_kind == "information":
+        read_rpc = next((r for r in service.rpcs if r.name == "Read"), None)
+        info_topic = _find_topic_by_role_suffix(sub_topics, pub_topics, ".information")
+        if read_rpc is None or info_topic is None:
+            return None
+        leg = InteractionLeg(
+            name="information",
+            group_name=_leg_group_name(service_key, "information"),
+            side_a=(rpc_endpoint(read_rpc),),
+            side_b=(topic_endpoint(info_topic),),
+        )
+        return Interaction(
+            service_key=service_key,
+            service_name=service.name,
+            port_kind="information",
+            legs=(leg,),
+        )
+
+    # Request-shape: up to two independent legs (request, requirement).
+    legs: List[InteractionLeg] = []
+
+    command_rpcs = [
+        rpc for rpc in service.rpcs if rpc.name in ("Create", "Update", "Cancel")
+    ]
+    request_topic = _find_topic_by_role_suffix(sub_topics, pub_topics, ".request")
+    if command_rpcs and request_topic is not None:
+        legs.append(InteractionLeg(
+            name="request",
+            group_name=_leg_group_name(service_key, "request"),
+            side_a=tuple(rpc_endpoint(rpc) for rpc in command_rpcs),
+            side_b=(topic_endpoint(request_topic),),
+        ))
+
+    read_rpc = next((r for r in service.rpcs if r.name == "Read"), None)
+    requirement_topic = _find_topic_by_role_suffix(sub_topics, pub_topics, ".requirement")
+    if read_rpc is not None and requirement_topic is not None:
+        legs.append(InteractionLeg(
+            name="requirement",
+            group_name=_leg_group_name(service_key, "requirement"),
+            side_a=(rpc_endpoint(read_rpc),),
+            side_b=(topic_endpoint(requirement_topic),),
+        ))
+
+    if not legs:
+        return None
+    return Interaction(
+        service_key=service_key,
+        service_name=service.name,
+        port_kind="request",
+        legs=tuple(legs),
+    )
+
+
 def topics_for_proto_file(
     pf: ProtoFile,
 ) -> Tuple[Dict[str, BindingTopic], Dict[str, BindingTopic]]:
@@ -925,6 +1114,20 @@ def _build_command_projectability(
     return result
 
 
+def _build_interactions(
+    service_modules: List[ProtoFile],
+    proto_files: List[ProtoFile],
+) -> Dict[str, Interaction]:
+    index = ProtoTypeIndex(proto_files)
+    result: Dict[str, Interaction] = {}
+    for pf in service_modules:
+        for service in pf.services:
+            interaction = interaction_for_service(index, pf, service)
+            if interaction is not None:
+                result[_service_key(pf.package, service)] = interaction
+    return result
+
+
 def naming_policy_for_layout(layout: str) -> NamingPolicy:
     if layout == "pyramid":
         return PyramidCompatNamingPolicy()
@@ -969,6 +1172,7 @@ def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract
         command_projectability=_build_command_projectability(
             service_modules, list(proto_files),
         ),
+        interactions=_build_interactions(service_modules, list(proto_files)),
     )
 
 

@@ -16,11 +16,27 @@
 ///   transport svc_grpc   /opt/plugins/libpyramid_grpc_coupled_plugin.so {"role":"consumed","address":"127.0.0.1:50051"}
 ///   transport topic_udp  /opt/plugins/libpcl_transport_udp_plugin.so    {"bind":"239.0.0.1:9000"}
 ///
+///   # exclusive <group_name> <side_a_endpoint>[,<side_a_endpoint>...] <side_b_endpoint>[,<side_b_endpoint>...]
+///   #   Declares two mutually-exclusive realizations of one logical leg (e.g.
+///   #   an rpc realization vs. a pub/sub realization of the same request/
+///   #   response transaction). Any number of same-side endpoints may be
+///   #   routed together freely; routing at least one endpoint from EACH side
+///   #   is a compose-time error (PCL_ERR_STATE), reported by whichever
+///   #   `route` line completes the second side. An endpoint named in no
+///   #   `exclusive` group is entirely unaffected by this check. Must be
+///   #   declared before any `route` line for one of its member endpoints
+///   #   (declare-before-use, same convention as `transport` before `route`).
+///   exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request
+///
 ///   # route <endpoint_name> <kind> <peer_id>[,<peer_id>...] [reliability]
 ///   #   kind        : publisher | subscriber | provided | consumed | stream_provided
 ///   #   reliability : best_effort | reliable   (optional QoS floor)
 ///   route create_requirement consumed  svc_grpc  reliable
 ///   route object_evidence    publisher topic_udp best_effort
+///   route ma_action.create   consumed  svc_grpc          # side A of ma_action.request_leg
+///   route ma_action.update   consumed  svc_grpc          # side A of ma_action.request_leg
+///   route ma_action.cancel   consumed  svc_grpc          # side A of ma_action.request_leg -- OK together
+///   # route agra.ma_action.request publisher topic_udp   # would fail closed: side B of the same group
 /// \endcode
 #ifndef PCL_TRANSPORT_ROUTING_H
 #define PCL_TRANSPORT_ROUTING_H
@@ -49,7 +65,8 @@ typedef struct pcl_transport_routing_t pcl_transport_routing_t;
 /// Fails closed:
 /// - PCL_ERR_NOT_FOUND  : manifest missing, or a route targets an unknown peer;
 /// - PCL_ERR_STATE      : a routed transport lacks the endpoint's required
-///                        capability or QoS floor;
+///                        capability or QoS floor, or a route completes both
+///                        sides of a declared `exclusive` group;
 /// - PCL_ERR_INVALID    : malformed manifest line / bad arguments.
 ///
 /// An empty or comment-only manifest is PCL_OK with an empty routing handle.
