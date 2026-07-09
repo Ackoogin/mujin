@@ -229,6 +229,69 @@ class ConsumerComponent final : public pcl::Component {
   magra_cons::MaactionRequestPortClient client_;
 };
 
+// -- Facade-built provider side (Phase 3) -----------------------------------
+
+class FacadeHandler final : public magra_prov::MaactionRequestPortHandler {
+ public:
+  magra_prov::Ack onCreate(
+      const magra_prov::MAAction_Service_Request& request) override {
+    ++create_count;
+    last_create = request;
+    return magra_prov::Ack{true};
+  }
+
+  magra_prov::Ack onUpdate(
+      const magra_prov::MAAction_Service_Requirement& request) override {
+    ++update_count;
+    last_update = request;
+    return magra_prov::Ack{true};
+  }
+
+  magra_prov::Ack onCancel(const magra_prov::Identifier& id) override {
+    ++cancel_count;
+    last_cancel = id;
+    return magra_prov::Ack{true};
+  }
+
+  int create_count = 0;
+  int update_count = 0;
+  int cancel_count = 0;
+  magra_prov::MAAction_Service_Request last_create;
+  magra_prov::MAAction_Service_Requirement last_update;
+  magra_prov::Identifier last_cancel;
+};
+
+// Provider component built entirely from the Phase 3 facade -- no raw
+// ProvidedService/ConsumedService probe, no hand-rolled Read-stream
+// tracking. Proves "Phase 2's consumer tests re-run against a facade-built
+// provider (facade<->facade, both bindings, one executor)" (plan Phase 3
+// accept criteria) and exercises the capabilities Phase 2's hand-wired
+// stand-in couldn't: multi-stream Read fan-out and D4 snapshot
+// re-publication, both owned internally by RequestPortProvider.
+class FacadeProviderComponent final : public pcl::Component {
+ public:
+  FacadeProviderComponent(pcl::Executor& executor, FacadeHandler& handler)
+      : pcl::Component("magra_facade_provider"),
+        provider_(*this, executor, handler) {}
+
+  magra_prov::MaactionRequestPortProvider& provider() { return provider_; }
+
+  pcl_status_t configureLocal() {
+    return provider_.consumedService().configurePubSubTransport(
+        R"({"transport":"local"})");
+  }
+
+  pcl_status_t configureInteractionBinding(std::string_view config_json) {
+    return provider_.configureInteractionBinding(config_json);
+  }
+
+ protected:
+  pcl_status_t on_configure() override { return provider_.bind(); }
+
+ private:
+  magra_prov::MaactionRequestPortProvider provider_;
+};
+
 class WidgetConsumerComponent final : public pcl::Component {
  public:
   explicit WidgetConsumerComponent(pcl::Executor& executor)
@@ -666,3 +729,223 @@ TEST_P(InteractionFacadeBindingTest, SubmitCreateRoundTrip) {
 
 INSTANTIATE_TEST_SUITE_P(RpcAndPubsub, InteractionFacadeBindingTest,
                           ::testing::Values("rpc", "pubsub"));
+
+// -----------------------------------------------------------------------
+// Phase 3: RequestPortProvider -- facade-built provider, both bindings,
+// one executor (plan Phase 3 accept criteria: "Phase 2's consumer tests
+// re-run against a facade-built provider").
+// -----------------------------------------------------------------------
+
+TEST(PclGeneratedInteractionFacadeProvider,
+     FacadeSubmitCreateRoundTripUnderRpc) {
+  pcl::Executor executor;
+  FacadeHandler handler;
+  FacadeProviderComponent provider{executor, handler};
+  ConsumerComponent consumer{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+
+  ASSERT_EQ(consumer.configure(), PCL_OK);
+  ASSERT_EQ(consumer.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer), PCL_OK);
+  ASSERT_EQ(consumer.client().consumedService().routeAllLocal(), PCL_OK);
+  ASSERT_EQ(consumer.client().configureInteractionBinding(R"({"binding":"rpc"})"),
+            PCL_OK);
+
+  magra_cons::MAAction_Service_Request command{};
+  pyramid::domain_model::agra::MA_Action action{};
+  action.id = "facade-action-1";
+  command.ma_action = action;
+
+  auto result = consumer.client().submit(command).get();
+  EXPECT_TRUE(result.accepted);
+  EXPECT_EQ(result.status, PCL_OK);
+  ASSERT_TRUE(result.remoteAck().has_value());
+  EXPECT_TRUE(result.remoteAck()->success);
+  EXPECT_EQ(handler.create_count, 1);
+  ASSERT_TRUE(handler.last_create.ma_action.has_value());
+  EXPECT_EQ(handler.last_create.ma_action->id, "facade-action-1");
+}
+
+TEST(PclGeneratedInteractionFacadeProvider,
+     FacadeSubmitCreateRoundTripUnderPubsub) {
+  pcl::Executor executor;
+  FacadeHandler handler;
+  FacadeProviderComponent provider{executor, handler};
+  ConsumerComponent consumer{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+
+  ASSERT_EQ(consumer.configure(), PCL_OK);
+  ASSERT_EQ(consumer.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer), PCL_OK);
+  ASSERT_EQ(consumer.client().consumedService().configurePubSubTransport(
+                R"({"transport":"local"})"),
+            PCL_OK);
+  ASSERT_EQ(
+      consumer.client().configureInteractionBinding(R"({"request_leg":"pubsub"})"),
+      PCL_OK);
+
+  magra_cons::MAAction_Service_Request command{};
+  pyramid::domain_model::agra::MA_Action action{};
+  action.id = "facade-action-2";
+  command.ma_action = action;
+
+  auto result = consumer.client().submit(command).get();
+  EXPECT_TRUE(result.accepted);
+  EXPECT_EQ(result.status, PCL_OK);
+  EXPECT_FALSE(result.remoteAck().has_value());  // D3: no synthetic ack
+
+  EXPECT_EQ(handler.create_count, 1);
+  ASSERT_TRUE(handler.last_create.ma_action.has_value());
+  EXPECT_EQ(handler.last_create.ma_action->id, "facade-action-2");
+}
+
+// Plan Phase 3 accept criteria: "two concurrent Read streams with disjoint
+// queries each receiving only their transitions (RPC mode)". The provider's
+// TransitionWriter (owned by RequestPortProvider, not the test) fans a
+// single send() out to every open Read stream, filtered by query.id --
+// this test proves two overlapping subscriptions on the same executor never
+// cross-deliver.
+TEST(PclGeneratedInteractionFacadeProvider,
+     TransitionWriterFansOutToConcurrentReadStreamsByQuery) {
+  pcl::Executor executor;
+  FacadeHandler handler;
+  FacadeProviderComponent provider{executor, handler};
+  ConsumerComponent consumer_a{executor};
+  ConsumerComponent consumer_b{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+  ASSERT_EQ(provider.configureInteractionBinding(R"({"binding":"rpc"})"), PCL_OK);
+
+  ASSERT_EQ(consumer_a.configure(), PCL_OK);
+  ASSERT_EQ(consumer_a.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer_a), PCL_OK);
+  ASSERT_EQ(consumer_a.client().consumedService().routeAllLocal(), PCL_OK);
+  ASSERT_EQ(consumer_a.client().configureInteractionBinding(R"({"binding":"rpc"})"),
+            PCL_OK);
+
+  ASSERT_EQ(consumer_b.configure(), PCL_OK);
+  ASSERT_EQ(consumer_b.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer_b), PCL_OK);
+  ASSERT_EQ(consumer_b.client().consumedService().routeAllLocal(), PCL_OK);
+  ASSERT_EQ(consumer_b.client().configureInteractionBinding(R"({"binding":"rpc"})"),
+            PCL_OK);
+
+  std::vector<magra_cons::MAAction_Service_Requirement> received_a, received_b;
+  magra_cons::Query query_a{};
+  query_a.id.push_back("facade-action-A");
+  magra_cons::Query query_b{};
+  query_b.id.push_back("facade-action-B");
+
+  auto handle_a = consumer_a.client().transitions(
+      query_a, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+        received_a.push_back(frame);
+      });
+  auto handle_b = consumer_b.client().transitions(
+      query_b, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+        received_b.push_back(frame);
+      });
+  ASSERT_TRUE(handle_a.valid());
+  ASSERT_TRUE(handle_b.valid());
+
+  auto writer = provider.provider().transitionWriter();
+
+  magra_prov::MAAction_Service_Requirement frame_a{};
+  pyramid::domain_model::common::Requirement req_a{};
+  req_a.id = "facade-action-A";
+  frame_a.ma_action_status = req_a;
+  ASSERT_EQ(writer.send(frame_a), PCL_OK);
+
+  magra_prov::MAAction_Service_Requirement frame_b{};
+  pyramid::domain_model::common::Requirement req_b{};
+  req_b.id = "facade-action-B";
+  frame_b.ma_action_status = req_b;
+  ASSERT_EQ(writer.send(frame_b), PCL_OK);
+
+  ASSERT_EQ(received_a.size(), 1u);
+  ASSERT_TRUE(received_a[0].ma_action_status.has_value());
+  EXPECT_EQ(received_a[0].ma_action_status->id, "facade-action-A");
+
+  ASSERT_EQ(received_b.size(), 1u);
+  ASSERT_TRUE(received_b[0].ma_action_status.has_value());
+  EXPECT_EQ(received_b[0].ma_action_status->id, "facade-action-B");
+}
+
+// Plan Phase 3 / D4 accept criteria: "late-command snapshot re-publication
+// observed (pub/sub mode)". The consumer subscribes transitions() first and
+// observes an original send() normally (count 1); a later command for the
+// *same* id then triggers dispatchPubsubCommand()'s snapshot
+// re-publication -- a second, distinct delivery of the same snapshot the
+// consumer would otherwise have to already be watching at exactly the
+// right moment to catch (the late-join mitigation D4 calls for).
+TEST(PclGeneratedInteractionFacadeProvider,
+     LateCommandTriggersSnapshotRepublicationUnderPubsub) {
+  pcl::Executor executor;
+  FacadeHandler handler;
+  FacadeProviderComponent provider{executor, handler};
+  ConsumerComponent consumer{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+  ASSERT_EQ(
+      provider.configureInteractionBinding(R"({"requirement_leg":"pubsub"})"),
+      PCL_OK);
+
+  ASSERT_EQ(consumer.configure(), PCL_OK);
+  ASSERT_EQ(consumer.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer), PCL_OK);
+  ASSERT_EQ(consumer.client().consumedService().configurePubSubTransport(
+                R"({"transport":"local"})"),
+            PCL_OK);
+  ASSERT_EQ(
+      consumer.client().configureInteractionBinding(
+          R"({"request_leg":"pubsub","requirement_leg":"pubsub"})"),
+      PCL_OK);
+
+  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  magra_cons::Query query{};
+  query.id.push_back("facade-action-late");
+  auto handle = consumer.client().transitions(
+      query, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+        received.push_back(frame);
+      });
+  ASSERT_TRUE(handle.valid());
+
+  // Original send: recorded into the D6 snapshot store *and* delivered
+  // normally to the already-live subscription (baseline, not the
+  // mechanism under test).
+  magra_prov::MAAction_Service_Requirement original{};
+  pyramid::domain_model::common::Requirement original_req{};
+  original_req.id = "facade-action-late";
+  original.ma_action_status = original_req;
+  ASSERT_EQ(provider.provider().transitionWriter().send(original), PCL_OK);
+  ASSERT_EQ(received.size(), 1u);
+
+  // A later command for the same id: dispatchPubsubCommand() re-publishes
+  // the recorded snapshot after handling the command itself -- a second,
+  // distinct delivery the consumer observes purely from the re-publication.
+  // Cancel has its own dedicated submit() overload (const Identifier&) --
+  // constructing a MAAction_Service_Request wrapper with .cancel set and
+  // calling submit() on *that* would resolve to Create's overload instead
+  // (matching argument type), not what this test means to exercise.
+  magra_cons::Identifier late_command_id{"facade-action-late"};
+  auto result = consumer.client().submit(late_command_id).get();
+  EXPECT_TRUE(result.accepted);
+  EXPECT_EQ(handler.cancel_count, 1);
+
+  ASSERT_EQ(received.size(), 2u);
+  ASSERT_TRUE(received[1].ma_action_status.has_value());
+  EXPECT_EQ(received[1].ma_action_status->id, "facade-action-late");
+}

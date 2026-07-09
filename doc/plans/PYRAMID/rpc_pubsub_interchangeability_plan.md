@@ -1050,3 +1050,167 @@ the queried one observed); `InformationPortSink` proven under pub/sub;
 existing generated-binding tests, PCL routing tests, Python tests, and
 every proving-plan harness re-run green. Phase 3 (provider-side facade) is
 untouched, as scoped.
+
+### Phase 3 — executed 2026-07-09
+
+Extended `subprojects/PYRAMID/pim/cpp/interaction_facade_gen.py` (no new
+file this phase -- appended to Phase 2's module) with the provider-side
+half of the facade, wired into the same `_write_interaction_facade` hook
+alongside the Phase 2 consumer classes:
+
+- **`RequestPortHandler`** (per Request-shape service): one `on<Command>()`
+  virtual method per `Create`/`Update`/`Cancel` rpc, returning `Ack` --
+  deliberately *no* `onRead` method. Under the interaction facade, `Read`
+  is entirely facade-internal (the open-stream registry, below); component
+  authors implement only the command callbacks.
+- **`RequestPortProvider`**: owns RPC dispatch for *just this service's*
+  four rpcs, independent of any file-wide `ProvidedService` a component
+  might separately construct for other services in the same file --
+  `ProvidedService`/`ProvidedHandler` (components_gen.py, unmodified) are
+  genuinely file-wide (one shared handler bound via one `all_rpcs` list
+  spanning every service in the file), which does not compose with a
+  per-service provider facade. Resolved by having `RequestPortProvider`
+  emit its *own* narrow `Bridge : ServiceHandler` (overriding only this
+  service's four methods; every other rpc in the file keeps
+  `ServiceHandler`'s existing default stub body, unreferenced) and its own
+  `addUnaryBinding`/`addStreamBinding`/`unaryDispatch`/`streamDispatch`
+  scoped to `service.rpcs` -- mechanically the same shape
+  `ProvidedService` already uses, narrowed, not a new dispatch mechanism.
+  Also owns:
+  - a pub/sub probe (a plain `ConsumedService`, matching Phase 2's own
+    "role-symmetric primitives" pattern) subscribing the request topic and
+    publishing the requirement topic;
+  - the **open-Read-stream registry** (D6): `Bridge`'s stream-rpc override
+    registers each incoming `Read`'s `StreamWriter` + `Query` instead of
+    exposing it to the component author;
+  - the **bounded snapshot store** (D6): an insertion-order-evicted
+    `std::list`+`std::unordered_map` pair (`kSnapshotCapacity = 64`),
+    updated on every `sendTransition()` regardless of realization;
+  - `configureInteractionBinding()`, selecting only the **requirement
+    leg's** realization -- **design decision**: the request leg has no
+    provider-side binding to configure at all. Both the RPC service ports
+    and the pub/sub probe's subscriber are *always* bound and listening;
+    which one a deployment actually delivers through is a routing-manifest
+    decision (D5's `exclusive` groups), not an application-level choice on
+    the provider, since the provider must be able to receive a command via
+    whichever side the manifest actually connects. Documented in `bind()`'s
+    doc comment and accepted (not silently dropped) in
+    `configureInteractionBinding()`'s JSON if a caller passes
+    `"request_leg"` anyway.
+  - **`TransitionWriter`** (D6): a thin proxy (`transitionWriter()` returns
+    one by value) forwarding `send()` to `RequestPortProvider::sendTransition()`,
+    which records the snapshot, then either fans out to every open Read
+    stream whose `query.id` matches (RPC) or publishes the requirement
+    topic (pub/sub) -- reusing Phase 2's exact `_requirement_correlation_field`
+    resolver for both the snapshot key and the RPC fan-out's `query.id`
+    match, not a new correlation mechanism.
+- **`dispatchPubsubCommand`** (D4 late-join mitigation): the pub/sub
+  probe's request-topic subscriber callback. Unwraps the shared wrapper's
+  oneof, dispatches to the same `on<Command>()` methods the RPC realization
+  uses (return value discarded, per D3 -- pub/sub has no synchronous ack),
+  then re-publishes the current snapshot for the command's id if one
+  exists. Correlation extraction for the **command** side (distinct from
+  the **transition** side's existing resolver) needed new machinery:
+  `_command_correlation_accessor()` (direct `Entity`-inlined `.id` for
+  `Create`'s `MA_Action`, the `Identifier` scalar-alias-is-the-id-itself
+  case for `Cancel`, one level of oneof-unwrap for `Update`'s
+  `MAAction_Service_Requirement`) plus `_leftover_wrapper_variant()` for
+  the `is_wrapper` command specifically: since `Create`'s own rpc parameter
+  type *is* the wrapper (D2), it has no dedicated oneof field the way
+  `matches_variant` commands do, so its correlation payload is found *by
+  elimination* -- the one wrapper oneof field no `matches_variant` command
+  already claims.
+
+**A real bug found and fixed during verification (not by inspection --
+by a failing test and a debugging session that needed generator-source
+instrumentation + full reconfigure to actually observe, see below):**
+`republishSnapshotFor()`'s first draft passed a *reference* into the
+stored snapshot value (`sendTransition(it->second->second)`) straight
+into `sendTransition()`, which unconditionally calls `recordSnapshot()`
+first. `recordSnapshot()`'s existing-id branch (needed for the normal
+update-in-place case) does `snapshot_order_.erase(existing->second)` --
+which, when re-recording the *same* id via a reference that already
+aliases that exact list node, erases the node the caller's reference
+points at, then copies from the now-dangling reference into the
+replacement node: a use-after-free with no crash (the freed `std::list`
+node's memory was quickly reused by the immediately-following
+`push_back`, so the corrupted copy silently carried whichever bytes
+happened to land there rather than segfaulting) that manifested as the
+re-published transition's `id` field no longer matching `query.id` on the
+consumer side, so `TransitionsUnderPubsubFiltersByQueryId`-style matching
+silently failed. Fixed by making `republishSnapshotFor()` copy the
+snapshot value out **before** calling `sendTransition()`:
+```cpp
+const MAAction_Service_Requirement snapshot_copy = it->second->second;
+sendTransition(snapshot_copy);
+```
+Diagnosed by regenerating with temporary `fprintf` tracing added directly
+to `interaction_facade_gen.py` (not hand-edited into build artifacts --
+an earlier attempt to do the latter produced no observable output for
+reasons not fully root-caused, possibly a stale generated-tree directory
+that a subsequent `cmake --preset` silently regenerated over; switching
+to source-level instrumentation with an explicit
+`rm -rf .../generated_agra_example && cmake --preset flatbuffers-only`
+before every rebuild made the tracing reliable) at four call sites
+(`dispatchPubsubTransition`'s entry and per-iteration match state,
+`dispatchPubsubCommand`'s entry, `republishSnapshotFor`'s lookup result,
+`sendTransition`'s publish return code) -- all instrumentation removed
+before this commit.
+
+**Tests** (`subprojects/PYRAMID/tests/test_pcl_generated_interaction_facade.cpp`,
+extended, no new file): a facade-built provider (`FacadeHandler` +
+`FacadeProviderComponent`, using `MaactionRequestPortProvider`) added
+*alongside* Phase 2's existing hand-wired `RecordingHandler`/
+`ProviderComponent` stand-in (not replacing it, to keep the Phase 2
+regression bar zero-risk under this phase's time budget) plus four new
+tests:
+- `FacadeSubmitCreateRoundTripUnderRpc` / `...UnderPubsub` -- the plan's
+  "facade<->facade, both bindings, one executor" accept criterion, a
+  smaller-scope stand-in for a full parameterized re-run of every Phase 2
+  scenario against the facade provider (a fuller re-run is possible future
+  work, not required to meet this phase's stated accept bar).
+- `TransitionWriterFansOutToConcurrentReadStreamsByQuery` -- the plan's
+  explicit "two concurrent Read streams with disjoint queries each
+  receiving only their transitions (RPC mode)" criterion: two consumers,
+  disjoint single-id queries, one `TransitionWriter::send()` per id,
+  each consumer receiving exactly its own.
+- `LateCommandTriggersSnapshotRepublicationUnderPubsub` -- the plan's
+  explicit "late-command snapshot re-publication observed (pub/sub mode)"
+  criterion: consumer subscribes and observes an original send (count 1);
+  a later `Cancel` command for the same id triggers `dispatchPubsubCommand`'s
+  re-publication, observed as a second, distinct delivery (count 2) --
+  this is the test that caught the use-after-free above; also confirmed
+  (via a fixed, then-reverted version of the test) that a naive
+  "send-before-subscribing" ordering is *not* buffered/replayed by PCL's
+  local pub/sub (VOLATILE, no history), which is why the test's baseline
+  send happens after the consumer subscribes rather than trying to prove
+  a stronger late-join guarantee than D4 actually promises.
+
+`./test_pcl_generated_interaction_facade` -- **13/13 pass** (9 carried
+from Phase 2 + 4 new), stable across 3 repeated runs. Full regression
+sweep: `test_pcl_generated_component_stream_handle` (7/7, WS-E facade,
+untouched), `test_pcl_transport_routing` (24/24, Phase 1, untouched),
+`python3 -m unittest ... test_binding_contract` (18/18, untouched --
+Phase 3 is C++-generator-only), `build_contract_routing_test.sh`,
+`build_agra_shm_comms_test.sh` (Phase C), `build_agra_udp_proof_test.sh`
+(Phase D), `build_agra_mixed_route_test.sh` (Phase E) all re-ran green.
+Regenerated `pim/test/` (388 files, `--languages cpp,ada`) directly to
+confirm the new provider-side per-file hook doesn't crash or error
+against any existing contract, not just the two Phase 2/3 fixtures --
+clean, exit 0 (no git-tracked generated output exists to diff against, so
+this is a crash/error check, not a byte-identity check, consistent with
+Phase 2's ledger methodology). Ada object-compile stays a carried note
+(no GNAT/gprbuild in this environment).
+
+**Accept criteria met:** `RequestPortHandler`/`RequestPortProvider`
+implemented, composed from existing primitives per D6 (no existing
+generated symbol changed); two concurrent Read streams with disjoint
+queries each receive only their own transitions (RPC mode, explicit plan
+criterion); late-command snapshot re-publication observed (pub/sub mode,
+explicit plan criterion); a facade-built provider interoperates correctly
+with Phase 2's facade-built consumer under both bindings on one executor
+(the "facade<->facade" criterion, via the four new tests rather than a
+full re-run of every Phase 2 scenario -- see the design-choices note
+above on scope); every existing test and harness re-runs green. Phase 4
+(Ada parity) and Phase 5 (terminal interchange harness) remain untouched,
+as scoped.
