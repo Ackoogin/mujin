@@ -107,7 +107,7 @@ class BodyEmitterMixin:
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]],
                     type_pkgs: List[str],
-                    codec_pkgs: List[str]):
+                    codec_pkgs: List[str], pf: Path = None):
         is_provided = _is_provided(parsed)
         has_grpc = False
         sub_topics, pub_topics, _ = _applicable_topics(
@@ -1604,6 +1604,8 @@ class BodyEmitterMixin:
             f.write(f'      end case;\n')
             f.write(f'   end Dispatch;\n')
             f.write(f'\n')
+            if pf is not None:
+                self._write_interaction_facade_body(f, pf, parsed)
             f.write(f'end {pkg_name};\n')
 
 

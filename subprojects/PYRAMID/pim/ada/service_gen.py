@@ -19,9 +19,10 @@ from .naming import (
 )
 from .service_body_gen import BodyEmitterMixin
 from .service_spec_gen import SpecEmitterMixin
+from .interaction_facade_gen import InteractionFacadeSpecMixin
 
 
-class AdaServiceGenerator(SpecEmitterMixin, BodyEmitterMixin):
+class AdaServiceGenerator(InteractionFacadeSpecMixin, SpecEmitterMixin, BodyEmitterMixin):
 
     def __init__(self, proto_input: str, enabled_backends=None,
                  topic_resolver: TopicSpecResolver = None):
@@ -61,9 +62,9 @@ class AdaServiceGenerator(SpecEmitterMixin, BodyEmitterMixin):
             ads_path = output_path / (pkg_name.lower().replace('.', '-') + '.ads')
             adb_path = output_path / (pkg_name.lower().replace('.', '-') + '.adb')
 
-            self._write_spec(ads_path, pkg_name, parsed, all_rpcs, type_pkgs)
+            self._write_spec(ads_path, pkg_name, parsed, all_rpcs, type_pkgs, pf)
             self._write_body(adb_path, pkg_name, parsed, all_rpcs,
-                             type_pkgs, codec_pkgs)
+                             type_pkgs, codec_pkgs, pf)
             generated_pkgs.append(pkg_name)
             print(f'  Generated {pkg_name}')
 

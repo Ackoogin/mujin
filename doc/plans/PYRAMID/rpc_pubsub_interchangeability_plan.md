@@ -1214,3 +1214,124 @@ full re-run of every Phase 2 scenario -- see the design-choices note
 above on scope); every existing test and harness re-runs green. Phase 4
 (Ada parity) and Phase 5 (terminal interchange harness) remain untouched,
 as scoped.
+
+### Phase 4 — executed 2026-07-09
+
+**Decision (recorded per the plan's own risk-note instruction, "decided at
+Phase 4 start, recorded in the ledger either way"): spec-only fallback,
+not full functional parity.** Rationale, established before writing any
+Ada code:
+
+- This build environment has no GNAT/gprbuild at all (`which gnatmake
+  gprbuild gnat` all resolve to nothing; only plain `gcc` is present, and
+  it lacks the `gnat1` backend -- confirmed by re-running the pre-existing
+  `test_generic_ada.py` object-compile tests, which already fail with
+  `cannot execute 'gnat1'` on the base branch, before this phase's changes).
+  Runtime *and* compile-time proof are both unavailable regardless of which
+  approach is chosen, so the usual mitigant for "large generated-code
+  change" -- compile and run it -- does not apply to either option here.
+- Surveyed the existing Ada generator (`pim/ada/`: `naming.py`,
+  `service_spec_gen.py`, `service_body_gen.py`, ~2900 lines together) before
+  deciding. It is a flat procedural surface -- one shared `Service_Handlers`
+  record of `access procedure`/`access function` callbacks, one
+  `Service_Channel` enum, one `Dispatch` case statement -- with no
+  tagged-type hierarchy, no dynamic dispatch, no RAII/controlled-type
+  idiom anywhere in it. The C++ facade's runtime behaviour (D1's per-leg
+  live binding switch, `SubscriptionHandle` unifying an RPC `StreamHandle`
+  and a pub/sub liveness flag under one type, D6's fan-out over an
+  open-stream registry plus a bounded LRU-ish snapshot store, D2's
+  oneof-variant routing at dispatch time) has no existing Ada analogue to
+  extend -- it would mean introducing a materially new architectural layer
+  into a generator that has never needed one, entirely unverifiable in this
+  environment. That is precisely the "Ada facade size balloons" condition
+  the plan's risk note names.
+- Spec-only keeps the *declared* surface -- the same shape client/provider
+  code would program against (`Submit_<Command>`, `Transitions`,
+  `Configure_Interaction_Binding`) -- consistent across languages and ready
+  for a future phase to wire real dispatch behind, without committing to
+  unverifiable dispatch logic now.
+
+**Implementation.** New file
+`subprojects/PYRAMID/pim/ada/interaction_facade_gen.py`
+(`InteractionFacadeSpecMixin`), mixed into `AdaServiceGenerator`
+(`service_gen.py`). Threaded the per-file proto `Path` (`pf`, already
+computed correctly in `generate()`'s loop) through `_write_spec`/
+`_write_body` as a new trailing optional parameter (default `None`, so
+every other existing caller/signature is unaffected) so the hook can build
+a `ProtoTypeIndex` and call `binding_contract.interaction_for_service` --
+the same Phase 0/1 classification function the C++ facade calls -- rather
+than re-deriving a parallel Request-shape detection rule in Ada. For each
+Request-shape `Interaction`:
+
+- `<Prefix>_Configure_Interaction_Binding (Config_Json : String)` -- spec
+  declaration matching D1's `config_json` shape (`request_leg`/
+  `requirement_leg` keys), documented in a doc comment.
+- `<Prefix>_Submit_<Command>` per `Create`/`Update`/`Cancel` rpc actually
+  present on the service (not a fixed three -- the widget fixture-style
+  case of a service missing a command is handled by only emitting what
+  `interaction_for_service`'s `request` leg actually lists), with an
+  explicit `Result_Has_Ack : out Boolean` alongside `Result_Ack : out Ack`
+  in the declaration -- naming D3's honest-ack-semantics contract directly
+  in the spec rather than leaving it implicit.
+- `<Prefix>_Transition_Callback` (access-procedure type) and
+  `<Prefix>_Transitions (Filter : ...; Callback : ...)` when a
+  `requirement` leg is present, with a doc comment recording D4's late-join
+  caveat and pointing at D6's provider-side snapshot store as the
+  mitigation a real implementation must call through to.
+- Bodies (`.adb`) are pragma-stubbed: `pragma Unreferenced` on every `in`
+  parameter, then `raise Program_Error with "<Name>: Phase 4 spec-only
+  fallback -- ..."`, following this codebase's own pre-existing
+  not-yet-implemented convention (`service_body_gen.py` already raises
+  `Program_Error` the same way for its own unfinished paths -- not a new
+  idiom introduced by this phase).
+
+**Bug caught before generating anything for real:** the first draft
+declared `Transitions (Query : Query; ...)` -- a formal parameter named
+identically to its own type mark (the `Query` message type). Ada's own
+homograph rule likely accepts this syntactically (the type mark on a
+parameter is resolved in the scope *before* the parameter's own name comes
+into scope), but this codebase already has an explicit guard against
+exactly this collision class elsewhere (`naming.py::_ada_field_name`'s
+`if ada_type is not None and name == ada_type: name = 'Val_' + name`,
+and the pre-existing `Invoke_*` procedures uniformly name this parameter
+`Request`, never after its own type) -- strong precedent that this
+exact pattern has caused real problems before. Renamed the parameter to
+`Filter` before generating anything, rather than relying on untestable
+Ada semantics to save it.
+
+**Verification** (Python-level only, per the decision above -- no
+GNAT/gprbuild in this environment to compile-verify either the new
+declarations or any pre-existing Ada output):
+
+- Ran `generate_bindings.py ... --languages ada` against both
+  `pim/agra_example` (13 files) and `pim/test/` (98 files) directly --
+  clean, exit 0, no exceptions. Inspected the emitted `.ads`/`.adb` for
+  `MAAction_Service` (agra_example, provided side) and
+  `SDI_Data_Provision_Dependency_Service` (`pim/test`, consumed side) by
+  hand: correct per-service command set, correct Ada types threaded
+  through from `_ada_req_type`/the response-type resolver, correct
+  `Filter`/`Query` type-vs-name disambiguation, matching spec/body
+  procedure signatures.
+- `tests/test_generic_ada.py`: 4 passed / 2 failed / 1 skipped, byte-identical
+  to the same file re-run against the pre-Phase-4 tree (confirmed via
+  `git stash`) -- the 2 failures are the pre-existing `gnat1`-absent
+  object-compile tests, present on the base branch, untouched by this
+  phase; 0 new failures.
+- Full non-Ada-object-compile Python suite (`tests/` + `pim/`, i.e.
+  everything except `test_generic_ada.py`'s two toolchain-gated cases):
+  52/52 passed, including `pim/test_binding_contract.py` (unmodified,
+  proves `interaction_for_service` reuse didn't perturb Phase 0/1's own
+  behaviour) and `pim/test_agra_example.py`.
+- No C++ generator source (`pim/cpp/`) touched by this phase -- confirmed
+  via `git status`; C++ build/test suite not re-run (nothing in its input
+  changed).
+
+**Accept criteria met (spec-only variant, as pre-authorized by the plan's
+own risk note):** Ada generation clean for the A-GRA example + `pim/test/`;
+object-compile carried as a note (no GNAT/gprbuild present, consistent
+with every prior phase's carried-note convention -- this is an existing
+environment limitation, not new to this phase); no C++ regressions. Full
+functional runtime parity with the C++ facade (D1's live dispatch, D6's
+snapshot store, etc.) is explicitly *not* delivered this phase --
+recorded here as scoped-out, not silently dropped, per the plan's own
+instruction to record the decision "either way."
