@@ -987,6 +987,19 @@ int pcl_executor_endpoint_route_exists(const pcl_executor_t* e,
   return find_endpoint_route_entry_const(e, endpoint_name, endpoint_kind) != NULL;
 }
 
+int pcl_executor_endpoint_route_exists_any_kind(const pcl_executor_t* e,
+                                                const char*           endpoint_name) {
+  uint32_t i;
+  if (!e || !endpoint_name) return 0;
+  for (i = 0; i < e->endpoint_route_count; ++i) {
+    if (e->endpoint_routes[i].in_use &&
+        strcmp(e->endpoint_routes[i].endpoint_name, endpoint_name) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
                                                const char*         endpoint_name,
                                                pcl_endpoint_kind_t endpoint_kind) {

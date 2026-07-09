@@ -3218,6 +3218,13 @@ A two-sided `exclusive` group conflict shall be detected and fail closed with `P
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder`.
 
+### REQ_PCL_474 - Exclusive Group Conflict Detected Against Pre-Existing Route
+A two-sided `exclusive` group conflict shall be detected and fail closed with `PCL_ERR_STATE` even when one side's routed member was installed before the current `pcl_transport_routing_load()` call began -- by an earlier manifest load into the same executor, or by a direct programmatic `pcl_executor_set_endpoint_route()` call -- and the current manifest only routes the opposite side, never mentioning the pre-existing side's endpoint at all.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedAgainstPreExistingRoute`. Found in PR review of REQ_PCL_467-469's original fix: `validate_exclusivity()` scanned only `r->routes` (the endpoint routes this one manifest load itself installed) rather than the executor's live route table, so a group conflict split across two separate loads -- or a manifest-routed side against a programmatically-installed one -- composed successfully and left both realizations active, silently bypassing the D5 fail-closed guarantee. Fixed by adding `pcl_executor_endpoint_route_exists_any_kind()` (a kind-agnostic sibling of the existing `pcl_executor_endpoint_route_exists()`, since an exclusive group's side members are plain endpoint names with no fixed kind) and querying the live executor instead of the manifest-load-scoped route list; since every route this load installs is itself applied to the executor before `validate_exclusivity()` runs, querying the executor directly subsumes the old `r->routes`-only check without needing to keep both.
+
 ## Manifest-Driven Remote Streaming Invoke and Gateway Discovery
 
 Found and fixed during

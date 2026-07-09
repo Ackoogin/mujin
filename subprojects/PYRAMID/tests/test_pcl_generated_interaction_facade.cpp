@@ -949,3 +949,53 @@ TEST(PclGeneratedInteractionFacadeProvider,
   ASSERT_TRUE(received[1].ma_action_status.has_value());
   EXPECT_EQ(received[1].ma_action_status->id, "facade-action-late");
 }
+
+// An RPC Read stream opened after a transition for its id was already
+// recorded (registerOpenStream(), the RPC-mode counterpart of the pub/sub
+// test above -- reachable only under RPC binding, since pub/sub readers get
+// their own late-join mitigation via dispatchPubsubCommand()'s
+// republishSnapshotFor()) must replay that stored snapshot immediately --
+// otherwise a late RPC reader waits forever for a terminal-state id (e.g.
+// COMPLETED/CANCELLED) that will never transition again.
+TEST(PclGeneratedInteractionFacadeProvider,
+     LateRpcStreamReplaysStoredSnapshot) {
+  pcl::Executor executor;
+  FacadeHandler handler;
+  FacadeProviderComponent provider{executor, handler};
+  ConsumerComponent consumer{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+  ASSERT_EQ(provider.configureInteractionBinding(R"({"binding":"rpc"})"), PCL_OK);
+
+  ASSERT_EQ(consumer.configure(), PCL_OK);
+  ASSERT_EQ(consumer.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer), PCL_OK);
+  ASSERT_EQ(consumer.client().consumedService().routeAllLocal(), PCL_OK);
+  ASSERT_EQ(consumer.client().configureInteractionBinding(R"({"binding":"rpc"})"),
+            PCL_OK);
+
+  // Transition happens *before* any Read stream is open -- nothing is
+  // listening yet, so this can only reach a late reader via the D6
+  // snapshot store, not fanOutRpc()'s normal live-delivery path.
+  magra_prov::MAAction_Service_Requirement original{};
+  pyramid::domain_model::common::Requirement original_req{};
+  original_req.id = "facade-action-late-rpc";
+  original.ma_action_status = original_req;
+  ASSERT_EQ(provider.provider().transitionWriter().send(original), PCL_OK);
+
+  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  magra_cons::Query query{};
+  query.id.push_back("facade-action-late-rpc");
+  auto handle = consumer.client().transitions(
+      query, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+        received.push_back(frame);
+      });
+  ASSERT_TRUE(handle.valid());
+
+  ASSERT_EQ(received.size(), 1u);
+  ASSERT_TRUE(received[0].ma_action_status.has_value());
+  EXPECT_EQ(received[0].ma_action_status->id, "facade-action-late-rpc");
+}

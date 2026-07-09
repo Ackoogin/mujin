@@ -1631,3 +1631,72 @@ harness (`build_comms_test.sh`, `build_routed_egress_test.sh`,
 `build_agra_shm_comms_test.sh`, `build_agra_udp_proof_test.sh`,
 `build_agra_mixed_route_test.sh`, `build_contract_routing_test.sh`)
 re-run green. `gen_hlr_coverage.py`: 92 HLRs / 388 LLRs, 0 gaps.
+
+### Phase 5 addendum 4 — Codex review, executed 2026-07-09
+
+An automated Codex review pass (on 539b83a, addendum 3's own fix) found two
+more real gaps, both scoped fail-closed/late-join guarantees this PR's own
+work had already established for the common case but not yet for a less
+obvious variant of it:
+
+- `validate_exclusivity()` (`pcl_transport_routing.c`, D5's `exclusive`
+  group enforcement) only scanned `r->routes` -- the endpoint routes the
+  *current* `pcl_transport_routing_load()` call itself installed -- when
+  checking whether both sides of a declared group were routed. A group
+  conflict split across two loads into the same executor (or a manifest
+  routing only one side against a side already routed
+  programmatically) composed successfully and left both realizations
+  active, since the check never saw the pre-existing side at all. Fixed
+  by adding `pcl_executor_endpoint_route_exists_any_kind()` (a
+  kind-agnostic sibling of the existing per-kind
+  `pcl_executor_endpoint_route_exists()`, since a group's side members
+  are plain names with no fixed kind) and querying the live executor
+  directly -- which, since every route this load installs is itself
+  already applied to the executor by the time `validate_exclusivity()`
+  runs, subsumes the old manifest-load-scoped check without needing to
+  keep both. New `REQ_PCL_474`, traced to PCL.077; new gtest
+  `PclTransportRouting.ExclusiveGroupConflictDetectedAgainstPreExistingRoute`
+  installs a programmatic side-A route before the manifest load, routes
+  only side B from the manifest, and asserts the load fails closed
+  naming both endpoints.
+- `interaction_facade_gen.py`'s generated `RequestPortProvider`
+  (`registerOpenStream()`) never consulted the D6 snapshot store
+  (`snapshot_index_`) when a new RPC Read stream opened -- unlike the
+  pub/sub path's `dispatchPubsubCommand()`, which already calls
+  `republishSnapshotFor()` after every command as its own late-join
+  mitigation. A client opening an RPC `transitions()` stream for an id
+  already in a terminal state (e.g. COMPLETED/CANCELLED, with no further
+  transition ever coming) would wait forever, since `fanOutRpc()` only
+  ever delivers *future* transitions to *currently open* streams. Fixed
+  by a new `replayStoredSnapshots(OpenStream&)` helper, called once from
+  `registerOpenStream()` right after a stream is registered: it sends
+  every snapshot matching the stream's query id filter (or every stored
+  snapshot, when the filter is empty -- mirroring `fanOutRpc()`'s same
+  "empty id list matches everything" semantics) directly to that
+  stream's own writer, deliberately not through
+  `sendTransition()`/`fanOutRpc()`, which would also re-deliver to every
+  other already-open matching stream. New compiled gtest
+  `PclGeneratedInteractionFacadeProvider.LateRpcStreamReplaysStoredSnapshot`
+  (`test_pcl_generated_interaction_facade.cpp`) sends a transition
+  *before* any Read stream is open, then subscribes and asserts the
+  stored snapshot is delivered immediately -- the RPC-mode sibling of
+  the file's existing pub/sub late-command republication test. This is
+  PYRAMID generator behaviour, not PCL library behaviour, so (consistent
+  with how the non-PCL follow-on fixes in addenda 2-3 were handled) it
+  gets no PCL LLR entry of its own; the dedicated regression test is the
+  record.
+
+**Verification**: full CTest suite 737/737 among tests already running in
+this environment before this round (net +2 for the two new tests above);
+installing GNAT in this environment during addendum 3 also surfaced 12
+newly-appearing Ada-target CTest entries this build tree had never
+attempted before, one of which (`pyramid_ada_build_artifacts`) fails on a
+pre-existing, unrelated `service_body_gen.py` bug -- an empty
+`begin...end` block in a `sensor_data_interpretation` consumed-service
+procedure with no publisher endpoints to configure, invalid Ada syntax
+that predates this PR entirely and touches no file this PR modifies;
+left out of scope (no reviewer raised it, and fixing it is unrelated to
+this PR's actual review comments). Full Python suite (`pim/` +
+`PYRAMID/tests/`) 60/60; Phase 5 harness re-run `PASS (0 failure(s))`;
+every sibling harness re-run green. `gen_hlr_coverage.py`: 92 HLRs / 389
+LLRs, 0 gaps.

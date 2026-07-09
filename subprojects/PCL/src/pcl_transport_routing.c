@@ -321,24 +321,22 @@ static pcl_status_t handle_exclusive_line(pcl_transport_routing_t* r,
   return routing_push_group(r, &group);
 }
 
-/* True if `name` appears in the bounded endpoint-name list [list, list+count). */
-static int name_in_list(const char list[][64], uint32_t count, const char* name) {
-  uint32_t i;
-  for (i = 0; i < count; ++i) {
-    if (strcmp(list[i], name) == 0) return 1;
-  }
-  return 0;
-}
-
-/* First endpoint name already routed on `r` that appears in [list, list+count),
-   or NULL if none. Used to find "the other side's already-routed member". */
+/* First endpoint name in [list, list+count) that is routed on the executor
+   under any kind, or NULL if none. Queries the live executor rather than
+   just `r->routes` (the routes this manifest load itself installed): by
+   the time this runs, the executor already reflects both this load's own
+   routes AND anything routed before this load started (a previous
+   manifest load into the same executor, or a direct programmatic
+   pcl_executor_set_endpoint_route call) -- the D5 fail-closed guarantee
+   must hold against that pre-existing state too, not just against routes
+   this one manifest happens to declare together. */
 static const char* route_matching_list(const pcl_transport_routing_t* r,
                                        const char                    list[][64],
                                        uint32_t                       count) {
-  size_t i;
-  for (i = 0; i < r->route_count; ++i) {
-    if (name_in_list(list, count, r->routes[i].endpoint_name)) {
-      return r->routes[i].endpoint_name;
+  uint32_t i;
+  for (i = 0; i < count; ++i) {
+    if (pcl_executor_endpoint_route_exists_any_kind(r->executor, list[i])) {
+      return list[i];
     }
   }
   return NULL;

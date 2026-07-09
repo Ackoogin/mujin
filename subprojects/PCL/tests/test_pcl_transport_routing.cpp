@@ -572,6 +572,55 @@ TEST(PclTransportRouting, ExclusiveGroupTwoSidedConflictFailsClosed) {
   pcl_executor_destroy(e);
 }
 
+// A pre-existing route installed before this manifest load (e.g. by an
+// earlier manifest load into the same executor, or programmatically) must
+// still be caught by exclusivity: the D5 fail-closed guarantee applies to
+// the executor's live route table, not just to routes this one load
+// happens to declare together.
+///< REQ_PCL_474: an `exclusive` group conflict is detected against a pre-existing route installed on the executor before this manifest load began, not just against routes this load itself installs.
+TEST(PclTransportRouting, ExclusiveGroupConflictDetectedAgainstPreExistingRoute) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // Side A (ma_action.create) is routed programmatically before this
+  // manifest load ever runs -- e.g. a prior manifest load into the same
+  // executor, or a default wired up in code.
+  pcl_endpoint_route_t prior;
+  memset(&prior, 0, sizeof(prior));
+  prior.endpoint_name = "ma_action.create";
+  prior.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  prior.route_mode    = PCL_ROUTE_LOCAL;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &prior), PCL_OK);
+
+  // This manifest declares the exclusive group and routes only side B
+  // (agra.ma_action.request) -- it never mentions ma_action.create at all,
+  // so a check scoped to only this load's own routes would miss the
+  // conflict entirely.
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route agra.ma_action.request publisher recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+  // The failed load must not leave its own (side B) route installed, and
+  // the pre-existing side-A route must survive untouched.
+  ASSERT_EQ(e->endpoint_route_count, 1u);
+  EXPECT_STREQ(e->endpoint_routes[0].endpoint_name, "ma_action.create");
+  EXPECT_EQ(e->endpoint_routes[0].route_mode, (uint32_t)PCL_ROUTE_LOCAL);
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
 ///< REQ_PCL_464: multiple same-side endpoints of one `exclusive` group (all three rpc command endpoints) route together successfully with no side-B member routed.
 TEST(PclTransportRouting, ExclusiveGroupMultipleSameSideEndpointsRouteTogether) {
   pcl_executor_t* e = pcl_executor_create();
