@@ -999,3 +999,68 @@ TEST(PclGeneratedInteractionFacadeProvider,
   ASSERT_TRUE(received[0].ma_action_status.has_value());
   EXPECT_EQ(received[0].ma_action_status->id, "facade-action-late-rpc");
 }
+
+// Codex PR review: a client-cancelled RPC Read stream stays live() forever
+// (pcl_stream_cancel() only sets the context's cancelled flag, not ctx_),
+// so fanOutRpc() must prune it -- and end() it -- before calling send() on
+// it, not merely check live(). Otherwise every future transitionWriter()
+// send() for that id keeps hitting the cancelled stream and can report
+// PCL_ERR_CANCELLED for what is, from the provider's perspective, an
+// entirely valid transition with simply no one left listening.
+TEST(PclGeneratedInteractionFacadeProvider,
+     FanOutRpcDropsCancelledStreamBeforeSending) {
+  pcl::Executor executor;
+  FacadeHandler handler;
+  FacadeProviderComponent provider{executor, handler};
+  ConsumerComponent consumer{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+  ASSERT_EQ(provider.configureInteractionBinding(R"({"binding":"rpc"})"), PCL_OK);
+
+  ASSERT_EQ(consumer.configure(), PCL_OK);
+  ASSERT_EQ(consumer.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer), PCL_OK);
+  ASSERT_EQ(consumer.client().consumedService().routeAllLocal(), PCL_OK);
+  ASSERT_EQ(consumer.client().configureInteractionBinding(R"({"binding":"rpc"})"),
+            PCL_OK);
+
+  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  magra_cons::Query query{};
+  query.id.push_back("facade-action-cancel");
+  auto handle = consumer.client().transitions(
+      query, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+        received.push_back(frame);
+      });
+  ASSERT_TRUE(handle.valid());
+
+  handle.cancel();
+
+  magra_prov::MAAction_Service_Requirement frame{};
+  pyramid::domain_model::common::Requirement req{};
+  req.id = "facade-action-cancel";
+  frame.ma_action_status = req;
+  // The stream's only subscriber cancelled: fanOutRpc() must have pruned
+  // and ended it, so this send() sees no matching live stream at all and
+  // returns PCL_OK -- not PCL_ERR_CANCELLED, which would incorrectly blame
+  // the transition itself for a listener that is simply gone.
+  EXPECT_EQ(provider.provider().transitionWriter().send(frame), PCL_OK);
+  EXPECT_TRUE(received.empty());
+}
+
+// InformationPortSource::publish()'s RPC-mode fan-out loop has the
+// identical live()-only bug FanOutRpcDropsCancelledStreamBeforeSending
+// covers for RequestPortProvider -- same generator (interaction_facade_
+// gen.py), same StreamWriter<T>/open_streams_ pattern, independently
+// emitted for the Data-1 leg. A runtime round-trip through this specific
+// generated class is blocked by an unrelated, pre-existing gap this PR
+// does not touch: every Data-1 Read rpc takes google.protobuf.Empty, and
+// no generated JSON codec plugin in this codebase registers a codec for
+// Empty (every other RPC-realized streaming test here uses a Query- or
+// Identifier-typed request, which *do* have registered codecs), so
+// dispatchStream()'s pyramid_try_registry_decode() call fails closed
+// before the fan-out loop under test is ever reached. See
+// pim/test_cancelled_stream_pruning.py for the generated-output-level
+// regression test covering this fix instead.

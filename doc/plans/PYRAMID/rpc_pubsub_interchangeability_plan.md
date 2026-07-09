@@ -1700,3 +1700,54 @@ this PR's actual review comments). Full Python suite (`pim/` +
 `PYRAMID/tests/`) 60/60; Phase 5 harness re-run `PASS (0 failure(s))`;
 every sibling harness re-run green. `gen_hlr_coverage.py`: 92 HLRs / 389
 LLRs, 0 gaps.
+
+### Phase 5 addendum 5 — Codex review, executed 2026-07-09
+
+An automated Codex review pass (on 21a0929, addendum 4's own fix) found
+one bug class in two places: `pcl_stream_cancel()` only sets the
+underlying `pcl_stream_context_t`'s `cancelled` flag, it does not clear
+`ctx_` -- so `StreamWriter<T>::live()` stays true forever for a
+client-cancelled stream, and both of `interaction_facade_gen.py`'s
+generated open-stream fan-out loops
+(`RequestPortProvider::fanOutRpc()` and
+`InformationPortSource::publish()`) pruned entries on `!live()` alone.
+A cancelled stream therefore stayed in `open_streams_` past its
+cancellation: every subsequent `send()` call hit it, could report
+`PCL_ERR_CANCELLED` for an otherwise-valid transition/publication (since
+`pcl_stream_send()` checks `ctx->cancelled` before `ctx->ended`), and the
+stale `StreamWriter`/context lingered until provider teardown. Fixed by
+pruning (and `end()`-ing) an entry whose `cancelled()` is true in both
+loops, in addition to the existing `!live()` prune -- `pcl_stream_end()`
+only checks `ctx->ended`, not `cancelled`, so ending a cancelled-but-live
+context is safe and correctly frees it. New gtest
+`PclGeneratedInteractionFacadeProvider.FanOutRpcDropsCancelledStreamBeforeSending`
+proves `fanOutRpc()`'s fix end-to-end: a consumer subscribes, cancels,
+and a subsequent `transitionWriter().send()` for the same id returns
+`PCL_OK` (not `PCL_ERR_CANCELLED`) with nothing delivered.
+
+`InformationPortSource::publish()`'s identical fix could not get the
+same runtime coverage: every Data-1 Read rpc takes
+`google.protobuf.Empty`, and no generated JSON codec plugin anywhere in
+this codebase registers a codec for `Empty` (every other RPC-realized
+streaming test uses a `Query`- or `Identifier`-typed request, which do
+have registered codecs) -- a gap that predates this PR, touches no file
+this PR modifies, and is out of scope for it. A real `subscribe()` call
+through the generated `InformationPortSink` therefore fails closed at
+`dispatchStream()`'s `pyramid_try_registry_decode()` before ever
+reaching the fan-out loop under test. New
+`pim/test_cancelled_stream_pruning.py` covers this half at the
+generated-output level instead (regenerates the A-GRA example bindings
+and asserts `publish()`'s body contains the `cancelled()`/`end()`/`erase`
+pattern, checked before the `send()` call), consistent with how
+`test_stream_consumed_routing.py` covered a generator-output-only
+concern in addendum 1 above.
+
+**Verification**: full CTest suite 738/738 among tests already running
+in this environment (net +1 for the new gtest; the same 12 pre-existing,
+unrelated Ada-target failures noted in addendum 4 persist unchanged).
+Full Python suite (`pim/` + `PYRAMID/tests/`) 61/61 (net +1 for the new
+generated-output test). Phase 5 harness re-run `PASS (0 failure(s))`;
+every sibling harness re-run green. Both fixes are PYRAMID generator
+behaviour, not PCL library behaviour, so (consistent with addenda 2-4)
+they get no PCL LLR entry of their own; the two new tests are the
+record.
