@@ -893,6 +893,9 @@ class ComponentsFacadeEmitterMixin:
             f.write('    }\n')
             f.write('}\n\n')
 
+            self._write_interaction_facade(
+                f, full_ns, parsed, all_topics, is_provided, duplicate_rpc_names)
+
             f.write(f'}} // namespace {full_ns}\n')
 
 

@@ -888,3 +888,165 @@ re-ran green. `git status` after all builds/regeneration/tests shows only
 the ten files listed above as Part A/B/C changes (build trees and harness
 scratch output are pre-existing `.gitignore` entries; `build-flatbuffers-only/`
 retained on disk, gitignored, in case it is useful for review).
+
+### Phase 2 — executed 2026-07-09
+
+New generator module `subprojects/PYRAMID/pim/cpp/interaction_facade_gen.py`
+(`InteractionFacadeEmitterMixin`, ~620 lines), wired into
+`CppServiceGenerator` (`service_gen.py`) and invoked from
+`components_gen.py::_write_components_header` (3-line hook, strictly
+additive -- appends after the existing `ProvidedHandler`/`ProvidedService`/
+`ConsumedService`/`StreamWriter`/`StreamHandle` text, changes none of it).
+For every service with a full `Interaction` (both legs present, from
+Phase 1's `interaction_for_service`), emits:
+
+- **`RequestPortClient`** (Request-shape services): one `submit()` overload
+  per command rpc, composed from the existing `<op>Async()` primitive (RPC
+  realization) or the D2 wrapper-projection rule (pub/sub realization, publish
+  via the existing `publish<Topic>()` primitive); `transitions(query, ...)`
+  composed from `<op>Streaming()` (RPC) or a client-side `query.id` filter
+  over a shared `subscribe<Topic>()` registration (pub/sub, D4); a
+  `SubmitResult{accepted, status, ack}` struct per D3 (`remoteAck()`
+  populated only under RPC); `configureInteractionBinding(config_json)`
+  selecting `{"binding":"rpc"|"pubsub"}` or per-leg
+  `{"request_leg":...,"requirement_leg":...}`, default `"rpc"` for both legs
+  (same conservative default Phase 1's `contract_routing_manifest.py`
+  settled on, for the same reason: the `pattern` stamp does not resolve
+  unambiguously to one side per leg independent of role).
+- **`InformationPortSink`** (Information-shape services): `subscribe(on_msg)`
+  composed the same way, one leg only.
+- A shared `SubscriptionHandle` (move-only, wraps either a live
+  `StreamHandle` (RPC) or a `shared_ptr<bool>` liveness flag (pub/sub) so
+  `transitions()`/`subscribe()` return one type under either realization)
+  and `InteractionBinding` enum, emitted once per file ahead of the classes
+  that use them.
+
+**Design choices (plan text under-specified, resolved and recorded per the
+task's own instruction):**
+- **`submit()` returns `std::future<SubmitResult>`**, not a bare
+  `SubmitResult` -- the plan's §2.1 table just shows `submit(command)`.
+  Chosen for consistency with `ConsumedService`'s existing uniformly-async
+  `<op>Async()`/`std::future<Result<T>>` idiom; the RPC branch wraps the
+  already-eagerly-invoked `<op>Async` future in a `std::launch::deferred`
+  continuation (dispatch happens synchronously either way under local
+  routing, matching the WS-E test's own "Local routing is synchronous"
+  comment), the pub/sub branch returns an already-satisfied
+  `std::promise`-backed future.
+- **D2 non-projectable-command failure surfaces at `submit()`'s pub/sub
+  branch**, not as a missing overload: every command still gets a
+  `submit()` overload (needed for the RPC realization regardless of
+  projectability -- `Update` must still be callable when the leg is
+  RPC-realized), but the pub/sub branch of a non-projectable overload
+  short-circuits to `SubmitResult{accepted=false, status=PCL_ERR_STATE}`
+  without touching the wire at all, per the plan's exact D2 Phase 2 note
+  ("fails at the facade with a precise error... only the *use* fails at
+  runtime, not generation").
+- **Correlation-field resolution for D4's pub/sub `query.id` filter** is
+  best-effort structural discovery (`_requirement_correlation_field`):
+  resolves the `Read` stream frame type's single-oneof-single-variant
+  payload's `id` field (directly or one level of `Entity`-style `base`
+  inlining, matching `types_gen.py`'s own inlining convention). Every
+  contract in the tree at Phase 2 authoring time fits this shape (confirmed
+  by generating clean against `pim/test/` and legacy `proto/` -- see
+  below), so the filter is live everywhere it currently could be; a
+  requirement frame type that doesn't fit the shape falls back to
+  accept-all with a generated comment explaining why, per D4's "documented
+  gap, not a silently-wrong filter" instruction, rather than failing
+  generation.
+
+**Test infrastructure and the account-interruption recovery.** This phase's
+implementing agent was cut off by an account-level API spend limit right
+after reporting "Builds cleanly. Let's run it." -- the generator code above,
+`subprojects/PYRAMID/tests/test_pcl_generated_interaction_facade.cpp`
+(574 lines), and the CMake wiring for a new `interaction_facade_fixture/`
+test-owned proto tree (D2's non-projectable-command fixture, `Widget_Service`
+with a variant-less `Update`) were all present and compiling, but 8 of 9
+new tests failed. Diagnosed and fixed directly (not re-delegated, to avoid
+the same interruption):
+
+- **Root cause (not a Phase 2 generator bug):** every generated
+  `invoke*`/`publish*` helper routes its wire payload through
+  `pyramid_try_registry_encode`/`decode`, which consults
+  `pcl_codec_registry_default()` with **no static-codec fallback** (fail-
+  closed by design, `transport_codec_plugin_system.md`). The interrupted
+  agent's CMake target compiled the raw generated `*_codec.cpp`
+  (`toJson`/`fromJson` free functions) directly into the test executable --
+  which defines the functions but registers nothing -- and never loaded
+  any of the three packages' JSON codec *plugin* `.so`s
+  (`pcl_plugin_load_codec`) the way every real deployment (and
+  `agra_shm_comms_test.cpp`, Phase C of the proving plan) does. Confirmed
+  by bisection: instrumenting `pcl_executor_invoke_async`/`find_service` in
+  `pcl_transport_routing.c`'s neighbour `pcl_executor.c` with temporary
+  `fprintf` diagnostics (reverted before commit; not part of this phase's
+  diff) showed the executor-level dispatch code was **never reached** --
+  the failing call returned `PCL_ERR_NOT_FOUND` from
+  `invokeMaactionCreate`'s own registry-encode check, several layers above
+  routing.
+- **Fix:** three new `add_library(... MODULE ...)` targets in
+  `tests/CMakeLists.txt` (`pyramid_codec_json_agra_mission_autonomy`,
+  `pyramid_codec_json_agra_c2_station`,
+  `pyramid_codec_json_interaction_facade_fixture_widget`), each built from
+  its package's generated `*_json_codec_plugin.cpp` plus the shared
+  data-model + package codec/cabi-marshal sources it needs (mirroring
+  `agra_shm_comms_test.cpp`'s per-package `.so` split, needed for the same
+  reason: each package's plugin exports the identical
+  `extern "C" pcl_codec_plugin_entry` symbol, so they cannot be statically
+  linked together). A new `CodecLoaderEnvironment : ::testing::Environment`
+  in the test file `pcl_plugin_load_codec()`s all three `.so` paths
+  (threaded in via `target_compile_definitions`, the same
+  `CAPTURE_PLUGIN_PATH`-style pattern `subprojects/PCL/tests/CMakeLists.txt`
+  already uses) into the shared default registry before any test runs,
+  registered via a global `::testing::AddGlobalTestEnvironment(...)` so it
+  fires ahead of `RUN_ALL_TESTS()` regardless of translation-unit order.
+  This resolved 8 of 9 failures immediately.
+- **Ninth failure, a genuine test-design gap:**
+  `SubmitProjectableCreateUnderPubsubStillWorksOnTheSameFixture` published
+  to the fixture's `.request` topic with no local subscriber at all in the
+  test -- `pcl_executor_publish_port`'s `PCL_ROUTE_LOCAL` branch correctly
+  reports `PCL_ERR_NOT_FOUND` when nobody local is listening (mirroring
+  `find_service`'s behaviour for unary RPC), so the publish's "success"
+  never had anywhere to be delivered. Added `WidgetProbeComponent`, a
+  second hand-wired `widget_cons::ConsumedService` instance subscribing the
+  fixture's `.request` topic (reusing the role-symmetric
+  `subscribeInteractionFacadeFixtureWidgetRequest()` primitive every
+  generated `ConsumedService` carries, per `interaction_facade_gen.py`'s
+  own comment on why this symmetry exists) as the fixture's sole listener.
+
+**Verification.** `./test_pcl_generated_interaction_facade` -- **9/9 pass**,
+stable across 3 repeated runs. Full regression sweep re-run after the fix
+(all green, no changes needed elsewhere): `test_pcl_generated_component_stream_handle`
+(7/7, the existing WS-E facade test, confirming Phase 2's additive hook
+changed none of its behaviour), `test_pcl_transport_routing` (24/24, Phase 1's
+suite, confirming the unrelated `pcl_executor.c` debug instrumentation used
+for diagnosis was fully reverted and left no trace),
+`python3 -m unittest ... test_binding_contract` (18/18, unchanged --
+Phase 2 touched no Python contract-model code, only the C++ generator),
+`build_contract_routing_test.sh`, `build_agra_shm_comms_test.sh` (Phase C),
+`build_agra_udp_proof_test.sh` (Phase D), and `build_agra_mixed_route_test.sh`
+(Phase E) all re-ran green. Regenerated `pim/test/` (388 files) and legacy
+`proto/` (65 files) directly (not via `git stash`/diff -- no generated
+output is git-tracked, confirmed via `git status` before and after showing
+only this phase's 6 intended source files) to confirm the new
+per-file `_write_interaction_facade` hook does not crash or error against
+every existing contract in the tree, not just the two Phase 2 fixtures:
+both regenerate cleanly (exit 0), and the facade classes appear in 16 of
+`pim/test/`'s generated files (every service with a complete two-leg
+`Interaction`) versus 0 in legacy `proto/` (no grammar-conforming ports
+there, consistent with Phase 1's finding) -- confirming the correlation-field
+structural-discovery fallback (previous bullet) never needed to fire
+outside its documented accept-all path. Ada generation (`--languages ada`)
+included in the same regeneration runs; object-compile stays a carried note
+(no GNAT/gprbuild in this environment, per the established convention).
+
+**Accept criteria met:** one component compiles against the same generated
+facade classes under both `{"binding":"rpc"}` and `{"binding":"pubsub"}`
+(`RpcAndPubsub/InteractionFacadeBindingTest.SubmitCreateRoundTrip/{0,1}`,
+parameterized over the identical test body); `remoteAck()` populated under
+RPC and empty under pub/sub for the same command; the D2 non-projectable
+case fails at the facade with `PCL_ERR_STATE` before any wire attempt;
+`transitions()` delivers correctly under both realizations with pub/sub-mode
+`query.id` filtering proven to actually filter (two concurrent ids, only
+the queried one observed); `InformationPortSink` proven under pub/sub;
+existing generated-binding tests, PCL routing tests, Python tests, and
+every proving-plan harness re-run green. Phase 3 (provider-side facade) is
+untouched, as scoped.
