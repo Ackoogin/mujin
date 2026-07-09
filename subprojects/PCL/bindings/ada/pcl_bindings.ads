@@ -81,7 +81,8 @@ package Pcl_Bindings is
      PCL_ENDPOINT_SUBSCRIBER,
      PCL_ENDPOINT_PROVIDED,
      PCL_ENDPOINT_CONSUMED,
-     PCL_ENDPOINT_STREAM_PROVIDED);
+     PCL_ENDPOINT_STREAM_PROVIDED,
+     PCL_ENDPOINT_STREAM_CONSUMED);
   pragma Convention(C, Pcl_Endpoint_Kind);
 
   type Pcl_Log_Level is

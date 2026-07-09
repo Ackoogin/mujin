@@ -1174,9 +1174,18 @@ class BodyEmitterMixin:
             for svc_name, rpc in all_rpcs:
                 service_const = _rpc_ada_svc_const(
                     svc_name, rpc, duplicate_rpc_names)
+                # Streaming rpcs (server_streaming) route under the distinct
+                # PCL_ENDPOINT_STREAM_CONSUMED kind, symmetric with
+                # PCL_ENDPOINT_STREAM_PROVIDED on the provider side --
+                # pcl_executor_invoke_stream() only consults a route
+                # installed under this kind, not the unary PCL_ENDPOINT_CONSUMED
+                # (see PCL.078 / REQ_PCL_470-472).
+                consumed_kind = (
+                    'Pcl_Bindings.PCL_ENDPOINT_STREAM_CONSUMED' if rpc.server_streaming
+                    else 'Pcl_Bindings.PCL_ENDPOINT_CONSUMED')
                 f.write(f'      Apply_Endpoint_Config\n')
                 f.write(f'        (Executor, {service_const},\n')
-                f.write(f'         Pcl_Bindings.PCL_ENDPOINT_CONSUMED, Config_Json);\n')
+                f.write(f'         {consumed_kind}, Config_Json);\n')
             f.write(f'   end Configure_Consumed_Transport;\n')
             f.write(f'\n')
 

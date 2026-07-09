@@ -1531,3 +1531,48 @@ new negative test). Full Phase 5 run matrix re-run clean:
 capability gate rather than silently passing). `gen_hlr_coverage.py`: 0
 gaps (92 HLRs, 387 LLRs). `PCL.078`/`REQ_PCL_470`-`472` updated to reflect
 the corrected design.
+
+### Phase 5 addendum 2 — further PR review, executed 2026-07-09
+
+A second Codex review pass (on a9dba96, the first addendum's own fix)
+found three more real gaps, all downstream consumers of the new
+`PCL_ENDPOINT_STREAM_CONSUMED` kind that the first addendum introduced but
+did not itself update:
+
+- The QoS-floor join added a real bug of its own:
+  `EndpointRequirement.reliability` is the sentinel string `"unspecified"`
+  (not empty) for an endpoint with no declared QoS floor, and the fix's
+  truthy check passed that straight through as a manifest token --
+  `pcl_transport_routing.c` only accepts `reliable`/`best_effort`, so this
+  would have broken the *common* case (most endpoints have no explicit
+  floor) rather than just failing to preserve one. Fixed by only emitting
+  the token for the two real values.
+- `subprojects/PYRAMID/pim/cpp/components_gen.py`'s `ConsumedService`
+  (the file-wide facade the interaction facade's `consumedService()`
+  accessor exposes) still hardcoded `PCL_ENDPOINT_CONSUMED` for every rpc
+  uniformly in `routeAllRemote()`/`routeAllLocal()` -- a real component
+  calling `consumedService().routeAllRemote("peer")` for a streaming `Read`
+  (exactly the interaction facade's own requirement leg) would install the
+  route under the wrong kind and `pcl_executor_invoke_stream()` would
+  silently miss it, falling back to local/intra-process dispatch instead of
+  the configured peer. Fixed to select the stream kind per-rpc from
+  `rpc.server_streaming`; new `pim/test_stream_consumed_routing.py` pins
+  the generated route calls.
+- The same hardcoded-kind gap existed in the Ada generator
+  (`service_body_gen.py`'s `Configure_Consumed_Transport`) and in the
+  hand-maintained Ada mirror of the C enum
+  (`subprojects/PCL/bindings/ada/pcl_bindings.ads`, missing the new literal
+  entirely). Fixed analogously; verified by clean Python-level
+  regeneration only, consistent with Phase 4's carried Ada
+  compile-verification limitation (no GNAT/gprbuild in this environment).
+
+**Verification**: full PCL suite 733/733 (unchanged count -- these three
+fixes are Python generator + one Ada spec literal, no new PCL test);
+`pim/test_stream_consumed_routing.py` new and passing; full Python suite
+53/53; Phase 5 harness re-run `PASS (0 failure(s))`; every prior harness
+including `build_contract_routing_test.sh` re-run green (its generated
+manifest now correctly reads `...read stream_consumed ... reliable`).
+`gen_hlr_coverage.py`: 0 gaps. `REQ_PCL_472`'s ledger entry extended with
+these follow-on fixes' detail rather than filed as a separate LLR, since
+none of them are PCL library behaviour -- they are PYRAMID generator
+correctness for consumers of PCL.078's already-documented contract.

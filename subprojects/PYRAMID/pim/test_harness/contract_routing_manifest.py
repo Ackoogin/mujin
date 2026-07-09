@@ -47,6 +47,9 @@ from pathlib import Path
 _LEG_NAMES = ("request", "requirement", "information")
 
 
+_PCL_RELIABILITY_TOKENS = ("reliable", "best_effort")
+
+
 def _reliability_floors(endpoint_requirements: list) -> dict:
     """Map (endpoint_name, kind) -> reliability floor ("reliable" /
     "best_effort" / ""), from `binding_manifest.json`'s `endpoint_requirements`
@@ -56,10 +59,17 @@ def _reliability_floors(endpoint_requirements: list) -> dict:
     reliability on its `InteractionEndpoint` entries, so route lines must
     join back here rather than silently dropping the floor -- the PCL
     manifest loader only enforces QoS from an explicit reliability token on
-    the `route` line itself (see FailsClosedWhenQosFloorUnmet)."""
+    the `route` line itself (see FailsClosedWhenQosFloorUnmet). An endpoint
+    with no declared QoS carries the sentinel "unspecified"
+    (`_qos_reliability_floor`'s default) -- not a real PCL token
+    (`reliability_from_str` only accepts "reliable"/"best_effort"), so it is
+    excluded here rather than passed through; `_route_line` only ever sees
+    the two real floors or nothing."""
     floors: dict = {}
     for req in endpoint_requirements:
-        floors[(req["endpoint_name"], req["kind"])] = req.get("reliability", "")
+        reliability = req.get("reliability", "")
+        if reliability in _PCL_RELIABILITY_TOKENS:
+            floors[(req["endpoint_name"], req["kind"])] = reliability
     return floors
 
 
