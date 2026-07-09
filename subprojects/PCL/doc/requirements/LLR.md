@@ -3217,3 +3217,29 @@ A two-sided `exclusive` group conflict shall be detected and fail closed with `P
 **Traces**: PCL.077
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder`.
+
+## Manifest-Driven Remote Streaming Invoke and Gateway Discovery
+
+Found and fixed during
+`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md` Phase 5 (the
+terminal cross-process proof harness): the first attempt anywhere in this
+codebase to route a `provided`/`stream_provided`-kind endpoint through
+`pcl_transport_routing_load()` and actually carry real cross-process traffic
+over it surfaced two gaps neither the low-level SHM transport tests (which
+never exercise the manifest loader for RPC-serving endpoints) nor any prior
+manifest-driven harness (which only ever routed pub/sub topics) had reason to
+catch.
+
+### REQ_PCL_470 - Manifest-Routed Streaming Invoke Dispatches Remotely
+`pcl_executor_invoke_stream()` shall dispatch a streaming service invocation through the named peer transport a `consumed`-kind route table entry designates, before considering the legacy single executor-wide transport or the intra-process fallback -- mirroring `pcl_executor_invoke_async()`'s existing two-tier (per-endpoint route, then legacy transport) structure.
+
+**Traces**: PCL.078
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingInvokeDispatchesThroughRoutedTransport`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (run1: request leg AND requirement leg both rpc-realized, cross-process over shared memory, JSON and FlatBuffers) -- before this fix, `transitions()`'s underlying `maactionReadStreaming()` call returned an invalid `StreamHandle` for every manifest-routed cross-process streaming invoke, since `pcl_executor_invoke_stream()` only ever consulted `e->has_transport`/`e->transport`, never the route table `pcl_transport_routing_load()` populates. Full PCL regression suite (728 tests, including all pre-existing `PclSharedMemoryTransport.Stream*` cases) re-runs green, proving the fix is additive.
+
+### REQ_PCL_471 - Routing-Manifest Gateway Container Discovery
+`pcl_transport_routing_get_gateway(routing, peer_id, out_gateway)` shall return `PCL_OK` with the named peer's transport's gateway container (if its plugin exports one of the known optional gateway-accessor symbols) or `PCL_OK` with `*out_gateway = NULL` (if it exports none -- not an error), and `PCL_ERR_NOT_FOUND` when no transport was loaded for `peer_id`. The routing manifest loader itself shall not add this container to the executor; a component providing a `provided`/`stream_provided` endpoint over such a transport is responsible for retrieving, configuring, activating, and adding it.
+
+**Traces**: PCL.078
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.GetGatewayReturnsUsableContainerForShmPeer`, `.GetGatewayReturnsNullForPluginWithoutGateway`, `.GetGatewayFailsClosedOnUnknownPeerAndBadArgs`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (the provider/MA role of every rpc-realized-request-leg scenario: run1 and run3, JSON and FlatBuffers) -- before this fix, inbound `SVC_REQ`/`STREAM_REQ` frames arriving over the shared-memory bus at a manifest-routed provider were silently dropped (nothing was registered to receive the internal gateway-subscriber topic those frames are re-posted to), so the provider process never observed the command at all and the consumer's pending RPC call hung until timeout.

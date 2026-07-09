@@ -15,6 +15,7 @@
 typedef struct {
   uint32_t publish_count;
   uint32_t serve_count;
+  uint32_t invoke_stream_count;
   char     last_topic[128];
 } capture_state_t;
 
@@ -47,18 +48,34 @@ static pcl_status_t capture_serve(void*            adapter_ctx,
   return PCL_OK;
 }
 
+/* Records the call and returns PCL_STREAMING without ever invoking the
+ * callback -- this plugin only needs to prove pcl_executor_invoke_stream()
+ * dispatched *here* (the named-peer route table path), not to exercise a
+ * real streaming round trip (see test_pcl_shared_memory_transport.cpp for
+ * that, over the real shared-memory transport). */
+static pcl_status_t capture_invoke_stream(void*               adapter_ctx,
+                                          const char*         service_name,
+                                          const pcl_msg_t*    request,
+                                          pcl_stream_msg_fn_t callback,
+                                          void*               user_data,
+                                          void**              stream_handle) {
+  capture_state_t* state = (capture_state_t*)adapter_ctx;
+  (void)service_name;
+  (void)request;
+  (void)callback;
+  (void)user_data;
+
+  if (!state) return PCL_ERR_INVALID;
+  state->invoke_stream_count++;
+  if (stream_handle) *stream_handle = NULL;
+  return PCL_STREAMING;
+}
+
 static pcl_transport_t capture_transport = {
-  capture_publish,
-  capture_serve,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  &capture_state
+  .publish = capture_publish,
+  .serve = capture_serve,
+  .invoke_stream = capture_invoke_stream,
+  .adapter_ctx = &capture_state
 };
 
 PCL_TEST_PLUGIN_EXPORT uint32_t pcl_transport_abi_version(void) {
@@ -94,4 +111,8 @@ PCL_TEST_PLUGIN_EXPORT const char* pcl_capture_last_topic(void) {
 
 PCL_TEST_PLUGIN_EXPORT uint32_t pcl_capture_serve_count(void) {
   return capture_state.serve_count;
+}
+
+PCL_TEST_PLUGIN_EXPORT uint32_t pcl_capture_invoke_stream_count(void) {
+  return capture_state.invoke_stream_count;
 }

@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <pcl/pcl_capabilities.h>
+#include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_plugin.h>
 #include <pcl/pcl_plugin_loader.h>
@@ -715,5 +716,153 @@ TEST(PclTransportRouting, ExclusiveGroupRoutesRolledBackWhenLaterLineFails) {
   // Both routes installed for the group's side A must have been rolled back.
   EXPECT_EQ(e->endpoint_route_count, 0u);
   std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// ---------------------------------------------------------------------------
+// Manifest-routed streaming invoke (rpc_pubsub_interchangeability_plan.md
+// Phase 5, PCL.078 / REQ_PCL_470): pcl_executor_invoke_stream() must consult
+// the per-endpoint route table pcl_transport_routing_load() installs, the
+// same way pcl_executor_invoke_async() already does -- before this fix it
+// only ever checked the legacy single executor-wide transport, so a
+// manifest-routed streaming endpoint silently fell through to the
+// intra-process fallback and failed with PCL_ERR_NOT_FOUND.
+// ---------------------------------------------------------------------------
+
+///< REQ_PCL_470: a streaming invoke for a manifest-routed `consumed` endpoint
+///< dispatches through the named peer's transport (PCL_STREAMING, and the
+///< transport's own invoke_stream is actually called) rather than falling
+///< through to the always-empty intra-process fallback.
+TEST(PclTransportRouting, StreamingInvokeDispatchesThroughRoutedTransport) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_plugin_handle_t* probe = pcl_plugin_open(CAPTURE_PLUGIN_PATH);
+  ASSERT_NE(probe, nullptr);
+  auto reset = reinterpret_cast<void (*)(void)>(
+      pcl_plugin_symbol(probe, "pcl_capture_reset"));
+  auto stream_count = reinterpret_cast<uint32_t (*)(void)>(
+      pcl_plugin_symbol(probe, "pcl_capture_invoke_stream_count"));
+  ASSERT_NE(reset, nullptr);
+  ASSERT_NE(stream_count, nullptr);
+  reset();
+
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "route some.read consumed recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+
+  const char payload[] = "query";
+  pcl_msg_t req{};
+  req.data = payload;
+  req.size = sizeof(payload);
+  req.type_name = "application/json";
+  pcl_stream_context_t* ctx = nullptr;
+  const pcl_status_t rc = pcl_executor_invoke_stream(
+      e, "some.read", &req,
+      [](const pcl_msg_t*, bool, pcl_status_t, void*) {}, nullptr, &ctx);
+
+  EXPECT_EQ(rc, PCL_STREAMING);
+  EXPECT_EQ(stream_count(), 1u);
+
+  std::remove(path.c_str());
+  pcl_plugin_unload(probe);
+  pcl_transport_routing_destroy(routing);
+  pcl_executor_destroy(e);
+}
+
+// ---------------------------------------------------------------------------
+// Gateway container discovery (rpc_pubsub_interchangeability_plan.md Phase 5,
+// PCL.078 / REQ_PCL_471): a manifest-driven peer whose transport plugin
+// exposes a gateway container (shared-memory, socket) must be discoverable
+// through the routing handle so a provider component can wire it into the
+// executor itself -- the loader does not do this automatically (see
+// pcl_transport_routing.h's doc comment for why).
+// ---------------------------------------------------------------------------
+
+///< REQ_PCL_471: a manifest-routed peer whose transport exposes a gateway
+///< container (shared memory) is discoverable via
+///< pcl_transport_routing_get_gateway(), and the returned container is a
+///< real, usable pcl_container_t (configure/activate/add all succeed).
+TEST(PclTransportRouting, GetGatewayReturnsUsableContainerForShmPeer) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const std::string body =
+      std::string("transport shm_peer ") + SHM_TRANSPORT_PLUGIN_PATH +
+      " {\"bus_name\":\"routing_gateway_test_bus\",\"participant_id\":\"a\"}\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+
+  pcl_container_t* gateway = nullptr;
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "shm_peer", &gateway),
+            PCL_OK);
+  ASSERT_NE(gateway, nullptr);
+  EXPECT_EQ(pcl_container_configure(gateway), PCL_OK);
+  EXPECT_EQ(pcl_container_activate(gateway), PCL_OK);
+  EXPECT_EQ(pcl_executor_add(e, gateway), PCL_OK);
+
+  std::remove(path.c_str());
+  pcl_transport_routing_destroy(routing);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_471: a peer whose transport exposes no gateway symbol (the test
+///< capture plugin) returns PCL_OK with a NULL container -- not an error.
+TEST(PclTransportRouting, GetGatewayReturnsNullForPluginWithoutGateway) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, nullptr, 0),
+            PCL_OK);
+
+  pcl_container_t* gateway = reinterpret_cast<pcl_container_t*>(0x1);
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "recorder", &gateway),
+            PCL_OK);
+  EXPECT_EQ(gateway, nullptr);
+
+  std::remove(path.c_str());
+  pcl_transport_routing_destroy(routing);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_471: an unrecognized peer id fails closed with
+///< PCL_ERR_NOT_FOUND, and NULL/invalid arguments fail with PCL_ERR_INVALID.
+TEST(PclTransportRouting, GetGatewayFailsClosedOnUnknownPeerAndBadArgs) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, nullptr, 0),
+            PCL_OK);
+
+  pcl_container_t* gateway = nullptr;
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "no_such_peer", &gateway),
+            PCL_ERR_NOT_FOUND);
+  EXPECT_EQ(pcl_transport_routing_get_gateway(nullptr, "recorder", &gateway),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_transport_routing_get_gateway(routing, "recorder", nullptr),
+            PCL_ERR_INVALID);
+
+  std::remove(path.c_str());
+  pcl_transport_routing_destroy(routing);
   pcl_executor_destroy(e);
 }

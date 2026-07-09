@@ -85,6 +85,36 @@ void pcl_transport_routing_destroy(pcl_transport_routing_t* routing);
 /// \brief Number of transport plugins \p routing loaded (0 if NULL).
 size_t pcl_transport_routing_transport_count(const pcl_transport_routing_t* routing);
 
+/// \brief Retrieve the "gateway" container the transport loaded for \p
+///        peer_id exposes for dispatching inbound unary/streaming service
+///        requests (shared-memory and socket transports both use this
+///        pattern -- see pcl_transport_shared_memory.h /
+///        pcl_transport_socket.h for the underlying mechanism). A component
+///        that PROVIDES a `provided`/`stream_provided`-kind endpoint routed
+///        through such a peer must retrieve this container and configure()
+///        + activate() + pcl_executor_add() it to the same executor \p e
+///        pcl_transport_routing_load() was called against -- exactly like
+///        any other container -- or inbound requests for that endpoint are
+///        silently dropped (there is nothing registered to dispatch them
+///        to). This manifest-driven loader does not do that wiring
+///        automatically, because not every transport needs it (e.g. UDP)
+///        and the loader has no way to know a given deployment intends to
+///        provide rpc-realized endpoints at all versus routing them
+///        elsewhere.
+///
+/// \param routing the loaded routing handle.
+/// \param peer_id the `<peer_id>` a `transport` line in the manifest declared.
+/// \param out_gateway receives the container, or NULL if \p peer_id's
+///        transport doesn't expose one (not an error -- pure pub/sub or
+///        pure-consumer transports have none).
+/// \return PCL_ERR_INVALID for NULL arguments; PCL_ERR_NOT_FOUND if no
+///         transport was loaded for \p peer_id; PCL_OK otherwise (including
+///         the "no gateway for this transport" case).
+pcl_status_t pcl_transport_routing_get_gateway(
+    const pcl_transport_routing_t* routing,
+    const char*                    peer_id,
+    pcl_container_t**              out_gateway);
+
 #ifdef __cplusplus
 }
 #endif

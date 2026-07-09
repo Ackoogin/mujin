@@ -1335,3 +1335,141 @@ functional runtime parity with the C++ facade (D1's live dispatch, D6's
 snapshot store, etc.) is explicitly *not* delivered this phase --
 recorded here as scoped-out, not silently dropped, per the plan's own
 instruction to record the decision "either way."
+
+### Phase 5 — executed 2026-07-09 (plan-terminal)
+
+New harness `pim/test_harness/agra_seam_interchange_test.cpp` +
+`build_agra_seam_interchange_test.sh`, modeled on the prior proving plan's
+Phase C/E harnesses (`agra_shm_comms_test.cpp`, `agra_mixed_route_test.cpp`
+-- same two-process MissionAutonomy/C2Station split, same real
+`libpcl_transport_shared_memory_plugin.so` bus, same cross-process
+child-process-pair pattern) but driving `MaactionRequestPortProvider` /
+`MaactionRequestPortClient` (the Phase 2/3 interaction facade) exclusively
+-- no hand-rolled `publish*`/`subscribe*`/`decode*` calls anywhere in the
+new harness. One binary, built once, re-executed as both roles across every
+run with only `--request-leg=`/`--requirement-leg=` CLI args and a
+freshly-generated manifest differing per run, so "byte-identical component
+objects across runs" holds trivially (literally the same file).
+
+Run matrix, each a real two-process cross-process run over SHM, JSON then
+FlatBuffers:
+
+| Run | request leg | requirement leg | Result |
+|---|---|---|---|
+| negative | dual-routed (both realizations of the request leg) | -- | fails closed, compose-time only, no processes spawned |
+| 1 | rpc | rpc | PASS |
+| 2 | pubsub | pubsub | PASS |
+| 3 | rpc | pubsub | PASS |
+
+Each of runs 1-3 replays the full worked-example sequence (Create ->
+RECEIVED/IN_PROGRESS/COMPLETED, a second action Cancelled, correlation +
+non-conflation checks) through `submit()`/`transitions()`/`TransitionWriter`
+only, plus a new D3 check unique to this phase: `remoteAck()` is asserted
+populated when the request leg is rpc-realized and asserted empty when
+pubsub-realized, for both the create and the cancel command -- proving the
+facade's honest-ack promise holds under real cross-process RPC, not just
+the in-process fixture Phase 2/3 verified it against.
+
+**Two real, pre-existing PCL-level gaps found and fixed** -- this is the
+first place in the entire codebase anything has driven a `provided`/
+`stream_provided`-kind endpoint through `pcl_transport_routing_load()` and
+carried real cross-process traffic over it; every earlier harness (this
+plan's Phases 0-4, the prior proving plan's Phases A-E) only ever routed
+pub/sub topics through that path. Both were found by direct evidence
+(a hung cross-process run, traced via targeted `dprintf` instrumentation in
+`pcl_transport_shared_memory.c`, rebuilding just the affected static
+lib/plugin targets each iteration -- removed before the final commit; see
+methodology precedent in the Phase 3 ledger entry) before either was
+understood as a real bug rather than a harness bug:
+
+1. **Manifest-driven streaming invoke never dispatched remotely.**
+   `pcl_executor_invoke_async()` (unary) already checks the per-endpoint
+   route table `pcl_transport_routing_load()` populates before falling back
+   to the legacy single executor-wide transport; `pcl_executor_invoke_stream()`
+   (streaming) never had the equivalent check -- it went straight to the
+   legacy `e->has_transport`/`e->transport` field, which a routing-manifest
+   deployment never sets, so every manifest-routed streaming invoke silently
+   fell through to the always-empty intra-process fallback.
+   `transitions()`'s underlying `maactionReadStreaming()` call returned an
+   invalid `StreamHandle` every time under the rpc realization -- run 1
+   deadlocked (see the future-lifecycle bug below, which this same symptom
+   also triggered). Fixed in `subprojects/PCL/src/pcl_executor.c` by adding
+   the identical per-endpoint-route-then-legacy-fallback structure
+   `pcl_executor_invoke_async()` already has, verbatim in shape.
+2. **A `provided`/`stream_provided`-serving component's inbound requests
+   were silently dropped.** The shared-memory (and socket) transport's
+   documented architecture (`pcl_transport_shared_memory.h`) requires a
+   provider to retrieve its transport's "gateway" container and
+   `configure()`/`activate()`/`pcl_executor_add()` it itself -- inbound
+   `SVC_REQ`/`STREAM_REQ` frames are re-posted onto an internal topic only
+   the gateway subscribes to. This is a real, established, precedented
+   requirement (`subprojects/PYRAMID/tactical_objects/src/apps/tactical_objects_main.cpp`
+   already does this manually for its own `pcl_executor_set_transport()`
+   -based setup), but `pcl_transport_routing_t` exposed no way to retrieve a
+   loaded peer's gateway container at all -- the manifest-driven path had no
+   route to this existing, working mechanism. Added
+   `pcl_transport_routing_get_gateway(routing, peer_id, out_gateway)` to
+   `pcl_transport_routing.c`/`.h` (purely additive: one new function,
+   resolves the same optional `pcl_shm_transport_plugin_gateway`/
+   `pcl_socket_transport_plugin_gateway` symbols `tactical_objects_main.cpp`
+   already resolves manually, via the same `pcl_plugin_symbol()` public
+   API -- no transport plugin touched, no vtable change). The harness's MA
+   role now calls it once, right after `pcl_transport_routing_load()`,
+   before constructing its component.
+
+Both fixes are HLR/LLR-documented (`PCL.078`, `REQ_PCL_470`/`471` in
+`subprojects/PCL/doc/requirements/`) with dedicated gtest coverage added to
+`test_pcl_transport_routing.cpp` (`StreamingInvokeDispatchesThroughRoutedTransport`;
+`GetGatewayReturnsUsableContainerForShmPeer`,
+`GetGatewayReturnsNullForPluginWithoutGateway`,
+`GetGatewayFailsClosedOnUnknownPeerAndBadArgs` -- the last two using a
+minimal `invoke_stream` stub added to the existing test-only capture
+transport plugin), not just the integration harness -- `gen_hlr_coverage.py`
+reports 0 gaps (92 HLRs, 386 LLRs) after regeneration.
+
+Also fixed, in the harness itself before the two PCL bugs were even
+diagnosed: `MaactionRequestPortClient::submit()` returns a
+`std::launch::deferred` `std::future<SubmitResult>` -- `wait_for()` on such
+a future *always* reports `std::future_status::deferred`, never `ready`,
+regardless of whether the underlying (genuinely async) response has
+arrived, so a poll loop written as "spin while `wait_for(0) != ready`, then
+`.get()`" spins uselessly for the whole timeout and then calls a *for-real*
+blocking `.get()` with nothing left driving the executor -- worse, a
+`std::launch::async` future's destructor also blocks until its thread
+finishes, so even abandoning the wait after a deadline doesn't bound the
+hang. Fixed by running the actual blocking `.get()` on a `std::launch::async`
+background thread (whose future *does* report `ready`/`timeout` correctly)
+while the calling thread keeps spinning the executor -- `await_submit()` in
+the harness, a small, generically-typed helper. Not a facade bug -- `submit()`'s
+own design already does the safe (eager-invoke, deferred-wait) split
+correctly; this was purely about how a *caller* wanting a bounded wait must
+compose with it.
+
+**Verification**: full run (negative gate + 3 runs x 2 codecs) green,
+`PASS (0 failure(s))`, stable. Full PCL regression suite re-run after each
+of the two core fixes and once more clean at the end: 732/732 CTest cases
+green (up from 728 -- the 4 new gtest cases), including every
+`PclSharedMemoryTransport.*`/`PclTransportRouting.*` case pre-existing
+before this phase. Every prior harness re-ran green:
+`build_comms_test.sh`, `build_routed_egress_test.sh`,
+`build_agra_shm_comms_test.sh`, `build_agra_udp_proof_test.sh`,
+`build_agra_mixed_route_test.sh`, `build_contract_routing_test.sh`.
+`gen_hlr_coverage.py`: 0 gaps.
+
+**Accept criteria met (plan-terminal):** all four runs (negative + 3
+positive) green on Linux from a clean generate, with identical component
+objects across runs 1-3 (the same compiled binary, trivially); run 3
+demonstrates the same transaction carried rpc on the request leg and
+pub/sub on the requirement leg with neither `MaactionRequestPortProvider`
+nor `MaactionRequestPortClient` aware which; run 4's (the negative gate's)
+diagnostic asserted (names the `request_leg` group and "opposite sides");
+every prior harness re-runs green. `doc/todo/PYRAMID/TODO.md`'s WS-D
+seam-duality row is updated to **Resolved** with a pointer here, and its
+capability-adapters row annotated per D7 (scope now explicitly free-form
+services only); `pim/test_harness/FINDINGS.md`'s "Remaining follow-ups"
+section gets a matching resolved-pointer entry. This plan
+(`rpc_pubsub_interchangeability_plan.md`) is itself the pointer artifact both
+of those updates point back to; the relationship to the broader adoption
+path is already recorded in §6 above.
+
+This closes the plan: Phases 0-5 are all executed, evidenced, and green.

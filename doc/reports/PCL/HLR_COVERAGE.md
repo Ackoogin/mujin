@@ -188,15 +188,16 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
 | PCL.077 | Manifest Exclusive Realization Groups | 463, 464, 465, 466, 467, 468, 469 | test_pcl_transport_routing |
+| PCL.078 | Manifest-Driven Remote Streaming Invoke and Gateway Discovery | 470, 471 | test_pcl_transport_routing |
 
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| HLRs | 91 |
-| LLRs | 384 |
-| LLRs with at least one verifying test file | 384 |
+| HLRs | 92 |
+| LLRs | 386 |
+| LLRs with at least one verifying test file | 386 |
 | Distinct test files carrying REQ_PCL tags | 17 |
 | HLRs with no tracing LLR | 0 |
 | LLRs with no test evidence | 0 |

@@ -551,3 +551,44 @@ void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
 size_t pcl_transport_routing_transport_count(const pcl_transport_routing_t* routing) {
   return routing ? routing->count : 0u;
 }
+
+/* Known optional plugin-exported gateway accessors (see pcl_plugin.h's
+   PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL for the established precedent of an
+   optional, dlsym-resolved extra a transport plugin may or may not export).
+   Not every transport type has a gateway symbol here -- only those with a
+   real gateway-container pattern; unlisted/no-match transports correctly
+   fall through to "no gateway", not an error. */
+static const char* const kRoutingGatewaySymbols[] = {
+  "pcl_shm_transport_plugin_gateway",
+  "pcl_socket_transport_plugin_gateway",
+};
+
+typedef pcl_container_t* (*pcl_routing_gateway_fn)(const pcl_transport_t*);
+
+pcl_status_t pcl_transport_routing_get_gateway(
+    const pcl_transport_routing_t* routing,
+    const char*                    peer_id,
+    pcl_container_t**              out_gateway) {
+  size_t i;
+  if (!out_gateway) return PCL_ERR_INVALID;
+  *out_gateway = NULL;
+  if (!routing || !peer_id) return PCL_ERR_INVALID;
+
+  for (i = 0; i < routing->count; ++i) {
+    if (strcmp(routing->transports[i].peer_id, peer_id) == 0) {
+      size_t si;
+      for (si = 0; si < sizeof(kRoutingGatewaySymbols) / sizeof(kRoutingGatewaySymbols[0]);
+           ++si) {
+        void* sym = pcl_plugin_symbol(routing->transports[i].handle,
+                                      kRoutingGatewaySymbols[si]);
+        if (sym) {
+          pcl_routing_gateway_fn fn = (pcl_routing_gateway_fn)sym;
+          *out_gateway = fn(routing->transports[i].vtable);
+          return PCL_OK;
+        }
+      }
+      return PCL_OK;  /* peer found; its transport just has no gateway */
+    }
+  }
+  return PCL_ERR_NOT_FOUND;
+}

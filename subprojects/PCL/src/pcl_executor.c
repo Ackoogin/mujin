@@ -1229,7 +1229,54 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
                                         pcl_stream_context_t** out_ctx) {
   if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
 
-  // If transport has invoke_stream, use it
+  // Per-endpoint route table first, mirroring pcl_executor_invoke_async:
+  // a manifest-driven deployment (pcl_transport_routing_load) may route
+  // different endpoints to different named transports, so the legacy
+  // single executor-wide e->transport below must not be consulted before
+  // this per-endpoint route is checked.
+  {
+    const pcl_endpoint_route_entry_t* route =
+        find_endpoint_route_entry_const(e, service_name, PCL_ENDPOINT_CONSUMED);
+    if (route) {
+      if (route->route_mode == PCL_ROUTE_LOCAL) {
+        /* handled below */
+      } else if (route->route_mode == PCL_ROUTE_REMOTE) {
+        const pcl_transport_t* transport = NULL;
+        if (route->peer_count > 1u) return PCL_ERR_INVALID;
+        if (route->peer_count == 1u) {
+          transport = find_named_transport(e, route->peer_ids[0]);
+        } else if (e->has_transport) {
+          transport = &e->transport;
+        }
+        if (!transport || !transport->invoke_stream) return PCL_ERR_NOT_FOUND;
+        {
+          void* stream_handle = NULL;
+          pcl_status_t rc = transport->invoke_stream(
+              transport->adapter_ctx, service_name, request,
+              callback, user_data, &stream_handle);
+          if (rc == PCL_OK || rc == PCL_STREAMING) {
+            if (out_ctx) {
+              pcl_stream_context_t* ctx =
+                  (pcl_stream_context_t*)pcl_calloc(1, sizeof(*ctx));
+              if (ctx) {
+                ctx->executor      = e;
+                ctx->callback      = callback;
+                ctx->user_data     = user_data;
+                ctx->transport     = transport;
+                ctx->transport_ctx = stream_handle;
+                *out_ctx = ctx;
+              }
+            }
+          }
+          return rc;
+        }
+      } else {
+        return PCL_ERR_INVALID;
+      }
+    }
+  }
+
+  // Legacy executor-wide transport fallback: if transport has invoke_stream, use it
   if (e->has_transport && e->transport.invoke_stream) {
     void* stream_handle = NULL;
     pcl_status_t rc = e->transport.invoke_stream(
