@@ -663,6 +663,34 @@ TEST(PclTransportRouting, ExclusiveGroupFailsClosedOnEmptyListMember) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_469: a two-sided conflict fails closed even when both conflicting `route` lines appear BEFORE the `exclusive` line that groups them -- the check is order-independent, not declare-before-use.
+TEST(PclTransportRouting, ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      // Both conflicting routes appear before the `exclusive` declaration.
+      "route ma_action.create consumed recorder\n" +
+      "route agra.ma_action.request publisher recorder\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+  // Both routes -- installed successfully at parse time -- must be rolled
+  // back once the final exclusivity pass fails the whole load.
+  EXPECT_EQ(e->endpoint_route_count, 0u);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
 // Rollback must cover exclusive-group routes too: routes installed for a
 // group's side A must be cleared when a later, unrelated line fails -- same
 // guarantee REQ_PCL_421 proves for plain routes, exercised here with a

@@ -3210,3 +3210,10 @@ Routes installed for a declared `exclusive` group's side shall be rolled back, a
 **Traces**: PCL.077, PCL.070
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupRoutesRolledBackWhenLaterLineFails`.
+
+### REQ_PCL_469 - Exclusive Group Conflict Detected Regardless Of Declaration Order
+A two-sided `exclusive` group conflict shall be detected and fail closed with `PCL_ERR_STATE` regardless of whether the conflicting `route` lines appear before or after the group's `exclusive` declaration in the manifest file.
+
+**Traces**: PCL.077
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder`.

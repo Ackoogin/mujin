@@ -21,11 +21,11 @@
 ///   #   an rpc realization vs. a pub/sub realization of the same request/
 ///   #   response transaction). Any number of same-side endpoints may be
 ///   #   routed together freely; routing at least one endpoint from EACH side
-///   #   is a compose-time error (PCL_ERR_STATE), reported by whichever
-///   #   `route` line completes the second side. An endpoint named in no
-///   #   `exclusive` group is entirely unaffected by this check. Must be
-///   #   declared before any `route` line for one of its member endpoints
-///   #   (declare-before-use, same convention as `transport` before `route`).
+///   #   is a compose-time error (PCL_ERR_STATE). Checked once, after the
+///   #   whole manifest has been parsed, so `exclusive` and `route` lines for
+///   #   the same group may appear in either order within the file -- there
+///   #   is no declare-before-use requirement. An endpoint named in no
+///   #   `exclusive` group is entirely unaffected by this check.
 ///   exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request
 ///
 ///   # route <endpoint_name> <kind> <peer_id>[,<peer_id>...] [reliability]

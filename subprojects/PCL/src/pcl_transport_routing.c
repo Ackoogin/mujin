@@ -343,30 +343,27 @@ static const char* route_matching_list(const pcl_transport_routing_t* r,
   return NULL;
 }
 
-/* D5 compose-time exclusivity: `endpoint_name` was just routed. If it is a
-   member of either side of a declared `exclusive` group and the group's
-   OTHER side already has a routed member, fail closed naming the group and
-   both conflicting endpoints. Endpoints in no group, and any number of
-   same-side endpoints routed together, are unaffected. */
-static pcl_status_t check_exclusivity(const pcl_transport_routing_t* r,
-                                      const char*                    endpoint_name,
-                                      char*                          diag,
-                                      size_t                          diag_size) {
+/* D5 compose-time exclusivity: checked once, after the whole manifest has
+   been parsed (not incrementally per `route` line), so the result is
+   independent of whether a manifest's `exclusive` declaration appears
+   before or after the `route` lines for its members -- a route line
+   processed while its group was not yet declared must not silently bypass
+   the check. For every declared group, fail closed if *both* sides have at
+   least one routed member; any number of same-side endpoints routed
+   together, and endpoints in no group, are unaffected. */
+static pcl_status_t validate_exclusivity(const pcl_transport_routing_t* r,
+                                         char*                          diag,
+                                         size_t                          diag_size) {
   size_t i;
   for (i = 0; i < r->group_count; ++i) {
     const pcl_routing_exclusive_group_t* g = &r->groups[i];
-    int in_a = name_in_list(g->side_a, g->side_a_count, endpoint_name);
-    int in_b = name_in_list(g->side_b, g->side_b_count, endpoint_name);
-    const char* other = NULL;
+    const char* a_hit = route_matching_list(r, g->side_a, g->side_a_count);
+    const char* b_hit = route_matching_list(r, g->side_b, g->side_b_count);
 
-    if (in_a) other = route_matching_list(r, g->side_b, g->side_b_count);
-    else if (in_b) other = route_matching_list(r, g->side_a, g->side_a_count);
-    else continue;
-
-    if (other) {
+    if (a_hit && b_hit) {
       set_diag(diag, diag_size,
                "exclusive '%s': '%s' and '%s' are routed from opposite sides",
-               g->name, endpoint_name, other);
+               g->name, a_hit, b_hit);
       return PCL_ERR_STATE;
     }
   }
@@ -450,12 +447,10 @@ static pcl_status_t handle_route_line(pcl_executor_t*          e,
     return rc;
     // GCOVR_EXCL_STOP
   }
-  /* D5 compose-time exclusivity: fail closed if this route completes both
-     sides of a declared `exclusive` group. The route is already recorded in
-     r->routes above, so the top-level loop's rollback-on-failure clears it
-     (and anything else this manifest installed) on this error path too. */
-  rc = check_exclusivity(r, endpoint, diag, diag_size);
-  if (rc != PCL_OK) return rc;
+  /* D5 compose-time exclusivity is validated once, after the whole manifest
+     is parsed (validate_exclusivity, called from pcl_transport_routing_load)
+     -- not here per-line, so it does not depend on `exclusive` declaration
+     order relative to this route's line. */
   /* Compose-time validation: caps + QoS floor, fail closed. */
   return pcl_executor_validate_endpoint_route(e, &route, diag, diag_size);
 }
@@ -509,6 +504,10 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
   }
 
   fclose(file);
+
+  if (rc == PCL_OK) {
+    rc = validate_exclusivity(r, diag, diag_size);
+  }
 
   if (rc != PCL_OK) {
     pcl_transport_routing_destroy(r);

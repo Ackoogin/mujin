@@ -651,18 +651,22 @@ holds two bounded endpoint-name lists (`side_a`/`side_b`,
 an empty list member (a doubled comma) or an oversized list rather than
 silently truncating.
 
-Enforcement lives entirely in `handle_route_line()`: after a route is
-recorded in `r->routes` (so rollback covers it on any later failure), a new
-`check_exclusivity()` checks whether the just-routed endpoint is a member of
-either side of any declared group and, if so, whether the group's *other*
-side already has a routed member (`route_matching_list()`, a linear scan
-over `r->routes` -- no new executor API, exactly as scoped). Two-sided
-conflicts fail closed with `PCL_ERR_STATE` naming the group and both
-endpoints; any number of same-side endpoints route together with zero
-overhead when no groups are declared (the check is a no-op loop over
-`group_count == 0`). Declared groups are never registered on the executor
-(pure manifest bookkeeping), so `pcl_transport_routing_destroy` just frees
-the array -- no unregister step needed, unlike transports/routes.
+Enforcement (**as fixed in review** -- see the design-choices note below for
+the original, order-dependent version this replaced) is a single
+`validate_exclusivity()` pass called from `pcl_transport_routing_load()`
+once the whole manifest has been parsed and every line has succeeded: for
+each declared group it checks, via `route_matching_list()` (a linear scan
+over the final `r->routes` array -- no new executor API, exactly as
+scoped), whether *any* routed endpoint appears on side A and *any* routed
+endpoint appears on side B; if both are non-empty, fails closed with
+`PCL_ERR_STATE` naming the group and one conflicting endpoint from each
+side. Because the check runs once against the fully-populated route/group
+state, it is independent of whether a manifest's `route` and `exclusive`
+lines for one group appear in any particular order. Any number of
+same-side endpoints route together with zero effect on other groups;
+declared groups are never registered on the executor (pure manifest
+bookkeeping), so `pcl_transport_routing_destroy` just frees the array --
+no unregister step needed, unlike transports/routes.
 
 Header (`subprojects/PCL/include/pcl/pcl_transport_routing.h`): grammar
 `\code` block extended with the `exclusive <group_name> <side_a_endpoints>
@@ -673,6 +677,8 @@ route as a comment. `PCL_ERR_STATE`'s doc-comment gained the exclusivity
 case.
 
 Six new tests in `subprojects/PCL/tests/test_pcl_transport_routing.cpp`
+(a seventh, `ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder`,
+was added by the same-day review fix below -- see the design-choices note)
 (`ExclusiveGroup*`, following the file's `WriteManifest`/diag-buffer/
 `EXPECT_NE(...find(...))` style): two-sided conflict fails closed naming
 group + both endpoints; three same-side command endpoints route together
@@ -842,16 +848,25 @@ regression bar) -- green, same JSON/FlatBuffers, two-process,
 correlation/non-conflation results as Phase 0's ledger entry.
 
 **Design choices recorded (beyond the default-side call above):**
-- `exclusive` group declaration order enforcement (declare-before-use) is
-  documented in the header, matching the `transport`-before-`route`
-  convention, but is not separately mechanically enforced the way an
-  unknown `route` peer is (`PCL_ERR_NOT_FOUND`) -- a `route` line for a
-  group member that appears *before* the `exclusive` declaration simply
-  will not find the group yet and is not checked against it. Scoped this
-  way because the task instructions asked for this to be documented, not
-  necessarily enforced as a distinct error path, and no existing manifest
-  in the tree (hand-authored or generated) has a reason to misorder these
-  lines. Flagged here in case future work wants a stricter check.
+- ~~`exclusive` group declaration order enforcement (declare-before-use) is
+  documented but not separately mechanically enforced~~ **fixed in review,
+  same day:** the flagged gap was real -- a manifest with both conflicting
+  `route` lines appearing *before* the `exclusive` declaration loaded
+  successfully, since the per-line `check_exclusivity()` call only ever
+  consulted whatever groups had been declared so far. Replaced with a
+  single `validate_exclusivity()` pass run once after the entire manifest
+  is parsed (checking, per group, whether *any* routed endpoint appears on
+  each side, via the existing `route_matching_list()` helper), removing
+  the ordering dependency entirely rather than special-casing it. Updated
+  the header grammar doc and `PCL.077`'s HLR text (both previously stated
+  the now-false declare-before-use requirement) and added
+  `REQ_PCL_469 - Exclusive Group Conflict Detected Regardless Of
+  Declaration Order` (`ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder`)
+  proving the reordered case now fails closed. `HLR_COVERAGE.md`
+  regenerated (91 HLRs, **384** LLRs, zero gaps); full
+  `test_pcl_transport_routing` re-run, **24/24** pass;
+  `build_contract_routing_test.sh` and `build_agra_shm_comms_test.sh`
+  both re-ran green after the fix.
 - `contract_routing_manifest.py`'s interaction selection (first
   Request-shape interaction with a *consumed*-role request leg) is a
   judgement call preserving the old script's implicit "consumer-side test
