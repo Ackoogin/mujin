@@ -997,6 +997,24 @@ int pcl_executor_endpoint_route_exists_any_kind(const pcl_executor_t* e,
       return 1;
     }
   }
+  /* The endpoint route table (above) is not the only place a route can
+     live: pcl_port_set_route() (pcl::Port::routeRemote() et al.) writes
+     directly onto a concrete port's route_configured/route_mode fields --
+     typically how a publisher/provided port gets routed post-bind(),
+     never touching e->endpoint_routes at all. A caller asking "is this
+     endpoint name routed at all" (e.g. D5 exclusive-group enforcement)
+     must see both stores or it misses routes installed this second way. */
+  for (i = 0; i < e->container_count; ++i) {
+    pcl_container_t* container = e->containers[i];
+    uint32_t          pi;
+    for (pi = 0; pi < container->port_count; ++pi) {
+      const pcl_port_t* port = &container->ports[pi];
+      if (port->route_configured && port->route_mode != PCL_ROUTE_NONE &&
+          strcmp(port->name, endpoint_name) == 0) {
+        return 1;
+      }
+    }
+  }
   return 0;
 }
 

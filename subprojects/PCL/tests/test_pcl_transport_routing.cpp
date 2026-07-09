@@ -621,6 +621,58 @@ TEST(PclTransportRouting, ExclusiveGroupConflictDetectedAgainstPreExistingRoute)
   pcl_executor_destroy(e);
 }
 
+// A concrete port route (pcl_port_set_route(), the mechanism
+// pcl::Port::routeRemote() et al. use -- typical for a publisher/provided
+// port configured directly at bind() time) is a second live route store
+// entirely separate from the endpoint route table
+// pcl_executor_set_endpoint_route() populates. Exclusivity must catch a
+// conflict against this store too, not just the endpoint route table
+// REQ_PCL_474 already covers.
+///< REQ_PCL_475: an exclusive group conflict is detected against a concrete port route (pcl_port_set_route()), a second live route store distinct from the endpoint route table REQ_PCL_474 covers.
+TEST(PclTransportRouting, ExclusiveGroupConflictDetectedAgainstConcretePortRoute) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // Side B (agra.ma_action.request) is a publisher port routed directly
+  // via pcl_port_set_route() before this manifest load ever runs --
+  // never touching e->endpoint_routes at all.
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    pcl_port_t* port = pcl_container_add_publisher(c, "agra.ma_action.request", "Msg");
+    if (!port) return PCL_ERR_NOMEM;
+    return pcl_port_set_route(port, PCL_ROUTE_LOCAL, nullptr, 0u);
+  };
+  auto* c = pcl_container_create("port_routed_node", &cbs, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  // This manifest declares the exclusive group and routes only side A
+  // (ma_action.create) -- it never mentions agra.ma_action.request at
+  // all, so a check scoped to the endpoint route table alone would miss
+  // this conflict.
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request\n" +
+      "route ma_action.create consumed recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  const std::string d(diag);
+  EXPECT_NE(d.find("ma_action.request_leg"), std::string::npos) << diag;
+  EXPECT_NE(d.find("ma_action.create"), std::string::npos) << diag;
+  EXPECT_NE(d.find("agra.ma_action.request"), std::string::npos) << diag;
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
 ///< REQ_PCL_464: multiple same-side endpoints of one `exclusive` group (all three rpc command endpoints) route together successfully with no side-B member routed.
 TEST(PclTransportRouting, ExclusiveGroupMultipleSameSideEndpointsRouteTogether) {
   pcl_executor_t* e = pcl_executor_create();

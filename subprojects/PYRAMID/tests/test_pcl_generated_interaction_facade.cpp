@@ -622,6 +622,67 @@ TEST(PclGeneratedInteractionFacade, TransitionsUnderPubsubFiltersByQueryId) {
   EXPECT_EQ(received.size(), 1u);  // cancel() suppressed further delivery
 }
 
+// Codex PR review: PubsubTransition dropped the on_end callback entirely
+// (never even stored it), so a Query.one_shot subscriber completing under
+// pub/sub never got the completion signal a one_shot RPC Read stream gives
+// when the provider ends it -- silently non-interchangeable for any
+// caller relying on on_end.
+TEST(PclGeneratedInteractionFacade,
+     TransitionsUnderPubsubHonorsOneShotAndFiresOnEnd) {
+  pcl::Executor executor;
+  RecordingHandler handler;
+  ProviderComponent provider{executor, handler};
+  ConsumerComponent consumer{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+
+  ASSERT_EQ(consumer.configure(), PCL_OK);
+  ASSERT_EQ(consumer.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer), PCL_OK);
+  ASSERT_EQ(consumer.client().consumedService().configurePubSubTransport(
+                R"({"transport":"local"})"),
+            PCL_OK);
+  ASSERT_EQ(consumer.client().configureInteractionBinding(
+                R"({"requirement_leg":"pubsub"})"),
+            PCL_OK);
+
+  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  bool ended = false;
+  pcl_status_t end_status = PCL_ERR_INVALID;
+  magra_cons::Query query{};
+  query.id.push_back("action-one-shot-pubsub");
+  query.one_shot = true;
+  auto handle = consumer.client().transitions(
+      query,
+      [&](const magra_cons::MAAction_Service_Requirement& frame) {
+        received.push_back(frame);
+      },
+      [&](pcl_status_t status) {
+        ended = true;
+        end_status = status;
+      });
+  ASSERT_TRUE(handle.valid());
+
+  magra_prov::MAAction_Service_Requirement frame_a{};
+  pyramid::domain_model::common::Requirement req_a{};
+  req_a.id = "action-one-shot-pubsub";
+  frame_a.ma_action_status = req_a;
+
+  ASSERT_EQ(provider.probe().publishAgraMaActionRequirement(frame_a), PCL_OK);
+
+  ASSERT_EQ(received.size(), 1u);
+  EXPECT_TRUE(ended);
+  EXPECT_EQ(end_status, PCL_OK);
+
+  // one_shot deactivated the subscription: a second publication for the
+  // same id must not be delivered.
+  ASSERT_EQ(provider.probe().publishAgraMaActionRequirement(frame_a), PCL_OK);
+  EXPECT_EQ(received.size(), 1u);
+}
+
 // -----------------------------------------------------------------------
 // InformationPortSink -- pub/sub realization
 // -----------------------------------------------------------------------
@@ -1064,3 +1125,66 @@ TEST(PclGeneratedInteractionFacadeProvider,
 // before the fan-out loop under test is ever reached. See
 // pim/test_cancelled_stream_pruning.py for the generated-output-level
 // regression test covering this fix instead.
+
+// Codex PR review: fanOutRpc() sent every matching transition forever,
+// never checking Query.one_shot at all -- unlike the pub/sub realization,
+// which at least stops future delivery (see
+// TransitionsUnderPubsubHonorsOneShotAndFiresOnEnd's sibling fix). D4's
+// own design table requires the RPC realization to "honour one_shot" the
+// same as pub/sub.
+TEST(PclGeneratedInteractionFacadeProvider,
+     FanOutRpcEndsStreamAfterOneShotMatch) {
+  pcl::Executor executor;
+  FacadeHandler handler;
+  FacadeProviderComponent provider{executor, handler};
+  ConsumerComponent consumer{executor};
+
+  ASSERT_EQ(provider.configure(), PCL_OK);
+  ASSERT_EQ(provider.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(provider), PCL_OK);
+  ASSERT_EQ(provider.configureLocal(), PCL_OK);
+  ASSERT_EQ(provider.configureInteractionBinding(R"({"binding":"rpc"})"), PCL_OK);
+
+  ASSERT_EQ(consumer.configure(), PCL_OK);
+  ASSERT_EQ(consumer.activate(), PCL_OK);
+  ASSERT_EQ(executor.add(consumer), PCL_OK);
+  ASSERT_EQ(consumer.client().consumedService().routeAllLocal(), PCL_OK);
+  ASSERT_EQ(consumer.client().configureInteractionBinding(R"({"binding":"rpc"})"),
+            PCL_OK);
+
+  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  bool ended = false;
+  pcl_status_t end_status = PCL_ERR_INVALID;
+  magra_cons::Query query{};
+  query.id.push_back("facade-action-one-shot");
+  query.one_shot = true;
+  auto handle = consumer.client().transitions(
+      query,
+      [&](const magra_cons::MAAction_Service_Requirement& frame) {
+        received.push_back(frame);
+      },
+      [&](pcl_status_t status) {
+        ended = true;
+        end_status = status;
+      });
+  ASSERT_TRUE(handle.valid());
+
+  magra_prov::MAAction_Service_Requirement frame{};
+  pyramid::domain_model::common::Requirement req{};
+  req.id = "facade-action-one-shot";
+  frame.ma_action_status = req;
+  ASSERT_EQ(provider.provider().transitionWriter().send(frame), PCL_OK);
+
+  ASSERT_EQ(received.size(), 1u);
+  EXPECT_TRUE(ended);
+  EXPECT_EQ(end_status, PCL_OK);
+
+  // fanOutRpc() must have ended and pruned the stream after its one match:
+  // a second transition for the same id is not delivered at all.
+  magra_prov::MAAction_Service_Requirement frame2{};
+  pyramid::domain_model::common::Requirement req2{};
+  req2.id = "facade-action-one-shot";
+  frame2.ma_action_status = req2;
+  provider.provider().transitionWriter().send(frame2);
+  EXPECT_EQ(received.size(), 1u);
+}

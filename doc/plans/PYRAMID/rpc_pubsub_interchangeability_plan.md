@@ -1751,3 +1751,58 @@ every sibling harness re-run green. Both fixes are PYRAMID generator
 behaviour, not PCL library behaviour, so (consistent with addenda 2-4)
 they get no PCL LLR entry of their own; the two new tests are the
 record.
+
+### Phase 5 addendum 6 — Codex review, executed 2026-07-09
+
+An automated Codex review pass (on cd1f0c3, addendum 5's own fix) found
+three more real gaps:
+
+- `pcl_executor_endpoint_route_exists_any_kind()` (REQ_PCL_474's fix)
+  only scanned `e->endpoint_routes`, missing a second, entirely separate
+  live route store: a concrete port routed directly via
+  `pcl_port_set_route()` (`pcl::Port::routeRemote()` et al., typical for
+  a publisher/provided port at bind() time) never touches
+  `e->endpoint_routes` at all -- it sets `pcl_port_t::route_configured`/
+  `route_mode` instead, which `port_route_mode()` already separately
+  consults. A manifest could therefore route the opposite side of an
+  exclusive group whose other side was already concretely port-routed
+  and pass exclusivity, leaving both realizations active -- exactly the
+  D5 violation REQ_PCL_474 was meant to close, just via the other route
+  store. Fixed by extending `pcl_executor_endpoint_route_exists_any_kind()`
+  to also scan every container's ports on the executor for a
+  `route_configured` port matching the name. New `REQ_PCL_475`; new
+  gtest `PclTransportRouting.ExclusiveGroupConflictDetectedAgainstConcretePortRoute`
+  installs a publisher port with `pcl_port_set_route(PCL_ROUTE_LOCAL)`,
+  then loads a manifest routing only the opposite side, and asserts the
+  load fails closed.
+- `fanOutRpc()` (`RequestPortProvider`, the RPC provider's transition
+  fan-out) never checked `Query.one_shot` at all, sending every matching
+  transition to an open Read stream forever -- unlike the pub/sub
+  realization, which at least stopped further delivery. D4's own design
+  table requires the RPC realization to "honour one_shot" the same as
+  pub/sub. Fixed by ending (and pruning) a stream after its first
+  matching delivery when `query.one_shot` is set, passing the send's own
+  return code to `end()` so a failed send aborts rather than
+  clean-ending. New gtest
+  `PclGeneratedInteractionFacadeProvider.FanOutRpcEndsStreamAfterOneShotMatch`.
+- `PubsubTransition` (`RequestPortClient`'s pub/sub-realized
+  `transitions()`) dropped the caller's `on_end` callback entirely --
+  never even stored it -- so a `Query.one_shot` subscriber's completion
+  under pub/sub gave no signal, unlike the same subscriber completing
+  under RPC realization (where the provider ending the stream fires
+  `on_end`). Silently non-interchangeable for any caller relying on
+  `on_end`. Fixed by storing `on_end` in `PubsubTransition` and firing it
+  with `PCL_OK` when `one_shot` deactivates the subscription, mirroring
+  what a one_shot RPC Read stream's ending gives the client. New gtest
+  `PclGeneratedInteractionFacade.TransitionsUnderPubsubHonorsOneShotAndFiresOnEnd`.
+  The generated doc comment on `transitions()` was updated to describe
+  this instead of leaving `on_end`'s pub/sub behaviour unstated.
+
+**Verification**: full CTest suite 741/741 among tests already running
+in this environment (net +3 for the three new gtests; the same 12
+pre-existing, unrelated Ada-target failures noted in addendum 4 persist
+unchanged). Full Python suite (`pim/` + `PYRAMID/tests/`) 61/61
+(unchanged -- all three fixes here have direct runtime gtest coverage,
+no generator-output-only test needed this round). Phase 5 harness re-run
+`PASS (0 failure(s))`; every sibling harness re-run green.
+`gen_hlr_coverage.py`: 92 HLRs / 390 LLRs, 0 gaps.
