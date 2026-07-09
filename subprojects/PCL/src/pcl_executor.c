@@ -949,7 +949,8 @@ pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
   if ((route->route_mode & PCL_ROUTE_REMOTE) == 0u && route->peer_count > 0u) {
     return PCL_ERR_INVALID;
   }
-  if (route->endpoint_kind == PCL_ENDPOINT_CONSUMED &&
+  if ((route->endpoint_kind == PCL_ENDPOINT_CONSUMED ||
+       route->endpoint_kind == PCL_ENDPOINT_STREAM_CONSUMED) &&
       route->route_mode == (PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE)) {
     return PCL_ERR_INVALID;
   }
@@ -1233,10 +1234,15 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
   // a manifest-driven deployment (pcl_transport_routing_load) may route
   // different endpoints to different named transports, so the legacy
   // single executor-wide e->transport below must not be consulted before
-  // this per-endpoint route is checked.
+  // this per-endpoint route is checked. Looked up under
+  // PCL_ENDPOINT_STREAM_CONSUMED, not PCL_ENDPOINT_CONSUMED (unary invoke's
+  // kind) -- a streaming client route must require PCL_CAP_RPC_STREAM at
+  // compose time (pcl_endpoint_required_caps()), not just PCL_CAP_RPC_UNARY,
+  // or a unary-only peer composes successfully and only fails once this
+  // call is actually made.
   {
-    const pcl_endpoint_route_entry_t* route =
-        find_endpoint_route_entry_const(e, service_name, PCL_ENDPOINT_CONSUMED);
+    const pcl_endpoint_route_entry_t* route = find_endpoint_route_entry_const(
+        e, service_name, PCL_ENDPOINT_STREAM_CONSUMED);
     if (route) {
       if (route->route_mode == PCL_ROUTE_LOCAL) {
         /* handled below */

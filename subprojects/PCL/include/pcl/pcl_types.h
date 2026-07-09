@@ -99,6 +99,13 @@ typedef enum {
   PCL_ENDPOINT_PROVIDED       = 2,
   PCL_ENDPOINT_CONSUMED       = 3,
   PCL_ENDPOINT_STREAM_PROVIDED = 4,
+  /// \brief Client side of a server-streaming rpc, symmetric with
+  ///        PCL_ENDPOINT_STREAM_PROVIDED. Distinct from PCL_ENDPOINT_CONSUMED
+  ///        (unary) so pcl_endpoint_required_caps() can require
+  ///        PCL_CAP_RPC_STREAM specifically -- a manifest route for a
+  ///        streaming client invoke must not compose against a unary-only
+  ///        transport just because "consumed" is satisfied by RPC_UNARY.
+  PCL_ENDPOINT_STREAM_CONSUMED = 5,
 } pcl_endpoint_kind_t;
 
 typedef struct {

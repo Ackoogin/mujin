@@ -29,7 +29,13 @@
 ///   exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request
 ///
 ///   # route <endpoint_name> <kind> <peer_id>[,<peer_id>...] [reliability]
-///   #   kind        : publisher | subscriber | provided | consumed | stream_provided
+///   #   kind        : publisher | subscriber | provided | consumed | stream_provided | stream_consumed
+///   #     stream_consumed routes a server-streaming rpc's *client-side*
+///   #     invoke (pcl_executor_invoke_stream()) -- distinct from `consumed`
+///   #     (used by pcl_executor_invoke_async()'s unary invoke) so a
+///   #     unary-only peer transport is rejected at compose time for a
+///   #     streaming endpoint instead of failing only when the call is
+///   #     actually made.
 ///   #   reliability : best_effort | reliable   (optional QoS floor)
 ///   route create_requirement consumed  svc_grpc  reliable
 ///   route object_evidence    publisher topic_udp best_effort

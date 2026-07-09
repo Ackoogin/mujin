@@ -36,7 +36,7 @@ CONTRACT_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
     return PCL_CAP_PUBSUB;
   }
   if (config_has(config_json, "\"mode\":\"rpc\"")) {
-    return PCL_CAP_RPC_UNARY;
+    return PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM;
   }
   return PCL_CAP_NONE;
 }

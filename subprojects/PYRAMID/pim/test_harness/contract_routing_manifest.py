@@ -47,8 +47,28 @@ from pathlib import Path
 _LEG_NAMES = ("request", "requirement", "information")
 
 
-def _route_line(endpoint: dict, peer: str) -> str:
-    return f"route {endpoint['endpoint_name']} {endpoint['kind']} {peer}"
+def _reliability_floors(endpoint_requirements: list) -> dict:
+    """Map (endpoint_name, kind) -> reliability floor ("reliable" /
+    "best_effort" / ""), from `binding_manifest.json`'s `endpoint_requirements`
+    -- the same per-endpoint QoS source `EndpointRequirement`/
+    `_build_endpoint_requirements` already compute (binding_contract.py).
+    `interactions` (this script's own primary source) does not carry
+    reliability on its `InteractionEndpoint` entries, so route lines must
+    join back here rather than silently dropping the floor -- the PCL
+    manifest loader only enforces QoS from an explicit reliability token on
+    the `route` line itself (see FailsClosedWhenQosFloorUnmet)."""
+    floors: dict = {}
+    for req in endpoint_requirements:
+        floors[(req["endpoint_name"], req["kind"])] = req.get("reliability", "")
+    return floors
+
+
+def _route_line(endpoint: dict, peer: str, floors: dict) -> str:
+    line = f"route {endpoint['endpoint_name']} {endpoint['kind']} {peer}"
+    reliability = floors.get((endpoint["endpoint_name"], endpoint["kind"]), "")
+    if reliability:
+        line += f" {reliability}"
+    return line
 
 
 def _find_request_interaction(interactions: list) -> dict:
@@ -106,6 +126,7 @@ def main() -> int:
     data = json.loads(Path(args.binding_manifest).read_text(encoding="utf-8"))
     interaction = _find_request_interaction(data.get("interactions", []))
     legs_by_name = {leg["name"]: leg for leg in interaction["legs"]}
+    floors = _reliability_floors(data.get("endpoint_requirements", []))
 
     plugin = Path(args.plugin_path).resolve().as_posix()
     lines = [
@@ -124,7 +145,7 @@ def main() -> int:
         side_b_names = ",".join(ep["endpoint_name"] for ep in leg["side_b"])
         lines.append(f'exclusive {leg["group_name"]} {side_a_names} {side_b_names}')
         for ep in routed_side:
-            lines.append(_route_line(ep, peer))
+            lines.append(_route_line(ep, peer, floors))
             summary.append(f"{leg_name}_leg_route={ep['endpoint_name']}:{ep['kind']}")
     lines.append("")
 

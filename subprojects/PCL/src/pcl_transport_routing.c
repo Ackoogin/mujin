@@ -63,6 +63,7 @@ static int kind_from_str(const char* s, pcl_endpoint_kind_t* out) {
   if (strcmp(s, "provided") == 0)             { *out = PCL_ENDPOINT_PROVIDED; return 1; }
   if (strcmp(s, "consumed") == 0)             { *out = PCL_ENDPOINT_CONSUMED; return 1; }
   if (strcmp(s, "stream_provided") == 0)      { *out = PCL_ENDPOINT_STREAM_PROVIDED; return 1; }
+  if (strcmp(s, "stream_consumed") == 0)      { *out = PCL_ENDPOINT_STREAM_CONSUMED; return 1; }
   return 0;
 }
 

@@ -3225,17 +3225,27 @@ Found and fixed during
 terminal cross-process proof harness): the first attempt anywhere in this
 codebase to route a `provided`/`stream_provided`-kind endpoint through
 `pcl_transport_routing_load()` and actually carry real cross-process traffic
-over it surfaced two gaps neither the low-level SHM transport tests (which
+over it surfaced gaps neither the low-level SHM transport tests (which
 never exercise the manifest loader for RPC-serving endpoints) nor any prior
 manifest-driven harness (which only ever routed pub/sub topics) had reason to
-catch.
+catch. REQ_PCL_470's `PCL_ENDPOINT_STREAM_CONSUMED` kind and REQ_PCL_472's
+capability gate were themselves found in PR review of the first cut of this
+fix (which routed the streaming client side under the pre-existing
+`consumed` kind) rather than in the original diagnosis.
 
 ### REQ_PCL_470 - Manifest-Routed Streaming Invoke Dispatches Remotely
-`pcl_executor_invoke_stream()` shall dispatch a streaming service invocation through the named peer transport a `consumed`-kind route table entry designates, before considering the legacy single executor-wide transport or the intra-process fallback -- mirroring `pcl_executor_invoke_async()`'s existing two-tier (per-endpoint route, then legacy transport) structure.
+`pcl_executor_invoke_stream()` shall dispatch a streaming service invocation through the named peer transport a `stream_consumed`-kind route table entry designates, before considering the legacy single executor-wide transport or the intra-process fallback -- mirroring `pcl_executor_invoke_async()`'s existing two-tier (per-endpoint route, then legacy transport) structure, but keyed on `PCL_ENDPOINT_STREAM_CONSUMED` rather than the unary `PCL_ENDPOINT_CONSUMED` (see REQ_PCL_472).
 
 **Traces**: PCL.078
 
-**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingInvokeDispatchesThroughRoutedTransport`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (run1: request leg AND requirement leg both rpc-realized, cross-process over shared memory, JSON and FlatBuffers) -- before this fix, `transitions()`'s underlying `maactionReadStreaming()` call returned an invalid `StreamHandle` for every manifest-routed cross-process streaming invoke, since `pcl_executor_invoke_stream()` only ever consulted `e->has_transport`/`e->transport`, never the route table `pcl_transport_routing_load()` populates. Full PCL regression suite (728 tests, including all pre-existing `PclSharedMemoryTransport.Stream*` cases) re-runs green, proving the fix is additive.
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingInvokeDispatchesThroughRoutedTransport`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (run1: request leg AND requirement leg both rpc-realized, cross-process over shared memory, JSON and FlatBuffers) -- before this fix, `transitions()`'s underlying `maactionReadStreaming()` call returned an invalid `StreamHandle` for every manifest-routed cross-process streaming invoke, since `pcl_executor_invoke_stream()` only ever consulted `e->has_transport`/`e->transport`, never the route table `pcl_transport_routing_load()` populates. Full PCL regression suite re-runs green, proving the fix is additive.
+
+### REQ_PCL_472 - Stream-Consumed Routes Require RPC_STREAM Capability
+A manifest `route` line of kind `stream_consumed` shall fail closed with `PCL_ERR_STATE` and a diagnostic naming `RPC_STREAM` when routed to a transport that does not declare `PCL_CAP_RPC_STREAM`, even when that transport declares `PCL_CAP_RPC_UNARY` (i.e. is unary-rpc-capable but not streaming-capable) -- `stream_consumed` and `consumed` are distinct endpoint kinds precisely so `pcl_endpoint_required_caps()` can require the correct capability for each, rather than a streaming client route being satisfied by `PCL_CAP_RPC_UNARY` alone and only failing once actually invoked.
+
+**Traces**: PCL.078
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingRouteRejectsStreamIncapableTransport` (routes against the existing unary-only `pcl_transport_nocaps_plugin` -- publish + invoke_async only, no invoke_stream); `PclCapabilities.EndpointRequiredCaps` (`PCL_ENDPOINT_STREAM_CONSUMED` maps to `PCL_CAP_RPC_STREAM`, not `PCL_CAP_RPC_UNARY`). Also exercised for real via `contract_routing_manifest.py`/`build_contract_routing_test.sh`: before this fix and its companion QoS-floor fix (both raised in the same PR review), the generated manifest routed `*.read`'s consumed side as plain `consumed` and dropped its reliability floor; `contract_routing_validation` now fails closed exactly as this REQ requires until the routed peer (there, `contract_transport_plugin.c`'s `"mode":"rpc"` config) is updated to actually declare `PCL_CAP_RPC_STREAM`.
 
 ### REQ_PCL_471 - Routing-Manifest Gateway Container Discovery
 `pcl_transport_routing_get_gateway(routing, peer_id, out_gateway)` shall return `PCL_OK` with the named peer's transport's gateway container (if its plugin exports one of the known optional gateway-accessor symbols) or `PCL_OK` with `*out_gateway = NULL` (if it exports none -- not an error), and `PCL_ERR_NOT_FOUND` when no transport was loaded for `peer_id`. The routing manifest loader itself shall not add this container to the executor; a component providing a `provided`/`stream_provided` endpoint over such a transport is responsible for retrieving, configuring, activating, and adding it.

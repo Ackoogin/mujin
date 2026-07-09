@@ -150,7 +150,10 @@ bool write_manifest(const std::string& path,
         << ma::kSvcMaactionRead << " " << ma::kTopicAgraMaActionRequirement << "\n";
 
     const char* rpc_command_kind = is_ma ? "provided" : "consumed";
-    const char* rpc_read_kind = is_ma ? "stream_provided" : "consumed";
+    // stream_consumed, not consumed: Read is a streaming rpc, so the client
+    // side's route must require PCL_CAP_RPC_STREAM at compose time (PCL.078
+    // fix), not just PCL_CAP_RPC_UNARY -- see pcl_transport_routing.h.
+    const char* rpc_read_kind = is_ma ? "stream_provided" : "stream_consumed";
     const char* request_topic_kind = is_ma ? "subscriber" : "publisher";
     const char* requirement_topic_kind = is_ma ? "publisher" : "subscriber";
 

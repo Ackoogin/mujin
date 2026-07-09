@@ -88,13 +88,14 @@ PCL_TEST_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   return &capture_transport;
 }
 
-/* Declare capabilities explicitly: pub/sub + unary from the vtable, plus an
- * action capability that has no vtable slot and so could never be derived.
- * This exercises the loader's explicit-symbol path overriding derivation. */
+/* Declare capabilities explicitly: pub/sub + unary + streaming from the
+ * vtable, plus an action capability that has no vtable slot and so could
+ * never be derived. This exercises the loader's explicit-symbol path
+ * overriding derivation. */
 PCL_TEST_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
     const char* config_json) {
   (void)config_json;
-  return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_ACTION;
+  return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM | PCL_CAP_RPC_ACTION;
 }
 
 PCL_TEST_PLUGIN_EXPORT void pcl_capture_reset(void) {

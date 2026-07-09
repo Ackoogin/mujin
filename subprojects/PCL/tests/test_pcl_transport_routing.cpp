@@ -729,10 +729,10 @@ TEST(PclTransportRouting, ExclusiveGroupRoutesRolledBackWhenLaterLineFails) {
 // intra-process fallback and failed with PCL_ERR_NOT_FOUND.
 // ---------------------------------------------------------------------------
 
-///< REQ_PCL_470: a streaming invoke for a manifest-routed `consumed` endpoint
-///< dispatches through the named peer's transport (PCL_STREAMING, and the
-///< transport's own invoke_stream is actually called) rather than falling
-///< through to the always-empty intra-process fallback.
+///< REQ_PCL_470: a streaming invoke for a manifest-routed `stream_consumed`
+///< endpoint dispatches through the named peer's transport (PCL_STREAMING,
+///< and the transport's own invoke_stream is actually called) rather than
+///< falling through to the always-empty intra-process fallback.
 TEST(PclTransportRouting, StreamingInvokeDispatchesThroughRoutedTransport) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -747,9 +747,13 @@ TEST(PclTransportRouting, StreamingInvokeDispatchesThroughRoutedTransport) {
   ASSERT_NE(stream_count, nullptr);
   reset();
 
+  // The capture plugin declares PCL_CAP_RPC_STREAM (it implements
+  // invoke_stream), so a stream_consumed route to it composes -- capability
+  // *rejection* for a stream-incapable peer is
+  // StreamingRouteRejectsStreamIncapableTransport below.
   const std::string body =
       std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
-      "route some.read consumed recorder\n";
+      "route some.read stream_consumed recorder\n";
   const auto path = WriteManifest(body);
   pcl_transport_routing_t* routing = nullptr;
   char diag[200] = "";
@@ -774,6 +778,33 @@ TEST(PclTransportRouting, StreamingInvokeDispatchesThroughRoutedTransport) {
   std::remove(path.c_str());
   pcl_plugin_unload(probe);
   pcl_transport_routing_destroy(routing);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_470: a stream_consumed route to a transport that is unary-only
+///< (publish + invoke_async, no invoke_stream -- exactly the "unary-only
+///< peer" scenario a stream_consumed/consumed kind conflation would have let
+///< through) fails closed with a diagnostic naming RPC_STREAM, leaving
+///< nothing installed. Before this fix, PCL_ENDPOINT_STREAM_CONSUMED did not
+///< exist: a streaming client route was indistinguishable from a unary one
+///< (both PCL_ENDPOINT_CONSUMED, requiring only PCL_CAP_RPC_UNARY), so this
+///< exact peer composed successfully and only failed once the stream was
+///< actually invoked at runtime.
+TEST(PclTransportRouting, StreamingRouteRejectsStreamIncapableTransport) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport unary_only ") + NOCAPS_TRANSPORT_PLUGIN_PATH +
+      "\n" + "route some.read stream_consumed unary_only\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  EXPECT_NE(std::string(diag).find("RPC_STREAM"), std::string::npos) << diag;
+  std::remove(path.c_str());
   pcl_executor_destroy(e);
 }
 

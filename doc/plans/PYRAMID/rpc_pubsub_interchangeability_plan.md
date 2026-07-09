@@ -1473,3 +1473,61 @@ of those updates point back to; the relationship to the broader adoption
 path is already recorded in §6 above.
 
 This closes the plan: Phases 0-5 are all executed, evidenced, and green.
+
+### Phase 5 addendum — PR review, executed 2026-07-09
+
+Two Codex review comments on the Phase 5 PR, both real correctness gaps in
+that phase's own fix, not pre-existing bugs:
+
+- **P1**: routing a streaming client invoke under the pre-existing
+  `consumed` kind meant `pcl_endpoint_required_caps()` only ever demanded
+  `PCL_CAP_RPC_UNARY` for it (the same requirement a *unary* consumed route
+  has) — a manifest could compose successfully against a unary-only peer
+  for a streaming endpoint, failing only once the stream was actually
+  invoked. Fixed by adding a new `PCL_ENDPOINT_STREAM_CONSUMED` endpoint
+  kind (manifest token `stream_consumed`), symmetric with the
+  provider-side `PCL_ENDPOINT_STREAM_PROVIDED`/`stream_provided` that
+  already existed: `pcl_endpoint_required_caps(STREAM_CONSUMED)` requires
+  `PCL_CAP_RPC_STREAM`; `pcl_executor_invoke_stream()`'s route-table lookup
+  (this phase's own REQ_PCL_470 fix) now keys on it instead of `CONSUMED`.
+  `binding_contract.py::_service_endpoint_kind()` emits `stream_consumed`
+  for a consumed-role streaming rpc (mirroring its existing
+  `stream_provided` branch for the provided role); `agra_seam_interchange_test.cpp`'s
+  hand-written manifest updated to match.  New `PCL_ENDPOINT_STREAM_CONSUMED`
+  requires touching: `pcl_types.h` (enum), `pcl_capabilities.c` (required
+  caps), `pcl_transport_routing.c`/`.h` (grammar token + doc), `pcl_executor.c`
+  (route lookup kind + the existing LOCAL|REMOTE-forbidden guard extended to
+  the new kind too). Documented as `REQ_PCL_472`, with a new negative gtest
+  (`StreamingRouteRejectsStreamIncapableTransport`, routed against the
+  existing unary-only `pcl_transport_nocaps_plugin`) proving the exact
+  scenario the reviewer described now fails closed at compose time.
+- **P2**: `contract_routing_manifest.py`'s route-line writer read
+  `endpoint_name`/`kind` off `InteractionEndpoint` but never carried a
+  reliability floor, silently dropping the QoS token the old
+  `endpoint_requirements`-based path used to append — a generated manifest
+  could route a contract-marked-`RELIABLE` endpoint to a `best_effort`-only
+  transport and compose successfully. Fixed by joining back to
+  `binding_manifest.json`'s `endpoint_requirements` (keyed by
+  `(endpoint_name, kind)`) for the floor, since `interactions` itself
+  carries no QoS field. Fixing P1 and P2 together changed
+  `build_contract_routing_test.sh`'s generated manifest for the first time
+  in a way that mattered: the `*.read` consumed-side route now correctly
+  emits `stream_consumed reliable` instead of `consumed` (no floor), which
+  then correctly failed closed against `contract_transport_plugin.c`'s
+  `"mode":"rpc"` stub (declared only `RPC_UNARY`) until that stub's
+  declared caps were updated to include `RPC_STREAM` too — a real
+  demonstration of P1's fix working end-to-end through the actual
+  generator path, not just the new unit tests.
+
+**Verification**: `test_pcl_transport_routing.cpp`
+(`StreamingInvokeDispatchesThroughRoutedTransport` updated to route
+`stream_consumed`; new `StreamingRouteRejectsStreamIncapableTransport`),
+`test_pcl_capabilities.cpp` (`EndpointRequiredCaps` extended;
+`LoaderUsesExplicitCapsSymbol` updated for the capture plugin's now-honest
+`RPC_STREAM` declaration). Full PCL suite: 733/733 (up from 732 — the one
+new negative test). Full Phase 5 run matrix re-run clean:
+`PASS (0 failure(s))`. All prior harnesses re-run green, including
+`build_contract_routing_test.sh` (now genuinely exercises and validates the
+capability gate rather than silently passing). `gen_hlr_coverage.py`: 0
+gaps (92 HLRs, 387 LLRs). `PCL.078`/`REQ_PCL_470`-`472` updated to reflect
+the corrected design.

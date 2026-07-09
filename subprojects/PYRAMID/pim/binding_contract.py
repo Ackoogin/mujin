@@ -998,15 +998,18 @@ def _rpc_wire_name(service: ProtoService, rpc: ProtoRpc) -> str:
 
 def _service_endpoint_kind(package: str, rpc: ProtoRpc) -> str:
     role = _service_role(package)
-    if role == "provided" and rpc.server_streaming:
-        return "stream_provided"
+    if rpc.server_streaming:
+        if role == "provided":
+            return "stream_provided"
+        if role == "consumed":
+            return "stream_consumed"
     return role
 
 
 def _service_endpoint_capability(kind: str) -> str:
     if kind in ("publisher", "subscriber"):
         return "PUBSUB"
-    if kind == "stream_provided":
+    if kind in ("stream_provided", "stream_consumed"):
         return "RPC_STREAM"
     return "RPC_UNARY"
 
