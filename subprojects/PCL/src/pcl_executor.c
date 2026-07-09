@@ -1157,6 +1157,8 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
                                        const pcl_msg_t* request,
                                        pcl_resp_cb_fn_t callback,
                                        void*            user_data) {
+  int route_forces_local = 0;
+
   if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
 
   {
@@ -1164,7 +1166,13 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
         find_endpoint_route_entry_const(e, service_name, PCL_ENDPOINT_CONSUMED);
     if (route) {
       if (route->route_mode == PCL_ROUTE_LOCAL) {
-        /* handled below */
+        /* An explicit LOCAL route is a deliberate override -- it must skip
+           the legacy executor-wide transport fallback below, not merely
+           "fall through to it because no remote transport is configured
+           for this endpoint". Enforced via route_forces_local rather than
+           an early return so the intra-process fallback code stays in one
+           place. */
+        route_forces_local = 1;
       } else if (route->route_mode == PCL_ROUTE_REMOTE) {
         const pcl_transport_t* transport = NULL;
         if (route->peer_count > 1u) return PCL_ERR_INVALID;
@@ -1182,8 +1190,9 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
     }
   }
 
-  // Legacy executor-wide transport fallback
-  if (e->has_transport && e->transport.invoke_async) {
+  // Legacy executor-wide transport fallback (skipped when an explicit
+  // LOCAL route exists for this endpoint -- see route_forces_local above).
+  if (!route_forces_local && e->has_transport && e->transport.invoke_async) {
     return e->transport.invoke_async(e->transport.adapter_ctx, service_name,
                                      request, callback, user_data);
   }
@@ -1228,6 +1237,8 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
                                         pcl_stream_msg_fn_t    callback,
                                         void*                  user_data,
                                         pcl_stream_context_t** out_ctx) {
+  int route_forces_local = 0;
+
   if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
 
   // Per-endpoint route table first, mirroring pcl_executor_invoke_async:
@@ -1245,7 +1256,12 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
         e, service_name, PCL_ENDPOINT_STREAM_CONSUMED);
     if (route) {
       if (route->route_mode == PCL_ROUTE_LOCAL) {
-        /* handled below */
+        /* An explicit LOCAL route is a deliberate override -- see the
+           identical route_forces_local comment in
+           pcl_executor_invoke_async(); it must skip the legacy
+           executor-wide transport fallback below, not merely fall through
+           to it. */
+        route_forces_local = 1;
       } else if (route->route_mode == PCL_ROUTE_REMOTE) {
         const pcl_transport_t* transport = NULL;
         if (route->peer_count > 1u) return PCL_ERR_INVALID;
@@ -1282,8 +1298,9 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
     }
   }
 
-  // Legacy executor-wide transport fallback: if transport has invoke_stream, use it
-  if (e->has_transport && e->transport.invoke_stream) {
+  // Legacy executor-wide transport fallback (skipped when an explicit
+  // LOCAL route exists for this endpoint -- see route_forces_local above).
+  if (!route_forces_local && e->has_transport && e->transport.invoke_stream) {
     void* stream_handle = NULL;
     pcl_status_t rc = e->transport.invoke_stream(
         e->transport.adapter_ctx, service_name, request,

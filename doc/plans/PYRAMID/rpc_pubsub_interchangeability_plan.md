@@ -1576,3 +1576,58 @@ manifest now correctly reads `...read stream_consumed ... reliable`).
 these follow-on fixes' detail rather than filed as a separate LLR, since
 none of them are PCL library behaviour -- they are PYRAMID generator
 correctness for consumers of PCL.078's already-documented contract.
+
+### Phase 5 addendum 3 — further PR review, executed 2026-07-09
+
+A third review pass (on 410dac9, the second addendum's own fix) found two
+more real gaps:
+
+- Both `pcl_executor_invoke_async()` (pre-existing, unaffected by this PR
+  directly) and `pcl_executor_invoke_stream()` (this PR's new code,
+  faithfully mirroring the older function's structure) let an explicit
+  `PCL_ROUTE_LOCAL` route fall through a "handled below" comment straight
+  into the legacy executor-wide transport fallback (`e->has_transport &&
+  e->transport.invoke_async`/`invoke_stream`) *before* ever reaching
+  intra-process dispatch -- so a deliberate local-route override was
+  silently ignored whenever a default transport also happened to be
+  registered on the executor. Confirmed this predates the PR in
+  `invoke_async`; fixed both functions symmetrically (leaving the
+  inconsistency between two near-identical functions would be worse, and
+  the reviewer's comment landed on code in the file this PR was already
+  modifying) via a `route_forces_local` flag set when `route->route_mode
+  == PCL_ROUTE_LOCAL`, gating the fallback check with
+  `!route_forces_local &&` rather than restructuring the fallback's
+  position. New `REQ_PCL_473`, traced to PCL.078; two new gtests
+  (`PclExecutor.InvokeAsyncExplicitLocalRouteBypassesDefaultTransport`,
+  `PclStreaming.InvokeStreamExplicitLocalRouteBypassesDefaultTransport`)
+  register a default transport with a spy `invoke_async`/`invoke_stream`
+  alongside an explicit `PCL_ROUTE_LOCAL` route and assert the transport
+  is never called.
+- `subprojects/PYRAMID/pim/cpp/components_gen.py`'s generated
+  `*_components.hpp` preamble never emitted `#include <unordered_map>`,
+  despite `interaction_facade_gen.py` generating a `std::unordered_map`
+  member (`snapshot_index_`, the D6 snapshot store) whenever a
+  `RequestPortProvider` is emitted -- a latent compile-fragility bug for
+  any consumer lacking a transitive include. Fixed by adding the include
+  to the preamble.
+
+Also: GNAT and gprbuild were installed in this environment during this
+round (`apt-get install gnat gprbuild`), retroactively closing the "no
+GNAT/gprbuild in this environment" compile-verification gap both Phase 4
+and Phase 5 addendum 2 carried for Ada codegen. `pcl_bindings.ads`
+(including addendum 2's new `PCL_ENDPOINT_STREAM_CONSUMED` literal) now
+compile-checks cleanly (`gcc -c -gnat2020 -gnatc`, exit 0), and the full
+`test_generic_ada.py` suite (7/7, including the two Ada object-compile
+tests that previously failed for lack of a compiler) passes.
+
+**Verification**: full PCL suite 735/735 (net +2 for the two new
+`route_forces_local` tests); full Python suite across `pim/` and
+`PYRAMID/tests/` 60/60 (up from the previously-reported 53, now including
+the newly-passing Ada compile tests); `pcl_bindings.ads` direct
+`gnatc` check passes; generated `*_components.hpp` spot-checked to confirm
+`#include <unordered_map>` now precedes the `snapshot_index_` member's
+use of it; Phase 5 harness re-run `PASS (0 failure(s))`; every sibling
+harness (`build_comms_test.sh`, `build_routed_egress_test.sh`,
+`build_agra_shm_comms_test.sh`, `build_agra_udp_proof_test.sh`,
+`build_agra_mixed_route_test.sh`, `build_contract_routing_test.sh`)
+re-run green. `gen_hlr_coverage.py`: 92 HLRs / 388 LLRs, 0 gaps.

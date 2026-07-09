@@ -77,6 +77,7 @@ class ComponentsFacadeEmitterMixin:
             f.write('#include <stdexcept>\n')
             f.write('#include <string>\n')
             f.write('#include <string_view>\n')
+            f.write('#include <unordered_map>\n')
             f.write('#include <utility>\n')
             f.write('#include <vector>\n\n')
 

@@ -801,6 +801,77 @@ TEST(PclExecutor, InvokeAsyncIntraProcessImmediateResponse) {
   pcl_container_destroy(c);
 }
 
+// An explicit PCL_ROUTE_LOCAL endpoint route is a deliberate override: it
+// must dispatch to the intra-process service even when a default transport
+// (with invoke_async set) is also registered on the executor, not silently
+// prefer the legacy transport because it happens to be checked first.
+// REQ_PCL_473.
+TEST(PclExecutor, InvokeAsyncExplicitLocalRouteBypassesDefaultTransport) {
+  static int response_val = 7;
+  auto svc_handler = [](pcl_container_t*, const pcl_msg_t*,
+                        pcl_msg_t* resp,
+                        pcl_svc_context_t*, void*) -> pcl_status_t {
+    resp->data = &response_val;
+    resp->size = sizeof(response_val);
+    return PCL_OK;
+  };
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto h = *static_cast<decltype(svc_handler)*>(ud);
+    return pcl_container_add_service(c, "local.forced.svc", "Msg", h, nullptr)
+               ? PCL_OK : PCL_ERR_NOMEM;
+  };
+
+  auto* e = pcl_executor_create();
+  auto* c = pcl_container_create("local_forced_node", &cbs, &svc_handler);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+  pcl_executor_add(e, c);
+
+  // A default transport IS registered and DOES implement invoke_async --
+  // if the legacy fallback were consulted before the explicit LOCAL route,
+  // this counter would be nonzero and the intra-process handler would not
+  // have fired.
+  int transport_invoke_count = 0;
+  pcl_transport_t t = {};
+  t.invoke_async = [](void* ctx, const char*, const pcl_msg_t*,
+                      pcl_resp_cb_fn_t, void*) -> pcl_status_t {
+    (*static_cast<int*>(ctx))++;
+    return PCL_ERR_NOT_FOUND;
+  };
+  t.adapter_ctx = &transport_invoke_count;
+  ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "local.forced.svc";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_LOCAL;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  bool cb_fired = false;
+  int  cb_val   = 0;
+  pcl_msg_t req = {};
+  req.type_name = "Msg";
+  auto cb = [](const pcl_msg_t* resp, void* ud) {
+    auto* pair = static_cast<std::pair<bool*, int*>*>(ud);
+    *pair->first = true;
+    if (resp->data && resp->size == sizeof(int))
+      *pair->second = *static_cast<const int*>(resp->data);
+  };
+  std::pair<bool*, int*> cb_ctx{&cb_fired, &cb_val};
+
+  EXPECT_EQ(pcl_executor_invoke_async(e, "local.forced.svc", &req, cb, &cb_ctx),
+            PCL_OK);
+  EXPECT_TRUE(cb_fired);
+  EXPECT_EQ(cb_val, 7);
+  EXPECT_EQ(transport_invoke_count, 0);
+
+  pcl_executor_set_transport(e, nullptr);
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
 // invoke_async intra-process with a service that returns PCL_PENDING exercises
 // the deferred-response branch (the svc_context_t is saved and not freed here).
 TEST(PclExecutor, InvokeAsyncIntraProcessPendingResponse) {

@@ -332,6 +332,71 @@ TEST(PclStreaming, TransportStreamSendEnd) {
   pcl_container_destroy(c);
 }
 
+// An explicit PCL_ROUTE_LOCAL endpoint route (PCL_ENDPOINT_STREAM_CONSUMED)
+// is a deliberate override: it must dispatch to the intra-process stream
+// service even when a default transport (with invoke_stream set) is also
+// registered on the executor, not silently prefer the legacy transport
+// because it happens to be checked first -- the identical
+// route_forces_local guarantee pcl_executor_invoke_async() already gives
+// unary calls. REQ_PCL_473.
+TEST(PclStreaming, InvokeStreamExplicitLocalRouteBypassesDefaultTransport) {
+  struct Ctx {
+    bool handler_invoked = false;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_stream_service(c, "local.forced.stream", "Type",
+      [](pcl_container_t*, const pcl_msg_t*,
+         pcl_stream_context_t*, void* ud) -> pcl_status_t {
+        static_cast<Ctx*>(ud)->handler_invoked = true;
+        return PCL_OK;
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("local_forced_stream_node", &cbs, &ctx);
+  auto* e = pcl_executor_create();
+
+  // A default transport IS registered and DOES implement invoke_stream --
+  // if the legacy fallback were consulted before the explicit LOCAL route,
+  // this counter would be nonzero and the intra-process handler would not
+  // have fired.
+  int transport_invoke_count = 0;
+  pcl_transport_t t = {};
+  t.invoke_stream = [](void* ctx, const char*, const pcl_msg_t*,
+                       pcl_stream_msg_fn_t, void*, void**) -> pcl_status_t {
+    (*static_cast<int*>(ctx))++;
+    return PCL_ERR_NOT_FOUND;
+  };
+  t.adapter_ctx = &transport_invoke_count;
+  ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
+
+  pcl_executor_add(e, c);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "local.forced.stream";
+  route.endpoint_kind = PCL_ENDPOINT_STREAM_CONSUMED;
+  route.route_mode = PCL_ROUTE_LOCAL;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto cb = [](const pcl_msg_t*, bool, pcl_status_t, void*) {};
+
+  EXPECT_EQ(pcl_executor_invoke_stream(e, "local.forced.stream", &req, cb,
+                                       nullptr, nullptr),
+            PCL_OK);
+  EXPECT_TRUE(ctx.handler_invoked);
+  EXPECT_EQ(transport_invoke_count, 0);
+
+  pcl_executor_set_transport(e, nullptr);
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
 ///< REQ_PCL_169: Streaming abort with transport. PCL.011c.
 TEST(PclStreaming, TransportStreamAbort) {
   struct TransportCtx {
