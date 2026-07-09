@@ -241,18 +241,33 @@ Two semantic gaps versus RPC `Read` are documented, not papered over:
 
 ### D5 — Compose-time exclusivity: one realization per leg, fail closed
 
+**The naive "at most one member routed" rule is wrong** — a request leg's
+RPC realization is *multiple* service endpoints (`Create`, `Update`,
+`Cancel` each have their own endpoint name), all of which are legitimately
+routed together when the leg runs as RPC. The exclusivity constraint is
+between the two **sides** (RPC-side vs. pub/sub-side), not between
+individual members: any number of same-side endpoints may be routed
+together; the violation is routing anything from *both* sides for the
+same leg.
+
 Two enforcement layers:
 
-1. **PCL routing grammar** gains an `exclusive` stanza:
-   `exclusive <group_name> <endpoint_name>...` — `pcl_transport_routing_load`
-   fails closed (precise-diagnostic style, like the §5.4 QoS failure)
-   if more than one endpoint of a group is routed. Contract-agnostic,
-   small, and useful beyond this plan.
+1. **PCL routing grammar** gains an `exclusive` stanza with two
+   comma-separated endpoint lists — the two realizations of one leg, not a
+   flat member list:
+   ```
+   exclusive <group_name> <side_a_endpoint>[,<side_a_endpoint>...] <side_b_endpoint>[,<side_b_endpoint>...]
+   ```
+   e.g. `exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request`.
+   `pcl_transport_routing_load` fails closed (precise-diagnostic style, like
+   the §5.4 QoS failure) if at least one endpoint from **each** side has a
+   route installed; any number of same-side endpoints may be routed
+   together freely. Contract-agnostic, small, and useful beyond this plan.
 2. **`contract_routing_manifest.py`** emits one `exclusive` group per
    interaction leg from `binding_manifest.json` (which gains an
-   `interactions` section grouping each rpc's service endpoint with its
-   projected topic endpoints), and derives route lines for exactly one
-   realization per leg (default: the `pattern` stamp; overridable
+   `interactions` section grouping each leg's service endpoint(s) — side A
+   — with its projected topic endpoint — side B), and derives route lines
+   for exactly one side per leg (default: the `pattern` stamp; overridable
    per deployment).
 
 Hand-authored manifests that omit `exclusive` stanzas remain valid (PCL
@@ -322,21 +337,26 @@ parity for generated output (carried note where GNAT is absent, per
 
 - `binding_contract.py`: build an `Interaction` model (Request port →
   request leg + requirement leg; Information port → one leg), each leg
-  listing its service-endpoint and topic-endpoint realizations and each
-  command's Phase 0 projectability flag; emit as an additive
-  `interactions` section in `binding_manifest.json`.
-- PCL: `exclusive <group> <endpoint>...` stanza in
-  `pcl_transport_routing.h` grammar; loader fails closed
-  (`PCL_ERR_STATE`, diagnostic naming the group and both routed
-  endpoints) when >1 group member is routed; unit tests beside
-  `ValidateRouteFailsClosedOnMissingPeer` in the capability suite.
+  listing its **two sides** — service-endpoint(s) (RPC side) and
+  topic-endpoint (pub/sub side) — and each command's Phase 0
+  projectability flag; emit as an additive `interactions` section in
+  `binding_manifest.json`.
+- PCL: two-sided `exclusive <group> <side_a_endpoints> <side_b_endpoints>`
+  stanza (D5) in `pcl_transport_routing.h` grammar; loader fails closed
+  (`PCL_ERR_STATE`, diagnostic naming the group and the routed endpoint
+  from each side) when at least one endpoint from *each* side is routed;
+  any number of same-side endpoints may be routed together freely; unit
+  tests in `test_pcl_transport_routing.cpp` beside the existing
+  `FailsClosedWhenTransportLacksRequiredCap`/QoS-floor tests.
 - `contract_routing_manifest.py`: emit `exclusive` groups from
-  `interactions`; derive one realization per leg (default = `pattern`
-  stamp; `--realize <leg>=rpc|pubsub` override).
-- **Accept:** dual-routing a leg fails closed at
-  `pcl_transport_routing_load` with the precise diagnostic; generated
-  manifests carry the groups; all existing routing/egress harnesses
-  re-run green (their manifests route one seam and gain nothing).
+  `interactions`; derive route lines for exactly one side per leg
+  (default = `pattern` stamp; `--realize <leg>=rpc|pubsub` override).
+- **Accept:** dual-routing a leg (one endpoint from each side) fails
+  closed at `pcl_transport_routing_load` with the precise diagnostic;
+  routing multiple same-side endpoints together (e.g. all three RPC
+  commands) succeeds; generated manifests carry the groups; all existing
+  routing/egress harnesses re-run green (their manifests route one side
+  and gain nothing).
 
 ### Phase 2 — C++ consumer facade (`RequestPortClient`, `InformationPortSink`)
 
