@@ -81,6 +81,11 @@ subprojects/PYRAMID/examples/ada/bin/*
 subprojects/PYRAMID/examples/ada/obj_active_find/*
 subprojects/PYRAMID/examples/ada/obj_test_bindings/*
 subprojects/PYRAMID/examples/ada/obj_tobj_client/*
+subprojects/PYRAMID/examples/ada/generated_agra_interaction_facade_example/
+subprojects/PYRAMID/examples/ada/agra_interaction_facade_example
+subprojects/PYRAMID/examples/ada/agra_interaction_facade_example.exe
+subprojects/PYRAMID/examples/ada/libma_agra_json_codec.so
+subprojects/PYRAMID/examples/ada/libc2_agra_json_codec.so
 subprojects/PYRAMID/tests/ada/bin/*
 subprojects/PYRAMID/pyramid_bridge/ada/bin/*
 

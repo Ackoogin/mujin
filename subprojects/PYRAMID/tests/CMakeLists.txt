@@ -347,6 +347,52 @@ add_dependencies(test_pcl_generated_interaction_facade
 gtest_discover_tests(test_pcl_generated_interaction_facade
     DISCOVERY_MODE PRE_TEST)
 
+# ---------------------------------------------------------------------------
+# examples/cpp/agra_interaction_facade_example.cpp (WS-F/F2): the facade
+# showcase, promoted per doc/todo/PYRAMID/TODO.md WS-F F2(a). Both provider
+# and client are built entirely from the generated interaction facade
+# (RequestPortProvider/RequestPortClient) against the same A-GRA example
+# bindings and codec plugins generated/built above for
+# test_pcl_generated_interaction_facade -- no separate generation step.
+# ---------------------------------------------------------------------------
+
+add_executable(agra_interaction_facade_example
+    ${PYRAMID_ROOT_DIR}/examples/cpp/agra_interaction_facade_example.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_agra_mission_autonomy_provided.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_services_agra_c2_station_consumed.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_mission_autonomy_services_provided_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_c2_station_services_consumed_codec.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_base_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_common_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_data_model_agra_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_mission_autonomy_services_provided_cabi_marshal.cpp
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}/pyramid_components_agra_c2_station_services_consumed_cabi_marshal.cpp
+)
+target_link_libraries(agra_interaction_facade_example PRIVATE
+    pcl_core
+    nlohmann_json::nlohmann_json
+)
+target_include_directories(agra_interaction_facade_example PRIVATE
+    ${PYRAMID_AGRA_EXAMPLE_GEN_DIR}
+)
+target_compile_definitions(agra_interaction_facade_example PRIVATE
+    AGRA_MISSION_AUTONOMY_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_mission_autonomy>"
+    AGRA_C2_STATION_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_c2_station>"
+)
+add_dependencies(agra_interaction_facade_example
+    pyramid_codec_json_agra_mission_autonomy
+    pyramid_codec_json_agra_c2_station
+)
+add_test(NAME agra_interaction_facade_example
+    COMMAND agra_interaction_facade_example --binding=rpc)
+set_tests_properties(agra_interaction_facade_example
+    PROPERTIES
+        LABELS "example;binding;facade"
+        TIMEOUT 15)
+
 add_executable(test_plugin_only_fail_closed
     test_plugin_only_fail_closed.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp

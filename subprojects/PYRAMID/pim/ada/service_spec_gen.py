@@ -309,6 +309,6 @@ class SpecEmitterMixin:
             f.write(f'      Response_Size : out Natural);\n')
             f.write(f'\n')
             if pf is not None:
-                self._write_interaction_facade_spec(f, pf, parsed)
+                self._write_interaction_facade_spec(f, pf, parsed, is_provided)
             f.write(f'end {pkg_name};\n')
 
