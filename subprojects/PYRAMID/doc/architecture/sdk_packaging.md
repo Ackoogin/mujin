@@ -74,14 +74,10 @@ JSON codec and always talks to the wire through a loaded codec plugin
 `.dll`/`.so`; it never calls `toJson`/`fromJson`/`toBinary`/`fromBinary`
 directly. This is why the GNAT-compatible archive built by
 `build_gnat_pyramid_cabi_marshal_libs.*` (both in this repo and in the SDK's
-`gnat/` template) is named `pyramid_generated_cabi_marshal`, not
-"...codec" or "...flatbuffers" -- those names described what the archive used
-to also contain (the wire codec, before it was trimmed down to marshal-only)
-and were actively misleading about what Ada actually depends on. The single
-`PYRAMID_CABI_LIB_DIR`/`PYRAMID_CABI_LIB_NAME` external variables (consumed by
-every Ada `.gpr` project in this repo) replace what used to be a redundant
-`PYRAMID_GEN_LIB_*`/`PYRAMID_CODECS_LIB_*` pair pointing at the same archive
-under two names.
+`gnat/` template) is named `pyramid_generated_cabi_marshal` — it contains
+marshalling only, no wire codec. The single
+`PYRAMID_CABI_LIB_DIR`/`PYRAMID_CABI_LIB_NAME` external variables are
+consumed by every Ada `.gpr` project in this repo.
 
 ## Deploy directory layout
 

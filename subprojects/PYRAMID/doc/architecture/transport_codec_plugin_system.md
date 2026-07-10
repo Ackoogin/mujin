@@ -5,23 +5,17 @@
 PYRAMID components and clients run against the generic PCL runtime through
 **runtime-loaded plugins**. A client links only the framework (`pcl_core`) and
 the generated contract (typed facade + native↔C-struct marshalling). The
-production plugin path covers JSON / FlatBuffers / Protobuf codecs and the
-socket, shared-memory, and UDP transports. gRPC is generated and runtime-tested
-as a direct C++ transport library, and its loadable coupled plugin
-(`pyramid_grpc_coupled_plugin`) is a real runtime plugin implementing the
-transport contract in both directions (server-mode ingress and client-mode
-`invoke_async`/`invoke_stream`). ROS2 has a real rclcpp-backed coupled plugin
-that is also complete both ways (pub/sub, consumed unary + streaming, safe
-lifecycle, reproducible ament build). The transport **capability model** (caps
-declaration, compose-time validation, QoS floor, manifest-driven per-endpoint
-routing) is in place. Native ROS2 IDL (`.msg`/`.srv`) and the `domain_model`↔ROS2
-marshalling/wire codec are generated and round-trip-verified, and since
-2026-07-04 the typed `pyramid_msgs` wire is the **default** live ROS2 path:
-`application/ros2` is a real registry codec (generated typed codec plugins built
-inside the ament package) and `RclcppRuntimeAdapter` publishes/subscribes typed
-messages, with the pass-through envelope selectable as a fallback. Current
-capability and remaining work are tracked in
-`doc/plans/PYRAMID/transport_plugins.md`.
+plugin path covers JSON / FlatBuffers / Protobuf codecs; the socket,
+shared-memory, and UDP transports; and two **coupled** (codec+transport)
+targets — gRPC (`pyramid_grpc_coupled_plugin`) and ROS2
+(`libpyramid_ros2_coupled_plugin`) — both implementing the transport contract
+in both directions (server ingress and client `invoke_async`/`invoke_stream`).
+The transport **capability model** (caps declaration, compose-time
+validation, QoS floor, manifest-driven per-endpoint routing) is in place. The
+typed `pyramid_msgs` wire is the default live ROS2 topic path, with the
+pass-through envelope selectable as a fallback (see
+[ros2_transport_semantics.md](ros2_transport_semantics.md)). Remaining
+transport work is tracked in `doc/plans/PYRAMID/transport_plugins.md`.
 
 This isolates churn (a wire-format or transport change ships as a new plugin, not
 a client rebuild), keeps client binaries minimal, and lets one cross-language
@@ -380,43 +374,32 @@ mapping and the `pyramid_msgs` interface package.
 | Coupled target plugin (codec+transport, one content_type) | gRPC both-ways; ROS2 both-ways (typed wire default, envelope fallback) | — |
 | Transport capability model (caps + compose-time validation + QoS + manifest routing) | ✅ | ✅ |
 
-**Plugin binding v1 is complete**: clients link core libs only, transport + codec
-are runtime plugins with uniform `config_json`, default-plugin manifests,
-per-module marshalling, and both languages fail closed. The **direct generated
-gRPC C++ transport** is built and
-runtime-verified on Linux (`test_grpc_transport_smoke`,
-`BindingPerformanceTest.Grpc_Tcp`); enable with `-DPYRAMID_ENABLE_GRPC=ON
--DPYRAMID_ENABLE_PROTOBUF=ON` or `scripts/build_plugins.sh --grpc`. The
-loadable **coupled gRPC target plugin** is now a real runtime plugin implementing
-the transport contract **both ways**: server mode starts a gRPC server (via a
-proto-driven aggregator, `pyramid_grpc_plugin_aggregator`) that routes inbound
-RPCs to the executor; client mode dials a remote endpoint and implements
-`invoke_async` (unary) and `invoke_stream` (server-streaming) through the
-generated typed stubs. `test_grpc_coupled_plugin_e2e` proves both directions
-through the dlopen'd `.so` (PCL ↔ plugin ↔ plugin ↔ PCL).
+Clients link core libs only; transport + codec are runtime plugins with
+uniform `config_json`, default-plugin manifests, per-module marshalling, and
+both languages fail closed.
 
-The **coupled ROS2 target plugin** (`libpyramid_ros2_coupled_plugin`, content type
-`application/ros2`) follows the same one-`.so`-two-vtables contract, with its
-transport vtable wired to the real `RclcppRuntimeAdapter`. Loading it constructs
-an rclcpp node and background spin thread; the vtable implements `publish` /
-`subscribe`, consumed `invoke_async` (unary) and `invoke_stream`
-(server-streaming, via the open-stream service + frame topic), and a process-safe
-`spin_once` shutdown. Production closure is **complete**: reproducible fresh-tree
-ament build (`scripts/build_ros2_transport.sh`, no committed generated files),
-plugin-loaded live E2E (`colcon test` green), and `pcl_transport_plugin_teardown`
-unload discipline. **Native ROS2 IDL + marshalling are done**: real `.msg`/`.srv`
-(the `pyramid_msgs` package) and a `domain_model`↔`pyramid_msgs` `rclcpp` wire
-codec (`pyramid_ros2_codec.hpp`), round-trip verified for every type. Since
-2026-07-04 the **typed wire is the live default**: `application/ros2` is a real
-registry codec (generated `*_ros2_codec_plugin.cpp` targets built inside the
-ament package) and `RclcppRuntimeAdapter` publishes/subscribes typed
-`pyramid_msgs` messages keyed by `TopicBinding::ros2_message_type`, verified by
-a plain-`rclcpp` interop test (no PYRAMID framing on the wire). The typed wire
-covers pub/sub topics; the *pass-through envelope* (`PclEnvelope` /
-`PclService` / `PclOpenStream`) remains selectable via
-`RclcppRuntimeAdapter::Options::use_envelope_wire` and still carries array
-topics and the unary/stream service framing. ROS2 actions remain deferred —
-see `doc/plans/PYRAMID/transport_plugins.md`.
+The **direct generated gRPC C++ transport** is built and runtime-verified on
+Linux (`test_grpc_transport_smoke`, `BindingPerformanceTest.Grpc_Tcp`);
+enable with `-DPYRAMID_ENABLE_GRPC=ON -DPYRAMID_ENABLE_PROTOBUF=ON` or
+`scripts/build_plugins.sh --grpc`. The loadable **coupled gRPC target
+plugin** implements the transport contract both ways: server mode starts a
+gRPC server (via the proto-driven `pyramid_grpc_plugin_aggregator`) that
+routes inbound RPCs to the executor; client mode dials a remote endpoint and
+implements `invoke_async` (unary) and `invoke_stream` (server-streaming)
+through the generated typed stubs. `test_grpc_coupled_plugin_e2e` proves both
+directions through the dlopen'd `.so` (PCL ↔ plugin ↔ plugin ↔ PCL).
+
+The **coupled ROS2 target plugin** (`libpyramid_ros2_coupled_plugin`, content
+type `application/ros2`) follows the same one-`.so`-two-vtables contract,
+wrapping the `RclcppRuntimeAdapter` (rclcpp node + background spin thread).
+Its vtable implements `publish` / `subscribe`, consumed `invoke_async` and
+`invoke_stream`, and a process-safe `spin_once` shutdown, with a reproducible
+fresh-tree ament build and `pcl_transport_plugin_teardown` unload discipline.
+The typed `pyramid_msgs` wire is the live default for topics; the
+pass-through envelope remains selectable and still carries array topics and
+unary/stream service framing. Details and remaining ROS2 work (actions,
+typed service framing) are in
+[ros2_transport_semantics.md](ros2_transport_semantics.md).
 
 **Architectural note — gRPC protobuf marshalling and Ada.** Ada consumes gRPC
 the same way it consumes socket/shm: the gRPC coupled plugin is loaded as the PCL
@@ -468,8 +451,8 @@ peer-filtered route is not yet wired end-to-end, in two linked places:
 These bind/server paths are exercised only by tests today (the routing loader
 does not yet invoke them for an endpoint), so the gap is **latent** rather than a
 regression. Closing it spans the PCL routing layer, the generated ROS2 support
-codegen, and both coupled-plugin ABIs; deferred from PR #96 review pending a
-build/test environment for the coupled ROS2/gRPC runtime.
+codegen, and both coupled-plugin ABIs; deferred pending a build/test
+environment for the coupled ROS2/gRPC runtime.
 
 ### Known gap — capability model does not encode plugin direction/mode (deferred)
 
@@ -486,5 +469,5 @@ cannot fail closed on a direction/mode mismatch today. Closing it needs either
 directional capability bits (e.g. provided-vs-consumed) or a route-validation
 hook that consults the plugin's `config_json` role/mode against the endpoint
 kind. This is a cross-cutting capability-model change affecting the coupled gRPC
-and ROS2 plugins; deferred from PR #96 review pending that design plus a gRPC/ROS2
-build environment.
+and ROS2 plugins; deferred pending that design plus a gRPC/ROS2 build
+environment.

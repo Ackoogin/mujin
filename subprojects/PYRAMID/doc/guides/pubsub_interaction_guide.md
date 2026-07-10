@@ -42,10 +42,9 @@ For each port the generator emits both:
 2. a **pub/sub seam** — typed `publish*`/`subscribe*` helpers, topic
    endpoints keyed by the contract topic (e.g. `agra.ma_action.request`).
 
-Historically these were two independent, independently-routable bindings.
-Since the interaction-facade work
-([`rpc_pubsub_interchangeability_plan.md`](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md))
-they are **declared, mutually-exclusive realizations of one interaction**:
+These are **declared, mutually-exclusive realizations of one interaction**
+(design record:
+[`rpc_pubsub_interchangeability_plan.md`](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md)):
 component code targets the facade, the wire realization is chosen at compose
 time, and routing *both* realizations of one leg is a compose-time error.
 
@@ -108,9 +107,23 @@ subscriber) — from the same component code.
 ## 2. Writing a consumer — `RequestPortClient`
 
 For every Request-shape service the generated components header
-(`*_components.hpp`) emits a `<Service>RequestPortClient` alongside the
-existing `ConsumedService`. Compose it into your `pcl::Component` exactly
-like the other bindings
+(`*_components.hpp`) emits a `<Service>RequestPortClient` **alongside**
+`ConsumedService` — both surfaces are generated and both work. They are
+layers, not alternatives at the same level:
+
+- `ConsumedService` (`<op>Async`/`<op>Streaming`, built on the low-level
+  `invoke*`/`dispatch` helpers) and the raw `publish*`/`subscribe*` topic
+  helpers are the **primitives**. They are realization-specific: calling
+  `<op>Async()` is an RPC, calling `publish*` is a topic publish.
+- `RequestPortClient` is the **facade composed from those primitives**. Its
+  `submit()`/`transitions()` API is realization-independent: whether a call
+  runs as RPC or pub/sub is chosen by `configureInteractionBinding()` +
+  the routing manifest, not by which method you called.
+
+Prefer the facade for grammar-conforming ports; use the primitives directly
+for free-form services (which get no facade) or when you need per-call
+control. Compose the facade into your `pcl::Component` exactly like the
+other bindings
 (see [`cpp_component_authoring.md`](../architecture/cpp_component_authoring.md)):
 
 ```cpp
@@ -416,12 +429,43 @@ papers over the difference:
 | `agra_mixed_route_test` | One deployment, two transports: reliable pair over SHM, best-effort data over UDP, all contract-derived | `pim/test_harness/build_agra_mixed_route_test.sh` |
 | A-GRA example contract | The hand-authored, options-stamped contract all of the above drive | `subprojects/PYRAMID/pim/agra_example/README.md` |
 
-Ada parity: generated Ada packages carry the same declared interaction
-surface (`Submit_<Command>`, `Transitions`,
-`Configure_Interaction_Binding`) as a spec-only surface today; runtime
-dispatch behind it is future work.
+## 8. Ada
 
-## 8. See also
+The generated Ada consumed service packages
+(`Pyramid.Services.<Component>.Consumed`) declare the same interaction
+surface as flat procedures, one set per Request-shape service. For
+`MAAction_Service` the declared surface is:
+
+```ada
+--  Realization selection, same JSON contract as the C++ facade.
+MA_Action_Configure_Interaction_Binding
+  (Config_Json => "{""request_leg"":""rpc"",""requirement_leg"":""pubsub""}");
+
+--  One Submit per command rpc. Result_Has_Ack is only ever True under
+--  the RPC realization -- no ack is synthesized under pub/sub.
+MA_Action_Submit_Create
+  (Request         => Command,
+   Result_Accepted => Accepted,
+   Result_Status   => Status,
+   Result_Has_Ack  => Has_Ack,
+   Result_Ack      => Remote_Ack);
+
+--  Correlated transition stream.
+procedure On_Transition (Item : MAAction_Service_Requirement);
+MA_Action_Transitions
+  (Filter   => Query,
+   Callback => On_Transition'Access);
+```
+
+**Status: spec-only.** These declarations compile against, but their bodies
+raise `Program_Error` — the runtime dispatch behind them (realization
+switching, subscription fan-out, snapshot store) is future work. Until it
+lands, Ada components use the realization-specific primitives directly: the
+RPC seam (`Invoke_*` with `Content_Type`) and the pub/sub seam
+(`Subscribe_*`/`Publish_*` with `Configure_Publisher_Transport` /
+`Configure_Consumed_Transport`).
+
+## 9. See also
 
 - [`cpp_component_authoring.md`](../architecture/cpp_component_authoring.md) — the component-facade authoring guide this builds on (`ProvidedService`, `ConsumedService`, generated pub/sub primitives).
 - [`pyramid_interaction_semantics.md`](../architecture/pyramid_interaction_semantics.md) — how interaction patterns, topics, and QoS are expressed in the contract.

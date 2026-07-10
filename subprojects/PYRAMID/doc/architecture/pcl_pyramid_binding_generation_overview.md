@@ -53,7 +53,7 @@ flowchart TB
   subgraph Generated["Build-local generated outputs"]
     Cpp["${binaryDir}/generated/pyramid_cpp_bindings<br/>types, codecs, services"]
     Ada["${binaryDir}/generated/pyramid_ada_bindings<br/>types, codecs, services"]
-    Transport["generated transport projections<br/>grpc, ros2, protobuf shims"]
+    Transport["generated transport projections<br/>grpc, ros2, protobuf codecs"]
   end
 
   subgraph Runtime["Runtime use"]
@@ -164,7 +164,7 @@ are transport projections generated from the same `.proto` contracts.
 | PCL local or adapter path | Runtime PCL ports plus `content_type` | JSON, FlatBuffers, or Protobuf through generated facade helpers | Main component-facing path and easiest path for tests, simulation, and embedded composition |
 | PCL socket/UDP/shared memory | Runtime PCL transport implementation plus `content_type` | Same generated payload codecs as the local path | PCL-owned transport paths for process or host boundaries; UDP is pub/sub-oriented |
 | gRPC bundle | Generated gRPC projection from `--backends grpc` | gRPC/protobuf service framing, bridged onto the generated service facade and PCL executor | Use when an external peer expects gRPC service APIs |
-| ROS2 bundle | Generated ROS2 facade hooks and support layer from `--backends ros2` | ROS2 envelopes carry `content_type` plus payload bytes, so JSON/FlatBuffers/Protobuf can remain codec choices | Use when the component surface needs ROS2 topic/service/stream naming and executor-thread handoff |
+| ROS2 bundle | Generated ROS2 facade hooks and support layer from `--backends ros2` | Typed `pyramid_msgs` messages on the topic wire by default (`application/ros2`); envelope fallback carries `content_type` plus payload bytes for array topics and service framing | Use when the component surface needs ROS2 topic/service/stream naming and executor-thread handoff |
 
 The component handler should not change across these options. It receives typed
 requests and returns typed responses; generated code owns the buffer and
@@ -179,29 +179,23 @@ replacement for PCL.
 
 The mapping is:
 
-- PCL topics become ROS2 topics under `/pyramid/topic/...`.
-- PCL unary services become ROS2 services under `/pyramid/service/...`.
+- PCL topics become ROS2 topics under `/pyramid/topic/...`, carrying typed
+  `pyramid_msgs` messages by default (a plain `rclcpp` node interoperates
+  directly); the generic envelope wire is a selectable fallback and still
+  carries array topics.
+- PCL unary services become ROS2 services under `/pyramid/service/...`
+  (envelope-based `PclService`).
 - PCL streaming services become an `open` service plus correlated `frames` and
-  `cancel` topics under `/pyramid/stream/...`.
-- Every ROS2 envelope carries `content_type`, `correlation_id`, `payload`,
+  `cancel` topics under `/pyramid/stream/...` (envelope-based).
+- Envelopes carry `content_type`, `correlation_id`, `payload`,
   `end_of_stream`, and `status`.
 - ROS2 callback threads hand work back to the PCL executor before business logic
   runs.
 
-Implemented today:
-
-- generated Tactical Objects ROS2 transport projection
-- generated `bindRos2(...)` C++ facade hooks
-- generated Ada ROS2 endpoint constants/specs
-- generic `pyramid_ros2_transport` envelope package
-- direct `rclcpp` runtime adapter
-- standalone fake-adapter and `rclcpp` runtime proofs for pub/sub, unary
-  service, streaming service, and outbound publish
-- tests that assert executor-thread handoff for business logic
-
 Not yet implemented:
 
 - ROS2 action mapping
+- typed service framing and typed array topics
 - Ada ROS2 runtime beyond generated constants/specs
 - top-level plain-CMake integration for the ament package build
 
@@ -341,7 +335,8 @@ ctest --test-dir build -C Release -R "(ProtoBindings|CodecDispatch|TacticalObjec
   PYRAMID message fields.
 - Keep transport projections free of business semantics. Transports route,
   frame, and hand off work; generated facades own payload meaning.
-- Regenerate checked-in outputs whenever generator behavior or proto contracts
+- Generated bindings are build-local artifacts, not checked in; reconfigure or
+  rebuild to refresh them whenever generator behavior or proto contracts
   change.
 
 ## Key Files

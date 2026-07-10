@@ -8,6 +8,7 @@ It reflects the current API shape in:
 - `pcl_executor_set_endpoint_route(...)`
 - `pcl_executor_register_transport(...)`
 - `pcl_executor_set_transport(...)`
+- `pcl_transport_routing_load(...)` (file-driven manifests, §10)
 
 The key design rule is:
 
@@ -16,7 +17,7 @@ The key design rule is:
 
 ## 1. Concepts
 
-PCL now supports three routing modes for endpoints:
+PCL supports three routing modes for endpoints:
 
 - `PCL_ROUTE_LOCAL`
   endpoint is reachable only within the local executor
@@ -507,35 +508,30 @@ Example bridge layout:
 
 This keeps chain behavior visible and deterministic.
 
-## 10. Suggested Static Config Shape
+## 10. File-Driven Routing Manifests
 
-PCL does not currently ship a config file parser for routing, but the intended deployment model is a small startup table like:
+For plugin-based deployments, PCL ships a line-based routing manifest
+(`pcl/pcl_transport_routing.h`, loaded with `pcl_transport_routing_load()`)
+that composes transports and per-endpoint routes from a file:
 
-```c
-typedef struct {
-  const char* peer_id;
-  const char* host;
-  uint16_t    port;
-  bool        is_server;
-} peer_cfg_t;
-
-typedef struct {
-  const char*         endpoint_name;
-  pcl_endpoint_kind_t endpoint_kind;
-  uint32_t            route_mode;
-  const char* const*  peer_ids;
-  uint32_t            peer_count;
-} endpoint_cfg_t;
+```
+transport <peer> <plugin.so> [config_json]
+route <endpoint> <kind> <peers> [reliability]
+exclusive <group> <side_a_endpoints> <side_b_endpoints>
 ```
 
-Recommended separation:
+Loading a manifest dlopens each transport plugin (injecting the executor),
+records its declared capabilities and QoS, registers it as a named peer,
+then installs and validates every route — failing closed on a missing
+capability, an unmet QoS floor, or a routed `exclusive` conflict (two
+realizations of one interaction leg). Providers serving RPC over a routed
+transport must retrieve and activate the transport's gateway container via
+`pcl_transport_routing_get_gateway()` after load (§7a).
 
-- peer table
-  declares available remote links
-- endpoint table
-  declares locality and peer selection
-
-This keeps deployment decisions out of business logic.
+The API calls in this guide (`pcl_port_set_route`,
+`pcl_executor_set_endpoint_route`, `pcl_executor_register_transport`) remain
+the programmatic path underneath; the manifest drives the same calls from
+deployment data, keeping deployment decisions out of business logic.
 
 ## 11. Recommended Naming and Conventions
 
@@ -568,9 +564,8 @@ If a publisher does not fan out remotely, check:
 ## 13. Current Limitations
 
 - consumed unary service routes are explicit local or explicit remote, not local+remote
-- the reference socket transport is still one connection per transport object (auto-reconnect refreshes the same peer endpoint; multi-client fan-in still requires one server transport per peer)
+- the reference socket transport is one connection per transport object (auto-reconnect refreshes the same peer endpoint; multi-client fan-in still requires one server transport per peer)
 - multi-hop routing is not automatic
-- route configuration is API-driven today, not file-driven in core PCL
 - the UDP transport is pub/sub only -- service RPC (`invoke_async`, `respond`) and streaming services are not supported over UDP; use the socket (TCP) transport for those
 
 Those are deliberate v1 constraints to keep routing behavior explicit and testable.

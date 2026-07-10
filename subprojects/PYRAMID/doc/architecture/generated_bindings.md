@@ -39,10 +39,8 @@ Component code should not branch directly on JSON, FlatBuffers, or Protobuf
 unless it is inside a generated binding/backend implementation or a narrowly
 scoped compatibility harness.
 
-The previous standalone data-model codec dispatch artifacts under
-`examples/dispatch/*_codec_dispatch.*` were removed during v1 cleanup. Do not
-reintroduce that path for component-facing use; codec dispatch belongs inside
-the generated service binding layer.
+Codec dispatch belongs inside the generated service binding layer. Do not add
+standalone component-facing codec dispatch artifacts outside it.
 
 ## Quick Map
 
@@ -64,7 +62,6 @@ the generated service binding layer.
 | ROS2 mapping rules | [ros2_transport_semantics.md](ros2_transport_semantics.md) |
 | Interaction pattern conventions (pub/sub/RPC/action in `.proto`) | [pyramid_interaction_semantics.md](pyramid_interaction_semantics.md) |
 | Tactical Objects status | [generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md) |
-| Historical review | [review_pyramid_bindings_pluggability.md](../../../../doc/reviews/PYRAMID/review_pyramid_bindings_pluggability.md) |
 
 ## Target Shape
 
@@ -290,9 +287,9 @@ The compiled showcase under `subprojects/PYRAMID/examples/cpp/` is the current
 reference for a user-provided C++ service implementation. It uses the
 higher-level **service-binding facade** (`ProvidedHandler`, `ProvidedService`,
 `ConsumedService`) generated alongside the low-level surface, which owns the
-`pcl_msg_t` callback boilerplate the older example-local registry used to
-carry. See [cpp_component_authoring.md](cpp_component_authoring.md) for the
-full authoring guide.
+`pcl_msg_t` callback boilerplate. See
+[cpp_component_authoring.md](cpp_component_authoring.md) for the full
+authoring guide.
 
 The showcase pieces are:
 
@@ -380,12 +377,12 @@ topic is relevant, so components can use one facade consistently.
 
 This topic set comes from a JSON side-table
 (`pim/topic_metadata/tactical_objects_topics.json` via
-`pim/standard_topics.py`) and is now explicitly **frozen legacy
-compatibility**: do not add new topics to it and do not use it for new
-contract trees. The generators consult it only for the legacy
+`pim/standard_topics.py`) and is **frozen legacy compatibility**: do not add
+new topics to it and do not use it for new contract trees. The generators
+consult it only for the legacy
 `pyramid.components.<component>.services.<provided|consumed>` compatibility
-layout; MBSE/new-tree bindings use contract-derived topics, so the former
-substring leak into `pim_osprey.tactical_objects` output is closed.
+layout; MBSE/new-tree bindings use contract-derived topics (see
+[pyramid_interaction_semantics.md](pyramid_interaction_semantics.md)).
 
 ## Codec Backends
 
@@ -436,11 +433,11 @@ ROS2 current-state summary:
 
 - Implemented: generated Tactical Objects ROS2 transport projection, generated
   `bindRos2(...)` C++ hooks, generated Ada endpoint constants/specs, typed
-  `pyramid_msgs` topic wire (default since 2026-07-04, with plain-rclcpp
-  interop proof), generic envelope support (selectable fallback; still carries
-  array topics and service framing), direct `rclcpp` runtime adapter, pub/sub,
-  unary service, streaming service, outbound publish, and executor-thread
-  handoff tests.
+  `pyramid_msgs` topic wire (the default, with plain-rclcpp interop proof),
+  generic envelope support (selectable fallback; still carries array topics
+  and service framing), direct `rclcpp` runtime adapter, pub/sub, unary
+  service, streaming service, outbound publish, and executor-thread handoff
+  tests.
 - Not yet implemented: typed array-topic `.msg` wrappers, typed service
   framing (unary/stream services use the envelope-based
   `PclService`/`PclOpenStream`), ROS2 action mapping, Ada ROS2 runtime beyond
@@ -452,18 +449,27 @@ For the canonical ROS2 naming, envelope, streaming, and threading rules, use
 
 ## Ada Policy
 
-Ada public APIs remain typed and proto-native.
+Ada public APIs remain typed and proto-native. Ada consumers link only PCL
+and the generated C-ABI marshal layer (`to_c`/`from_c`/`_c_free` over the
+frozen `pyramid_<T>_c` structs) — never wire-format code. All encoding is
+done by the same cross-language codec plugin `.so`s C++ loads, selected by
+`Content_Type` through the codec registry; gRPC and ROS2 are likewise loaded
+transport plugins, not Ada-specific paths. See
+[transport_codec_plugin_system.md](transport_codec_plugin_system.md) and
+[sdk_packaging.md](sdk_packaging.md).
 
-JSON should remain native at the Ada layer. FlatBuffers, Protobuf, and gRPC may
-use generated C/C++ shims internally while the public Ada surface stays typed.
-That is an implementation choice, not a contract exception.
+The Ada interaction facade (`<Service>_Submit_*`, `<Service>_Transitions`,
+`<Service>_Configure_Interaction_Binding`) is declared but spec-only — bodies
+raise `Program_Error` pending runtime dispatch; Ada components use the typed
+`Invoke_*` / `Subscribe_*` / `Publish_*` primitives directly (see the
+[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md) §8).
 
 ## Compatibility-only shim surfaces
 
-The facade-closure work (review §6.9) routed every component-facing call through
-the single typed service facade. A few lower-level shim symbols remain public
-for ABI/compatibility reasons; they are **compatibility-only generated
-implementation details** and must not be called from component business logic:
+Every component-facing call goes through the single typed service facade. A
+few lower-level shim symbols remain public for ABI/compatibility reasons;
+they are **compatibility-only generated implementation details** and must not
+be called from component business logic:
 
 | Shim surface | Where it lives | Compatibility-only status |
 |--------------|----------------|---------------------------|

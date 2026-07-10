@@ -2,15 +2,15 @@
 
 ## Purpose
 
-The binding generator originally assumed every contract used PYRAMID package
+The binding generator emits bindings both for contracts using PYRAMID package
 conventions — data-model types under `pyramid.data_model.*`, services under
-`pyramid.components.*.services.*`, and a `pyramid::domain_model` /
-`Pyramid.Data_Model.*` naming surface. This page documents the additions that
-let the **same generator** also emit bindings for **arbitrary `.proto`
-contracts** that do not follow those conventions, while keeping existing PYRAMID
-output byte-for-byte identical.
+`pyramid.components.*.services.*`, a `pyramid::domain_model` /
+`Pyramid.Data_Model.*` naming surface — and for **arbitrary `.proto`
+contracts** that do not follow those conventions. This page documents the
+neutral contract model, the naming policies, the artifact manifest, and the
+manifest-driven CMake mode that support this.
 
-Two layouts now exist, selected by `--contract-layout`:
+Two layouts exist, selected by `--contract-layout`:
 
 | Layout | Meaning |
 |--------|---------|
@@ -159,32 +159,33 @@ module identity from `pyramid_data_model_*_cabi_marshal.cpp` filenames, and
 codec-plugin targets and protoc/gRPC proto input paths remain on globs/fixed
 paths. The default stays `glob` until those are also manifest-driven.
 
-## Topic Metadata (data-driven)
+## Topic Metadata (frozen legacy fallback)
 
-Standard-topic generation is no longer domain-branched in code. `standard_topics.py`
-loads topic metadata from an explicit JSON file and resolves topics purely from
-it:
+Topics are derived from the **contract**: `pyramid.options.pyramid_op` method
+options (stamped by the MBSE generator or hand-authored) plus the
+port-grammar classifier — see
+[pyramid_interaction_semantics.md](pyramid_interaction_semantics.md).
+Contract-derived topics carry QoS and are recorded in the manifest's `topics`
+role.
 
-- `pim/topic_metadata/tactical_objects_topics.json` holds the Tactical Objects
-  standard topics (wire names, `pyramid.data_model.tactical.*` payload types,
-  provided/consumed subscribe/publish sets). This file **is** the pyramid-compat
-  topic set — it contains the only domain data.
-- The module default is that compat metadata (so pyramid output is unchanged);
-  `EMPTY_METADATA` yields no topics for any package.
-- Generic layout emits **no topics** (its service path does not call topic code,
-  and empty metadata returns `({}, {})` even for a `tactical_objects` package).
+The legacy Tactical Objects standard topics predate contract-derived topics
+and live in a JSON side-table consulted as a scoped fallback:
 
-Note: pub/sub topic generation is only *partially* realised (mostly wire-name
-constants and some subscribe/publish scaffolding in the pyramid facades). The
-5a change **relocated** that existing partial support into data and removed the
-domain branching; it did not complete or extend pub/sub codegen. The fuller
-topic feature is now planned to derive topics from the **contract** (MBSE-
-stamped interaction options + a port-grammar classifier), not from this JSON
-file, which becomes a frozen legacy compat set — see
-[doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md).
-Caveat while it remains the pyramid-layout default: its substring
-`package_match` also matches new-tree packages like
-`pim_osprey.tactical_objects`, leaking legacy wire names into those bindings.
+- `pim/topic_metadata/tactical_objects_topics.json` holds the wire names,
+  `pyramid.data_model.tactical.*` payload types, and provided/consumed
+  subscribe/publish sets. It is loaded by `standard_topics.py`, which itself
+  holds no domain data.
+- `TopicSpecResolver` prefers contract-derived topics and falls back to the
+  side-table only for legacy pyramid-compat service packages
+  (`pyramid.components.<component>.services.<provided|consumed>`) whose
+  contract yields no topics. New/MBSE trees never hit the fallback.
+- Generic layout emits **no topics** from the side-table (`EMPTY_METADATA`
+  yields no topics for any package).
+
+The side-table is frozen: do not add topics to it or use it for new contract
+trees. Full deletion (stamping the legacy contract with options and diffing
+the bindings) remains available — see
+[pyramid_interaction_semantics.md](pyramid_interaction_semantics.md).
 
 ## Backward-Compatibility Guarantee
 

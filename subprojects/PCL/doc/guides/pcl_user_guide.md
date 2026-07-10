@@ -23,9 +23,8 @@ PCL exposes three supported entry points:
 | C++ wrapper | `subprojects/PCL/include/pcl/component.hpp`, `executor.hpp` | Native C++ applications that want RAII and virtual lifecycle hooks |
 | Ada wrapper | `subprojects/PCL/bindings/ada/` | Canonical Ada binding for PCL and generated PYRAMID Ada service bindings |
 
-The Ada binding now lives inside `subprojects/PCL` so it can evolve alongside
-the public C ABI and the C++ wrapper rather than drifting in downstream
-examples.
+The Ada binding lives inside `subprojects/PCL` so it evolves alongside the
+public C ABI and the C++ wrapper.
 
 ## 2. Core Model
 
@@ -141,7 +140,7 @@ pub_.routeLocalAndRemote("planner");
 
 ### 4.3 Executor Helpers
 
-`pcl::Executor` now wraps the most common transport/routing operations too:
+`pcl::Executor` wraps the most common transport/routing operations too:
 
 - `remove(component)`
 - `registerTransport("planner", transport)`
