@@ -350,6 +350,24 @@ The showcase exercises Create / Read (streaming, server-ended) / Read
 branching, no manual stream plumbing, no background thread, and no
 `pcl::await`.
 
+## Interaction facade showcase (`submit()`/`transitions()`)
+
+For a grammar-conforming Request-shape contract, prefer the **interaction
+facade** (`RequestPortClient`/`RequestPortProvider`) over the raw
+`ProvidedService`/`ConsumedService` bindings above — it makes the RPC-vs-
+pub/sub realization a deploy-time manifest choice instead of an
+application-level one. See
+[`examples/cpp/agra_interaction_facade_example.cpp`](../../examples/cpp/agra_interaction_facade_example.cpp):
+one provider (`MaactionRequestPortProvider`) and one client
+(`MaactionRequestPortClient`) built entirely from generated facade types
+against the `pim/agra_example/` contract, run with `--binding=rpc` or
+`--binding=pubsub` to show the same component code driving either
+realization via `configureInteractionBinding()`. No RPC or pub/sub
+primitive is named directly in the example itself. See the
+[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md)
+for the full facade API (`submit()`, `transitions()`, `TransitionWriter`,
+`InformationPort*`).
+
 ## When to drop down to the low-level surface
 
 The component facade calls into the low-level `invoke*` / `dispatch` /

@@ -72,8 +72,8 @@ behind explicit triggers.
 | 9 | ~~C2 Manifest-driven CMake completion~~ **✅ done 2026-07-04 (default flip deferred by choice)** | M |
 | 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
 | 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
-| 12 | **F1 Ada interaction-facade runtime parity (priority)** | M/L |
-| 13 | F2 Convert extant examples to the port abstraction | S/M |
+| 12 | **F1 Ada interaction-facade runtime parity (priority) — still blocked, no GNAT/gprbuild** | M/L |
+| 13 | ~~F2(a) A-GRA facade example into `examples/cpp/`~~ **✅ done 2026-07-10**; F2(b) Tactical Objects example (rides on PIM migration plan), F2(c) Ada example (blocked on F1) remain | S/M |
 | 14 | C4 Retire codegen shims (after one SDK release) | S |
 | 15 | C5 Windows parity pass | S/M |
 | 16 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
@@ -604,7 +604,7 @@ local no-plugin routing from opaque plugin `config_json`.
 
 ## WS-F — Interaction facade follow-ons
 
-### F1. Ada interaction-facade runtime parity (priority)
+### F1. Ada interaction-facade runtime parity (priority) — still blocked
 
 The generated Ada interaction surface (`<Service>_Submit_*`,
 `<Service>_Transitions`, `<Service>_Configure_Interaction_Binding`) is
@@ -614,6 +614,13 @@ The generated Ada interaction surface (`<Service>_Submit_*`,
 Ada components must use the realization-specific `Invoke_*` /
 `Subscribe_*` / `Publish_*` primitives directly, so Ada cannot yet switch a
 leg's realization by configuration the way C++ can.
+
+**Re-checked 2026-07-10: still blocked, no GNAT/gprbuild available in the
+working environment** (`which gnat gnatmake gprbuild` — nothing found).
+Writing the runtime-dispatch bodies without a compiler to verify them
+against is exactly the "large, unverifiable leap" the module's own header
+comment says produced the spec-only fallback in the first place — declined
+again for the same reason, not attempted blind.
 
 - **Plan:** implement runtime dispatch behind the unchanged declared spec —
   realization selection from `Config_Json`, submit via the existing typed
@@ -631,24 +638,31 @@ leg's realization by configuration the way C++ can.
 
 ### F2. Convert extant examples to the port abstraction
 
-The shipped examples (`examples/cpp/` showcase, `examples/ada/`) are written
-against the legacy Tactical Objects contract using the primitive bindings
-(`ProvidedService`/`ConsumedService`, `Invoke_*`), so nothing in `examples/`
-demonstrates the recommended port-facade surface
-(`RequestPortClient`/`RequestPortProvider`/`InformationPort*`) — the only
-facade usage lives in test harnesses (`agra_seam_interchange_test`,
+The shipped examples (`examples/cpp/` showcase, `examples/ada/`) were
+written against the legacy Tactical Objects contract using the primitive
+bindings (`ProvidedService`/`ConsumedService`, `Invoke_*`); facade usage
+previously lived only in test harnesses (`agra_seam_interchange_test`,
 `test_pcl_generated_interaction_facade`).
 
-- **Plan:** (a) promote an A-GRA-based facade example (grammar-conforming
-  contract, `submit()`/`transitions()`, realization switch by manifest) into
-  `examples/cpp/`; (b) convert the Tactical Objects showcase when its
-  contract becomes grammar-conforming — rides on
+**(a) done 2026-07-10:** `examples/cpp/agra_interaction_facade_example.cpp`
+— a two-component showcase (`MaactionRequestPortProvider`/
+`MaactionRequestPortClient` against `pim/agra_example/`) that drives
+`submit()`/`transitions()` with the realization picked at the command line
+(`--binding=rpc`\|`pubsub`) via the same `configureInteractionBinding()`
+manifest string on both sides; no RPC/pub-sub primitive named directly.
+Built and passing under CTest (`agra_interaction_facade_example`, reuses
+the A-GRA generation + JSON codec plugins already built for
+`test_pcl_generated_interaction_facade` in `tests/CMakeLists.txt`).
+`cpp_component_authoring.md` and `pubsub_interaction_guide.md` §7 now point
+at it as the copied example for new components.
+
+Remaining:
+
+- **(b)** convert the Tactical Objects showcase when its contract becomes
+  grammar-conforming — rides on
   [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
-  (the legacy CRUD services are not port-grammar shapes today); (c) the Ada
-  example conversion depends on F1.
-- **Accept:** `examples/` contains a buildable, documented facade-first
-  example; `cpp_component_authoring.md` and the pub/sub guide point at it as
-  the copied example for new components.
+  (the legacy CRUD services are not port-grammar shapes today).
+- **(c)** the Ada example conversion — depends on F1, still blocked.
 
 ---
 

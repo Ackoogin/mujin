@@ -468,6 +468,7 @@ papers over the difference:
 
 | Example | What it shows | Where |
 |---|---|---|
+| `agra_interaction_facade_example` | **The copied example for new components**: a runnable, documented two-component facade showcase (`RequestPortProvider`/`RequestPortClient`) against the A-GRA contract, realization picked at the command line (`--binding=rpc`\|`pubsub`) via the same `configureInteractionBinding()` manifest string both sides consume | `subprojects/PYRAMID/examples/cpp/agra_interaction_facade_example.cpp` |
 | `test_pcl_generated_interaction_facade` | The facade API in-process: submit/transitions/TransitionWriter under both bindings, remoteAck honesty, D2 fail-closed, query filtering, snapshot re-publication | `subprojects/PYRAMID/tests/` |
 | `agra_seam_interchange_test` | **The terminal proof**: one compiled component pair, cross-process over real SHM, run as rpc/rpc, pubsub/pubsub, and mixed rpc/pubsub purely by manifest + config; dual-routing negative gate | `subprojects/PYRAMID/pim/test_harness/build_agra_seam_interchange_test.sh` |
 | `agra_shm_comms_test` | The correlated pair over cross-process SHM via raw `publish*`/`subscribe*` primitives (pre-facade; shows what the facade owns for you) | `pim/test_harness/build_agra_shm_comms_test.sh` |
