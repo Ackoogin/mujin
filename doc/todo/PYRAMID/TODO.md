@@ -1,29 +1,21 @@
 # PYRAMID — Consolidated TODO & Plan
 
 **Last consolidated: 2026-07-10.** This is the single tracker for remaining
-PCL/PYRAMID work. Completed workstreams (WS-A ROS2 typed wire, WS-B known
-defects, WS-C structural/hygiene except C4/C5 timing notes below, WS-E
-items E1–E4/E6, F1's single-process scope, F2(a)) have been folded into
-"Delivered" below and removed from the active list — see git history for
-the detailed per-item record if needed.
+PCL/PYRAMID work. Completed workstreams have been folded into "Delivered"
+below; the executed plans, reviews, and status reports that used to carry
+their detail were removed in the 2026-07-10 doc review — their design
+intents are summarised in
+[`doc/plans/PYRAMID/README.md`](../../plans/PYRAMID/README.md) and their
+full text is in git history.
 
-| Source doc | Role now |
-|------------|----------|
-| [`transport_plugins.md`](../../plans/PYRAMID/transport_plugins.md) | Capability statement + detail for the (now-delivered) ROS2 typed-wire work and deferred transport items |
-| [`architecture_cleanup_plan.md`](../../plans/PYRAMID/architecture_cleanup_plan.md) | Structural cleanup plan; fully executed |
-| [`generator_refactor_plan.md`](../../plans/PYRAMID/generator_refactor_plan.md) | Executed 2026-07-03 |
-| [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md) | Executed 2026-07-02 (phases 0–5) |
-| [`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md) | Executed 2026-07-08 (phases A–E, plan-terminal) |
-| [`rpc_pubsub_interchangeability_plan.md`](../../plans/PYRAMID/rpc_pubsub_interchangeability_plan.md) | Executed 2026-07-09 (phases 0–5); Ada runtime parity (its Phase 4 spec-only fallback) delivered for the single-process scope 2026-07-10, tracked here as F1 |
-| [`standard_alignment_plan.md`](../../plans/PYRAMID/standard_alignment_plan.md) | Stable design reference for Tactical Objects; one open design point (D-list) |
-| [`review_pyramid_bindings_pluggability.md`](../../reviews/PYRAMID/review_pyramid_bindings_pluggability.md) | Review record; facade closure fully done |
-| [`in_process_service_pubsub_todo.md`](../../reports/PYRAMID/in_process_service_pubsub_todo.md) | Review record; only E5 remains open (WS-E) |
-| [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **New plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
+Live companion documents:
 
-How the plugin/codec system works lives in the architecture reference:
-[`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
-and
-[`ros2_transport_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md).
+| Document | Role |
+|----------|------|
+| [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **Live plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
+| [`pyramid_user_guide.md`](../../../subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Single high-level user guide (design intent, usage, diagrams) |
+| [`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md) | Stable design reference for shipped Tactical Objects; one open design point (D-list row below) |
+| [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) / [`ros2_transport_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md) | How the plugin/codec system and the ROS2 mapping work |
 
 ## Delivered (context, not work)
 
@@ -44,11 +36,11 @@ domain literals confined to `PyramidCompatNamingPolicy`; `cpp_codegen.py`/
 local routing, facade-owned pub/sub, both proven same-executor with no
 transport adapter — WS-E E1–E4/E6, closed 2026-07-04); the C++ interaction
 facade (`RequestPortClient`/`RequestPortProvider`/`InformationPortSink`/
-`InformationPortSource`, Phases 0–5 of `rpc_pubsub_interchangeability_plan.md`,
-proven cross-process over real SHM by `agra_seam_interchange_test`); an
-A-GRA facade example in `examples/cpp/` (F2(a)) and `examples/ada/`
-(F2(c)), both done 2026-07-10; the Ada interaction facade's single-process
-runtime dispatch (F1, done 2026-07-10 — see below for what's still open).
+`InformationPortSource`, proven cross-process over real SHM by
+`agra_seam_interchange_test`); an A-GRA facade example in `examples/cpp/`
+(F2(a)) and `examples/ada/` (F2(c)), both done 2026-07-10; the Ada
+interaction facade's single-process runtime dispatch (F1, done 2026-07-10 —
+see below for what's still open).
 
 ## Standing regression bar (applies to every item below)
 
@@ -78,8 +70,6 @@ runtime dispatch (F1, done 2026-07-10 — see below for what's still open).
 
 ## WS-E — In-process service/pub/sub facade closure
 
-Tracked from
-[`in_process_service_pubsub_todo.md`](../../reports/PYRAMID/in_process_service_pubsub_todo.md).
 E1–E4 and E6 are done (see Delivered). E5 remains open.
 
 ### E5. Classify or migrate `StandardBridge` raw PCL wiring
@@ -146,9 +136,10 @@ No action until the trigger fires; listed so nothing silently drops.
 | Ada ROS2 runtime | Ada consumer of ROS2 transport | Ada has generated ROS2 constants/specs only; no rclcpp-equivalent runtime. |
 | Top-level (non-ament) ROS2 plugin target | Only if ament-free builds need the coupled plugin | rclcpp discoverability keeps it in the ament/colcon build today. |
 | ROS2 stream-cancel direct test | First production ROS2 user | Runtime cancel works; add dedicated coverage then. |
+| Plugin-level threading conformance harness | First production ROS2/gRPC user, or any threading regression | The in-tree transports pass `PclTransportThreading`; the ROS2/gRPC coupled plugins satisfy the executor-threading contract in code (documented in `pcl/pcl_transport.h`) but lack plugin-level `PyramidPluginThreading.Ros2*`/`Grpc*` harness coverage. Optional at the same time: route the shared-memory `respond`/`stream_send`/`stream_end`/`stream_cancel` bus-lock operations through the egress worker. |
 | AME contract canonicalization | AME exposes its interface as canonical PYRAMID `.proto` | Unblocks AME consuming the generated ROS2 bindings directly. |
 | `ada/service_body_gen.py` `_write_body` split (~1.3k lines) | Next substantive change inside that emitter | Splitting means threading the output stream and dozens of locals — do it when already in there. |
 | `pcl_transport_shared_memory.c` split (~2.2k lines) | Peer-identity threading work grows it further | Split along existing seams (ring/mailbox, frame codec, gateway dispatch, plugin entry) within the same target. |
 | `contract_routing_manifest.py` support for real (non-stub) transports | A generated manifest needs to target SHM/UDP/etc. rather than `contract_transport_plugin.c` | Today it only emits `{"mode":"rpc"\|"pubsub"}` config for the NULL-vtable stub. Needs `bus_name`/`participant_id` (SHM) and `remote_host`/`remote_port`/`local_port`/`peer_id` (UDP) config emission, plus the counterpart-participant-id peer-alias convention. |
-| Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream (`standard_alignment_plan.md`, Remaining Design Point). |
+| Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream ([`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md), Remaining Design Point). |
 | Interaction-pattern options for the legacy tree / side-table deletion | Only if the frozen-compat stance changes | Resolved as *frozen compat, new consumers forbidden*; `standard_topics.py` stays scoped to the legacy layout. |

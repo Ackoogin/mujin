@@ -93,9 +93,9 @@ the generated provided/consumed service bindings for dispatch and payload
 encoding.
 
 For the canonical generated-binding usage guide, see
-[`../generated_bindings.md`](../generated_bindings.md). For the
-current Tactical Objects binding proof matrix, see
-[`generated_bindings_status.md`](../../../../../doc/reports/PYRAMID/generated_bindings_status.md).
+[`../generated_bindings.md`](../generated_bindings.md). For the standard
+interface boundary mapping, see
+[`standard_alignment.md`](standard_alignment.md).
 
 The internal runtime still owns correlation, spatial indexing, interest
 matching, and high-rate stream subscriber state. The bridge owns only the schema

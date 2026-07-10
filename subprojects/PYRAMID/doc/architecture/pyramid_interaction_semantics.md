@@ -232,7 +232,9 @@ generated bindings unchanged by diff.
 | Legacy side-table | frozen compat, scoped to the legacy layout; deletion deferred |
 | Actions (`ACTION` pattern) | reserved, unimplemented |
 
-Design records and evidence for the executed work:
-[pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md),
-[agra_pubsub_shm_udp_proving_plan.md](../../../../doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md),
-[rpc_pubsub_interchangeability_plan.md](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md).
+The executed plans behind this work (`pubsub_contract_generation_plan.md`,
+`agra_pubsub_shm_udp_proving_plan.md`,
+`rpc_pubsub_interchangeability_plan.md`) were retired in the 2026-07-10 doc
+review; their design intents are summarised in
+[`doc/plans/PYRAMID/README.md`](../../../../doc/plans/PYRAMID/README.md)
+and their full text is in git history.

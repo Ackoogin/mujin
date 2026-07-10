@@ -9,8 +9,8 @@ service as `Create` / `Read` / `Update` / `Cancel`.
 
 **Date:** 2026-07-06
 **Related:**
-[`pubsub_contract_generation_plan.md`](pubsub_contract_generation_plan.md) (executed),
-[`standard_alignment_plan.md`](standard_alignment_plan.md) (legacy design reference),
+[`README.md`](README.md) (design-intent summary of the executed plans, incl. `pubsub_contract_generation_plan.md`),
+[`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md) (legacy design reference),
 [`generic_contract_layout.md`](../../../subprojects/PYRAMID/doc/architecture/generic_contract_layout.md),
 [`pyramid_interaction_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/pyramid_interaction_semantics.md),
 [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md) (single tracker; E5 lands inside Part 2 here).
@@ -324,7 +324,7 @@ analogue of `standard.entity_matches`), or (b) accept that matching is
 delivered as `Object_Of_Interest` requirement transitions only, and retire
 the match stream. Recommendation: (a) — the match stream is the wire-
 efficient high-rate path the runtime already produces
-(`standard_alignment_plan.md`, Object Match Stream), and (b) would push
+(`standard_alignment.md`, Object Match Stream), and (b) would push
 full-detail payloads onto every stream tick, the exact thing the legacy
 design avoided.
 
@@ -376,7 +376,7 @@ design avoided.
   implementation work for the adapter, with any missing fields fed back
   into the model.
 - **Units:** both trees share the `GeodeticPosition` contract; the
-  radians-at-the-boundary rule from `standard_alignment_plan.md` carries
+  radians-at-the-boundary rule from `standard_alignment.md` carries
   over unchanged — but re-verify against `GeoPosition_Record`
   (`int32` lat/lon) if the Osprey radar/track ports (D2.5) come into
   scope.
@@ -459,7 +459,7 @@ now against the real app).
 | M2 | Part 1 P1 lands (per-contract CMake seam) | legacy build byte-identical via compat invocation |
 | M3 | New adapter (`PimBridge` or `StandardBridge` v2) on the generated facade + `tactical_objects_app` variant hosting the Osprey contract; legacy app untouched | app serves Create/Read/Update/Cancel + information topics over JSON; facade-only (no raw PCL) — E5 satisfied for the new path |
 | M4 | Port clients/examples/tests; run legacy and PIM apps side by side; conformance parity matrix (JSON/FB/protobuf codecs × socket/shm transports × C++/Ada clients, plus gRPC + typed-ROS2 smoke) | parity matrix green; sequence checks (create→acceptance, cancel→transition) green; legacy suite still green untouched |
-| M5 | Switchover: PIM contract becomes the shipped Tactical Objects surface; `standard_alignment_plan.md` rewritten as the new-current-state reference (legacy sections marked historical); decide legacy contract retirement vs frozen-compat (D2.6) | docs updated; TODO E5 + the "Tactical Objects bulk-detail" WS-D row re-evaluated against the new stream design |
+| M5 | Switchover: PIM contract becomes the shipped Tactical Objects surface; `standard_alignment.md` rewritten as the new-current-state reference (legacy sections marked historical); decide legacy contract retirement vs frozen-compat (D2.6) | docs updated; TODO E5 + the "Tactical Objects bulk-detail" WS-D row re-evaluated against the new stream design |
 
 ## 2.5 Open decisions — resolved 2026-07-07
 

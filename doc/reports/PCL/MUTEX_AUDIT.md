@@ -8,10 +8,10 @@ contract is visible.
 Generated: 2026-05-21
 Updated: 2026-07-06 -- re-audited the locks added by the 2026-07-04/05
 threading-model rework (SHM egress worker `egress_lock`, UDP send worker
-`send_lock`); see "Addendum (2026-07-06)". The rework itself is recorded in
-[`../PYRAMID/pcl_plugin_threading_model_report.md`](../PYRAMID/pcl_plugin_threading_model_report.md),
-which also covers the PYRAMID plugin (gRPC/ROS2) threading outside this
-audit's PCL-source scope.
+`send_lock`); see "Addendum (2026-07-06)". The rework was recorded in the
+(since retired) `doc/reports/PYRAMID/pcl_plugin_threading_model_report.md`
+— full text in git history; the threading contract itself is documented in
+`subprojects/PCL/include/pcl/pcl_transport.h` / `pcl_executor.h`.
 
 Scope: `subprojects/PCL/src/pcl_executor.c`, `pcl_transport_socket.c`,
 `pcl_transport_shared_memory.c`, `pcl_transport_template.c`,
@@ -162,8 +162,8 @@ into the executor cannot reenter back through any transport lock.
 
 ## Addendum (2026-07-06): Locks Added By The Threading-Model Rework
 
-The 2026-07-04/05 rework (recorded in
-`doc/reports/PYRAMID/pcl_plugin_threading_model_report.md`) moved blocking
+The 2026-07-04/05 rework (recorded in the since-retired
+`pcl_plugin_threading_model_report.md`; full text in git history) moved blocking
 egress off the executor thread in the SHM and UDP transports. Both new locks
 follow the same producer-consumer shape as the audited socket/template
 `send_lock` and were re-audited by code inspection on 2026-07-06.

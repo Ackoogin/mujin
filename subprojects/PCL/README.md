@@ -63,4 +63,4 @@ subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 - [Coverage report](../../doc/reports/PCL/COVERAGE_REPORT.md)
 - [HLR coverage matrix](../../doc/reports/PCL/HLR_COVERAGE.md)
 - [Mutex audit](../../doc/reports/PCL/MUTEX_AUDIT.md)
-- [Plugin/transport threading model report](../../doc/reports/PYRAMID/pcl_plugin_threading_model_report.md)
+- Plugin/transport threading contract: documented in the `pcl_transport_t` vtable docs ([`include/pcl/pcl_transport.h`](include/pcl/pcl_transport.h), [`include/pcl/pcl_executor.h`](include/pcl/pcl_executor.h)), enforced by the `PclTransportThreading` conformance suite

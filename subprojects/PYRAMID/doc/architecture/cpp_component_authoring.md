@@ -275,8 +275,9 @@ Information port. The full developer story — semantics (ack honesty, late
 join, `one_shot`), deployment manifests, projectability, worked examples —
 is in the
 [pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md);
-the design record is
-[`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md`](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md).
+the design intent of the retired `rpc_pubsub_interchangeability_plan.md` is
+summarised in
+[`doc/plans/PYRAMID/README.md`](../../../../doc/plans/PYRAMID/README.md).
 Free-form (non-grammar) services get no facade — use
 `ProvidedService`/`ConsumedService` directly.
 

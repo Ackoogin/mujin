@@ -15,7 +15,7 @@ validation, QoS floor, manifest-driven per-endpoint routing) is in place. The
 typed `pyramid_msgs` wire is the default live ROS2 topic path, with the
 pass-through envelope selectable as a fallback (see
 [ros2_transport_semantics.md](ros2_transport_semantics.md)). Remaining
-transport work is tracked in `doc/plans/PYRAMID/transport_plugins.md`.
+transport work is tracked in `doc/todo/PYRAMID/TODO.md` (WS-D).
 
 This isolates churn (a wire-format or transport change ships as a new plugin, not
 a client rebuild), keeps client binaries minimal, and lets one cross-language
@@ -409,9 +409,9 @@ codec registry. There is no Ada-specific gRPC JSON shim in the active path.
 uses the standard generated service API with `application/protobuf` payload
 encoding.
 
-**Current capability and remaining transport work** (ROS2 actions, deferred
-capability adapters) are tracked in:
-[`doc/plans/PYRAMID/transport_plugins.md`](../../../../doc/plans/PYRAMID/transport_plugins.md).
+**Remaining transport work** (ROS2 actions, deferred capability adapters)
+is tracked in
+[`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md) (WS-D).
 
 ### Known gap — manifest-routed *remote* ingress / peer identity (deferred)
 

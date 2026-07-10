@@ -13,8 +13,8 @@ our adoption path, and how its interfaces map onto PCL/PYRAMID.
 stack, §7 adoption path, §8 risks) and
 [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md).
 **Related:**
-[`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md),
-[`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md),
+[`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/README.md),
+[`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/README.md),
 [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md).
 **Inputs reviewed:** repo `README.md`; `docs/architecture.md`,
 `contracts.md`, `decisions.md`, `maintainer-guide.md`, `ports.md`,
@@ -218,7 +218,7 @@ happens — which is what our generated typed facades already provide.
   topics and pure pub/sub — the same **service-over-pub/sub** discipline
   the a-gra review found in DMS (topic == message name, correlation by ID,
   no RPC), already analysed in
-  [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md).
+  [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/README.md).
   The starter kit confirms the pattern holds across the ecosystem's
   dev-grade transport too, which strengthens that plan's premise that
   pub/sub projection is the load-bearing shape, with the concrete wire
@@ -398,8 +398,8 @@ the shape it should have.
   [`a_gra_standard_review.md`](a_gra_standard_review.md),
   [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md)
 - PCL/PYRAMID plans this feeds:
-  [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md),
-  [`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md)
+  [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/README.md),
+  [`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/README.md)
 - In-repo anchors: `subprojects/PCL/include/pcl/pcl_container.h`
   (stream-service endpoints), `subprojects/PCL/include/pcl/pcl_plugin.h`
   (plugin ABI), `subprojects/PYRAMID/core/include/uuid/`,

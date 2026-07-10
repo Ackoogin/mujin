@@ -27,7 +27,7 @@ positional (see §2.1 and the RTB contingency in §5).
 
 A-GRA's **service-over-pub/sub mechanism** and its implications for the
 PCL/PYRAMID binding system are treated separately in
-[`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md)
+[`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../plans/PYRAMID/README.md)
 (§8 here is a short pointer).
 
 ---
@@ -832,7 +832,7 @@ That pattern, its fit with the new port-shaped proto contract set
 (`pim/test/`), and a concrete phased plan for generating pub/sub bindings
 from those contracts — including the option of skewing toward pub/sub at
 the MBSE layer — are covered in
-[`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md).
+[`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../plans/PYRAMID/README.md).
 
 The consequence for this example: once EntityActions services have a native
 correlated-topic projection, the `agra_c2_bridge` is mostly *renaming*
@@ -864,4 +864,5 @@ contract set adopts.
   (PYR-RESP IDs cited in §2.1/§7; PYR-RESP-0622 and PYR-RESP-0634 are the
   delegation hooks)
 - `doc/plans/PYRAMID/pubsub_contract_generation_plan.md` (service-over-pub/sub
-  analysis and bindings plan, split out from §8)
+  analysis and bindings plan, split out from §8; executed and retired —
+  design intent in `doc/plans/PYRAMID/README.md`, full text in git history)

@@ -4,7 +4,7 @@ A PYRAMID component that maintains authoritative knowledge of battlespace object
 
 Conforms to **PYRAMID Technical Standard 5.4.2.60**.
 
-Current status: the runtime, generated PYRAMID service bridge, binary streaming codec, interest-filtered updates, resync service, JSON/FlatBuffers/Protobuf generated binding paths, and Ada/C++ socket smoke flows are implemented and covered by tests. See [`generated_bindings_status.md`](../../../doc/reports/PYRAMID/generated_bindings_status.md) for the current conformance snapshot.
+Current status: the runtime, generated PYRAMID service bridge, binary streaming codec, interest-filtered updates, resync service, JSON/FlatBuffers/Protobuf generated binding paths, and Ada/C++ socket smoke flows are implemented and covered by tests. See [`standard_alignment.md`](../doc/architecture/tactical_objects/standard_alignment.md) for the standard-interface design reference and [`HLR_COVERAGE.md`](../../../doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md) for requirement traceability.
 
 ---
 
@@ -86,9 +86,9 @@ All JSON schemas are defined in `TacticalObjectsCodec` and exercised by `Test_Ta
 
 Generated binding architecture, content-type selection rules, and topic helper
 usage are documented in
-[`../doc/architecture/generated_bindings.md`](../doc/architecture/generated_bindings.md). Current
-Tactical Objects generated-binding status and conformance coverage are tracked
-in [`generated_bindings_status.md`](../../../doc/reports/PYRAMID/generated_bindings_status.md).
+[`../doc/architecture/generated_bindings.md`](../doc/architecture/generated_bindings.md).
+The standard-interface boundary mapping is documented in
+[`standard_alignment.md`](../doc/architecture/tactical_objects/standard_alignment.md).
 
 | Service/topic | Direction | Payload |
 |---------------|-----------|---------|
