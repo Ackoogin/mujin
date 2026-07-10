@@ -98,6 +98,12 @@ consume declared roles instead of `pyramid_*` filename globs:
   "json_codecs": ["..._codec.cpp", "..._codec.hpp", ...],
   "cabi": ["..._cabi.h", "..._cabi_marshal.cpp", ...],
   "services": ["..._provided.cpp", ...],
+  "topics": [ {"service": "...", "rpc": "...", "direction": "publish|subscribe", "pattern": "...", "wire_name": "agra.ma_action.request", "payload_type": "...", "qos": {...}, ...} ],
+  "endpoint_requirements": [ {"endpoint_name": "...", "kind": "publisher|subscriber|consumed|provided|stream_provided", "capability": "...", "reliability": "...", "source": "service|topic", ...} ],
+  "interactions": [ {"service_key": "...", "service_name": "...", "port_kind": "request|information",
+                     "legs": [ {"name": "request|requirement|information", "group_name": "...",
+                                "side_a": [ {"endpoint_name": "...", "kind": "...", "rpc_name": "...", "projectable": true} ],
+                                "side_b": [ {"endpoint_name": "<topic wire name>", "kind": "..."} ]} ]} ],
   "codec_plugins": [ {"target": "...", "source": "...", "content_type": "application/json"} ],
   "flatbuffers_schemas": ["flatbuffers/cpp/....fbs", ...],
   "protobuf_protos": [...],
@@ -108,6 +114,15 @@ consume declared roles instead of `pyramid_*` filename globs:
 Paths are relative to the output directory (portable); `proto_files` are
 relative to the proto import root. Roles not produced for the current
 backend/language selection are empty.
+
+Three roles are contract metadata rather than file lists: `topics` (the
+contract-derived topic specs with QoS), `endpoint_requirements` (per-endpoint
+capability + QoS-floor rows that compose-time routing validation consumes),
+and `interactions` (each grammar-conforming port's legs, grouping the RPC-side
+service endpoints — with per-command pub/sub projectability — against the
+pub/sub-side topic endpoint; `contract_routing_manifest.py` derives routing
+manifests and `exclusive` groups from it). See the
+[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md).
 
 ## Manifest-Driven CMake
 

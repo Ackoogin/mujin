@@ -328,6 +328,14 @@ or hand-written contracts. Generated manifests also record the corresponding
 endpoint requirements (`endpoint_name`, endpoint kind, capability, QoS floor) so
 transport routing can be validated from the contract.
 
+For grammar-conforming Request/Information ports, prefer the **interaction
+facade** over raw topic helpers: it presents one transaction-shaped API
+(`submit()`/`transitions()`/`publish()`/`subscribe()`) whose RPC or pub/sub
+realization is selected per leg at compose time — see the
+[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md).
+The raw helpers below remain the primitives the facade composes, and the
+direct surface for free-form contracts.
+
 For Tactical Objects provided bindings:
 
 ```cpp
