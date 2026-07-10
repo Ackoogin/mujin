@@ -152,7 +152,7 @@ class BodyEmitterMixin:
             f.write(f'with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             f.write(f'with Ada.Unchecked_Conversion;\n')
             f.write(f'with Interfaces.C.Strings;\n')
-            f.write(f'with Pcl_Bindings;\n')
+            f.write(f'with Pcl_Bindings;  use type Pcl_Bindings.Pcl_Port_Access;\n')
             f.write(f'with Pcl_Plugins;\n')
             f.write(f'with System;\n')
             f.write(f'with System.Address_To_Access_Conversions;\n')
@@ -1194,12 +1194,16 @@ class BodyEmitterMixin:
             f.write(f'      Config_Json : String)\n')
             f.write(f'   is\n')
             f.write(f'   begin\n')
-            for key in pub_topics:
-                const_name = 'Topic_' + '_'.join(
-                    w.capitalize() for w in key.split('_'))
-                f.write(f'      Apply_Endpoint_Config\n')
-                f.write(f'        (Executor, {const_name},\n')
-                f.write(f'         Pcl_Bindings.PCL_ENDPOINT_PUBLISHER, Config_Json);\n')
+            if pub_topics:
+                for key in pub_topics:
+                    const_name = 'Topic_' + '_'.join(
+                        w.capitalize() for w in key.split('_'))
+                    f.write(f'      Apply_Endpoint_Config\n')
+                    f.write(f'        (Executor, {const_name},\n')
+                    f.write(f'         Pcl_Bindings.PCL_ENDPOINT_PUBLISHER, Config_Json);\n')
+            else:
+                f.write(f'      pragma Unreferenced (Executor, Config_Json);\n')
+                f.write(f'      null;\n')
             f.write(f'   end Configure_Publisher_Transport;\n')
             f.write(f'\n')
 
@@ -1614,7 +1618,7 @@ class BodyEmitterMixin:
             f.write(f'   end Dispatch;\n')
             f.write(f'\n')
             if pf is not None:
-                self._write_interaction_facade_body(f, pf, parsed)
+                self._write_interaction_facade_body(f, pf, parsed, is_provided)
             f.write(f'end {pkg_name};\n')
 
 

@@ -459,10 +459,18 @@ transport plugins, not Ada-specific paths. See
 [sdk_packaging.md](sdk_packaging.md).
 
 The Ada interaction facade (`<Service>_Submit_*`, `<Service>_Transitions`,
-`<Service>_Configure_Interaction_Binding`) is declared but spec-only — bodies
-raise `Program_Error` pending runtime dispatch; Ada components use the typed
-`Invoke_*` / `Subscribe_*` / `Publish_*` primitives directly (see the
-[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md) §8).
+`<Service>_Configure_Interaction_Binding` on the client side;
+`<Service>_Interaction_Handlers`, `<Service>_Provider_Bind`,
+`<Service>_Send_Transition` on the provider side) dispatches for real: RPC
+via `Pcl_Bindings.Invoke_Async`/`Invoke_Stream`, pub/sub via
+`Add_Publisher`/`Add_Subscriber`/`Port_Publish` built directly by the
+facade (there is no pre-generated `Publish_*`/`Subscribe_*` wrapper layer
+for Request-shape topics in Ada). Verified single-process, both
+realizations, via `pim/test_harness/agra_ada_interaction_facade_proof.adb`.
+Remote/cross-process routing is not yet exposed by the facade (see the
+[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md) §8
+for exact scope and follow-ups); Ada components needing that today still use
+the typed `Invoke_*` / `Subscribe_*` / `Publish_*` primitives directly.
 
 ## Compatibility-only shim surfaces
 

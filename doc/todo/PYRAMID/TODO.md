@@ -72,8 +72,8 @@ behind explicit triggers.
 | 9 | ~~C2 Manifest-driven CMake completion~~ **✅ done 2026-07-04 (default flip deferred by choice)** | M |
 | 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
 | 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
-| 12 | **F1 Ada interaction-facade runtime parity (priority) — still blocked, no GNAT/gprbuild** | M/L |
-| 13 | ~~F2(a) A-GRA facade example into `examples/cpp/`~~ **✅ done 2026-07-10**; F2(b) Tactical Objects example (rides on PIM migration plan), F2(c) Ada example (blocked on F1) remain | S/M |
+| 12 | ~~F1 Ada interaction-facade runtime parity~~ **✅ single-process scope done 2026-07-10** (cross-process proof + D4 narrow case + CI wiring remain) | M/L |
+| 13 | ~~F2(a) A-GRA facade example into `examples/cpp/`~~ **✅ done 2026-07-10**; F2(b) Tactical Objects example (rides on PIM migration plan), F2(c) Ada example (now unblocked by F1, not yet done) remain | S/M |
 | 14 | C4 Retire codegen shims (after one SDK release) | S |
 | 15 | C5 Windows parity pass | S/M |
 | 16 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
@@ -604,37 +604,75 @@ local no-plugin routing from opaque plugin `config_json`.
 
 ## WS-F — Interaction facade follow-ons
 
-### F1. Ada interaction-facade runtime parity (priority) — still blocked
+### F1. Ada interaction-facade runtime parity — single-process scope done 2026-07-10
 
-The generated Ada interaction surface (`<Service>_Submit_*`,
-`<Service>_Transitions`, `<Service>_Configure_Interaction_Binding`) is
-**spec-only**: bodies raise `Program_Error`
-(`pim/ada/interaction_facade_gen.py`, the recorded Phase 4 fallback of
-[`rpc_pubsub_interchangeability_plan.md`](../../plans/PYRAMID/rpc_pubsub_interchangeability_plan.md)).
-Ada components must use the realization-specific `Invoke_*` /
-`Subscribe_*` / `Publish_*` primitives directly, so Ada cannot yet switch a
-leg's realization by configuration the way C++ can.
+**GNAT/gprbuild installed this session** (`apt-get install gnat gprbuild`),
+unblocking compile-verification for the first time. That surfaced the real
+architectural gap behind the old spec-only fallback: Ada codegen had no
+generated pub/sub wrapper layer at all for Request-shape topics (only
+`Invoke_*` RPC client calls, and only on the `is_provided` file — an
+inversion from the intuitive client/server split, verified empirically
+against generated output), and no live-streaming RPC primitive in the
+per-RPC codegen (`Invoke_MA_Action_Read` blocks for one array response, not
+a push stream). Both turned out to be buildable directly against the raw
+PCL Ada bindings (`Pcl_Bindings.Add_Publisher`/`Add_Subscriber`/
+`Port_Publish` for pub/sub; `Invoke_Stream`/`Add_Stream_Service`/
+`Stream_Send` for real RPC streaming — all already existed at the FFI
+level, just unused by codegen).
 
-**Re-checked 2026-07-10: still blocked, no GNAT/gprbuild available in the
-working environment** (`which gnat gnatmake gprbuild` — nothing found).
-Writing the runtime-dispatch bodies without a compiler to verify them
-against is exactly the "large, unverifiable leap" the module's own header
-comment says produced the spec-only fallback in the first place — declined
-again for the same reason, not attempted blind.
+**Done:** `pim/ada/interaction_facade_gen.py` rewritten to emit real runtime
+dispatch, self-contained (no dependency on `Register_Services` or any
+per-topic wrapper) — client (`<Prefix>_Client_Bind`,
+`Configure_Interaction_Binding`, `Submit_*`, `Transitions`) and, as a new
+provider-side API distinct from the client's (the old spec-only stub gave
+both roles the identical, architecturally-wrong shape), provider
+(`<Prefix>_Interaction_Handlers`, `<Prefix>_Provider_Bind`,
+`<Prefix>_Send_Transition`). D1 (config-selected realization per leg), D2
+(pub/sub fails closed for non-projectable commands), D3 (no synthetic ack
+under pub/sub), and D4's primary case (a bounded per-id snapshot store
+replays state to late-joining RPC Read streams at open time) are
+implemented. Two genuine pre-existing base-generator bugs found and fixed
+along the way (both blocked *any* object-compile of these files, unrelated
+to the facade): `Configure_Publisher_Transport`'s empty `is begin end;` body
+(needs `null;`) and a missing `use type Pcl_Bindings.Pcl_Port_Access;`
+(ambiguous/invisible `/=` on a private access type) in
+`pim/ada/service_body_gen.py`.
 
-- **Plan:** implement runtime dispatch behind the unchanged declared spec —
-  realization selection from `Config_Json`, submit via the existing typed
-  `Invoke_*` (rpc) or `Publish_*` on the `.request` topic (pubsub),
-  transitions via streaming `Read` or the `.requirement` topic subscription
-  with id filtering. Provider side needs the wrapper-oneof unwrap and a
-  transition writer mirroring the C++ facade's snapshot-store semantics.
-  Requires a GNAT/gprbuild environment to compile-verify (the blocker that
-  produced the spec-only fallback).
-- **Accept:** an Ada seam-interchange proof mirroring
-  `agra_seam_interchange_test` (rpc/rpc, pubsub/pubsub, mixed — same Ada
-  binary, realization chosen by manifest + config); the spec-only caveats in
-  `pubsub_interaction_guide.md` §8 and `generated_bindings.md` (Ada Policy)
-  removed.
+Object-compiles clean (`gnatgcc -c -gnat2020`) across every generated
+`.adb` in both `pim/agra_example/` and the full `pim/test` tree (98 files,
+zero regressions — `python3 -m pytest subprojects/PYRAMID/tests` and the
+`unittest` suites stay green). A real runtime proof —
+`pim/test_harness/agra_ada_interaction_facade_proof.adb` /
+`build_agra_ada_interaction_facade_proof.sh` — builds a provider and a
+client on one `pcl::Executor` and drives `submit()`/`transitions()` under
+both `rpc` and `pubsub` realizations end to end (real PCL dispatch, not a
+stub), asserting D2/D3 and the correct payload round-trips; **passes**.
+This is the single-process scope `test_pcl_generated_interaction_facade.cpp`
+covers for C++ (Phase 2/3), not yet the cross-process real-transport proof
+`agra_seam_interchange_test.cpp` adds — see below.
+
+Docs updated: `pubsub_interaction_guide.md` §8 and `generated_bindings.md`
+(Ada Policy) no longer claim spec-only; they describe the real dispatch and
+its current scope.
+
+Remaining (follow-ups, not blockers):
+
+- **Cross-process/remote-transport proof** mirroring `agra_seam_interchange_test`
+  (rpc/rpc, pubsub/pubsub, mixed, over real SHM). `Client_Bind`/
+  `Provider_Bind` currently always route locally
+  (`Pcl_Bindings.PCL_ROUTE_LOCAL` hardcoded); remote routing needs a
+  `Config_Json`/`Transport_Config` parameter threaded through, a mechanical
+  follow-up, not a design change.
+- **D4's narrower case**: an *already-open* RPC Read stream doesn't get a
+  re-send when a late pub/sub-realized command changes state for an id it's
+  already watching (C++'s `republishSnapshotFor()` on the inbound-command
+  path has no Ada equivalent yet — documented gap in the generated code
+  comments, not silently wrong).
+- **CI/CTest wiring**: the proof is a standalone script today
+  (`pim/test_harness/build_agra_ada_interaction_facade_proof.sh`), matching
+  the other `pim/test_harness/build_*.sh` proofs that also aren't
+  CTest-registered; wiring GNAT detection + the proof into the standing
+  regression bar is unstarted.
 
 ### F2. Convert extant examples to the port abstraction
 
@@ -662,7 +700,11 @@ Remaining:
   grammar-conforming — rides on
   [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
   (the legacy CRUD services are not port-grammar shapes today).
-- **(c)** the Ada example conversion — depends on F1, still blocked.
+- **(c)** the Ada example conversion — unblocked now that F1 has real
+  single-process runtime dispatch; not yet done. Would mirror
+  `examples/cpp/agra_interaction_facade_example.cpp` using
+  `pim/test_harness/agra_ada_interaction_facade_proof.adb`'s Bind/Handlers
+  pattern.
 
 ---
 

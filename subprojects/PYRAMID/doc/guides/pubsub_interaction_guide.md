@@ -478,12 +478,20 @@ papers over the difference:
 
 ## 8. Ada
 
-The generated Ada consumed service packages
-(`Pyramid.Services.<Component>.Consumed`) declare the same interaction
-surface as flat procedures, one set per Request-shape service. For
-`MAAction_Service` the declared surface is:
+The generated Ada consumed (client) service packages
+(`Pyramid.Services.<Component>.Consumed`) declare a real, runtime-dispatching
+client surface as flat procedures, one set per Request-shape service. The
+provided (server) packages declare a matching handler + provider surface
+(`<Prefix>_Interaction_Handlers`, `<Prefix>_Provider_Bind`,
+`<Prefix>_Send_Transition`) — the Ada analogue of the C++ facade's
+`RequestPortClient`/`RequestPortProvider` split. For `MAAction_Service` the
+client-side surface is:
 
 ```ada
+--  Bind pub/sub ports + remember the executor for RPC calls. Call once
+--  from on_configure().
+MA_Action_Client_Bind (Container, Executor);
+
 --  Realization selection, same JSON contract as the C++ facade.
 MA_Action_Configure_Interaction_Binding
   (Config_Json => "{""request_leg"":""rpc"",""requirement_leg"":""pubsub""}");
@@ -504,13 +512,49 @@ MA_Action_Transitions
    Callback => On_Transition'Access);
 ```
 
-**Status: spec-only.** These declarations compile against, but their bodies
-raise `Program_Error` — the runtime dispatch behind them (realization
-switching, subscription fan-out, snapshot store) is future work. Until it
-lands, Ada components use the realization-specific primitives directly: the
-RPC seam (`Invoke_*` with `Content_Type`) and the pub/sub seam
-(`Subscribe_*`/`Publish_*` with `Configure_Publisher_Transport` /
-`Configure_Consumed_Transport`).
+The provider side binds unary Create/Update/Cancel RPC ports, a streaming
+Read RPC port (real live push via `Pcl_Bindings.Invoke_Stream`/
+`Add_Stream_Service`, not a poll), and the pub/sub request/requirement probe
+ports from one call:
+
+```ada
+MA_Action_Provider_Bind (Container, Executor, Handlers => (
+   On_Create => On_Create'Access,
+   On_Update => On_Update'Access,
+   On_Cancel => On_Cancel'Access));
+
+--  D6: the provider's single way to emit a transition -- fans out to
+--  every open Read stream matching the transition's id, or publishes on
+--  the requirement topic, per MA_Action_Configure_Interaction_Binding.
+MA_Action_Send_Transition (Frame);
+```
+
+**Status: real runtime dispatch, single-process scope verified.** Both
+realizations (`rpc`, `pubsub`) run end to end — `submit()`/`transitions()`
+dispatching through `Pcl_Bindings.Invoke_Async`/`Invoke_Stream` (RPC) or
+`Add_Publisher`/`Add_Subscriber`/`Port_Publish` (pub/sub) directly (there is
+no pre-generated `Publish_*`/`Subscribe_*` wrapper layer for Request-shape
+topics in Ada, so the facade builds its own, independent of
+`Register_Services`), D2 fails closed for non-projectable pub/sub commands,
+D3 never synthesizes an ack under pub/sub, and a bounded per-id snapshot
+store replays state to late-joining RPC Read streams (D4). Proof:
+`pim/test_harness/agra_ada_interaction_facade_proof.adb` /
+`build_agra_ada_interaction_facade_proof.sh` — a single-process,
+single-executor proof (the Ada analogue of
+`test_pcl_generated_interaction_facade.cpp`'s scope), object-compiled across
+both the A-GRA and `pim/test` trees and passing at runtime for both
+realizations.
+
+Not yet covered (follow-ups, not blockers): a cross-process/real-transport
+proof the way `agra_seam_interchange_test.cpp` is for C++ (`Client_Bind`/
+`Provider_Bind` currently always route locally — remote routing would need
+a `Config_Json`/`Transport_Config` parameter threaded through, mechanically);
+the narrower D4 case where an *already-open* RPC stream misses a state
+change because a late pub/sub-realized command doesn't independently
+trigger a re-send (C++'s `republishSnapshotFor()` on the inbound-command
+path has no Ada equivalent yet); wiring the proof into CTest/CI (currently a
+standalone script, matching the other `pim/test_harness/build_*.sh` proofs
+that aren't CTest-registered either).
 
 ## 9. See also
 
