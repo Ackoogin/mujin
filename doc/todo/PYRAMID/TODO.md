@@ -46,9 +46,9 @@ transport adapter — WS-E E1–E4/E6, closed 2026-07-04); the C++ interaction
 facade (`RequestPortClient`/`RequestPortProvider`/`InformationPortSink`/
 `InformationPortSource`, Phases 0–5 of `rpc_pubsub_interchangeability_plan.md`,
 proven cross-process over real SHM by `agra_seam_interchange_test`); an
-A-GRA facade example in `examples/cpp/` (F2(a), done 2026-07-10); the Ada
-interaction facade's single-process runtime dispatch (F1, done 2026-07-10 —
-see below for what's still open).
+A-GRA facade example in `examples/cpp/` (F2(a)) and `examples/ada/`
+(F2(c)), both done 2026-07-10; the Ada interaction facade's single-process
+runtime dispatch (F1, done 2026-07-10 — see below for what's still open).
 
 ## Standing regression bar (applies to every item below)
 
@@ -71,7 +71,7 @@ see below for what's still open).
 | Order | Item | Size |
 |-------|------|------|
 | 1 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
-| 2 | F2(b) Tactical Objects example (rides on PIM migration plan), F2(c) Ada example (now unblocked) | S/M |
+| 2 | F2(b) Tactical Objects example (rides on PIM migration plan) | S/M |
 | 3 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
 
 ---
@@ -121,18 +121,16 @@ Remaining, not blockers:
 
 ### F2. Convert extant examples to the port abstraction
 
-`examples/cpp/agra_interaction_facade_example.cpp` (F2(a)) is done — see
-Delivered. Remaining:
+`examples/cpp/agra_interaction_facade_example.cpp` (F2(a)) and
+`examples/ada/agra_interaction_facade_example.adb` (F2(c), done 2026-07-10 —
+`--binding=rpc|pubsub`, built via `build_agra_interaction_facade_example.sh`,
+mirrors the C++ example using F1's Client_Bind/Provider_Bind/Handlers
+pattern) are done — see Delivered. Remaining:
 
 - **(b)** convert the Tactical Objects showcase when its contract becomes
   grammar-conforming — rides on
   [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
   (the legacy CRUD services are not port-grammar shapes today).
-- **(c)** the Ada example conversion — unblocked now that F1 has real
-  single-process runtime dispatch; not yet done. Would mirror
-  `examples/cpp/agra_interaction_facade_example.cpp` using
-  `pim/test_harness/agra_ada_interaction_facade_proof.adb`'s Bind/Handlers
-  pattern.
 
 ---
 

@@ -543,7 +543,9 @@ store replays state to late-joining RPC Read streams (D4). Proof:
 single-executor proof (the Ada analogue of
 `test_pcl_generated_interaction_facade.cpp`'s scope), object-compiled across
 both the A-GRA and `pim/test` trees and passing at runtime for both
-realizations.
+realizations. `examples/ada/agra_interaction_facade_example.adb` /
+`build_agra_interaction_facade_example.sh` is the copied example for new
+Ada components — the analogue of `examples/cpp/agra_interaction_facade_example.cpp`.
 
 Not yet covered (follow-ups, not blockers): a cross-process/real-transport
 proof the way `agra_seam_interchange_test.cpp` is for C++ (`Client_Bind`/

@@ -114,6 +114,38 @@ Notes:
 - `gprbuild` places generated objects and ALI files under `obj/` and the executable under `bin/`.
 - If you previously built the demo with `gnatmake`, you may have stale `.ali`, `.o`, or `b~*` files beside the sources. Those are legacy by-products from that earlier build mode, not from the current `gprbuild` project.
 
+## Interaction Facade Example
+
+For a grammar-conforming Request-shape contract, prefer the **interaction
+facade** (`<Service>_Client_Bind`/`Submit_*`/`Transitions` on the consumed
+side, `<Service>_Interaction_Handlers`/`Provider_Bind`/`Send_Transition` on
+the provided side) over the raw `Register_Services`/`Invoke_*` primitives
+below — it makes the RPC-vs-pub/sub realization a deploy-time manifest
+choice instead of an application-level one. See
+`agra_interaction_facade_example.adb`: one provider and one client built
+entirely from generated facade types against the `pim/agra_example/`
+contract, run with `--binding=rpc` or `--binding=pubsub` to show the same
+component code driving either realization via
+`Configure_Interaction_Binding`. No RPC or pub/sub primitive is named
+directly in the example itself — the C++ analogue is
+`examples/cpp/agra_interaction_facade_example.cpp`; the full facade API is
+documented in `doc/guides/pubsub_interaction_guide.md` §8.
+
+Build and run:
+
+```sh
+./build_agra_interaction_facade_example.sh --binding=rpc
+./build_agra_interaction_facade_example.sh --binding=pubsub
+```
+
+The script generates the A-GRA bindings, builds the per-role JSON codec
+plugins, compiles the shared C-ABI marshal layer, links the example against
+a `libpcl_core.a` it finds under a `build*/` directory at the repo root
+(build PCL first if none exists), and runs it. Scope note: `Client_Bind`/
+`Provider_Bind` route everything locally (single process) — the facade
+does not yet expose remote/cross-process routing (see
+`doc/todo/PYRAMID/TODO.md` WS-F F1).
+
 ## Generated Service Server Example
 
 For generated PYRAMID service bindings, topic subscriptions still use
