@@ -160,11 +160,10 @@ Examples:
 ## Envelope Model
 
 > **Fallback wire.** The envelope below is the *fallback* ROS2 wire model: a
-> generic transport that carries opaque codec bytes. Since 2026-07-04 the
-> *default* wire is native ROS2 IDL — typed `pyramid_msgs` messages generated
-> from the `.proto` contracts — so ROS2 tooling and non-PYRAMID nodes
-> interoperate directly (see "typed `pyramid_msgs` wire" under the delivered
-> items below). The envelope remains selectable via
+> generic transport that carries opaque codec bytes. The *default* wire for
+> topics is native ROS2 IDL — typed `pyramid_msgs` messages generated from
+> the `.proto` contracts — so ROS2 tooling and non-PYRAMID nodes interoperate
+> directly (see "Current Scope"). The envelope remains selectable via
 > `RclcppRuntimeAdapter::Options::use_envelope_wire` and still carries array
 > topics and the unary/stream service framing described in this section.
 
@@ -327,127 +326,74 @@ Object-of-Interest and Matching-Objects service routes.
 
 ## Current Scope
 
-Implemented today:
+Implemented:
 
-- generated Tactical Objects ROS2 transport projection
-- canonical ROS2 name mapping for topics, unary services, and streaming
-  services
-- generic ROS2 envelope package `pyramid_ros2_transport` with:
-  - `msg/PclEnvelope`
-  - `srv/PclService`
-  - `srv/PclOpenStream`
-- direct `rclcpp` runtime adapter in
-  `subprojects/PYRAMID/ros2/include/pyramid_ros2_transport/rclcpp_runtime_adapter.hpp`
-- standalone fake-adapter proof for pub/sub, unary service, and streaming
-  service ingress
-- standalone `rclcpp` runtime proof for pub/sub, unary service, streaming
-  service, and outbound publish
-- **typed `pyramid_msgs` wire (default) + plain-rclcpp interop proof.** The
-  `RclcppRuntimeAdapter` publishes/subscribes native `pyramid_msgs` typed
-  messages via `rclcpp` generic pub/sub keyed by
-  `TopicBinding::ros2_message_type` (the opaque envelope wire stays selectable
-  via `RclcppRuntimeAdapter::Options::use_envelope_wire`). A plain `rclcpp`
-  peer that links only the generated `pyramid_msgs` IDL — no `RclcppRuntimeAdapter`
-  or other PYRAMID API, just `create_publisher`/`create_subscription` over
-  `pyramid_msgs::msg::ObjectDetail` — round-trips a typed message against the
-  PYRAMID component in both directions (peer → adapter ingress → PCL executor,
-  then component → adapter publish → peer), proving the wire carries standard
-  ROS2 typed messages with no PYRAMID-specific framing. Verified by
-  `PlainRclcppPeerRoundTripsGeneratedTypedIdl` (`test_rclcpp_runtime_adapter`,
-  9/9 on Humble).
-- runtime cancel subscription support for stream correlation IDs
-- executor-thread assertion for the business-logic path
-- coupled ROS2 target plugin (`libpyramid_ros2_coupled_plugin`, content type
-  `application/ros2`): a single MODULE `.so` that exposes both a PCL transport
-  vtable and a PCL codec vtable through the generic plugin loader, parallel to
-  the coupled gRPC target. Its transport vtable wraps the `RclcppRuntimeAdapter`
-  (rclcpp node + background spin thread), so a dlopen-only client linking only
-  `pcl_core` gets working pub/sub plus service/stream advertising via the
-  `pcl_ros2_transport_plugin_{bind_topic,advertise_unary,advertise_stream,destroy}`
-  entry symbols. Built inside the ament package and verified by
-  `test_ros2_coupled_plugin_load` for ABI/load shape and the pass-through codec.
-
-- **consumed unary client** (`invoke_async`): the transport vtable's
-  `invoke_async` slot calls `RclcppRuntimeAdapter::invokeUnary` (cached
-  `rclcpp::Client<PclService>`, bounded waits, fail-closed without a server), so
-  PCL can call a remote ROS2 unary service. Verified by
-  `ConsumedInvokeUnaryCallsRemoteRos2Service` and the load test's `invoke_async`
-  non-null assertion.
-- **reproducible fresh-tree ament build**: `ros2/CMakeLists.txt` takes
-  `PYRAMID_CPP_BINDINGS_DIR` (the host build's build-tree bindings) and globs the
-  generated `ros2/cpp` sources, so no generated files are committed;
-  `scripts/build_ros2_transport.sh` drives proto → generate → colcon.
-- **process-safe spin lifecycle**: the plugin spins via a `spin_once(50ms)` loop
-  gated on an atomic flag (no lost-`cancel()` teardown deadlock). rclcpp
-  init/shutdown is refcounted process-wide (`acquireRclcpp`/`releaseRclcpp`), so
-  a context only shuts rclcpp down once the last plugin-owned reference is
-  released — and never if the host application initialised it — letting sibling
-  ROS2 transport instances in one process tear down independently.
-- **consumed streaming** (`invoke_stream`): the transport vtable's `invoke_stream`
-  slot opens the generated `PclOpenStream` service, subscribes to the frame topic
-  before sending the request, buffers frames until the terminal `end_of_stream`
-  envelope, and delivers them through `transport.invoke_stream`. So ROS2 meets the
-  both-ways unary + streaming core contract. Verified by
-  `ConsumedInvokeStreamCallsRemoteRos2Service`.
-- **safe teardown-then-unload**: the standard optional `pcl_transport_plugin_teardown`
-  symbol + generic `pcl_plugin_unload_transport` stop the spin thread before
-  `dlclose`; the ROS2 plugin exports the alias.
-- **plugin-loaded live E2E**: `test_ros2_coupled_plugin_load` drives the dlopen'd
-  `.so`'s transport vtable + codec; `test_rclcpp_runtime_adapter` moves live
-  topic/unary/stream/publish traffic through the adapter. `colcon test` green.
+- generated Tactical Objects ROS2 transport projection, with canonical name
+  mapping for topics, unary services, and streaming services
+- **typed `pyramid_msgs` wire (default for topics).** Native ROS2 IDL is
+  generated from the contract: `pim/ros2_idl_codegen.py` emits the
+  `pyramid_msgs` ament package (`.msg`/`.srv`), and
+  `pim/ros2_marshal_codegen.py` emits the `domain_model` ↔ `pyramid_msgs`
+  marshalling + `rclcpp` wire codec (round-trip verified). The
+  `RclcppRuntimeAdapter` publishes/subscribes typed messages keyed by
+  `TopicBinding::ros2_message_type`; a plain `rclcpp` peer that links only
+  `pyramid_msgs` interoperates in both directions with no PYRAMID-specific
+  framing (proven by `PlainRclcppPeerRoundTripsGeneratedTypedIdl`).
+  `application/ros2` is a registry codec (generated `*_ros2_codec_plugin.cpp`
+  targets, built inside the ament package).
+- generic envelope package `pyramid_ros2_transport` (`msg/PclEnvelope`,
+  `srv/PclService`, `srv/PclOpenStream`) — the selectable fallback wire
+  (`RclcppRuntimeAdapter::Options::use_envelope_wire`), still carrying array
+  topics and unary/stream service framing
+- direct `rclcpp` runtime adapter
+  (`ros2/include/pyramid_ros2_transport/rclcpp_runtime_adapter.hpp`), with
+  runtime cancel subscription for stream correlation IDs and executor-thread
+  handoff enforced by tests (fake-adapter and live `rclcpp` proofs cover
+  pub/sub, unary, streaming, and outbound publish)
+- **coupled ROS2 target plugin** (`libpyramid_ros2_coupled_plugin`, content
+  type `application/ros2`): one MODULE `.so` exposing both a PCL transport
+  vtable and a PCL codec vtable through the generic plugin loader, wrapping
+  the `RclcppRuntimeAdapter` (rclcpp node + background spin thread). It is
+  complete both ways: provided-side topic/service/stream advertising plus
+  consumed `invoke_async` (unary) and `invoke_stream` (open-stream service +
+  frame topic). Lifecycle is process-safe (refcounted rclcpp init/shutdown,
+  `pcl_transport_plugin_teardown` before `dlclose`), and the ament build is
+  reproducible from a fresh tree (`scripts/build_ros2_transport.sh`; no
+  generated files committed). Verified by `test_ros2_coupled_plugin_load` and
+  `test_rclcpp_runtime_adapter`.
 
 Not yet implemented:
 
-- ~~**Native ROS2 IDL + typed wire.**~~ **Done (A1–A4).** `.msg`/`.srv` via
-  `pim/ros2_idl_codegen.py` (the `pyramid_msgs` ament package — 69 msg + 43 srv
-  build clean on Humble); `domain_model` ↔ `pyramid_msgs` marshalling + `rclcpp`
-  wire codec via `pim/ros2_marshal_codegen.py` (`test_ros2_codec_roundtrip`, 8/8);
-  `application/ros2` registered as a registry codec plugin built under ament; a
-  typed `RclcppRuntimeAdapter` that publishes/serves `pyramid_msgs` messages
-  instead of `PclEnvelope` (envelope wire still selectable); and a plain-rclcpp
-  interop proof. See "Implemented today" above and
-  `doc/plans/PYRAMID/transport_plugins.md` §1.
-- ROS2 action mapping (`RPC_ACTION`, first-class per D3; depends on native IDL)
-- **Remote-source dispatch for manifest-routed ROS2 ingress.** The generated
+- **ROS2 action mapping** (`RPC_ACTION`); `.action` files are not generated
+- **typed service framing and typed array topics.** Unary/stream services use
+  the envelope-based `PclService`/`PclOpenStream`, and array topics use the
+  envelope wire, so non-PCL nodes can consume typed topics but not PYRAMID
+  services natively
+- **remote-source dispatch for manifest-routed ROS2 ingress.** The generated
   ingress helpers (`bindTopicIngress`, `bindUnaryServiceIngress`,
   `bindStreamServiceIngress` in `pim/backends/ros2_backend.py`) post into the
-  executor as a *local* source (`pcl_executor_post_incoming` /
-  `pcl_executor_post_service_request`), and the plugin's private bind/advertise
-  symbols (`pcl_ros2_transport_plugin_{bind_topic,advertise_unary,advertise_stream}`)
-  carry no peer id. That is correct for the intra-process / single-peer use the
-  binds serve today (only `test_ros2_coupled_plugin_load` and the adapter tests
-  call them). It is **not** yet correct for a manifest *remote* route such as
-  `route standard.object_evidence subscriber ros2` or a remote `provided`
-  service: a remote-only endpoint rejects local ingress in
-  `dispatch_incoming_now` / the service lookup runs with `PCL_ROUTE_LOCAL`, so
-  routed remote ROS2 messages/requests would be dropped or miss the handler.
-  The routing loader does **not** wire endpoints to these binds yet, so the path
-  is latent rather than broken. Closing it requires: (a) threading a `peer_id`
-  through the generated bind helpers and the plugin's private bind/advertise
-  ABI symbols, (b) emitting `pcl_executor_post_remote_incoming` /
-  `pcl_executor_post_service_request_remote` for ROS2 ingress, and (c) wiring
-  the manifest routing flow to invoke the (now peer-aware) binds. This is the
-  ROS2 half of a cross-cutting gap (the manifest peer id is also not threaded
-  into UDP/socket/gRPC transports); see
+  executor as a *local* source, and the plugin's private bind/advertise
+  symbols carry no peer id, so a manifest *remote* route (e.g.
+  `route standard.object_evidence subscriber ros2`) would drop routed remote
+  ingress. The routing loader does not wire endpoints to these binds yet, so
+  the path is latent rather than broken. Closing it requires threading a
+  `peer_id` through the bind helpers and plugin ABI, posting via the
+  `*_remote` executor APIs, and wiring the manifest routing flow to the
+  binds. This is the ROS2 half of a cross-cutting gap — see
   [`transport_codec_plugin_system.md`](transport_codec_plugin_system.md)
-  (§ "Known gap — manifest-routed remote ingress / peer identity"). Tracked from
-  PR #96 review (codex comments on routed topic/service ingress).
-- **Staging the ROS2 plugin's shared runtime dependency.** The coupled plugin is
-  an `add_library(... MODULE)` that links the **shared**
-  `libpyramid_ros2_transport_lib.so` (`ros2/CMakeLists.txt`), so the staged
-  `.so` carries a `DT_NEEDED` on it. `scripts/stage_plugin_deploy.sh` copies only
-  `libpyramid_ros2_coupled_plugin.so`, so a deployment assembled outside the
-  colcon install tree cannot `dlopen` it (missing runtime lib). Closing this
-  means either staging `libpyramid_ros2_transport_lib.so` beside the plugin with
-  a matching `$ORIGIN` rpath / `LD_LIBRARY_PATH`, or making the MODULE
-  self-contained (statically absorbing the runtime lib). Deferred from PR #96
-  review; part of the broader "ROS2 staged deployment is not yet runnable"
-  status (the coupled plugin is colcon/ament-only today).
+  (§ "Known gap — manifest-routed remote ingress / peer identity").
+- **staging the ROS2 plugin's shared runtime dependency.** The coupled plugin
+  links the shared `libpyramid_ros2_transport_lib.so`, but
+  `scripts/stage_plugin_deploy.sh` copies only the plugin `.so`, so a
+  deployment assembled outside the colcon install tree cannot `dlopen` it.
+  Fix: stage the runtime lib beside the plugin with an `$ORIGIN` rpath, or
+  make the MODULE self-contained. Until then the coupled plugin is
+  colcon/ament-only.
 - Ada ROS2 runtime beyond generated constants/specs
-- a top-level (non-ament) CMake target for the coupled plugin: because rclcpp is
-  only discoverable under ament, the coupled ROS2 plugin is built via colcon
-  inside the ament package (`scripts/build_ros2_transport`) rather than the
-  ament-free top-level `pyramid_plugins` aggregate
+- a top-level (non-ament) CMake target for the coupled plugin: rclcpp is only
+  discoverable under ament, so the plugin is built via colcon inside the
+  ament package (`scripts/build_ros2_transport.sh`) rather than the
+  ament-free `pyramid_plugins` aggregate
 
 ## Deployment / runtime environment (dlopen-only clients)
 

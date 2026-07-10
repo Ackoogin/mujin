@@ -231,7 +231,19 @@ generated topic publishes from taking the remote default.
 
 For grammar-conforming ports (the 4-rpc Request shape and the 1-rpc
 Information shape), the components header also emits a **transaction-shaped
-facade** layered on the primitives above:
+facade** layered on the primitives above. It is emitted *alongside*
+`ProvidedService`/`ConsumedService` and the topic helpers — those remain
+generated, supported, and are what the facade composes internally; the
+facade adds realization independence on top:
+
+```mermaid
+flowchart LR
+  App["component code"] --> Facade["RequestPortClient /<br/>InformationPortSink"]
+  Facade -->|"leg = rpc"| Cons["ConsumedService<br/>&lt;op&gt;Async / &lt;op&gt;Streaming"]
+  Facade -->|"leg = pubsub"| Topics["topic helpers<br/>publish* / subscribe*"]
+  App -.->|"free-form service"| Cons
+  App -.->|"raw topic"| Topics
+```
 
 | Class | Role | API |
 |-------|------|-----|
