@@ -79,8 +79,8 @@ type per app instance:
 The C++ generated bindings support all three content types on the real app
 path. The current Ada ActiveFind socket client exercises JSON and FlatBuffers.
 Ada protobuf/gRPC coverage is handled by the generated binding and gRPC
-interop tests described in
-[generated_bindings_status.md](../../reports/PYRAMID/generated_bindings_status.md).
+interop tests (see [generated_bindings.md](../generated_bindings.md) and the
+CTest suite).
 
 ## Standard To Internal Mapping
 
@@ -194,8 +194,9 @@ The focused real-app verification command is:
 ctest --test-dir build -C Release -R "tobj_cpp_app_client_(e2e|flatbuffers_e2e|protobuf_e2e)|tobj_ada_active_find_app(_flatbuffers)?_e2e" --output-on-failure
 ```
 
-Broader generated-binding, gRPC, ROS2, and transport status is tracked in
-[generated_bindings_status.md](../../reports/PYRAMID/generated_bindings_status.md).
+Broader generated-binding, gRPC, ROS2, and transport coverage lives in the
+CTest suite; outstanding work is tracked in
+[`doc/todo/PYRAMID/TODO.md`](../../../../../doc/todo/PYRAMID/TODO.md).
 
 ## Remaining Design Point
 

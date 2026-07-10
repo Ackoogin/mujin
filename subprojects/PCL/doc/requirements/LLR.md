@@ -3166,8 +3166,9 @@ Two-sided `exclusive <group_name> <side_a_endpoints> <side_b_endpoints>` groups
 (PCL.077): mutual exclusivity is between the two named *sides* of one logical
 leg, not between individual members -- any number of same-side endpoints
 route together freely; the violation is routing anything from *both* sides.
-See design decision D5 ("Compose-time exclusivity") in
-`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md`.
+See design decision D5 ("Compose-time exclusivity") in the retired
+`rpc_pubsub_interchangeability_plan.md` (design intent summarised in
+`doc/plans/PYRAMID/README.md`; full text in git history).
 
 ### REQ_PCL_463 - Exclusive Group Two-Sided Conflict Fails Closed
 A `route` line that completes both sides of a declared `exclusive` group (one side-A endpoint and one side-B endpoint both routed) shall fail closed with `PCL_ERR_STATE` and a diagnostic naming the group and both conflicting endpoints.

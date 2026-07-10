@@ -20,8 +20,9 @@ Use this page when you need to:
 - write a component against generated services/topics
 - select JSON, FlatBuffers, or Protobuf at startup
 
-For current Tactical Objects proof status and test coverage, use
-[generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md).
+Current proof status and test coverage live in the CTest suite itself;
+outstanding work is tracked in
+[`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md).
 
 ## V1 Decision
 
@@ -61,7 +62,7 @@ standalone component-facing codec dispatch artifacts outside it.
 | Ada backend projections | `${PYRAMID_ADA_BINDINGS_DIR}/{flatbuffers,protobuf}/ada/*.ads` |
 | ROS2 mapping rules | [ros2_transport_semantics.md](ros2_transport_semantics.md) |
 | Interaction pattern conventions (pub/sub/RPC/action in `.proto`) | [pyramid_interaction_semantics.md](pyramid_interaction_semantics.md) |
-| Tactical Objects status | [generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md) |
+| Tactical Objects design/alignment | [tactical_objects/standard_alignment.md](tactical_objects/standard_alignment.md) |
 
 ## Target Shape
 

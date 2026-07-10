@@ -503,7 +503,7 @@ including an approval-gated replan) is worked through in
   projecting EntityActions onto pure pub/sub transports. Analysed in detail,
   with a concrete phased plan for pub/sub generation from the new-shape
   proto contracts, in
-  [`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md).
+  [`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../plans/PYRAMID/README.md).
 
 ---
 
@@ -817,5 +817,5 @@ contract. Phases 3–4 are where genuinely new capability lives.
   `subprojects/PYRAMID/proto/pyramid/components/pyramid.components.autonomy_backend.services.provided.proto`,
   `subprojects/AME/include/ame/{autonomy_backend.h,execution_sink.h,pyramid_autonomy_bridge.h,action_registry.h}`,
   `subprojects/PYRAMID/doc/architecture/generated_bindings.md`,
-  `doc/plans/PYRAMID/standard_alignment_plan.md`,
+  `subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md`,
   `doc/research/AME/temporal_extension_research.md`

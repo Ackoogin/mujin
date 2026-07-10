@@ -1,7 +1,9 @@
 # A-GRA example contract: `agra.mission_autonomy` / `agra.c2_station`
 
-Phase B of
-[`agra_pubsub_shm_udp_proving_plan.md`](../../../../doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md):
+Phase B of the SHM/UDP proving plan (the retired
+`agra_pubsub_shm_udp_proving_plan.md` — design intent summarised in
+[`doc/plans/PYRAMID/README.md`](../../../../doc/plans/PYRAMID/README.md),
+full text in git history):
 a hand-authored, grammar-conforming, options-stamped proto tree carrying an
 A-GRA-vocabulary example contract, so the pubsub plan's §7 "mostly renaming,
 not re-plumbing" bridge argument has a concrete artefact behind it.

@@ -70,15 +70,15 @@ Reproduce: `./viability_check.sh` (or `.bat`); comms test:
 - **RESOLVED: the RPC/pub-sub seam duality this file's Phase C section
   below flags** (every `Create/Read/Update/Cancel` rpc generating both an
   RPC seam and a pub/sub seam with nothing reconciling a manifest routing
-  both) is resolved by
-  `doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md` (Phases 0-5,
-  2026-07-09): a transaction-shaped C++ facade makes the two seams
-  interchangeable realizations of one interaction, selected per leg at
-  compose time via a manifest `exclusive` group, fail-closed against
-  dual-routing. See `agra_seam_interchange_test.cpp`/
-  `build_agra_seam_interchange_test.sh` (Phase 5's terminal cross-process
-  proof, this same directory) and that plan's own evidence ledger for
-  full detail.
+  both) is resolved by the interaction-facade work (the retired
+  `rpc_pubsub_interchangeability_plan.md`, Phases 0-5, 2026-07-09 — design
+  intent in `doc/plans/PYRAMID/README.md`, full text in git history): a
+  transaction-shaped C++ facade makes the two seams interchangeable
+  realizations of one interaction, selected per leg at compose time via a
+  manifest `exclusive` group, fail-closed against dual-routing. See
+  `agra_seam_interchange_test.cpp`/`build_agra_seam_interchange_test.sh`
+  (the terminal cross-process proof, this same directory) and the
+  [pub/sub & interaction facade guide](../../doc/guides/pubsub_interaction_guide.md).
 
 ## Files
 
@@ -90,7 +90,7 @@ Reproduce: `./viability_check.sh` (or `.bat`); comms test:
 | `plugin_load_test.cpp` | Provider + client that load a **prebuilt** codec plugin at runtime (no relink) and pass config through the loader |
 | `build_plugin_load_test.sh` / `.bat` | Builds the codec plugin as a standalone shared lib + the codec-free test, runs the no-relink demonstration |
 | `contract_routing_validation.cpp` / `build_contract_routing_test.sh` / `.bat` | Compose-time-only: contract-derived endpoint requirements validated against a NULL-vtable stub plugin's declared caps/QoS |
-| `routed_egress_shm_test.cpp` / `build_routed_egress_test.sh` / `.bat` | **Data-plane, real transport**: proves generated pub/sub helpers cross a real `libpcl_transport_shared_memory_plugin.so` bus loaded via `pcl_transport_routing_load`, same-process then cross-process (see `doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md` Phase A) |
+| `routed_egress_shm_test.cpp` / `build_routed_egress_test.sh` / `.bat` | **Data-plane, real transport**: proves generated pub/sub helpers cross a real `libpcl_transport_shared_memory_plugin.so` bus loaded via `pcl_transport_routing_load`, same-process then cross-process (proving-plan Phase A) |
 | `agra_shm_comms_test.cpp` / `build_agra_shm_comms_test.sh` / `.bat` | A-GRA example contract's correlated request/requirement pair, cross-process over real SHM, JSON + FlatBuffers (Phase C) |
 | `agra_udp_proof_test.cpp` / `build_agra_udp_proof_test.sh` / `.bat` | UDP fail-closed negative gate + the BEST_EFFORT information topic over real UDP datagrams, cross-process (Phase D) |
 | `agra_mixed_route_test.cpp` / `build_agra_mixed_route_test.sh` / `.bat` | **Plan-terminal**: MA/C2 each load two transports (real SHM + real UDP) from one manifest, full worked-example sequence, both codecs (Phase E) |
@@ -98,8 +98,10 @@ Reproduce: `./viability_check.sh` (or `.bat`); comms test:
 
 ## A-GRA example contract over real transports (2026-07-08)
 
-`doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md` phases A-E are
-executed and green (see that plan's §6 evidence ledger for full detail):
+The SHM/UDP proving plan (the retired
+`agra_pubsub_shm_udp_proving_plan.md` — design intent in
+`doc/plans/PYRAMID/README.md`, full text in git history) phases A-E are
+executed and green:
 the routed-egress seam (container port -> executor route -> plugin egress
 -> remote executor ingress -> subscriber callback) is proven over a real
 SHM transport loaded from a routing manifest (Phase A); a new

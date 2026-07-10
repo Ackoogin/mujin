@@ -1,9 +1,10 @@
 # PYRAMID Pub/Sub & the Interaction Facade — Developer Guide
 
-This is the high-level, developer-facing guide to **contract-driven pub/sub**
-in PYRAMID and the **interaction facade** that makes RPC and pub/sub
-interchangeable realizations of the same contract. Read this first; the
-architecture pages it links to carry the full design detail.
+This is the developer-facing guide to **contract-driven pub/sub** in PYRAMID
+and the **interaction facade** that makes RPC and pub/sub interchangeable
+realizations of the same contract. It is the sub-document of the
+[PYRAMID user guide](pyramid_user_guide.md); the architecture pages it links
+to carry the full design detail.
 
 **Audience:** component authors who want to task, observe, or publish data
 through a generated PYRAMID contract, and deployers who choose how those
@@ -43,8 +44,8 @@ For each port the generator emits both:
    endpoints keyed by the contract topic (e.g. `agra.ma_action.request`).
 
 These are **declared, mutually-exclusive realizations of one interaction**
-(design record:
-[`rpc_pubsub_interchangeability_plan.md`](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md)):
+(design intent summarised in
+[`doc/plans/PYRAMID/README.md`](../../../../doc/plans/PYRAMID/README.md)):
 component code targets the facade, the wire realization is chosen at compose
 time, and routing *both* realizations of one leg is a compose-time error.
 
@@ -564,6 +565,4 @@ that aren't CTest-registered either).
 - [`pyramid_interaction_semantics.md`](../architecture/pyramid_interaction_semantics.md) — how interaction patterns, topics, and QoS are expressed in the contract.
 - [`transport_codec_plugin_system.md`](../architecture/transport_codec_plugin_system.md) — transport/codec plugins, the capability model, and compose-time validation.
 - [`generic_contract_layout.md`](../architecture/generic_contract_layout.md) — `binding_manifest.json`, including the `interactions` section.
-- [`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md`](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md) — the interaction-facade design (D1–D7) and its evidence ledger.
-- [`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md) — topic derivation, correlated-pair pattern, QoS rule.
-- [`doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md`](../../../../doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md) — the SHM/UDP data-plane proving plan and its findings.
+- [`doc/plans/PYRAMID/README.md`](../../../../doc/plans/PYRAMID/README.md) — design-intent summary of the retired plans behind this work (interaction facade D1–D7, topic derivation/correlated-pair pattern, SHM/UDP data-plane proofs); full text in git history.
