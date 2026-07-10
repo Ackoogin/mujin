@@ -29,10 +29,27 @@ It is the design reference for the contract convention; the parser
 >    *intent*; plugin QoS is *capability*; compose-time validation
 >    reconciles them.
 >
-> The current plan of record for pub/sub generation — including topic
+> 3. **The interaction facade landed**
+>    ([rpc_pubsub_interchangeability_plan.md](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md)):
+>    for grammar-conforming ports, the RPC and pub/sub projections of a
+>    port are now **declared, interchangeable realizations of one
+>    interaction**, selected per directed leg at compose time.
+>    `binding_manifest.json` carries an `interactions` section grouping
+>    each leg's service endpoints with its projected topic endpoint, PCL
+>    routing manifests enforce one-realization-per-leg via `exclusive`
+>    groups, and the `pattern` stamp below now serves as the *default
+>    realization* rather than advisory-only metadata. Developer-facing
+>    usage is in the
+>    [pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md).
+>
+> The plan of record for pub/sub generation — including topic
 > naming, correlated request/requirement topic pairs, and the migration of
 > this doc's proposals onto the new tree — is
-> [doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md).
+> [doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md)
+> (executed; its data-plane follow-on,
+> [agra_pubsub_shm_udp_proving_plan.md](../../../../doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md),
+> proved the correlated pair and information topics over real SHM and UDP
+> transports).
 
 ## The Problem
 
@@ -385,6 +402,8 @@ native-IDL backend; gRPC already meets the "as-is" bar.
 | Method option (Layer 2) | implemented for `pyramid.options.pyramid_op`; MBSE stamps options mechanically |
 | `standard_topics.py` retirement | scoped to frozen legacy compat only; new-tree substring leak closed; full deletion deferred |
 | QoS / action projection | QoS reliability floors are emitted in binding manifests and generated C++ topic constants; actions remain reserved |
+| Correlated request/requirement pair over real transports | proven cross-process over SHM and UDP with contract-derived routing/QoS ([proving plan](../../../../doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md)) |
+| RPC ↔ pub/sub interchangeability (interaction facade) | implemented for grammar-conforming ports: per-leg realization choice, compose-time `exclusive` enforcement, manifest `interactions` section ([plan](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md), [guide](../guides/pubsub_interaction_guide.md)) |
 | gRPC direct (as-is) consumption | compatible by design; annotation is transparent to `protoc`/gRPC |
 | ROS2 native IDL (`.msg`/`.srv`) projection | generated + round-trip verified (`pyramid_msgs`, `pyramid_ros2_codec.hpp`); live wire still envelope-only, `.action` not generated |
 

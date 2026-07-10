@@ -227,6 +227,47 @@ and do not set a transport adapter for that route. If the executor also has a
 remote/default transport for other endpoints, the explicit local route prevents
 generated topic publishes from taking the remote default.
 
+### The interaction facade — realization-independent ports
+
+For grammar-conforming ports (the 4-rpc Request shape and the 1-rpc
+Information shape), the components header also emits a **transaction-shaped
+facade** layered on the primitives above:
+
+| Class | Role | API |
+|-------|------|-----|
+| `<Service>RequestPortClient` | consumer | `submit(command)` → `std::future<SubmitResult>`, `transitions(query, on_frame, on_end)` → `SubscriptionHandle` |
+| `<Service>RequestPortHandler` / `<Service>RequestPortProvider` | provider | `on<Command>()` callbacks (no `onRead` — stream fan-out is facade-internal), `transitionWriter().send(t)` |
+| `<Service>InformationPortSource` / `<Service>InformationPortSink` | provider / consumer | `publish(msg)` / `subscribe(on_msg)` |
+
+Each is a binding you compose into your `pcl::Component` and `bind()` from
+`on_configure()`, exactly like `ProvidedService`/`ConsumedService`. The
+point of the facade is that **whether the interaction runs as RPC or as
+pub/sub is configuration, not code**:
+
+```cpp
+client_.configureInteractionBinding(R"({"binding":"rpc"})");
+client_.configureInteractionBinding(R"({"binding":"pubsub"})");
+client_.configureInteractionBinding(
+    R"({"request_leg":"rpc","requirement_leg":"pubsub"})");   // per-leg
+```
+
+Under RPC the facade composes the `<op>Async`/`<op>Streaming`/dispatch
+primitives; under pub/sub it composes the generated topic
+publish/subscribe with client-side correlation filtering. The same
+compiled component runs unmodified under either realization (or mixed per
+leg), and the routing manifest declares the two realizations of each leg
+mutually exclusive at compose time.
+
+This is the recommended surface for new components speaking a Request or
+Information port. The full developer story — semantics (ack honesty, late
+join, `one_shot`), deployment manifests, projectability, worked examples —
+is in the
+[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md);
+the design record is
+[`doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md`](../../../../doc/plans/PYRAMID/rpc_pubsub_interchangeability_plan.md).
+Free-form (non-grammar) services get no facade — use
+`ProvidedService`/`ConsumedService` directly.
+
 ## Component transport configuration
 
 Transport setup has two layers:
@@ -311,6 +352,7 @@ For everything else, prefer the binding facade — it owns the boilerplate.
 
 ## See also
 
+- [pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md) — contract-driven pub/sub, the interaction facade, and realization selection at deploy time.
 - [`generated_bindings.md`](generated_bindings.md) — binding architecture overview.
 - [`pcl_pyramid_binding_generation_overview.md`](pcl_pyramid_binding_generation_overview.md) — short engineer-facing description of the binding layer.
 - [`PYRAMID_COMPONENT_RESPONSIBILITIES.md`](PYRAMID_COMPONENT_RESPONSIBILITIES.md) — canonical component responsibilities from the technical standard.

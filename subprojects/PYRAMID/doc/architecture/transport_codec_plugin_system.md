@@ -171,9 +171,25 @@ missing peer, `PCL_ERR_STATE` missing cap/QoS) with a precise diagnostic like
 [reliability]`) loads each transport plugin (injecting the executor), records its
 caps + QoS, registers it as a named peer, then installs and validates every route.
 So one component can route its services over gRPC and its telemetry topics over
-DDS/UDP. Capability *gaps* are **fail-closed by default**; opt-in adapters
-(`PUBSUB over RPC_STREAM`, `RPC_UNARY over PUBSUB`) are not in v1 and, when added,
-each advertises its derived capability behind explicit config.
+DDS/UDP. Route kinds distinguish unary from streaming on the consumer side
+(`consumed` vs `stream_consumed`), so a unary-only transport is rejected for a
+streaming endpoint at compose time, not at first call. An `exclusive
+<group> <side_a_endpoints> <side_b_endpoints>` stanza declares two
+mutually-exclusive realizations of one interaction leg (e.g. a Request port's
+command rpcs vs its `.request` topic): routing endpoints from both sides of one
+group fails closed with a precise diagnostic, in either declaration order.
+Generated manifests (`contract_routing_manifest.py`, from
+`binding_manifest.json`'s `interactions` section) emit these groups and route
+exactly one side per leg — see the
+[pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md).
+Components *serving* RPC over a manifest-routed transport must retrieve and
+activate the transport's gateway container via
+`pcl_transport_routing_get_gateway()` after load, or inbound requests are
+dropped. Capability *gaps* are **fail-closed by default**; for
+grammar-conforming ports the old `RPC_UNARY over PUBSUB` adapter idea is
+subsumed by the interaction facade (running the interaction over a PUBSUB-only
+transport is a route-line realization choice); opt-in adapters remain a
+deferred idea for free-form services only.
 
 ## Code mechanism — ABI contracts
 

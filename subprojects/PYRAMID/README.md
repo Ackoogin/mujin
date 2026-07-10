@@ -56,12 +56,14 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 | `cmake/` | Manifest-driven binding-source CMake helpers and their tests |
 | `scripts/` | Binding generation, plugin build, SDK packaging, coverage, and interop test helpers |
 | `doc/architecture/` | Generated-binding, plugin, ROS2 transport, and responsibility docs |
+| `doc/guides/` | Developer-facing guides (pub/sub & the interaction facade) |
 | `doc/requirements/` | PYRAMID-owned requirements |
 
 ## Documentation
 
 | Document | Purpose |
 |----------|---------|
+| [doc/guides/pubsub_interaction_guide.md](doc/guides/pubsub_interaction_guide.md) | **Developer guide** to contract-driven pub/sub and the interaction facade: submit/transitions/publish APIs, RPC ↔ pub/sub realization choice per leg, routing manifests, worked examples |
 | [doc/architecture/pcl_pyramid_binding_generation_overview.md](doc/architecture/pcl_pyramid_binding_generation_overview.md) | Broad engineer-facing overview of how PYRAMID generated bindings plug into the PCL runtime |
 | [doc/architecture/generated_bindings.md](doc/architecture/generated_bindings.md) | Canonical v1 guide for proto schemas, generated bindings, codecs, transports, and how components should use them |
 | [doc/architecture/transport_codec_plugin_system.md](doc/architecture/transport_codec_plugin_system.md) | Runtime transport/codec **plugin** system: ABI, loader, config pass-through, build targets, and per-component deployment staging (with diagrams) |
