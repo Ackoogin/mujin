@@ -72,9 +72,11 @@ behind explicit triggers.
 | 9 | ~~C2 Manifest-driven CMake completion~~ **✅ done 2026-07-04 (default flip deferred by choice)** | M |
 | 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
 | 11 | ~~C6 Document remaining allowed facade leaks~~ **✅ done 2026-07-04** | S |
-| 12 | C4 Retire codegen shims (after one SDK release) | S |
-| 13 | C5 Windows parity pass | S/M |
-| 14 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
+| 12 | **F1 Ada interaction-facade runtime parity (priority)** | M/L |
+| 13 | F2 Convert extant examples to the port abstraction | S/M |
+| 14 | C4 Retire codegen shims (after one SDK release) | S |
+| 15 | C5 Windows parity pass | S/M |
+| 16 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
 
 C1–C3 are independent of WS-A and of each other; they can be picked up in
 parallel whenever there is slack. C4 is time-gated, C5 environment-gated.
@@ -597,6 +599,56 @@ local no-plugin routing from opaque plugin `config_json`.
   single-threaded `spinOnce` loop, and no transport adapter.
 - **Accept:** local peer, shared-memory peer, and remote transport are presented
   as deployment options that do not change handler signatures or business logic.
+
+---
+
+## WS-F — Interaction facade follow-ons
+
+### F1. Ada interaction-facade runtime parity (priority)
+
+The generated Ada interaction surface (`<Service>_Submit_*`,
+`<Service>_Transitions`, `<Service>_Configure_Interaction_Binding`) is
+**spec-only**: bodies raise `Program_Error`
+(`pim/ada/interaction_facade_gen.py`, the recorded Phase 4 fallback of
+[`rpc_pubsub_interchangeability_plan.md`](../../plans/PYRAMID/rpc_pubsub_interchangeability_plan.md)).
+Ada components must use the realization-specific `Invoke_*` /
+`Subscribe_*` / `Publish_*` primitives directly, so Ada cannot yet switch a
+leg's realization by configuration the way C++ can.
+
+- **Plan:** implement runtime dispatch behind the unchanged declared spec —
+  realization selection from `Config_Json`, submit via the existing typed
+  `Invoke_*` (rpc) or `Publish_*` on the `.request` topic (pubsub),
+  transitions via streaming `Read` or the `.requirement` topic subscription
+  with id filtering. Provider side needs the wrapper-oneof unwrap and a
+  transition writer mirroring the C++ facade's snapshot-store semantics.
+  Requires a GNAT/gprbuild environment to compile-verify (the blocker that
+  produced the spec-only fallback).
+- **Accept:** an Ada seam-interchange proof mirroring
+  `agra_seam_interchange_test` (rpc/rpc, pubsub/pubsub, mixed — same Ada
+  binary, realization chosen by manifest + config); the spec-only caveats in
+  `pubsub_interaction_guide.md` §8 and `generated_bindings.md` (Ada Policy)
+  removed.
+
+### F2. Convert extant examples to the port abstraction
+
+The shipped examples (`examples/cpp/` showcase, `examples/ada/`) are written
+against the legacy Tactical Objects contract using the primitive bindings
+(`ProvidedService`/`ConsumedService`, `Invoke_*`), so nothing in `examples/`
+demonstrates the recommended port-facade surface
+(`RequestPortClient`/`RequestPortProvider`/`InformationPort*`) — the only
+facade usage lives in test harnesses (`agra_seam_interchange_test`,
+`test_pcl_generated_interaction_facade`).
+
+- **Plan:** (a) promote an A-GRA-based facade example (grammar-conforming
+  contract, `submit()`/`transitions()`, realization switch by manifest) into
+  `examples/cpp/`; (b) convert the Tactical Objects showcase when its
+  contract becomes grammar-conforming — rides on
+  [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
+  (the legacy CRUD services are not port-grammar shapes today); (c) the Ada
+  example conversion depends on F1.
+- **Accept:** `examples/` contains a buildable, documented facade-first
+  example; `cpp_component_authoring.md` and the pub/sub guide point at it as
+  the copied example for new components.
 
 ---
 

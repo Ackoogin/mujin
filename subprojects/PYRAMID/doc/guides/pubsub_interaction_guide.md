@@ -120,6 +120,28 @@ layers, not alternatives at the same level:
   runs as RPC or pub/sub is chosen by `configureInteractionBinding()` +
   the routing manifest, not by which method you called.
 
+```mermaid
+flowchart TB
+  App["Component code"]
+  Facade["&lt;Service&gt;RequestPortClient<br/>submit() / transitions()<br/><i>realization-independent</i>"]
+  Rpc["RPC seam (primitives)<br/>ConsumedService: &lt;op&gt;Async / &lt;op&gt;Streaming<br/>built on invoke*/dispatch"]
+  Pub["Pub/sub seam (primitives)<br/>publish* / subscribe* topic helpers"]
+  SvcEp["service endpoints<br/>ma_action.create / .update / .cancel / .read"]
+  TopEp["topic endpoints<br/>agra.ma_action.request / .requirement"]
+  Route["routing manifest<br/>exclusive: one realization per leg"]
+  Wire["transport plugin(s)"]
+
+  App -->|"grammar-conforming port"| Facade
+  App -.->|"free-form service<br/>(no facade)"| Rpc
+  Facade -->|"leg realized as rpc"| Rpc
+  Facade -->|"leg realized as pubsub"| Pub
+  Rpc --> SvcEp
+  Pub --> TopEp
+  SvcEp --> Route
+  TopEp --> Route
+  Route --> Wire
+```
+
 Prefer the facade for grammar-conforming ports; use the primitives directly
 for free-form services (which get no facade) or when you need per-call
 control. Compose the facade into your `pcl::Component` exactly like the
@@ -246,6 +268,30 @@ is RPC-realized.
 The provider side is a handler with **one callback per command** — there is
 deliberately no `onRead`: the `Read` stream, its per-query fan-out, and the
 open-stream registry are facade-internal.
+
+The same layering applies in reverse — commands arrive through either
+primitive, transitions leave through either primitive, and your handler
+never knows which:
+
+```mermaid
+flowchart TB
+  RpcIn["unary rpc dispatch<br/>(Create/Update/Cancel)"]
+  TopIn[".request topic publication<br/>(wrapper message)"]
+  Provider["&lt;Service&gt;RequestPortProvider<br/>unwraps the wrapper oneof"]
+  Handler["RequestPortHandler<br/>onCreate / onUpdate / onCancel"]
+  Writer["transitionWriter().send(t)"]
+  Snap["bounded per-id<br/>snapshot store"]
+  Streams["fan-out to open<br/>Read streams"]
+  Topic["publish on<br/>.requirement topic"]
+
+  RpcIn --> Provider
+  TopIn --> Provider
+  Provider --> Handler
+  Handler --> Writer
+  Writer --> Snap
+  Writer -->|"leg realized as rpc"| Streams
+  Writer -->|"leg realized as pubsub"| Topic
+```
 
 ```cpp
 namespace ma = pyramid::components::agra::mission_autonomy::services::provided;
