@@ -402,3 +402,34 @@ TEST(LacalPlugin, ReliableFloorOverBestEffortFailsClosed) {
   std::remove(path.c_str());
   pcl_executor_destroy(exec);
 }
+
+// Phase 5 capability negative: an RPC-shaped endpoint (PROVIDED requires
+// PCL_CAP_RPC_UNARY) cannot be realized over LA-CAL, which advertises
+// PCL_CAP_PUBSUB only. Routing must fail closed at compose time -- the seam's
+// Request legs can be realized pub/sub over this peer but never RPC.
+TEST(LacalPlugin, RpcEndpointOverPubsubPeerFailsClosed) {
+  BrokerMock broker;
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+  std::ostringstream manifest;
+  manifest << "transport asb " << kPluginPath << " {\"url\":\""
+           << broker.url()
+           << "\",\"service_id\":\"svc\",\"peer_id\":\"asb\","
+              "\"connect_timeout_ms\":2000}\n"
+           << "route ActionCommand_Service provided asb\n";
+  const std::string path = write_manifest(manifest.str());
+  ASSERT_FALSE(path.empty());
+
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[256] = "";
+  EXPECT_EQ(pcl_transport_routing_load(exec, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_EQ(routing, nullptr);
+  EXPECT_NE(std::string(diag).find("requires"), std::string::npos) << diag;
+  EXPECT_EQ(pcl_executor_get_transport_for_peer(exec, "asb"), nullptr);
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(exec);
+}

@@ -358,3 +358,20 @@ publisher's `PUB` draws a `+OK`/`-ERR` so a schema rejection surfaces loudly.
 Captured PASS output committed at `lacal/interop_run.log`. Codec round-trip
 suite (`OmsJsonUciCodec`, 6/6) and `owp.*` (12/12) remain green; the Phase 4
 codec prerequisite was recorded earlier.
+
+## LA-CAL integration rung 1 — Phase 5 progress: RPC-impossible negative (2026-07-11)
+
+The static half of the Phase 5 exit gate is in place ahead of the positive
+seam-over-Sleet leg. `owp.LacalPlugin.RpcEndpointOverPubsubPeerFailsClosed`
+routes a PROVIDED endpoint (requires `PCL_CAP_RPC_UNARY`) over the LA-CAL
+transport (advertises `PCL_CAP_PUBSUB` only): `pcl_transport_routing_load` fails
+closed with `PCL_ERR_STATE` and a `requires`-caps diagnostic, and no peer
+transport is registered. This confirms the capability row now recorded in
+`transport_codec_plugin_system.md` (LA-CAL: PUBSUB ✓, RPC_UNARY ✗) — the seam's
+Request legs can be realized pub/sub over this peer but never RPC.
+`owp.*` suite now 13/13.
+
+**Next (Phase 5 positive):** the correlated request/requirement interaction over
+real Sleet using the UCI `ActionCommand` / `ActionCommandStatus` pair
+(correlation key `CommandID.UUID`), which the pinned schema validates — the
+vocabulary confirmed feasible by generating both messages from the XSD.

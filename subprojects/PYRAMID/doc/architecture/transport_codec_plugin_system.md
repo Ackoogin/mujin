@@ -141,6 +141,7 @@ may pin a minimum (e.g. a command service must be `RELIABLE`).
 | TCP socket| ✓ | ✓ | ✗ | ✗ | RELIABLE | decoupled |
 | shared mem| ✓ | ✓ | ✓ | ✗ | RELIABLE | decoupled |
 | UDP       | ✓ | ✗ | ✗ | ✗ | BEST_EFFORT | decoupled |
+| LA-CAL (owp/asb) | ✓ | ✗ | ✗ | ✗ | BEST_EFFORT (RELIABLE opt-in) | decoupled (OMS JSON) |
 | DDS/MQTT  | ✓ | ⟂/✗ | ✗ | ✗ | configurable | decoupled |
 
 ✓ native · ⟂ via an explicit adapter (not in v1) · ✗ unsupported. A component
