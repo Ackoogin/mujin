@@ -223,6 +223,95 @@ TEST(OmsJsonUciCodec, HandlesOmsSpecialFloatingPointTokens) {
   pcl_plugin_unload(handle);
 }
 
+TEST(OmsJsonUciCodec, ActionCommandRoundTrips) {
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_codec_t* codec = load_codec(&handle);
+  ASSERT_NE(codec, nullptr);
+
+  pyramid_uci_action_command_c command;
+  std::memset(&command, 0, sizeof(command));
+  set_text(command.header.classification, "U");
+  set_text(command.header.owner_producer, "USA");
+  set_text(command.header.system_uuid,
+           "550e8400-e29b-41d4-a716-446655440000");
+  set_text(command.header.timestamp, "2026-07-11T12:00:00Z");
+  set_text(command.header.schema_version, "002.5.0");
+  set_text(command.header.mode, "LIVE");
+  set_text(command.command_uuid, "7c9e6679-7425-40de-944b-e07fc1f90ae7");
+  set_text(command.command_state, "NEW");
+  set_text(command.capability_uuid, "6da3573c-2863-47a9-80cd-52b1ee2b4077");
+  command.priority = 5;
+  set_text(command.action_uuid, "eacfc454-2741-4d15-aeac-15c573d94090");
+
+  pcl_msg_t encoded{};
+  ASSERT_EQ(codec->encode(codec->codec_ctx, "ActionCommand", &command, &encoded),
+            PCL_OK);
+  const auto json = nlohmann::json::parse(
+      static_cast<const char*>(encoded.data),
+      static_cast<const char*>(encoded.data) + encoded.size);
+  const auto& capability =
+      json.at("ActionCommand").at("MessageData").at("Command").at(0).at(
+          "Capability");
+  EXPECT_EQ(capability.at("CommandID").at("UUID"),
+            "7c9e6679-7425-40de-944b-e07fc1f90ae7");
+  EXPECT_EQ(capability.at("CommandState"), "NEW");
+  EXPECT_EQ(capability.at("Ranking").at("Rank").at("Priority"), 5);
+
+  pyramid_uci_action_command_c decoded{};
+  ASSERT_EQ(codec->decode(codec->codec_ctx, "ActionCommand", &encoded, &decoded),
+            PCL_OK);
+  EXPECT_STREQ(decoded.command_uuid, "7c9e6679-7425-40de-944b-e07fc1f90ae7");
+  EXPECT_STREQ(decoded.command_state, "NEW");
+  EXPECT_STREQ(decoded.capability_uuid,
+               "6da3573c-2863-47a9-80cd-52b1ee2b4077");
+  EXPECT_EQ(decoded.priority, 5);
+  EXPECT_STREQ(decoded.action_uuid, "eacfc454-2741-4d15-aeac-15c573d94090");
+
+  codec->free_msg(codec->codec_ctx, &encoded);
+  pcl_plugin_unload(handle);
+}
+
+TEST(OmsJsonUciCodec, ActionCommandStatusRoundTripsAndCorrelates) {
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_codec_t* codec = load_codec(&handle);
+  ASSERT_NE(codec, nullptr);
+
+  pyramid_uci_action_command_status_c status;
+  std::memset(&status, 0, sizeof(status));
+  set_text(status.header.classification, "U");
+  set_text(status.header.owner_producer, "USA");
+  set_text(status.header.system_uuid,
+           "550e8400-e29b-41d4-a716-446655440000");
+  set_text(status.header.timestamp, "2026-07-11T12:00:01Z");
+  set_text(status.header.schema_version, "002.5.0");
+  set_text(status.header.mode, "LIVE");
+  set_text(status.command_uuid, "7c9e6679-7425-40de-944b-e07fc1f90ae7");
+  set_text(status.command_processing_state, "ACCEPTED");
+
+  pcl_msg_t encoded{};
+  ASSERT_EQ(codec->encode(codec->codec_ctx, "ActionCommandStatus", &status,
+                          &encoded),
+            PCL_OK);
+  const auto json = nlohmann::json::parse(
+      static_cast<const char*>(encoded.data),
+      static_cast<const char*>(encoded.data) + encoded.size);
+  const auto& data = json.at("ActionCommandStatus").at("MessageData");
+  // Correlation key echoes the ActionCommand's CommandID.
+  EXPECT_EQ(data.at("CommandID").at("UUID"),
+            "7c9e6679-7425-40de-944b-e07fc1f90ae7");
+  EXPECT_EQ(data.at("CommandProcessingState"), "ACCEPTED");
+
+  pyramid_uci_action_command_status_c decoded{};
+  ASSERT_EQ(codec->decode(codec->codec_ctx, "ActionCommandStatus", &encoded,
+                          &decoded),
+            PCL_OK);
+  EXPECT_STREQ(decoded.command_uuid, "7c9e6679-7425-40de-944b-e07fc1f90ae7");
+  EXPECT_STREQ(decoded.command_processing_state, "ACCEPTED");
+
+  codec->free_msg(codec->codec_ctx, &encoded);
+  pcl_plugin_unload(handle);
+}
+
 TEST(OmsJsonUciCodec, RejectsInvalidUuidAndUnknownSchema) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_codec_t* codec = load_codec(&handle);

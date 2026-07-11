@@ -64,3 +64,30 @@ UCI_XSD_PATH=/path/to/UCI_MessageDefinitions_v2_5_0.xsd \
 The script SKIPs (exit 0) when `SLEET_URL` is unreachable, no harness-capable
 Python is given, or the XSD is absent; a reachable Sleet that then rejects any
 step is a FAIL. A captured PASS run is committed at `interop_run.log`.
+
+## Phase 5 request/requirement seam (`build_lacal_seam_test.sh`)
+
+Demonstrates the interaction seam's **pubsub-works over the real broker** leg
+with a UCI vocabulary Sleet validates: a correlated request/requirement
+interaction, both legs realized pub/sub over LA-CAL, using the
+`ActionCommand` / `ActionCommandStatus` pair (correlation key `CommandID.UUID`).
+
+- provider (`seam-ma`) subscribes the request topic; on an `ActionCommand` it
+  publishes correlated `ActionCommandStatus` transitions (`RECEIVED`,
+  `ACCEPTED`) on the requirement topic;
+- consumer (`seam-c2`) publishes the `ActionCommand`, subscribes the
+  requirement topic, and asserts it collects both correlated transitions.
+
+```bash
+SLEET_URL=ws://127.0.0.1:21402 ./build_lacal_seam_test.sh
+```
+
+Needs the `seam-ma` / `seam-c2` service registrations (`services/`) loaded by
+Sleet. SKIPs when Sleet is absent/unreachable. Captured PASS at `seam_run.log`.
+The rpc-impossible half of the matrix is the unit test
+`owp.LacalPlugin.RpcEndpointOverPubsubPeerFailsClosed`.
+
+The positive leg drives the PCL pub/sub primitives directly (like
+`lacal_e2e_test`), not the generated `MaactionRequestPort` interaction facade;
+running that facade over LA-CAL additionally needs OMS-JSON codecs for the
+generated seam structs (rung-3 `oms_json_backend.py`).

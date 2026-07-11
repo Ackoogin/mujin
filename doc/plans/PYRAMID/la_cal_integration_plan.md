@@ -1,10 +1,15 @@
 # LA-CAL Integration Plan — Rung 1 of the OMS CAL Join
 
-**Status:** in progress — Phases 0–4 are implemented and verified on Linux.
-Phase 3 (real-Sleet cross-process delivery) and Phase 4 (OMS JSON codec +
-foreign-peer interop, both directions, against the AMS GRA `la-cal-harness`)
-are complete against the pinned Sleet container. Phases 5 (interaction seam
-over LA-CAL) and 6 (stretch AME MS-leg demo) remain.
+**Status:** in progress — Phases 0–5 are implemented and verified on Linux
+against the pinned Sleet container. Phase 3 (real-Sleet delivery), Phase 4
+(OMS JSON codec + foreign-peer interop both directions vs the AMS GRA
+`la-cal-harness`), and Phase 5 (the rpc-impossible/pubsub-works matrix over the
+real broker, with a correlated UCI `ActionCommand`/`ActionCommandStatus`
+request/requirement seam) are complete. The one honest carve-out in Phase 5:
+the positive leg uses PCL pub/sub primitives directly, not the *generated*
+interaction facade — wiring that facade over LA-CAL needs generated-struct
+OMS-JSON codecs (rung-3 `oms_json_backend.py`), a listed follow-on. Only the
+stretch Phase 6 (AME MS-leg demo) remains.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -290,6 +295,19 @@ The step that earns "interop" rather than "loopback through a broker":
 independently-authored peers; codec round-trip suite green; SKIP-safe.
 
 ### Phase 5 — The interaction seam over LA-CAL (medium/large)
+
+**Progress:** complete (2026-07-11). The rpc-impossible/pubsub-works matrix is
+demonstrated over the real broker. Positive: `lacal_seam_test` +
+`build_lacal_seam_test.sh` run a correlated `ActionCommand`/`ActionCommandStatus`
+request/requirement interaction, both legs pub/sub over LA-CAL through Sleet,
+correlated by `CommandID.UUID` (`RECEIVED`/`ACCEPTED` transitions) →
+`PASS ... (both legs pub/sub)`, SKIP-safe. Negative:
+`owp.LacalPlugin.RpcEndpointOverPubsubPeerFailsClosed` + the capability-matrix
+row. Codec extended with `ActionCommand`/`ActionCommandStatus`
+(`OmsJsonUciCodec` 8/8, `owp.*` 13/13). Carve-out: the positive uses PCL
+pub/sub primitives, not the generated `MaactionRequestPort` facade — see
+FINDINGS.md "Phase 5 exit (2026-07-11)". Guide §7 row still to be added if the
+generated-facade variant lands.
 
 The payoff phase: demonstrate that rung 1 composes with the seam that
 motivated it.

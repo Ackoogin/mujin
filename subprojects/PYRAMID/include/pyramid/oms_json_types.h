@@ -54,6 +54,27 @@ typedef struct {
   char altitude_reference[PYRAMID_OMS_TOKEN_SIZE];
 } pyramid_uci_position_report_c;
 
+/// \brief UCI 2.5 ActionCommand subset — the Request leg of the seam
+/// interaction. `command_uuid` (CommandID) is the request/requirement
+/// correlation key.
+typedef struct {
+  pyramid_uci_oms_header_c header;
+  char command_uuid[PYRAMID_OMS_UUID_SIZE];
+  char command_state[PYRAMID_OMS_TOKEN_SIZE];
+  char capability_uuid[PYRAMID_OMS_UUID_SIZE];
+  int32_t priority;
+  char action_uuid[PYRAMID_OMS_UUID_SIZE];
+} pyramid_uci_action_command_c;
+
+/// \brief UCI 2.5 ActionCommandStatus subset — the Requirement leg of the seam
+/// interaction. `command_uuid` echoes the request's CommandID;
+/// `command_processing_state` carries the transition (RECEIVED/ACCEPTED/...).
+typedef struct {
+  pyramid_uci_oms_header_c header;
+  char command_uuid[PYRAMID_OMS_UUID_SIZE];
+  char command_processing_state[PYRAMID_OMS_TOKEN_SIZE];
+} pyramid_uci_action_command_status_c;
+
 #ifdef __cplusplus
 }
 #endif

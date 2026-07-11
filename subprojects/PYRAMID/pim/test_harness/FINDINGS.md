@@ -375,3 +375,42 @@ Request legs can be realized pub/sub over this peer but never RPC.
 real Sleet using the UCI `ActionCommand` / `ActionCommandStatus` pair
 (correlation key `CommandID.UUID`), which the pinned schema validates — the
 vocabulary confirmed feasible by generating both messages from the XSD.
+
+## LA-CAL integration rung 1 — Phase 5 exit (2026-07-11)
+
+**Phase 5 exit gate met — the rpc-impossible / pubsub-works matrix is
+demonstrated over the real broker.** Both halves:
+
+- **pubsub-works (positive):** `lacal_seam_test` runs a correlated
+  request/requirement interaction over real Sleet with the UCI
+  `ActionCommand` / `ActionCommandStatus` pair, **both legs realized pub/sub**
+  over the LA-CAL (owp/asb) transport. `seam-c2` publishes an `ActionCommand`
+  (`CommandState=NEW`) on the request topic and subscribes the requirement
+  topic; `seam-ma` subscribes the request topic and, on receipt, publishes two
+  correlated `ActionCommandStatus` transitions (`RECEIVED`, `ACCEPTED`) keyed by
+  the request's `CommandID.UUID`; `seam-c2` collects both by matching that key
+  → `seam-ok`. `PASS: LA-CAL Phase 5 request/requirement seam over Sleet (both
+  legs pub/sub)`. Sleet validated every `ActionCommand`/`ActionCommandStatus`
+  payload against the pinned UCI 2.5 schema. Captured at `lacal/seam_run.log`;
+  SKIP-safe on absent/unreachable Sleet.
+- **rpc-impossible (negative):** `owp.LacalPlugin.RpcEndpointOverPubsubPeerFailsClosed`
+  (recorded above), plus the capability-matrix row in
+  `transport_codec_plugin_system.md`.
+
+**Codec extension:** `pyramid_oms_json_codec_uci` gained `ActionCommand` and
+`ActionCommandStatus` (frozen C structs + OMS JSON map, hand-written like
+PositionReport/SignalReport). `OmsJsonUciCodec` now 8/8, `owp.*` 13/13.
+
+**Scope honesty — what the positive proves and doesn't.** `lacal_seam_test`
+demonstrates the request/requirement *interaction semantics* (correlated
+request → requirement transitions, both legs pub/sub, over the real broker,
+UCI-validated) using the PCL publish/subscribe primitives directly — it is
+**not** the generated `MaactionRequestPortProvider/Client` interaction facade
+from `agra_seam_interchange_test.cpp`. Driving that generated facade over LA-CAL
+would additionally require OMS-JSON codecs operating on the *generated* seam
+structs (the seam facade currently routes proto3-JSON / FlatBuffers), which is
+the `oms_json_backend.py` generator work deferred to rung 3 (§7). The facade's
+realization-agnostic component-code claim is already proven over SHM in
+`agra_seam_interchange_test`; Phase 5 proves the same interaction rides the
+LA-CAL/Sleet transport with a schema-valid UCI vocabulary. Wiring the generated
+facade end-to-end over LA-CAL is the honest follow-on.

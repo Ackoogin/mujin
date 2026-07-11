@@ -44,6 +44,18 @@ if(PYRAMID_ENABLE_OWP)
     target_compile_definitions(lacal_e2e_test PRIVATE
         PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>"
         PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci>")
+
+    add_executable(lacal_seam_test
+        "${PYRAMID_ROOT_DIR}/pim/test_harness/lacal_seam_test.cpp")
+    add_dependencies(lacal_seam_test
+        pyramid_lacal_transport_plugin pyramid_codec_oms_json_uci)
+    target_link_libraries(lacal_seam_test
+        PRIVATE pcl_core nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS})
+    target_include_directories(lacal_seam_test PRIVATE
+        "${PCL_ROOT_DIR}/include" "${PYRAMID_ROOT_DIR}/include")
+    target_compile_definitions(lacal_seam_test PRIVATE
+        PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>"
+        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci>")
 endif()
 
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)

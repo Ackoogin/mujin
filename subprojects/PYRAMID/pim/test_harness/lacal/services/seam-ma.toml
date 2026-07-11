@@ -1,0 +1,11 @@
+service_id = "seam-ma"
+service_uuid = "8b1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f"
+allowed_topics = ["mission.action-command", "mission.action-command-status"]
+
+[[topic_bindings]]
+topic = "mission.action-command"
+allowed_messages = ["ActionCommand"]
+
+[[topic_bindings]]
+topic = "mission.action-command-status"
+allowed_messages = ["ActionCommandStatus"]

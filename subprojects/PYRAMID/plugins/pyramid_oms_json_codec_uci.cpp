@@ -27,6 +27,8 @@ namespace {
 constexpr const char* kContentType = "application/oms-json";
 constexpr const char* kSignalReport = "SignalReport";
 constexpr const char* kPositionReport = "PositionReport";
+constexpr const char* kActionCommand = "ActionCommand";
+constexpr const char* kActionCommandStatus = "ActionCommandStatus";
 
 bool is_hex(char value) {
   return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f') ||
@@ -254,6 +256,76 @@ void decode_position_report(const nlohmann::json& document,
   }
 }
 
+nlohmann::json encode_action_command(const pyramid_uci_action_command_c& cmd) {
+  if (!valid_header(cmd.header) || !is_uuid(cmd.command_uuid) ||
+      !required_text(cmd.command_state) || !is_uuid(cmd.capability_uuid) ||
+      !is_uuid(cmd.action_uuid)) {
+    throw nlohmann::json::type_error::create(302, "invalid ActionCommand", nullptr);
+  }
+
+  nlohmann::json capability = {
+      {"CommandID", {{"UUID", cmd.command_uuid}}},
+      {"CommandState", cmd.command_state},
+      {"CapabilityID", {{"UUID", cmd.capability_uuid}}},
+      {"Ranking", {{"Rank", {{"Priority", cmd.priority}}}}},
+      {"ActionID", {{"UUID", cmd.action_uuid}}}};
+
+  return {{kActionCommand,
+           {{"SecurityInformation", encode_security(cmd.header)},
+            {"MessageHeader", encode_header(cmd.header)},
+            {"MessageData",
+             {{"Command",
+               nlohmann::json::array({{{"Capability", std::move(capability)}}})}}}}}};
+}
+
+void decode_action_command(const nlohmann::json& document,
+                           pyramid_uci_action_command_c* cmd) {
+  std::memset(cmd, 0, sizeof(*cmd));
+  const auto& root = document.at(kActionCommand);
+  decode_header(root, &cmd->header);
+  const auto& capability =
+      root.at("MessageData").at("Command").at(0).at("Capability");
+  copy_text(capability.at("CommandID").at("UUID"), cmd->command_uuid);
+  copy_text(capability.at("CommandState"), cmd->command_state);
+  copy_text(capability.at("CapabilityID").at("UUID"), cmd->capability_uuid);
+  cmd->priority = capability.at("Ranking").at("Rank").at("Priority").get<int32_t>();
+  copy_text(capability.at("ActionID").at("UUID"), cmd->action_uuid);
+  if (!is_uuid(cmd->command_uuid) || !is_uuid(cmd->capability_uuid) ||
+      !is_uuid(cmd->action_uuid)) {
+    throw nlohmann::json::type_error::create(302, "invalid ActionCommand UUID", &root);
+  }
+}
+
+nlohmann::json encode_action_command_status(
+    const pyramid_uci_action_command_status_c& status) {
+  if (!valid_header(status.header) || !is_uuid(status.command_uuid) ||
+      !required_text(status.command_processing_state)) {
+    throw nlohmann::json::type_error::create(302, "invalid ActionCommandStatus",
+                                             nullptr);
+  }
+
+  return {{kActionCommandStatus,
+           {{"SecurityInformation", encode_security(status.header)},
+            {"MessageHeader", encode_header(status.header)},
+            {"MessageData",
+             {{"CommandID", {{"UUID", status.command_uuid}}},
+              {"CommandProcessingState", status.command_processing_state}}}}}};
+}
+
+void decode_action_command_status(const nlohmann::json& document,
+                                  pyramid_uci_action_command_status_c* status) {
+  std::memset(status, 0, sizeof(*status));
+  const auto& root = document.at(kActionCommandStatus);
+  decode_header(root, &status->header);
+  const auto& data = root.at("MessageData");
+  copy_text(data.at("CommandID").at("UUID"), status->command_uuid);
+  copy_text(data.at("CommandProcessingState"), status->command_processing_state);
+  if (!is_uuid(status->command_uuid)) {
+    throw nlohmann::json::type_error::create(302, "invalid ActionCommandStatus UUID",
+                                             &root);
+  }
+}
+
 pcl_status_t assign_payload(const std::string& payload, pcl_msg_t* out_msg) {
   if (!out_msg || payload.size() > std::numeric_limits<uint32_t>::max()) {
     return PCL_ERR_INVALID;
@@ -288,6 +360,20 @@ pcl_status_t plugin_encode(void*, const char* schema_id, const void* value,
               .dump(),
           out_msg);
     }
+    if (std::strcmp(schema_id, kActionCommand) == 0) {
+      return assign_payload(
+          encode_action_command(
+              *static_cast<const pyramid_uci_action_command_c*>(value))
+              .dump(),
+          out_msg);
+    }
+    if (std::strcmp(schema_id, kActionCommandStatus) == 0) {
+      return assign_payload(
+          encode_action_command_status(
+              *static_cast<const pyramid_uci_action_command_status_c*>(value))
+              .dump(),
+          out_msg);
+    }
   } catch (const nlohmann::json::exception&) {
     return PCL_ERR_INVALID;
   }
@@ -314,6 +400,17 @@ pcl_status_t plugin_decode(void*, const char* schema_id, const pcl_msg_t* msg,
     if (std::strcmp(schema_id, kPositionReport) == 0) {
       decode_position_report(
           document, static_cast<pyramid_uci_position_report_c*>(out_value));
+      return PCL_OK;
+    }
+    if (std::strcmp(schema_id, kActionCommand) == 0) {
+      decode_action_command(
+          document, static_cast<pyramid_uci_action_command_c*>(out_value));
+      return PCL_OK;
+    }
+    if (std::strcmp(schema_id, kActionCommandStatus) == 0) {
+      decode_action_command_status(
+          document,
+          static_cast<pyramid_uci_action_command_status_c*>(out_value));
       return PCL_OK;
     }
   } catch (const nlohmann::json::exception&) {

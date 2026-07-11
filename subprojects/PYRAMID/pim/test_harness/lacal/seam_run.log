@@ -1,0 +1,21 @@
+# Captured LA-CAL Phase 5 request/requirement seam run
+# Date: 2026-07-11
+# Interaction: correlated ActionCommand (request) -> ActionCommandStatus
+#              (requirement) transitions, both legs realized pub/sub over
+#              the LA-CAL (owp/asb) transport, correlation key CommandID.UUID.
+# Sleet image: registry.gitlab.com/open-arsenal/ams-gra/hello-world-sk/infra/sleet:v2026.06.01
+# Schema:      UCI_MessageDefinitions_v2_5_0.xsd (OAC-STD-002 RevE, v2.5.0)
+# ---------------------------------------------------------------
+PASS: LA-CAL Phase 5 request/requirement seam over Sleet (both legs pub/sub)
+
+## sleet server log (ANSI stripped, routing evidence)
+2026-07-11T12:20:13.302588Z  INFO connection{id=2 service_id="seam-ma"}: sleet::server: initialized schema=002.5.0 service_id=seam-ma
+2026-07-11T12:20:13.606711Z  INFO connection{id=3 service_id="seam-c2"}: sleet::server: initialized schema=002.5.0 service_id=seam-c2
+2026-07-11T12:20:13.968865Z  INFO connection{id=3 service_id="seam-c2"}: sleet::server: disconnected
+2026-07-11T12:20:25.553350Z  INFO connection{id=2 service_id="seam-ma"}: sleet::server: disconnected
+
+# seam-c2 published ActionCommand (CommandState=NEW); seam-ma subscribed the
+# request topic, decoded it, and published two correlated ActionCommandStatus
+# transitions (RECEIVED, ACCEPTED) on the requirement topic; seam-c2 collected
+# both by matching CommandID.UUID -> seam-ok. All payloads validated by Sleet
+# against the pinned UCI 2.5 schema.
