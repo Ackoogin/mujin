@@ -1,6 +1,6 @@
 service_id = "seam-c2"
 service_uuid = "9c2e3f4a-5b6c-7d8e-9f0a-1b2c3d4e5f60"
-allowed_topics = ["mission.action-command", "mission.action-command-status"]
+allowed_topics = ["mission.action-command", "mission.action-command-status", "mission.action_command.request", "mission.action_command.requirement"]
 
 [[topic_bindings]]
 topic = "mission.action-command"
@@ -8,4 +8,12 @@ allowed_messages = ["ActionCommand"]
 
 [[topic_bindings]]
 topic = "mission.action-command-status"
+allowed_messages = ["ActionCommandStatus"]
+
+[[topic_bindings]]
+topic = "mission.action_command.request"
+allowed_messages = ["ActionCommand"]
+
+[[topic_bindings]]
+topic = "mission.action_command.requirement"
 allowed_messages = ["ActionCommandStatus"]

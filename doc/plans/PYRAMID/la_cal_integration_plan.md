@@ -8,9 +8,16 @@ pubsub-works matrix is demonstrated over the real broker** (capability negative
 + a correlated UCI `ActionCommand`/`ActionCommandStatus` request/requirement
 seam), but the *generated interaction-facade* form of step 1 — driving the
 `MaactionRequestPort` facade **from a proto contract through generated
-bindings, with Ada codec compatibility** — is the active follow-on (directed
-2026-07-11), together with the mixed-transport variant (step 2) and the guide
-§7 row. The stretch Phase 6 (AME MS-leg demo) also remains.
+bindings, with Ada codec compatibility** — is largely built (directed
+2026-07-11): a new `oms_json` generator backend (C++ + Ada) + a UCI-XSD-faithful
+`pim/uci_seam_example` contract generate the facade and a byte-equivalent,
+Ada-compiling OMS-JSON codec; the generated facade e2e runs against real Sleet
+with no schema rejection. One diagnosed blocker remains — the OWP wire
+*message name* must be remapped from the oneof wrapper to the bare UCI root
+(the per-variant unwrap, §3.2/D7), or the provider's subscription won't match
+the published bare message. See FINDINGS.md "Phase 5 generated-facade path".
+The mixed-transport variant (step 2), guide §7 row, and stretch Phase 6 also
+remain.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)

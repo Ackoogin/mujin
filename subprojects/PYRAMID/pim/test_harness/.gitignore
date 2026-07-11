@@ -44,3 +44,6 @@ c2_agra_flatbuffers_codec.dll
 *.lib
 *.pdb
 *.ilk
+generated_lacal_generated_seam/
+lacal_generated_seam_test
+*.so

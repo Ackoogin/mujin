@@ -652,7 +652,7 @@ def main():
     parser.add_argument(
         '--backends', '-b',
         help='Comma-separated list of backends (default: all). '
-             'Available: json, flatbuffers, protobuf, grpc, ros2',
+             'Available: json, oms_json, flatbuffers, protobuf, grpc, ros2',
     )
     parser.add_argument(
         '--languages', '-l',
@@ -742,6 +742,22 @@ def main():
                 contract=contract,
             )
         remaining_backends.remove('json')
+
+    # OMS JSON is a wire codec over the same generated native and C-ABI
+    # bindings as JSON.  Generate those bindings even when ordinary JSON was
+    # not requested; the OMS plugin receives the C ABI at its PCL boundary.
+    if 'oms_json' in remaining_backends:
+        print('  oms_json: generating unified data-model and service bindings')
+        if 'cpp' in langs:
+            total += _generate_json_cpp(
+                proto_dir, output_dir, enabled_backends=backend_names,
+                contract_layout=args.contract_layout, proto_files=proto_files,
+                manifest=manifest, contract=contract)
+        if 'ada' in langs:
+            total += _generate_json_ada(
+                proto_dir, output_dir, enabled_backends=backend_names,
+                contract_layout=args.contract_layout, proto_files=proto_files,
+                contract=contract)
 
     if remaining_backends:
         results = codec_backends.generate_all(

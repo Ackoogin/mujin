@@ -435,3 +435,48 @@ subscription registers. This is shared with the pre-existing `lacal_e2e_test`
 and is deterministic on localhost TCP; a non-flaky fix needs the `owp` client to
 surface SUB acknowledgement (Phase 4 direction B already uses the Python
 client's verbose `+OK`). Listed as a follow-on, not a blocker.
+
+## LA-CAL rung 1 — Phase 5 generated-facade path: proto -> OMS JSON (2026-07-11)
+
+Directed follow-on to the hand-wired seam: prove the **generated** Request-port
+facade over LA-CAL/Sleet, driven from a proto contract with Ada compatibility,
+where the OMS JSON is **generated** (not hand-written). Large code work was
+delegated to Codex; Claude specced, integrated, and ran the real-Sleet leg
+(Codex has no Docker/Sleet access).
+
+**Done and verified:**
+- **`oms_json` generator backend** (`pim/backends/oms_json_backend.py` +
+  `pim/cpp/oms_json_codec_gen.py` + `pim/ada/oms_json_codec_gen.py`, wired in
+  `pim/generate_bindings.py`): `--backends oms_json` emits C++ **and** Ada
+  OMS-JSON codecs. Scope is schema-valid UCI only (not arbitrary proto).
+- **`pim/uci_seam_example/`**: a UCI-XSD-faithful Request-port contract
+  (`ActionCommand`/`ActionCommandStatus`, `Cancel(Identifier)`,
+  `.request`/`.requirement` topic legs) that generates the interaction facade
+  classes `ActioncommandRequestPort{Client,Provider,Handler}`.
+- **Byte-equivalence**: the generated C++ OMS-JSON codec produces JSON
+  byte-identical to the hand-written `pyramid_oms_json_codec_uci.cpp` for
+  `ActionCommand`/`ActionCommandStatus` (Sleet already accepts that output).
+  The generated codec also unwraps the `ActionCommand_Service_Request/_Requirement`
+  oneof wrappers to the bare UCI root JSON on encode and re-wraps on decode.
+- **Ada**: the generated Ada OMS-JSON codec object-compiles (GNAT 10.5).
+- **e2e harness** (`lacal_generated_seam_test.cpp` + `build_lacal_generated_seam_test.sh`):
+  drives the generated facade Provider/Client (not raw primitives), both legs
+  pub/sub over LA-CAL, generated OMS-JSON codec, SKIP-safe. Against real Sleet
+  both services register and **Sleet raises no schema rejection** — the
+  generated OMS JSON validates against the UCI 2.5 XSD. Fixes applied while
+  integrating: `declare_reliability` for the RELIABLE contract floor over the
+  BEST_EFFORT transport; both legs realized pubsub on the provider; codec loaded
+  into `pcl_codec_registry_default()` (the registry the facade resolves from);
+  and a pipefail-safe `libpcl_core.a` discovery in the build script.
+
+**Remaining blocker (well-diagnosed, last mile of the per-variant unwrap):**
+the round-trip does not yet deliver — provider `sawCreate=0`. Root cause: the
+OWP `SUB`/`PUB` **message name** is still the wrapper type
+(`ActionCommand_Service_Request`), but the wire body is the bare `ActionCommand`
+and Sleet's topic binding expects message name `ActionCommand`. So the
+subscription's message name does not match the published message name and Sleet
+does not route it to the provider. The codec unwraps the JSON *body*; the fix is
+to also remap the OWP wire *message name* to the bare UCI root (the per-variant
+unwrap onto per-type topics, research §3.2 / plan D7). This is the honest next
+step — it belongs in the transport/facade type-name path, not a codec hack.
+Committed as work-in-progress; the harness is not a CTest (no Sleet in CI).

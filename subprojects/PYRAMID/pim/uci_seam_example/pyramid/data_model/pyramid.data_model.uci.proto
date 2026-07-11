@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package pyramid.data_model.uci;
+
+// This tree mirrors the UCI 2.5 XML element nesting, not a generic protobuf
+// data model.  UUID values are RFC-4122 strings enforced by the OMS codec.
+message Uuid { string uuid = 1; }
+// Port-grammar scalar alias used by Cancel.  The command UUID is carried in id.
+message Identifier { string id = 1; }
+message GovernmentIdentifier { string government_identifier = 1; }
+message SecurityInformation {
+  string classification = 1;
+  repeated GovernmentIdentifier owner_producer = 2;
+}
+message MissionId { Uuid uuid = 1; optional string descriptive_label = 2; }
+message SystemId { Uuid uuid = 1; }
+message ServiceId { Uuid uuid = 1; }
+message CommandId { Uuid uuid = 1; }
+message CapabilityId { Uuid uuid = 1; }
+message ActionId { Uuid uuid = 1; }
+message MessageHeader {
+  optional MissionId mission_id = 1;
+  SystemId system_id = 2;
+  optional ServiceId service_id = 3;
+  string timestamp = 4;
+  string schema_version = 5;
+  string mode = 6;
+}
+message Rank { int32 priority = 1; }
+message Ranking { Rank rank = 1; }
+message Capability {
+  CommandId command_id = 1;
+  string command_state = 2;
+  CapabilityId capability_id = 3;
+  Ranking ranking = 4;
+  ActionId action_id = 5;
+}
+message Command { Capability capability = 1; }
+message ActionCommandMessageData { repeated Command command = 1; }
+message ActionCommand {
+  SecurityInformation security_information = 1;
+  MessageHeader message_header = 2;
+  ActionCommandMessageData message_data = 3;
+}
+message ActionCommandStatusMessageData {
+  CommandId command_id = 1;
+  string command_processing_state = 2;
+}
+message ActionCommandStatus {
+  SecurityInformation security_information = 1;
+  MessageHeader message_header = 2;
+  ActionCommandStatusMessageData message_data = 3;
+}
+
+// Small local port grammar support types; they are not OMS payload roots.
+message Ack { bool success = 1; }
+message Query {}
