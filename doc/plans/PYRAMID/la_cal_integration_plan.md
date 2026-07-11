@@ -1,23 +1,19 @@
 # LA-CAL Integration Plan — Rung 1 of the OMS CAL Join
 
 **Status:** in progress — Phases 0–4 complete and verified on Linux against the
-pinned Sleet container; Phase 5 substantially done. Phase 3 (real-Sleet
+pinned Sleet container; Phase 5 step 1 is complete. Phase 3 (real-Sleet
 delivery) and Phase 4 (OMS JSON codec + foreign-peer interop both directions vs
 the AMS GRA `la-cal-harness`) are complete. Phase 5's **rpc-impossible/
 pubsub-works matrix is demonstrated over the real broker** (capability negative
 + a correlated UCI `ActionCommand`/`ActionCommandStatus` request/requirement
-seam), but the *generated interaction-facade* form of step 1 — driving the
+seam), and the *generated interaction-facade* form of step 1 — driving the
 `MaactionRequestPort` facade **from a proto contract through generated
-bindings, with Ada codec compatibility** — is largely built (directed
+bindings, with Ada codec compatibility** — is verified (2026-07-11):
 2026-07-11): a new `oms_json` generator backend (C++ + Ada) + a UCI-XSD-faithful
 `pim/uci_seam_example` contract generate the facade and a byte-equivalent,
-Ada-compiling OMS-JSON codec; the generated facade e2e runs against real Sleet
-with no schema rejection. One diagnosed blocker remains — the OWP wire
-*message name* must be remapped from the oneof wrapper to the bare UCI root
-(the per-variant unwrap, §3.2/D7), or the provider's subscription won't match
-the published bare message. See FINDINGS.md "Phase 5 generated-facade path".
-The mixed-transport variant (step 2), guide §7 row, and stretch Phase 6 also
-remain.
+Ada-compiling OMS-JSON codec; the generated facade e2e completes the correlated
+round trip over real Sleet. The mixed-transport variant (step 2), guide §7 row,
+and stretch Phase 6 remain.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -109,12 +105,12 @@ the whole path proven against independently-authored infrastructure
   getter (`pyramid_lacal_transport_get_identity()`), for the future
   bridge's header population. UUIDv5 derivation remains the fallback where
   no CAL assigns identity (per the starter-kit review recommendation).
-- **D7 — Wrapper handling deferred by construction.** Phase-level demos
-  use Information ports (no wrapper on the wire) and Request ports whose
-  wire shape we control end-to-end (both ends are ours or the harness's).
-  Per-variant unwrap onto per-type topics (research doc §3.2) is **not**
-  built in this plan — it becomes necessary only when a non-PYRAMID peer
-  must consume our Request traffic, and is noted as a follow-on.
+- **D7 — Wrapper handling at the OMS boundary.** Generated Request-port
+  wrappers remain a PYRAMID convenience, but the LA-CAL adapter maps this
+  profile's `ActionCommand_Service_Request`/`_Requirement` names to the bare
+  UCI `ActionCommand`/`ActionCommandStatus` roots used by Sleet. Encoded
+  payloads remain OMS JSON and ingress remains tagged with the codec content
+  type, so transport message identity and codec selection are independent.
 
 ---
 
@@ -304,8 +300,8 @@ independently-authored peers; codec round-trip suite green; SKIP-safe.
 
 ### Phase 5 — The interaction seam over LA-CAL (medium/large)
 
-**Progress:** matrix demonstrated; generated-facade e2e in progress
-(2026-07-11). The rpc-impossible/pubsub-works matrix is demonstrated over the
+**Progress:** step 1 complete; step 2 pending (2026-07-11). The
+rpc-impossible/pubsub-works matrix is demonstrated over the
 real broker. Positive (interaction-pattern form): `lacal_seam_test` +
 `build_lacal_seam_test.sh` run a correlated `ActionCommand`/`ActionCommandStatus`
 request/requirement interaction, both legs pub/sub over LA-CAL through Sleet,
@@ -313,10 +309,11 @@ correlated by `CommandID.UUID` (`RECEIVED`/`ACCEPTED` transitions) →
 `PASS ... (both legs pub/sub)`, SKIP-safe. Negative:
 `owp.LacalPlugin.RpcEndpointOverPubsubPeerFailsClosed` + the capability-matrix
 row. Codec extended with `ActionCommand`/`ActionCommandStatus`
-(`OmsJsonUciCodec` 8/8, `owp.*` 13/13). **Remaining for full step 1:** drive the
-*generated* `MaactionRequestPort` facade over LA-CAL from a proto contract
-(generated bindings + Ada-compatible codec), then step 2's mixed-transport
-variant and the guide §7 row. See FINDINGS.md "Phase 5 exit (2026-07-11)".
+(`OmsJsonUciCodec` 8/8, `owp.*` 13/13). The generated
+`ActioncommandRequestPort` Provider/Client now also completes the same
+correlated pub/sub round trip through Sleet, with generated OMS JSON and
+Ada-compatible bindings. Remaining: step 2's mixed-transport variant and the
+guide §7 row. See FINDINGS.md "Phase 5 generated-facade path".
 
 The payoff phase: demonstrate that rung 1 composes with the seam that
 motivated it.
@@ -395,9 +392,8 @@ transport work, and must not gate rungs.
 
 ## 7. Follow-ons deliberately outside this plan
 
-Per-variant Request-wrapper unwrap onto per-type topics (research doc
-§3.2) for non-PYRAMID consumers of our Request traffic; the
-`oms_json_backend.py` generator (wants `xsd2proto`, rung 3); coupled
-single-`.so` packaging; client reconnect/resubscribe policy; transport
-health surfacing (CAL connection-status analogue); the C++ CAL plugin
+General per-variant Request-wrapper projection for additional UCI profiles
+(the completed `ActionCommand`/`ActionCommandStatus` mapping is the first
+profile); coupled single-`.so` packaging; client reconnect/resubscribe policy;
+transport health surfacing (CAL connection-status analogue); the C++ CAL plugin
 (rung 4) — whose vtable mapping this plugin's Phase-2 code defines.

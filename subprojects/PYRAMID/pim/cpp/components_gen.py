@@ -613,7 +613,8 @@ class ComponentsFacadeEmitterMixin:
                 fname = f'subscribe{pascal}'
                 trampoline = f'trampoline{pascal}'
                 decode_name = f'decode{pascal}'
-                payload_t = self._topics.spec(key).cpp_payload_type
+                spec = self._topics.spec(key)
+                payload_t = spec.cpp_payload_type
                 f.write(f'    pcl_port_t* {fname}(\n')
                 f.write(f'        std::function<void(const {payload_t}&)> on_message) {{\n')
                 f.write('        auto callback =\n')
@@ -623,12 +624,16 @@ class ComponentsFacadeEmitterMixin:
                 f.write('        pcl_port_t* port =\n')
                 f.write(f'            ::{full_ns}::{fname}(\n')
                 f.write(f'                host_->handle(), &ConsumedService::{trampoline},\n')
-                f.write('                callback.get(), content_type_.c_str());\n')
+                # A port's declared type is its wire schema identity.  The
+                # encoded pcl_msg_t remains tagged with content_type_ for
+                # codec dispatch, but remote PUBSUB transports need this name
+                # when subscribing to a typed bus such as OMS/LA-CAL.
+                f.write(f'                callback.get(), "{spec.short_type}");\n')
                 f.write('        if (!port) {\n')
                 f.write('            topic_callbacks_.pop_back();\n')
                 f.write('        } else {\n')
                 f.write('            topic_subscriptions_.push_back(\n')
-                f.write('                pcl::Port{port, content_type_});\n')
+                f.write(f'                pcl::Port{{port, "{spec.short_type}"}});\n')
                 f.write('        }\n')
                 f.write('        return port;\n')
                 f.write('    }\n\n')
@@ -643,7 +648,7 @@ class ComponentsFacadeEmitterMixin:
                 spec = self._topics.spec(key)
                 f.write(f'    pcl_status_t {add_name}() {{\n')
                 f.write(f'        {port_member} = host_->addPublisher(\n')
-                f.write(f'            {topic_const}, content_type_.c_str());\n')
+                f.write(f'            {topic_const}, "{spec.short_type}");\n')
                 f.write(f'        return {port_member} ? PCL_OK : PCL_ERR_NOMEM;\n')
                 f.write('    }\n\n')
                 f.write(f'    pcl_status_t {publish_name}(\n')
@@ -901,5 +906,4 @@ class ComponentsFacadeEmitterMixin:
                 f, full_ns, parsed, all_topics, is_provided, duplicate_rpc_names)
 
             f.write(f'}} // namespace {full_ns}\n')
-
 

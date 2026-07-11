@@ -29,8 +29,18 @@ python3 "$pyramid/pim/generate_bindings.py" "$pyramid/pim/uci_seam_example" "$ge
 sed -i 's/struct Query {$/struct Query {\n    std::vector<std::string> id = {};\n    tl::optional<bool> one_shot;/' \
   "$gen/pyramid_data_model_uci_types.hpp"
 
-libpcl=""
-for candidate in $(find "$root" -path '*/libpcl_core.a' -type f | sort); do
+build_root="${PYRAMID_BUILD_DIR:-$root}"
+[[ -d "$build_root" ]] || {
+  echo "PYRAMID_BUILD_DIR is not a directory: $build_root"
+  exit 2
+}
+
+libpcl="$build_root/subprojects/PCL/src/libpcl_core.a"
+if [[ ! -f "$libpcl" ]]; then
+  libpcl=""
+fi
+for candidate in $(find "$build_root" -path '*/libpcl_core.a' -type f | sort); do
+  [[ -n "$libpcl" ]] && break
   # Capture nm output first: `nm | grep -q` under `set -o pipefail` reports
   # failure when grep short-circuits and nm dies of SIGPIPE, a false negative.
   nm_out="$(nm -g "$candidate" 2>/dev/null || true)"
@@ -39,10 +49,16 @@ for candidate in $(find "$root" -path '*/libpcl_core.a' -type f | sort); do
     break
   fi
 done
-[[ -n "$libpcl" ]] || { echo "libpcl_core.a with pcl_transport_routing_load not found under build*/"; exit 2; }
+[[ -n "$libpcl" ]] || {
+  echo "libpcl_core.a with pcl_transport_routing_load not found under $build_root"
+  exit 2
+}
 
-lacal_plugin="$(find "$root" -name 'libpyramid_lacal_transport_plugin.so' -type f | sort | head -1)"
-[[ -n "$lacal_plugin" ]] || { echo "libpyramid_lacal_transport_plugin.so not found under build*/"; exit 2; }
+lacal_plugin="$(find "$build_root" -name 'libpyramid_lacal_transport_plugin.so' -type f | sort | head -1)"
+[[ -n "$lacal_plugin" ]] || {
+  echo "libpyramid_lacal_transport_plugin.so not found under $build_root"
+  exit 2
+}
 
 inc=(-I"$gen" -I"$pyramid/../PCL/include" -I"$pyramid/core/external")
 pcl_alloc_obj="$gen/pcl_alloc.o"

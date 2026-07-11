@@ -34,6 +34,18 @@ namespace {
 using namespace std::chrono_literals;
 constexpr const char* kCommandId = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
+void fillUciEnvelope(uci::SecurityInformation& security,
+                     uci::MessageHeader& header) {
+  security.classification = "U";
+  security.owner_producer.push_back({"USA"});
+  header.system_id.uuid.uuid = "550e8400-e29b-41d4-a716-446655440000";
+  header.service_id.emplace();
+  header.service_id->uuid.uuid = "6eefc2b6-08d4-4c39-8267-b1f21745bc90";
+  header.timestamp = "2026-07-11T12:00:00Z";
+  header.schema_version = "002.5.0";
+  header.mode = "LIVE";
+}
+
 bool writeText(const std::filesystem::path& path, const std::string& text) {
   std::ofstream out(path, std::ios::binary | std::ios::trunc);
   out << text;
@@ -104,6 +116,7 @@ class ProviderHandler final : public ma::ActioncommandRequestPortHandler {
   void send(const std::string& id, const char* state) {
     ma::ActionCommand_Service_Requirement transition;
     uci::ActionCommandStatus status;
+    fillUciEnvelope(status.security_information, status.message_header);
     status.message_data.command_id.uuid.uuid = id;
     status.message_data.command_processing_state = state;
     transition.action_command_status = std::move(status);
@@ -160,7 +173,10 @@ int runProvider(const std::string& url, const std::filesystem::path& ready,
   handler.bindWriter(component.provider().transitionWriter());
   const bool configured = component.provider().configureInteractionBinding(
                               "{\"request_leg\":\"pubsub\",\"requirement_leg\":\"pubsub\"}") == PCL_OK &&
-                          component.configure() == PCL_OK && component.activate() == PCL_OK &&
+                          component.configure() == PCL_OK &&
+                          component.provider().consumedService().configurePubSubTransport(
+                              "{\"transport\":\"remote\",\"peer\":\"asb\"}") == PCL_OK &&
+                          component.activate() == PCL_OK &&
                           executor.add(component) == PCL_OK;
   if (!configured) return 2;
   writeText(ready, "ready\n");
@@ -168,7 +184,9 @@ int runProvider(const std::string& url, const std::filesystem::path& ready,
   while (!handler.sawCreate() && std::chrono::steady_clock::now() < deadline) {
     executor.spinOnce(10);
   }
-  std::fprintf(stderr, "provider: sawCreate=%d\n", handler.sawCreate() ? 1 : 0);
+  // OWP publication is asynchronous. Let both correlated transitions leave
+  // the worker queue before component/plugin teardown closes the socket.
+  if (handler.sawCreate()) std::this_thread::sleep_for(250ms);
   executor.remove(component);
   pcl_transport_routing_destroy(routing);
   std::filesystem::remove(manifest);
@@ -188,7 +206,10 @@ int runConsumer(const std::string& url, const std::filesystem::path& output,
   ConsumerComponent component(executor);
   if (component.client().configureInteractionBinding(
           "{\"request_leg\":\"pubsub\",\"requirement_leg\":\"pubsub\"}") != PCL_OK ||
-      component.configure() != PCL_OK || component.activate() != PCL_OK ||
+      component.configure() != PCL_OK ||
+      component.client().consumedService().configurePubSubTransport(
+          "{\"transport\":\"remote\",\"peer\":\"asb\"}") != PCL_OK ||
+      component.activate() != PCL_OK ||
       executor.add(component) != PCL_OK) return 2;
 
   std::vector<std::string> states;
@@ -206,6 +227,7 @@ int runConsumer(const std::string& url, const std::filesystem::path& output,
 
   c2::ActionCommand_Service_Request request;
   uci::ActionCommand command;
+  fillUciEnvelope(command.security_information, command.message_header);
   uci::Command command_item;
   command_item.capability.command_id.uuid.uuid = kCommandId;
   command_item.capability.command_state = "NEW";
@@ -216,9 +238,6 @@ int runConsumer(const std::string& url, const std::filesystem::path& output,
   const auto submit = component.client().submit(request).get();
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_seconds);
   while (states.size() < 2 && std::chrono::steady_clock::now() < deadline) executor.spinOnce(10);
-  std::fprintf(stderr, "consumer: submit.accepted=%d states=%zu\n",
-               submit.accepted ? 1 : 0, states.size());
-  for (const auto& s : states) std::fprintf(stderr, "  state=%s\n", s.c_str());
   const bool ok = submit.accepted && states.size() == 2 && states[0] == "RECEIVED" &&
                   states[1] == "ACCEPTED";
   if (ok) writeText(output, "seam-ok\n");

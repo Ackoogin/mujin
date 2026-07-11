@@ -124,12 +124,29 @@ struct LacalContext {
   std::string         content_type;
   pyramid::owp::Info  identity;
   uint64_t            sub_counter = 0u;
-  std::mutex          mutex;                                 // guards topic_type + sub_counter
-  std::unordered_map<std::string, std::string> topic_type;  // topic -> UCI message name
+  std::mutex          mutex;  // guards topic_type + sub_counter
+  // topic -> codec content type for ingress. OWP's SUB message name is
+  // deliberately separate: it identifies the UCI root accepted by Sleet.
+  std::unordered_map<std::string, std::string> topic_type;
 };
 
 LacalContext* ctx_of(void* adapter_ctx) {
   return static_cast<LacalContext*>(adapter_ctx);
+}
+
+std::string owp_message_name(const char* type_name, const char* topic) {
+  const std::string declared =
+      (type_name && *type_name) ? std::string(type_name) : std::string(topic);
+
+  // Generated Request-port wrappers are a PYRAMID convenience only. OMS JSON
+  // places each oneof variant on the corresponding UCI root message topic.
+  // Keep this boundary mapping here, rather than leaking wrapper names into
+  // Sleet or teaching the codec about transport routing.
+  if (declared == "ActionCommand_Service_Request") return "ActionCommand";
+  if (declared == "ActionCommand_Service_Requirement") {
+    return "ActionCommandStatus";
+  }
+  return declared;
 }
 
 // -- Vtable: PUBSUB only -----------------------------------------------------
@@ -155,14 +172,13 @@ pcl_status_t lacal_subscribe(void* adapter_ctx, const char* topic,
                              const char* type_name) {
   LacalContext* ctx = ctx_of(adapter_ctx);
   if (!ctx || !topic) return PCL_ERR_INVALID;
-  // owp SUB needs the UCI message name; the contract's type_name carries it.
-  // Fall back to the topic when absent (D5: topic == UCI message name).
-  const std::string message_name =
-      (type_name && *type_name) ? std::string(type_name) : std::string(topic);
+  // OWP SUB needs the UCI root message name, while ingress must retain the
+  // configured codec content type for generated decoders.
+  const std::string message_name = owp_message_name(type_name, topic);
   std::string sub_id;
   {
     std::lock_guard<std::mutex> lock(ctx->mutex);
-    ctx->topic_type[topic] = message_name;
+    ctx->topic_type[topic] = ctx->content_type;
     sub_id = "s" + std::to_string(ctx->sub_counter++);
   }
   try {

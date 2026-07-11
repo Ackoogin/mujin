@@ -469,14 +469,22 @@ delegated to Codex; Claude specced, integrated, and ran the real-Sleet leg
   into `pcl_codec_registry_default()` (the registry the facade resolves from);
   and a pipefail-safe `libpcl_core.a` discovery in the build script.
 
-**Remaining blocker (well-diagnosed, last mile of the per-variant unwrap):**
-the round-trip does not yet deliver — provider `sawCreate=0`. Root cause: the
-OWP `SUB`/`PUB` **message name** is still the wrapper type
-(`ActionCommand_Service_Request`), but the wire body is the bare `ActionCommand`
-and Sleet's topic binding expects message name `ActionCommand`. So the
-subscription's message name does not match the published message name and Sleet
-does not route it to the provider. The codec unwraps the JSON *body*; the fix is
-to also remap the OWP wire *message name* to the bare UCI root (the per-variant
-unwrap onto per-type topics, research §3.2 / plan D7). This is the honest next
-step — it belongs in the transport/facade type-name path, not a codec hack.
-Committed as work-in-progress; the harness is not a CTest (no Sleet in CI).
+**Verified completion (2026-07-11).** The generated facade now completes the
+full correlated round trip through the pinned Sleet container:
+`provider sawCreate=1`, `consumer submit.accepted=1`, and two ordered states
+`RECEIVED`, `ACCEPTED` (`PASS: generated UCI facade LA-CAL seam over Sleet`).
+The harness remains SKIP-safe and is intentionally not a CTest because CI does
+not provide Sleet.
+
+The final boundary split is explicit. Generated topic ports declare their
+schema identity; the LA-CAL adapter maps the generated
+`ActionCommand_Service_Request` and `_Requirement` wrappers to the UCI root
+message names `ActionCommand` and `ActionCommandStatus` for OWP `SUB`, while
+ingress remains tagged `application/oms-json` for codec lookup. Thus the
+oneof wrapper is unwrapped at the transport/facade boundary, not in the codec.
+
+Harness hardening found during the live run: `PYRAMID_BUILD_DIR` now selects
+both the canonical CMake `libpcl_core.a` and the matching LA-CAL plugin; the
+facade's generated topic ports explicitly receive their remote `asb` route;
+and the witness populates required UCI envelope fields and allows queued OWP
+status publications to drain before provider teardown.
