@@ -12,6 +12,13 @@ our adoption path, and how its interfaces map onto PCL/PYRAMID.
 [`a_gra_standard_review.md`](a_gra_standard_review.md) (esp. §6.3 wire
 stack, §7 adoption path, §8 risks) and
 [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md).
+**Superseding note (2026-07-11):** the OMS Standard v2.5 document set —
+including the CAL, C++ CAL, and LA-CAL specifications this review could
+only infer from the kit's behaviour — is now public
+(github.com/open-arsenal/oms). [`ams_gra_oms_cal_join.md`](ams_gra_oms_cal_join.md)
+reviews those specs and extends action #2 below (the LA-CAL client spike)
+into a full PCL coupled-plugin design; the kit's "LA-CAL/OWP" flow (§4) is
+an implementation of OMSC-SPC-013.
 **Related:**
 [`pubsub_contract_generation_plan.md`](../../plans/PYRAMID/README.md),
 [`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/README.md),
