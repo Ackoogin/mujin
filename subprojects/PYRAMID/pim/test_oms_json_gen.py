@@ -146,15 +146,45 @@ class RepeatedChoiceCarrierTest(unittest.TestCase):
         self.assertIn("TargetType", str(ctx.exception))
 
 
-class AdaGuardTest(unittest.TestCase):
-    def test_ada_emitter_skips_non_seam_uci_packages(self):
-        # The Ada template hard-references the seam contract's shapes; fed
-        # the xsd2proto-generated P1 tree it must skip, not emit
-        # non-compiling Ada.
+class AdaGeneralizedEmitterTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
         files = parse_proto_tree(P1_TREE)
-        gen = AdaOmsJsonCodecGenerator(ProtoTypeIndex(files))
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(gen.generate(Path(tmp)), [])
+        cls.paths = AdaOmsJsonCodecGenerator(
+            ProtoTypeIndex(files)).generate(Path(cls.tmp.name))
+        cls.body = next(p for p in cls.paths if p.suffix == ".adb") \
+            .read_text(encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_sidecar_package_gets_the_generalized_encoder(self):
+        self.assertEqual(
+            sorted(p.name for p in self.paths),
+            ["pyramid-data_model-uci-oms_json_codec.adb",
+             "pyramid-data_model-uci-oms_json_codec.ads"])
+
+    def test_roots_and_wire_rules_present(self):
+        # One To_Oms_Json per profile root, keys from the sidecar, enums as
+        # XSD literals with Unspecified raising, retained-base flattening
+        # re-rooted through the Base component.
+        for root in ("Action_Command_Status_Mt", "Position_Report_Mt",
+                     "Signal_Report_Mt"):
+            self.assertIn(f"function To_Oms_Json (Msg : "
+                          f"Pyramid.Data_Model.Uci.Types.{root})", self.body)
+        self.assertIn('"CUI_Basic"', self.body)
+        self.assertIn('when Enum_Ts => return """TS""";', self.body)
+        self.assertIn("value not on the UCI wire", self.body)
+        self.assertIn("M.Base.Command_Id", self.body)
+
+    def test_optional_presence_uses_the_documented_envelope(self):
+        # Optional enum: zero-sentinel; optional message: Is_Default probe;
+        # optional string: emptiness -- the Ada layer's presence envelope.
+        self.assertIn("/= Enum_Unspecified then", self.body)
+        self.assertIn("if not Is_Default_", self.body)
+        self.assertIn("if Length (M.", self.body)
 
 
 def _find_nlohmann():
@@ -314,6 +344,63 @@ class HarnessRoundTripTest(unittest.TestCase):
 
     def test_signal_report(self):
         self._roundtrip("SignalReport")
+
+
+class AdaCompileParityTest(unittest.TestCase):
+    """Opt-in Ada parity gates (same OMS_JSON_COMPILE_SMOKE=1 switch):
+
+    1. the generated P1 Ada OMS-JSON encoder object-compiles (gnatmake,
+       -gnat2020) over the full 515-message tree;
+    2. an Ada driver building the same ActionCommandStatusMT value as the
+       C++ self-test prints wire JSON **byte-identical** to the checked-in
+       parity golden (which the C++ driver also matches) -- the static
+       key sorting reproduces nlohmann's object ordering exactly.
+
+    Demonstrated green 2026-07-11 (GNAT 13.3)."""
+
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("OMS_JSON_COMPILE_SMOKE") != "1":
+            raise unittest.SkipTest("set OMS_JSON_COMPILE_SMOKE=1 to run")
+        if shutil.which("gnatmake") is None:
+            raise unittest.SkipTest("gnatmake not available")
+
+    def test_p1_ada_encoder_compiles_and_matches_the_parity_golden(self):
+        golden = (PIM_DIR / "test_oms_json_gen_fixtures" /
+                  "p1_parity_golden.json").read_text(encoding="utf-8").strip()
+        driver = PIM_DIR / "test_oms_json_gen_fixtures" / \
+            "p1_ada_parity_driver.adb"
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = Path(tmp) / "gen"
+            subprocess.run(
+                [sys.executable, str(PIM_DIR / "generate_bindings.py"),
+                 str(P1_TREE), str(gen), "--languages", "ada",
+                 "--backends", "oms_json"],
+                check=True, capture_output=True)
+            shutil.copy(driver, gen / driver.name)
+            build = subprocess.run(
+                ["gnatmake", "-q", "-gnat2020", "-I.", "-Ioms_json/ada",
+                 driver.name],
+                cwd=gen, capture_output=True, text=True)
+            self.assertEqual(build.returncode, 0,
+                             build.stdout + build.stderr)
+            run = subprocess.run([str(gen / "p1_ada_parity_driver")],
+                                 capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(run.stdout.strip(), golden,
+                             "Ada wire output drifted from the parity "
+                             "golden (C++ and Ada must stay byte-identical)")
+
+    def test_cpp_driver_matches_the_same_golden(self):
+        golden = (PIM_DIR / "test_oms_json_gen_fixtures" /
+                  "p1_parity_golden.json").read_text(encoding="utf-8").strip()
+        try:
+            exe = _build_driver()
+        except unittest.SkipTest:
+            self.skipTest("C++ toolchain gates not met")
+        run = subprocess.run([str(exe)], capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(run.stdout.splitlines()[0], golden)
 
 
 if __name__ == "__main__":

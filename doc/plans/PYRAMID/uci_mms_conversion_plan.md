@@ -12,18 +12,18 @@ pruning gate). The D6 reconciliation against `uci_seam_example` is recorded
 in `pim/uci_generated/README.md`: conversion supersedes the hand contract
 in fidelity, wire-compatible throughout, one new codec-gen rule identified
 (`base`-field flattening, Phase 2). `pim/test_xsd2proto.py`: 27 tests.
-**Phase 2 is complete except Ada generalization** (see its progress note):
-the C++ OMS-JSON emitter is generalized (sidecar wire names, enums,
-oneofs, nested-base flattening), the seam output is frozen byte-identical
-(golden + `pim/test_oms_json_gen.py`), the generated P1 codec compiles and
-round-trips end-to-end, and the D4(a) loop is closed — schema-derived
+**Phase 2 is complete** (see its progress note): the C++ OMS-JSON emitter
+is generalized (sidecar wire names, enums, oneofs, nested-base
+flattening), the seam output is frozen byte-identical (golden +
+`pim/test_oms_json_gen.py`), the generated P1 codec compiles and
+round-trips end-to-end, the D4(a) loop is closed — schema-derived
 instances from the foreign `la-cal-harness` generator round-trip
 semantically identical through the generated codec for **all six P1
-roots** (opt-in suite, demonstrated green). Ada emitter generalization is
-deferred to a GNAT-equipped environment (object-compile gate). Next:
-Phase 3 (re-point the live Sleet harnesses at generated artifacts).
-Incorporates a review of the A-GRA integration state as of 2026-07-11
-(§2).
+roots** — and **Ada parity is discharged**: the generalized Ada encoder
+object-compiles over the full P1 tree (GNAT 13.3) and produces wire JSON
+byte-identical to the C++ codec (checked-in parity golden). Next: Phase 3
+(re-point the live Sleet harnesses at generated artifacts). Incorporates
+a review of the A-GRA integration state as of 2026-07-11 (§2).
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/a_gra_standard_review.md`](../../research/AME/a_gra_standard_review.md)
@@ -319,12 +319,25 @@ independently-authored `la-cal-harness` XSD-derived generator decodes and
 re-encodes through the generated codec to a semantically identical
 document (`$type` annotations stripped per the Phase-4 interop
 convention) — simultaneously a decode-fidelity, encode-fidelity, and
-schema-shape check, all six roots passing on first run.  The Ada emitter
-is shape-guarded: it still emits the exact seam contract, and skips (with
-a printed note) any other UCI package — true Ada generalization is the
-one remaining item of this phase, deliberately deferred to an environment
-with GNAT (this one has none, and the house discipline is that generated
-Ada ships only with its object-compile gate).
+schema-shape check, all six roots passing on first run.  **Ada parity is
+discharged** (2026-07-11, GNAT 13.3 installed into the dev environment):
+`ada/oms_json_codec_gen.py` gains a generalized emitter for
+wire_names.json-backed packages — encode-only `To_Oms_Json` per profile
+root (the C++ plugin remains the PCL wire implementation), JSON keys
+statically sorted at generation time to match nlohmann's object ordering,
+XSD enum literals with `*_Unspecified` raising, codegen-time flattening of
+retained extension-base members, omit-empty arrays, and the documented
+Ada presence envelope (optional strings by emptiness, optional enums by
+the zero sentinel the conversion added for exactly this, optional
+messages by generated `Is_Default_*` probes — the native Ada record layer
+carries `Has_` flags only for optional scalars and oneof members, and the
+Ada→C marshal has the same limit).  Gates passed: the generated P1
+encoder **object-compiles clean over all 515 messages** (`gnatmake
+-gnat2020`), and an Ada driver building the same `ActionCommandStatusMT`
+as the C++ self-test produces wire JSON **byte-identical to the C++
+output** (checked-in parity golden; `AdaCompileParityTest` holds both
+languages to it).  The seam template remains byte-frozen for the seam
+contract.
 
 1. Remove the seam hard-coding: package name, root-message list, and
    Request-wrapper structs all derived from the contract tree + binding
