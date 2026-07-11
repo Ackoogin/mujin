@@ -127,6 +127,10 @@ class FieldSpec:
     oneof: Optional[str] = None
     comment: List[str] = field(default_factory=list)
     is_attribute: bool = False
+    # For repeated fields only: XSD minOccurs >= 1, i.e. an empty list is
+    # schema-invalid.  proto3 'repeated' cannot express this, so it rides
+    # the wire_names sidecar for the codec generators to enforce.
+    required_repeated: bool = False
 
 
 @dataclass
@@ -515,7 +519,10 @@ class Converter:
         spec.fields.append(FieldSpec(
             proto_name=snake_case(wire), proto_type=proto_type,
             wire_name=wire, number=number, label=label, oneof=oneof,
-            comment=comment + type_comment))
+            comment=comment + type_comment,
+            required_repeated=(label == "repeated"
+                               and min_occurs != "0"
+                               and not optional_group)))
         return number + 1
 
     def _convert_attributes(self, spec: MessageSpec, node: ET.Element,
@@ -670,6 +677,8 @@ def emit_wire_names(conv: Converter) -> str:
             entry: dict = {"element": fld.wire_name}
             if fld.is_attribute:
                 entry["attribute"] = True
+            if fld.required_repeated:
+                entry["required"] = True
             fields[fld.proto_name] = entry
         doc["messages"][name] = {"fields": fields}
         if spec.synthesized:

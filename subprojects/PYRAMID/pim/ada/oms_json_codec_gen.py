@@ -253,6 +253,11 @@ class _AdaPackageEmitter:
                  .get('fields', {}).get(field_name))
         return entry.get('element') if entry else None
 
+    def _field_required(self, msg_name: str, field_name: str) -> bool:
+        entry = (self.sidecar.get('messages', {}).get(msg_name, {})
+                 .get('fields', {}).get(field_name))
+        return bool(entry and entry.get('required'))
+
     def _is_synthesized(self, msg_name: str) -> bool:
         return bool(self.sidecar.get('messages', {}).get(msg_name, {})
                     .get('synthesized'))
@@ -365,7 +370,8 @@ class _AdaPackageEmitter:
             'end;',
         ]
 
-    def _member_stmts(self, key: str, fld: ProtoField, comp: str) -> List[str]:
+    def _member_stmts(self, key: str, fld: ProtoField, comp: str,
+                      owner: str) -> List[str]:
         """Guarded statements adding one member to buffer B of record M."""
         access = f'M.{comp}'
         kind = self._kind(fld)
@@ -373,6 +379,12 @@ class _AdaPackageEmitter:
             body = ['declare', '   V : Unbounded_String;', 'begin']
             body += ['   ' + s for s in self._array_render(fld, access)]
             body += [f'   Add (B, "{key}", To_String (V));', 'end;']
+            if self._field_required(owner, fld.name):
+                # XSD minOccurs >= 1: an empty list has no valid wire form.
+                return ([f'if {access} = null or else {access}\'Length = 0 then',
+                         f'   raise Constraint_Error with '
+                         f'"required repeated element {key} is empty";',
+                         'end if;'] + body)
             return ([f'if {access} /= null and then {access}\'Length > 0 then']
                     + ['   ' + s for s in body] + ['end if;'])
         if kind == 'scalar':
@@ -457,8 +469,20 @@ class _AdaPackageEmitter:
                     f'{owner}.{fld.name}: no wire element name -- repeated '
                     'xs:choice carriers are not supported on the OMS wire '
                     'path')
-            members.append((key, self._member_stmts(key, fld, comp)))
+            members.append((key, self._member_stmts(key, fld, comp, owner)))
         for oo in msg.oneofs:
+            if len(oo.fields) > 1:
+                # An xs:choice has exactly one active arm; the record's
+                # independent Has_ flags cannot enforce that, so the encoder
+                # must (mirrors the C++ emitter's multi-arm rejection).
+                arms = ' + '.join(
+                    f'Boolean\'Pos (M.Has_{self._ada_component(f.name, f)})'
+                    for f in oo.fields)
+                members.append(('', [
+                    f'if {arms} > 1 then',
+                    f'   raise Constraint_Error with '
+                    f'"multiple active choice arms in {msg.name}";',
+                    'end if;']))
             for fld in oo.fields:
                 key = self._field_key(msg.name, fld.name)
                 members.append((key or '', self._oneof_member_stmts(msg, fld)))

@@ -177,6 +177,17 @@ class MappingRuleTest(unittest.TestCase):
         fields = self.wire["messages"]["TestCommandMDT"]["fields"]
         self.assertEqual(fields["command_id"]["element"], "CommandID")
         self.assertEqual(fields["by_label"]["element"], "ByLabel")
+
+    def test_required_repeated_rides_the_sidecar(self):
+        # OwnerProducer: maxOccurs unbounded with minOccurs defaulting to 1
+        # -- an empty list is schema-invalid, which proto3 'repeated' cannot
+        # express, so the sidecar carries it (Codex review of PR #120).
+        sec = self.wire["messages"]["SecurityInformationType"]["fields"]
+        self.assertTrue(sec["owner_producer"].get("required"))
+        # Target and the referenced Remark are minOccurs="0": no flag.
+        mdt = self.wire["messages"]["TestCommandMDT"]["fields"]
+        self.assertNotIn("required", mdt["target"])
+        self.assertNotIn("required", mdt["remark"])
         header = self.wire["messages"]["HeaderType"]["fields"]
         self.assertEqual(header["mission_id"]["element"], "MissionID")
         uuid = self.wire["messages"]["SystemID_Type"]["fields"]["uuid"]

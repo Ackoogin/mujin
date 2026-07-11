@@ -112,6 +112,23 @@ class P1SidecarGenerationTest(unittest.TestCase):
     def test_optional_repeated_arrays_are_omitted_when_empty(self):
         self.assertIn('if (!m.activity.empty()) o["Activity"]', self.text)
 
+    def test_required_repeated_arrays_are_enforced(self):
+        # ActionCommandMDT.Command is minOccurs>=1: encoding an empty list
+        # or decoding a document without it must fail, not silently pass
+        # (Codex review of PR #120).
+        self.assertIn(
+            'if (m.command.empty()) throw json::type_error::create(302,'
+            '"required repeated element Command is empty"', self.text)
+        # Decode stays strict: no contains-guard on the required element.
+        self.assertNotIn('if (j.contains("Command")) r.command', self.text)
+
+    def test_multiple_active_choice_arms_are_rejected(self):
+        # types_gen's independent optionals cannot enforce xs:choice's
+        # exactly-one; the codec must (Codex review of PR #120).
+        self.assertIn('multiple active choice arms in', self.text)
+        self.assertIn('(m.government_identifier ? 1 : 0) + '
+                      '(m.nato_special_word ? 1 : 0)', self.text)
+
     def test_no_wrapper_structs_for_a_serviceless_tree(self):
         self.assertNotIn("_Service_", self.text)
         self.assertNotIn("Wire {", self.text)
@@ -185,6 +202,16 @@ class AdaGeneralizedEmitterTest(unittest.TestCase):
         self.assertIn("/= Enum_Unspecified then", self.body)
         self.assertIn("if not Is_Default_", self.body)
         self.assertIn("if Length (M.", self.body)
+
+    def test_required_repeated_and_choice_arms_are_enforced(self):
+        # Mirrors of the C++ emitter's validity rules (Codex review of
+        # PR #120): empty required lists and multiply-populated choice
+        # arms raise before producing schema-invalid wire.
+        self.assertIn('"required repeated element Command is empty"',
+                      self.body)
+        self.assertIn('"multiple active choice arms in', self.body)
+        self.assertIn("Boolean'Pos (M.Has_Government_Identifier) + "
+                      "Boolean'Pos (M.Has_Nato_Special_Word)", self.body)
 
 
 def _find_nlohmann():

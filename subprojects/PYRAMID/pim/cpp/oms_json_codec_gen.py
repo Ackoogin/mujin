@@ -86,6 +86,15 @@ class _WireNames:
                  .get('fields', {}).get(field_name))
         return entry.get('element') if entry else None
 
+    def field_required(self, msg_name: str, field_name: str) -> bool:
+        """XSD minOccurs >= 1 on a repeated field: an empty list is
+        schema-invalid (absent from the heuristic path)."""
+        if self.sidecar is None:
+            return False
+        entry = (self.sidecar.get('messages', {}).get(msg_name, {})
+                 .get('fields', {}).get(field_name))
+        return bool(entry and entry.get('required'))
+
     def is_synthesized(self, msg_name: str) -> bool:
         if self.sidecar is None:
             return False
@@ -364,14 +373,19 @@ class _PackageEmitter:
                     'wire path')
             access = f'm.{member}'
             if fld.is_repeated:
-                if self.wire.sidecar is not None:
-                    # Sidecar path: an empty array means "zero occurrences";
-                    # the XSD wire form for that is absence (the la-cal-harness
-                    # generator omits min_occurs=0 members the same way).  The
-                    # heuristic/seam path keeps its verified always-emit form.
-                    f.write(f'  if (!{access}.empty()) o["{key}"] = {self._enc_expr(fld, access)};\n')
-                else:
+                if self.wire.sidecar is None:
+                    # Heuristic/seam path keeps its verified always-emit form.
                     f.write(f'  o["{key}"] = {self._enc_expr(fld, access)};\n')
+                elif self.wire.field_required(owner, fld.name):
+                    # XSD minOccurs >= 1: an empty list has no valid wire
+                    # form -- fail before Sleet/schema validation would.
+                    f.write(f'  if ({access}.empty()) throw json::type_error::create(302,"required repeated element {key} is empty",nullptr);\n')
+                    f.write(f'  o["{key}"] = {self._enc_expr(fld, access)};\n')
+                else:
+                    # Optional list: empty means "zero occurrences"; the XSD
+                    # wire form for that is absence (the la-cal-harness
+                    # generator omits min_occurs=0 members the same way).
+                    f.write(f'  if (!{access}.empty()) o["{key}"] = {self._enc_expr(fld, access)};\n')
             elif fld.is_optional:
                 if fld.type in ('string', 'bytes'):
                     f.write(f'  if (!{access}.empty()) o["{key}"] = {self._enc_expr(fld, access)};\n')
@@ -380,6 +394,13 @@ class _PackageEmitter:
             else:
                 f.write(f'  o["{key}"] = {self._enc_expr(fld, access)};\n')
         for oo in msg.oneofs:
+            if len(oo.fields) > 1:
+                # types_gen represents oneof arms as independent optionals,
+                # so a caller can populate several; that has no valid wire
+                # form for an xs:choice -- reject before Sleet would.
+                arms = ' + '.join(f'(m.{fld.name} ? 1 : 0)'
+                                  for fld in oo.fields)
+                f.write(f'  if (({arms}) > 1) throw json::type_error::create(302,"multiple active choice arms in {msg.name}",nullptr);\n')
             for fld in oo.fields:
                 key = self.wire.field_key(msg.name, fld.name)
                 if key is None:
@@ -433,12 +454,20 @@ class _PackageEmitter:
             value = f'j.at("{key}")'
             if fld.is_optional and not fld.is_repeated:
                 f.write(f'  if (j.contains("{key}")) r.{member} = {self._dec_expr(fld, value, member)};\n')
-            elif fld.is_repeated and self.wire.sidecar is not None:
+            elif (fld.is_repeated and self.wire.sidecar is not None
+                  and not self.wire.field_required(owner, fld.name)):
                 # Mirror of the omit-empty encode rule: absence == empty.
+                # Required repeated fields (minOccurs >= 1) stay strict:
+                # j.at throws when the element is missing.
                 f.write(f'  if (j.contains("{key}")) r.{member} = {self._dec_expr(fld, value, member)};\n')
             else:
                 f.write(f'  r.{member} = {self._dec_expr(fld, value, member)};\n')
         for oo in msg.oneofs:
+            if len(oo.fields) > 1:
+                arms = ' + '.join(
+                    f'(j.contains("{self.wire.field_key(msg.name, f.name)}") ? 1 : 0)'
+                    for f in oo.fields)
+                f.write(f'  if (({arms}) > 1) throw json::type_error::create(302,"multiple active choice arms in {msg.name}",nullptr);\n')
             first = True
             for fld in oo.fields:
                 key = self.wire.field_key(msg.name, fld.name)
