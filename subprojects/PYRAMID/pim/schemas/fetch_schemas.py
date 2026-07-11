@@ -81,6 +81,39 @@ def _resolve_checkout_source(source: dict) -> Path | None:
     return Path(hits[0]) if hits else None
 
 
+def _resolve_git_source(source: dict, dest: Path) -> Path | None:
+    """Shallow-fetch a pinned revision and copy one file out (the same
+    mechanism Sleet's own `make fetch-spec` uses)."""
+    import subprocess
+    import tempfile
+
+    repo, ref, path = source.get("repo"), source.get("ref"), source.get("path")
+    if not (repo and ref and path):
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            for cmd in (
+                ["git", "init", "-q", "--initial-branch=main", tmp],
+                ["git", "-C", tmp, "remote", "add", "origin", repo],
+                ["git", "-C", tmp, "fetch", "-q", "--depth", "1", "origin", ref],
+                ["git", "-C", tmp, "checkout", "-q", "--detach", "FETCH_HEAD"],
+            ):
+                subprocess.run(cmd, check=True, capture_output=True,
+                               timeout=300)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            detail = getattr(exc, "stderr", b"") or b""
+            print(f"  git source failed ({repo}@{ref[:12]}): "
+                  f"{detail.decode(errors='replace').strip() or exc}")
+            return None
+        src = Path(tmp) / path
+        if not src.is_file():
+            print(f"  git source: {path} not present at {repo}@{ref[:12]}")
+            return None
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dest)
+        return dest
+
+
 def _resolve_url_source(source: dict, dest: Path) -> Path | None:
     url = source.get("url")
     if not url:
@@ -132,6 +165,11 @@ def fetch_file(drop: str, spec: dict, force: bool) -> str:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(found, dest)
                 print(f"  {name}: copied from checkout ({found})")
+        elif kind == "git":
+            found = _resolve_git_source(source, dest)
+            if found:
+                print(f"  {name}: extracted from {source.get('repo')}"
+                      f"@{source.get('ref', '')[:12]}")
         elif kind == "url":
             found = _resolve_url_source(source, dest)
             if found:

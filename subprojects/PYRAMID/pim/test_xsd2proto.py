@@ -306,40 +306,44 @@ class RealAgraP2ConversionTest(unittest.TestCase):
         self.assertEqual(len(pf.enums), 297)
 
 
-def _find_real_uci_xsd():
-    """Locate the pinned UCI 2.5 XSD, or None (callers SKIP)."""
+def _find_real_uci_xsds():
+    """Locate the pinned UCI 2.5 drop (both files), or None (callers SKIP).
+
+    MessageDefinitions xs:includes SecurityMarkings, so the drop is only
+    usable as a pair."""
     import os
 
-    dl = PIM_DIR / "schemas" / "dl" / "uci_2_5_0" / \
-        "UCI_MessageDefinitions_v2_5_0.xsd"
-    if dl.is_file():
-        return dl
+    names = ("UCI_MessageDefinitions_v2_5_0.xsd",
+             "UCI_SecurityMarkings_v2_5_0.xsd")
+    dl = PIM_DIR / "schemas" / "dl" / "uci_2_5_0"
+    if all((dl / n).is_file() for n in names):
+        return [dl / n for n in names]
     env = os.environ.get("UCI_XSD_PATH")
     if env:
-        p = Path(env)
-        if p.is_file():
-            return p
-        if p.is_dir():
-            hits = sorted(p.rglob("UCI_MessageDefinitions_v2_5_0.xsd"))
-            if hits:
-                return hits[0]
+        root = Path(env)
+        if root.is_file():
+            root = root.parent
+        if root.is_dir():
+            hits = [sorted(root.rglob(n)) for n in names]
+            if all(hits):
+                return [h[0] for h in hits]
     return None
 
 
 class RealUciP1ConversionTest(unittest.TestCase):
-    """SKIP-gated: needs the pinned UCI 2.5 XSD (fetch_schemas.py)."""
+    """SKIP-gated: needs the pinned UCI 2.5 drop (fetch_schemas.py)."""
 
     @classmethod
     def setUpClass(cls):
-        cls.xsd = _find_real_uci_xsd()
-        if cls.xsd is None:
+        cls.xsds = _find_real_uci_xsds()
+        if cls.xsds is None:
             raise unittest.SkipTest(
-                "UCI 2.5 XSD absent -- run pim/schemas/fetch_schemas.py "
+                "UCI 2.5 drop absent -- run pim/schemas/fetch_schemas.py "
                 "uci_2_5_0 or set UCI_XSD_PATH")
         profile = json.loads(
             (PIM_DIR / "uci_profiles" / "p1_kitty_hawk.json").read_text(
                 encoding="utf-8"))
-        index = xsd2proto.SchemaIndex([cls.xsd], lax=True)
+        index = xsd2proto.SchemaIndex(cls.xsds, lax=False)
         cls.conv = xsd2proto.Converter(index, profile)
         cls.conv.convert()
 
@@ -349,6 +353,25 @@ class RealUciP1ConversionTest(unittest.TestCase):
             ["ActionCommand", "ActionCommandStatus",
              "ObservationMeasurementReport", "PositionReport",
              "ServiceStatus", "SignalReport"])
+
+    def test_p1_closure_scale_is_pinned(self):
+        # Recorded 2026-07-11 on the sha256-pinned drop: a changed count on
+        # the same bytes means converter behaviour drift.
+        report = json.loads(xsd2proto.emit_closure_report(self.conv))
+        self.assertEqual(report["skipped"], [])
+        self.assertEqual(report["counts"]["messages"], 515)
+        self.assertEqual(report["counts"]["enums"], 188)
+
+    def test_checked_in_p1_tree_is_current(self):
+        """The plan-D2 byte-stability guard: the committed
+        pim/uci_generated/uci_2_5_0/ tree must equal a fresh conversion."""
+        out_dir = PIM_DIR / "uci_generated" / "uci_2_5_0"
+        for rel, content in xsd2proto.outputs(self.conv).items():
+            path = out_dir / rel
+            self.assertTrue(path.is_file(), f"missing checked-in {rel}")
+            self.assertEqual(path.read_text(encoding="utf-8"), content,
+                             f"{rel} drifted -- rerun xsd2proto.py "
+                             "uci_profiles/p1_kitty_hawk.json and commit")
 
     def test_output_parses_with_proto_parser(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -11,12 +11,12 @@
   ],
   "drops": {
     "uci_2_5_0": {
-      "description": "UCI 2.5 message definitions -- the schema the pinned Sleet v2026.06.01 container validates every PUB/MSG body against (INIT schema_version 002.5.0). Governs profile P1.",
+      "description": "UCI 2.5 message definitions -- the schema the pinned Sleet v2026.06.01 container validates every PUB/MSG body against (INIT schema_version 002.5.0). Governs profile P1. MessageDefinitions xs:includes SecurityMarkings; both files are passed to xsd2proto together. Upstream is the public USAF UCI standard repo; the git ref below is the exact revision Sleet's own fetch-spec pins (docs/schema-sourcing.md in the sleet repo).",
       "schema_version": "002.5.0",
       "files": [
         {
           "name": "UCI_MessageDefinitions_v2_5_0.xsd",
-          "sha256": null,
+          "sha256": "ac9430499e1107371345e04430895c8c9f18578c1a6b022958ca43ae8aa7bf27",
           "sources": [
             {
               "kind": "env",
@@ -27,6 +27,33 @@
               "kind": "checkout",
               "glob": "external/ams-gra/**/UCI_MessageDefinitions_v2_5_0.xsd",
               "note": "The persistent Kitty Hawk checkout (ams_gra_starter_kit_bringup.md); Sleet loads this file, so any complete checkout contains it."
+            },
+            {
+              "kind": "git",
+              "repo": "https://gitlab.com/open-arsenal/uci/standard.git",
+              "ref": "73a286fc4b881d9f328dbd64148525606a92c33a",
+              "path": "03_OAC-STD-002_RevE_UCI_Schema_v2_5/UCI_MessageDefinitions_v2_5_0.xsd",
+              "note": "Public unclassified UCI 2.5 release (Government Owned license, OACWG-governed); ref == Sleet's pinned revision. sha256 bootstrapped from this source 2026-07-11."
+            }
+          ]
+        },
+        {
+          "name": "UCI_SecurityMarkings_v2_5_0.xsd",
+          "sha256": "4a8056f1503234d423a0c2495844ab65387febced62bea58b87d4f343e9e7a0b",
+          "sources": [
+            {
+              "kind": "env",
+              "env": "UCI_XSD_PATH"
+            },
+            {
+              "kind": "checkout",
+              "glob": "external/ams-gra/**/UCI_SecurityMarkings_v2_5_0.xsd"
+            },
+            {
+              "kind": "git",
+              "repo": "https://gitlab.com/open-arsenal/uci/standard.git",
+              "ref": "73a286fc4b881d9f328dbd64148525606a92c33a",
+              "path": "03_OAC-STD-002_RevE_UCI_Schema_v2_5/UCI_SecurityMarkings_v2_5_0.xsd"
             }
           ]
         }

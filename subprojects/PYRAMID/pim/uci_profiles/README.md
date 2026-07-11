@@ -13,10 +13,10 @@ pim toolchain is Python-stdlib-only and stays that way (PyYAML exists in
 some dev environments but is not a dependency anywhere else in `pim/`).
 Commentary lives in `_comment` arrays.
 
-| Profile | Drop | Ladder rung | Validation tier |
-|---------|------|-------------|-----------------|
-| `p1_kitty_hawk.json` | `uci_2_5_0` | P1 — working set, provable live vs Sleet | (a)+(b)+(c) |
-| `p2_agra_planning_core.json` | `agra_5_0a` | P2 — A-GRA `MA_*` planning core | (a) offline only |
+| Profile | Drop | Ladder rung | Validation tier | Converted (2026-07-11) |
+|---------|------|-------------|-----------------|------------------------|
+| `p1_kitty_hawk.json` | `uci_2_5_0` | P1 — working set, provable live vs Sleet | (a)+(b)+(c) | strict-clean: 515 messages + 188 enums from 6 roots; tree checked in |
+| `p2_agra_planning_core.json` | `agra_5_0a` | P2 — A-GRA `MA_*` planning core | (a) offline only | strict-clean: 1,163 messages + 297 enums from 18 roots; check-in gated on Phase-4 pruning |
 
 Rules of the road (plan D1/D2):
 

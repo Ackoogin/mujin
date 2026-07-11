@@ -1,13 +1,18 @@
 # UCI MMS Conversion Plan — from seam test cases to a GRA-scale message set
 
-**Status:** in progress — Phase 0 is complete for the A-GRA 5.0a drop
-(fetched, sha256-pinned, verified) and pending only the UCI 2.5 XSD source
-for P1; Phase 1's converter is built, fixture-tested (22 tests), and
-**proven at scale against the real pinned 5.0a drop**: the P2 planning-core
-profile converts strict-clean (no `--lax`) to 1,163 messages + 297 enums in
-under a second, deterministically (`--check` green), and the output parses
-with `proto_parser.py`. P1 conversion + `uci_seam_example` reconciliation
-remain gated on the UCI 2.5 XSD (SKIP-gated tests are in place). Incorporates
+**Status:** in progress — **Phases 0 and 1 complete** (2026-07-11). Both
+drops are fetched and sha256-pinned (A-GRA 5.0a from the public a-gra repo;
+UCI 2.5 from the public USAF standard repo at the exact revision Sleet's
+`fetch-spec` pins, discovered via the sleet repo's schema-sourcing doc).
+The converter is built, fixture-tested, and proven strict-clean on both
+real drops: P1 → 515 messages + 188 enums from 6 roots (**tree checked in**
+under `pim/uci_generated/uci_2_5_0/`, byte-stability test-guarded), P2 →
+1,163 messages + 297 enums from 18 roots (tree not yet checked in — Phase-4
+pruning gate). The D6 reconciliation against `uci_seam_example` is recorded
+in `pim/uci_generated/README.md`: conversion supersedes the hand contract
+in fidelity, wire-compatible throughout, one new codec-gen rule identified
+(`base`-field flattening, Phase 2). `pim/test_xsd2proto.py`: 27 tests.
+Next: Phase 2 (generalize the OMS-JSON codec generator). Incorporates
 a review of the A-GRA integration state as of 2026-07-11 (§2).
 **Date:** 2026-07-11
 **Design source:**
@@ -204,18 +209,21 @@ contract input a future `agra_c2_bridge` (and the AME repo) would consume.
 
 ### Phase 0 — Schema acquisition and pinning (small)
 
-**Progress (2026-07-11):** infrastructure complete
-(`pim/schemas/{schema_manifest.json,fetch_schemas.py,README.md}`,
-`pim/uci_profiles/{p1_kitty_hawk,p2_agra_planning_core}.json` — JSON, not
-YAML: pim stays stdlib-only). The **A-GRA 5.0a drop is fetched and
-sha256-pinned** (raw.githubusercontent.com is reachable from the dev
-environment even though the GitHub API is not; commit-ref pinning noted as
-outstanding in the manifest). P2's roots are reconciled against the real
-drop's 841 top-level elements (the review-guessed `MA_MissionPlanStatus`
-does not exist; `MA_MissionPlanActivationStatus` does). The **UCI 2.5 XSD
-remains unsourced** (no public URL found; env-override and Kitty-Hawk-
-checkout sources are wired and SKIP-safe). Redistribution posture recorded
-as unresolved → fetch-not-vendor in `pim/schemas/README.md`.
+**Progress: complete (2026-07-11).** Infrastructure:
+`pim/schemas/{schema_manifest.json,fetch_schemas.py,README.md}`,
+`pim/uci_profiles/{p1_kitty_hawk,p2_agra_planning_core}.json` (JSON, not
+YAML: pim stays stdlib-only). **Both drops fetched and sha256-pinned**:
+A-GRA 5.0a via raw.githubusercontent.com; UCI 2.5 via a `git`-kind source
+from the public USAF UCI standard repo
+(`gitlab.com/open-arsenal/uci/standard` @ `73a286fc...` — the exact
+revision Sleet's own `make fetch-spec` pins, found via the sleet repo's
+`docs/schema-sourcing.md`), **including `UCI_SecurityMarkings_v2_5_0.xsd`
+which MessageDefinitions xs:includes**. P2's roots reconciled against the
+real drop's 841 top-level elements (the review-guessed
+`MA_MissionPlanStatus` does not exist; `MA_MissionPlanActivationStatus`
+does). Redistribution posture recorded as unresolved → fetch-not-vendor in
+`pim/schemas/README.md` (the UCI upstream's "Government Owned" license
+marker noted there).
 
 1. Determine redistribution posture for both XSD sets (the a-gra repo is a
    public release; the review's Phase-0 residual — confirm CUI status
@@ -233,22 +241,26 @@ redistribution posture recorded.
 
 ### Phase 1 — `xsd2proto` converter, proven on P1 (medium)
 
-**Progress (2026-07-11):** `pim/xsd2proto.py` is implemented (stdlib-only:
-`xml.etree`, no xmlschema/lxml dependency) with the D5 mapping rules,
-D3 wire-name sidecar, closure report, deterministic emission, and
-`--check`; two documented rule deviations (temporal types → `string`
-matching the shipped OMS codec; prefixed enum values with `*_UNSPECIFIED`
-sentinels). `pim/test_xsd2proto.py` (22 tests, green) pins the mapping
-table against a hand-written fixture XSD
-(`pim/test_xsd2proto_fixtures/uci_fixture.xsd`) and adds two SKIP-gated
-real-drop classes. Ahead of schedule, the converter is **proven at real
-scale**: the P2 conversion over the pinned 8.6 MB 5.0a drop runs
-strict-clean → 1,163 messages (30 synthesized) + 297 enums from 18 roots,
-`--check`-stable, parseable by `proto_parser.py`, with the fan-in report
-confirming the predicted ID-type hubs (`ID_Type` 74, `SystemID_Type` 49,
-`ForeignKeyType` 40). Steps 3's P1 conversion/reconciliation and the
-generated-tree check-in await the UCI 2.5 XSD; generated trees stay
-untracked until then (`pim/uci_generated/README.md`).
+**Progress: complete — exit gate met (2026-07-11).** `pim/xsd2proto.py`
+implemented (stdlib-only: `xml.etree`, no xmlschema/lxml dependency) with
+the D5 mapping rules, D3 wire-name sidecar, closure report, deterministic
+emission, and `--check`; two documented rule deviations (temporal types →
+`string` matching the shipped OMS codec; prefixed enum values with
+`*_UNSPECIFIED` sentinels). `pim/test_xsd2proto.py` (27 tests, all green
+with both drops present) pins the mapping table against a hand-written
+fixture XSD and re-derives both real conversions from the pinned drops.
+**P1 converted strict-clean and checked in**
+(`pim/uci_generated/uci_2_5_0/`: 515 messages, 6 synthesized, + 188 enums
+from 6 roots; byte-stability guarded by
+`test_checked_in_p1_tree_is_current`). **D6 reconciliation documented** in
+`pim/uci_generated/README.md`: the conversion supersedes the hand contract
+in fidelity (real choice arms, real `ID_Type` composition, real facets),
+is wire-compatible throughout, and surfaces one required Phase-2 codec-gen
+rule — XSD-extension `base` fields must flatten into the parent JSON
+object on the wire. Bonus at-scale proof: P2 also converts strict-clean
+(1,163 messages + 297 enums, `--check`-stable, parseable; hub fan-in
+`ID_Type` 74 / `SystemID_Type` 49 / `ForeignKeyType` 40) — its tree stays
+untracked until the Phase-4 pruning gate.
 
 1. `pim/xsd2proto.py`: parse the XSD (Python `xmlschema` or `lxml` — pick
    in-phase; no new C++ deps), resolve the profile closure, emit protos per

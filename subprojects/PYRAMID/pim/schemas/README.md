@@ -38,11 +38,14 @@ to a verify-only role. Record that conclusion here either way.
 
 Network note (measured 2026-07-11): the development environment's egress
 proxy blocks the GitHub API and codeload, but **allows
-raw.githubusercontent.com** — the A-GRA 5.0a drop was bootstrapped and
-sha256-pinned from exactly that path. The UCI 2.5 XSD has no known public
-URL (probed candidates 404); it comes from the `UCI_XSD_PATH` env override
-or the `external/ams-gra/` Kitty Hawk checkout, which needs no network at
-all.
+raw.githubusercontent.com and git-over-HTTPS** (github.com and gitlab.com
+both fetch). Both drops were bootstrapped and sha256-pinned from this
+environment: A-GRA 5.0a from the public a-gra repo (commit
+`953c6a11b83dc96d2a5133a49d4691e71150750c` at bootstrap time), and UCI 2.5
+via the `git` source — the public USAF UCI standard repo at the exact
+revision Sleet's own `make fetch-spec` pins. The upstream UCI drop carries
+a "Government Owned" license marker (`LICENSES/uci-schema` in the sleet
+repo records the same posture question we track above).
 
 ## Bootstrap (trust-on-first-use, once per drop)
 
