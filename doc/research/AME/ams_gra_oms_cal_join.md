@@ -259,6 +259,22 @@ the normative naming rules, which are fully specified; and a
 self-generated conformant header set is still exactly what a toy/reference
 CAL conformance harness needs (§7).
 
+**Why no public header generator exists — by design, not omission.** The
+spec's own §1.1 draws the contrast: "Unlike the **OMS C++ Schema
+Compiler** that clearly defines how the various data types are to be
+implemented, this specification attempts to be implementation independent
+and only specifies the prototypes." I.e. a full generator exists in the
+ecosystem's controlled/vendor toolchains, and OMSC-SPC-008 is the
+deliberately relaxed public posture: prototypes only, so each CAL vendor
+co-generates headers *and* an optimized implementation together. Under
+that choice a standalone header generator is nearly valueless — headers
+generated independently cannot link against any provider's library, so
+the unit of delivery is always the CAL SDK (headers + lib from one
+toolchain), and the generator is effectively a private part of each CAL
+implementation. Corroborating this, the ecosystem's answer to "language
+bindings require a blessed generator" was not to publish the generator
+but to standardize the *wire* instead: LA-CAL (§2.4).
+
 ### 2.4 The LA-CAL (OMSC-SPC-013): a concrete wire, no API
 
 The Language-Agnostic CAL is the mirror image — a **protocol
