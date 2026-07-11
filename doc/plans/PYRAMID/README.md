@@ -9,6 +9,7 @@ were removed. What remains is:
 | **Outstanding work** (the single tracker) | [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md) |
 | **High-level design & usage** (single user-guide entry, with diagrams) | [`subprojects/PYRAMID/doc/guides/pyramid_user_guide.md`](../../../subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) |
 | **Live plan** (proposed, not yet scheduled) | [`pyramid_split_and_tobj_pim_migration_plan.md`](pyramid_split_and_tobj_pim_migration_plan.md) |
+| **Live plan** (proposed, not yet scheduled) | [`la_cal_integration_plan.md`](la_cal_integration_plan.md) — LA-CAL (`owp`) transport plugin + OMS JSON codec, rung 1 of the OMS CAL join |
 | **Architecture reference** | `subprojects/PYRAMID/doc/architecture/` |
 | Full text of any retired document | git history (`git log --diff-filter=D --oneline -- doc/plans/PYRAMID doc/reports/PYRAMID doc/reviews/PYRAMID`) |
 

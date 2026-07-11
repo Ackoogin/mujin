@@ -561,7 +561,7 @@ Rungs, in order:
 
 | # | Rung | Contents | Readiness |
 |---|------|----------|-----------|
-| 1 | **LA-CAL coupled plugin** | `owp` transport + OMS-JSON codec, one `.so`; prove against public Sleet + `la-cal-harness`; drive the starter-kit MS-leg demo (signal reports → `StateUpdate` → WorldModel) through it | Everything public; websocketpp in-tree; supersedes starter-kit review action #2's "spike" |
+| 1 | **LA-CAL plugin** | `owp` transport + OMS-JSON codec; prove against public Sleet + `la-cal-harness`; drive the starter-kit MS-leg demo (signal reports → `StateUpdate` → WorldModel) through it. **Concrete plan:** [`doc/plans/PYRAMID/la_cal_integration_plan.md`](../../plans/PYRAMID/la_cal_integration_plan.md) (which refines "coupled" to decoupled transport + codec with a content-type guard; coupled packaging deferred) | Everything public; websocketpp in-tree; supersedes starter-kit review action #2's "spike" |
 | 2 | **Capability row + manifests** | Declare `PUBSUB`-only caps; routing manifests realize Request ports as pub/sub over the CAL transport (the `exclusive` machinery already enforces one realization per leg) | Mechanism fully landed |
 | 3 | **Profile tooling grows two emitters** | The planned `xsd2proto` profile manifest additionally feeds (a) the OMS-JSON codec tables, (b) the `pyramid_<T>_c` ↔ accessor mapping (consumed by rung 4) | Extends already-planned Phase-1 work |
 | 4 | **C++ CAL coupled plugin** | Same vtable mapping as rung 1 with the provider SDK underneath; per-platform builds | Blocked on access to any C++ CAL implementation — spec-complete, implementation-starved |
