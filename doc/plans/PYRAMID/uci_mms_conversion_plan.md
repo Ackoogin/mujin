@@ -12,14 +12,18 @@ pruning gate). The D6 reconciliation against `uci_seam_example` is recorded
 in `pim/uci_generated/README.md`: conversion supersedes the hand contract
 in fidelity, wire-compatible throughout, one new codec-gen rule identified
 (`base`-field flattening, Phase 2). `pim/test_xsd2proto.py`: 27 tests.
-**Phase 2 is largely complete** (see its progress note): the C++ OMS-JSON
-emitter is generalized (sidecar wire names, enums, oneofs, nested-base
-flattening), the seam output is frozen byte-identical (golden +
-`pim/test_oms_json_gen.py`, 11 tests), and the generated P1 codec compiles
-and round-trips end-to-end (opt-in smoke, demonstrated green). Remaining
-in Phase 2: Ada emitter generalization and the D4(a) XSD-validation
-harness. Incorporates a review of the A-GRA integration state as of
-2026-07-11 (§2).
+**Phase 2 is complete except Ada generalization** (see its progress note):
+the C++ OMS-JSON emitter is generalized (sidecar wire names, enums,
+oneofs, nested-base flattening), the seam output is frozen byte-identical
+(golden + `pim/test_oms_json_gen.py`), the generated P1 codec compiles and
+round-trips end-to-end, and the D4(a) loop is closed — schema-derived
+instances from the foreign `la-cal-harness` generator round-trip
+semantically identical through the generated codec for **all six P1
+roots** (opt-in suite, demonstrated green). Ada emitter generalization is
+deferred to a GNAT-equipped environment (object-compile gate). Next:
+Phase 3 (re-point the live Sleet harnesses at generated artifacts).
+Incorporates a review of the A-GRA integration state as of 2026-07-11
+(§2).
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/a_gra_standard_review.md`](../../research/AME/a_gra_standard_review.md)
@@ -308,11 +312,19 @@ with g++ 13 and completes a byte-stable encode→decode→re-encode round trip
 correct wire output verified key-by-key (`CUI_Basic`, `"RECEIVED"`,
 `OwnerProducer` choice, flattened `CommandID`).  Repeated `xs:choice`
 carriers fail generation loudly (`OmsJsonShapeError`) rather than emitting
-wrong JSON — absent from P1, tracked for P2.  The Ada emitter is
-shape-guarded: it still emits the exact seam contract, and skips (with a
-printed note) any other UCI package — true Ada generalization is the main
-remaining item of this phase, alongside the D4(a) harness-driven XSD
-validation loop.
+wrong JSON — absent from P1, tracked for P2.  **The D4(a) validation loop
+is closed** (`HarnessRoundTripTest`, demonstrated green 2026-07-11): for
+every P1 root, a minimal schema-valid instance produced by the
+independently-authored `la-cal-harness` XSD-derived generator decodes and
+re-encodes through the generated codec to a semantically identical
+document (`$type` annotations stripped per the Phase-4 interop
+convention) — simultaneously a decode-fidelity, encode-fidelity, and
+schema-shape check, all six roots passing on first run.  The Ada emitter
+is shape-guarded: it still emits the exact seam contract, and skips (with
+a printed note) any other UCI package — true Ada generalization is the
+one remaining item of this phase, deliberately deferred to an environment
+with GNAT (this one has none, and the house discipline is that generated
+Ada ships only with its object-compile gate).
 
 1. Remove the seam hard-coding: package name, root-message list, and
    Request-wrapper structs all derived from the contract tree + binding

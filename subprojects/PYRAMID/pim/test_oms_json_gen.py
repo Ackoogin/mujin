@@ -164,6 +164,55 @@ def _find_nlohmann():
     return None
 
 
+_DRIVER_DIR: dict = {}
+
+
+def _require_toolchain():
+    if os.environ.get("OMS_JSON_COMPILE_SMOKE") != "1":
+        raise unittest.SkipTest("set OMS_JSON_COMPILE_SMOKE=1 to run")
+    if shutil.which("g++") is None:
+        raise unittest.SkipTest("g++ not available")
+    nlohmann = _find_nlohmann()
+    if nlohmann is None:
+        raise unittest.SkipTest(
+            "set NLOHMANN_JSON_INCLUDE to a dir containing nlohmann/json.hpp")
+    return nlohmann
+
+
+def _build_driver() -> Path:
+    """Generate P1 bindings and compile the smoke driver, once per test run
+    (~1 min of template instantiation for the 515-message tree)."""
+    if "exe" in _DRIVER_DIR:
+        return _DRIVER_DIR["exe"]
+    nlohmann = _require_toolchain()
+    import atexit
+    tmp = Path(tempfile.mkdtemp(prefix="oms_json_smoke_"))
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
+    repo = PIM_DIR.parents[2]
+    driver = PIM_DIR / "test_oms_json_gen_fixtures" / "p1_smoke_driver.cpp"
+    gen = tmp / "gen"
+    subprocess.run(
+        [sys.executable, str(PIM_DIR / "generate_bindings.py"),
+         str(P1_TREE), str(gen), "--languages", "cpp",
+         "--backends", "oms_json"],
+        check=True, capture_output=True)
+    exe = tmp / "driver"
+    compile_cmd = [
+        "g++", "-std=c++17", "-o", str(exe), str(driver),
+        str(gen / "oms_json" / "cpp" /
+            "pyramid_data_model_uci_oms_json_codec_plugin.cpp"),
+        str(gen / "pyramid_data_model_uci_cabi_marshal.cpp"),
+        f"-I{gen}", f"-I{nlohmann}",
+        f"-I{repo / 'subprojects' / 'PCL' / 'include'}",
+        f"-I{repo / 'subprojects' / 'PYRAMID' / 'core' / 'external'}",
+    ]
+    build = subprocess.run(compile_cmd, capture_output=True, text=True)
+    if build.returncode != 0:
+        raise AssertionError("driver build failed:\n" + build.stderr[-4000:])
+    _DRIVER_DIR["exe"] = exe
+    return exe
+
+
 class OmsJsonCompileSmokeTest(unittest.TestCase):
     """Opt-in (slow: ~1 min of template instantiation): compile the
     generated P1 plugin and run an encode->decode->re-encode round trip.
@@ -173,49 +222,98 @@ class OmsJsonCompileSmokeTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if os.environ.get("OMS_JSON_COMPILE_SMOKE") != "1":
-            raise unittest.SkipTest("set OMS_JSON_COMPILE_SMOKE=1 to run")
-        if shutil.which("g++") is None:
-            raise unittest.SkipTest("g++ not available")
-        cls.nlohmann = _find_nlohmann()
-        if cls.nlohmann is None:
-            raise unittest.SkipTest(
-                "set NLOHMANN_JSON_INCLUDE to a dir containing "
-                "nlohmann/json.hpp")
+        cls.exe = _build_driver()
 
     def test_p1_codec_compiles_and_round_trips(self):
-        repo = PIM_DIR.parents[2]
-        driver = PIM_DIR / "test_oms_json_gen_fixtures" / "p1_smoke_driver.cpp"
-        with tempfile.TemporaryDirectory() as tmp:
-            gen = Path(tmp) / "gen"
-            subprocess.run(
-                [sys.executable, str(PIM_DIR / "generate_bindings.py"),
-                 str(P1_TREE), str(gen), "--languages", "cpp",
-                 "--backends", "oms_json"],
-                check=True, capture_output=True)
-            exe = Path(tmp) / "driver"
-            compile_cmd = [
-                "g++", "-std=c++17", "-o", str(exe), str(driver),
-                str(gen / "oms_json" / "cpp" /
-                    "pyramid_data_model_uci_oms_json_codec_plugin.cpp"),
-                str(gen / "pyramid_data_model_uci_cabi_marshal.cpp"),
-                f"-I{gen}", f"-I{self.nlohmann}",
-                f"-I{repo / 'subprojects' / 'PCL' / 'include'}",
-                f"-I{repo / 'subprojects' / 'PYRAMID' / 'core' / 'external'}",
-            ]
-            build = subprocess.run(compile_cmd, capture_output=True, text=True)
-            self.assertEqual(build.returncode, 0, build.stderr[-4000:])
-            run = subprocess.run([str(exe)], capture_output=True, text=True)
-            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
-            self.assertIn("RT_OK", run.stdout)
-            wire = json.loads(run.stdout.splitlines()[0])
-            root = wire["ActionCommandStatus"]
-            self.assertEqual(
-                root["MessageData"]["CommandProcessingState"], "RECEIVED")
-            self.assertEqual(
-                root["SecurityInformation"]["OwnerProducer"][0]
-                    ["GovernmentIdentifier"], "USA")
-            self.assertNotIn("Activity", root["MessageData"])  # omit-empty
+        run = subprocess.run([str(self.exe)], capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("RT_OK", run.stdout)
+        wire = json.loads(run.stdout.splitlines()[0])
+        root = wire["ActionCommandStatus"]
+        self.assertEqual(
+            root["MessageData"]["CommandProcessingState"], "RECEIVED")
+        self.assertEqual(
+            root["SecurityInformation"]["OwnerProducer"][0]
+                ["GovernmentIdentifier"], "USA")
+        self.assertNotIn("Activity", root["MessageData"])  # omit-empty
+
+
+def _strip_type_annotations(node):
+    """Remove the la-cal-harness generator's non-UCI ``$type`` annotations
+    (the Phase-4 interop convention: stripped before comparison)."""
+    if isinstance(node, dict):
+        return {k: _strip_type_annotations(v) for k, v in node.items()
+                if k != "$type"}
+    if isinstance(node, list):
+        return [_strip_type_annotations(v) for v in node]
+    return node
+
+
+class HarnessRoundTripTest(unittest.TestCase):
+    """Plan D4(a): schema-derived instances through the generated codec.
+
+    For every P1 root, the independently-authored la-cal-harness
+    XSD-derived generator produces a minimal schema-valid instance; the
+    generated codec must decode and re-encode it to a semantically
+    identical document.  Since the input is derived from the pinned UCI
+    2.5 XSD by a foreign implementation, equality here is simultaneously a
+    decode-fidelity, encode-fidelity, and schema-shape check.
+
+    Opt-in alongside the compile smoke (same toolchain gates), plus the
+    harness checkout (LACAL_HARNESS_SRC or the external/ default) with
+    lxml + xmlschema importable.  Demonstrated green 2026-07-11 for all
+    six P1 roots."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.exe = _build_driver()
+        harness_src = Path(os.environ.get(
+            "LACAL_HARNESS_SRC",
+            PIM_DIR.parents[2] / "external" / "ams-gra" /
+            "ams-gra-hello-world-sk-test-la-cal-harness" / "src"))
+        if not (harness_src / "la_cal_harness").is_dir():
+            raise unittest.SkipTest(
+                f"la-cal-harness not found at {harness_src} -- clone it or "
+                "set LACAL_HARNESS_SRC")
+        xsd = PIM_DIR / "schemas" / "dl" / "uci_2_5_0" / \
+            "UCI_MessageDefinitions_v2_5_0.xsd"
+        if not xsd.is_file():
+            raise unittest.SkipTest(
+                "UCI 2.5 drop absent -- run pim/schemas/fetch_schemas.py")
+        sys.path.insert(0, str(harness_src))
+        try:
+            from la_cal_harness.oms_json.generator import OMSJsonGenerator
+        except ImportError as exc:
+            raise unittest.SkipTest(f"harness deps missing: {exc}")
+        cls.generator = OMSJsonGenerator(str(xsd))
+
+    def _roundtrip(self, root: str):
+        doc = _strip_type_annotations(self.generator.generate_minimal(root))
+        run = subprocess.run(
+            [str(self.exe), "--roundtrip", root],
+            input=json.dumps(doc), capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0,
+                         f"{root}: {run.stderr}\ninput: {json.dumps(doc)[:2000]}")
+        out = json.loads(run.stdout)
+        self.assertEqual(out, doc, root)
+
+    def test_action_command(self):
+        self._roundtrip("ActionCommand")
+
+    def test_action_command_status(self):
+        self._roundtrip("ActionCommandStatus")
+
+    def test_observation_measurement_report(self):
+        self._roundtrip("ObservationMeasurementReport")
+
+    def test_position_report(self):
+        self._roundtrip("PositionReport")
+
+    def test_service_status(self):
+        self._roundtrip("ServiceStatus")
+
+    def test_signal_report(self):
+        self._roundtrip("SignalReport")
 
 
 if __name__ == "__main__":

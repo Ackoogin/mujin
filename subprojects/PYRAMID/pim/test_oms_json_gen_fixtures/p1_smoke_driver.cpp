@@ -1,13 +1,26 @@
-// Round-trip smoke driver for the generated P1 OMS-JSON codec plugin.
-// Exercises: inlined envelope (enums), sidecar wire names, nested-base
-// flattening (ActionCommandStatusMDT.base), oneof choice (OwnerProducer),
-// optionals, arrays.  encode -> decode -> re-encode must be byte-stable.
+// Test driver for the generated P1 OMS-JSON codec plugin
+// (pim/test_oms_json_gen.py).  Two modes:
+//
+//   (no args)             self-test: build an ActionCommandStatusMT natively,
+//                         encode -> decode -> re-encode, assert byte-stable,
+//                         print the wire JSON + RT_OK.  Exercises inlined
+//                         envelope enums, sidecar wire names, nested-base
+//                         flattening, oneof choice, optionals, omit-empty.
+//
+//   --roundtrip <RootId>  D4(a) filter: read one OMS JSON document (as
+//                         produced by the la-cal-harness XSD-derived
+//                         generator) on stdin, decode it by root id through
+//                         the plugin, re-encode, print the wire JSON.  The
+//                         Python side asserts semantic equality with the
+//                         schema-derived input.
 #include "pyramid_data_model_uci_types.hpp"
 #include "pyramid_data_model_uci_cabi_marshal.hpp"
 #include <pcl/pcl_codec.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
+#include <iterator>
 #include <string>
 
 extern "C" const pcl_codec_t* pcl_codec_plugin_entry(const char*);
@@ -17,7 +30,49 @@ extern "C" void pcl_free(void* p) { std::free(p); }
 namespace uci = pyramid::domain_model::uci;
 namespace cabi = pyramid::cabi;
 
-int main() {
+// The P1 profile roots (element name -> C ABI struct type).
+#define P1_ROOTS(X)                                                        \
+  X(ActionCommand, pyramid_data_model_uci_ActionCommandMT_c)               \
+  X(ActionCommandStatus, pyramid_data_model_uci_ActionCommandStatusMT_c)   \
+  X(ObservationMeasurementReport,                                          \
+    pyramid_data_model_uci_ObservationMeasurementReportMT_c)               \
+  X(PositionReport, pyramid_data_model_uci_PositionReportMT_c)             \
+  X(ServiceStatus, pyramid_data_model_uci_ServiceStatusMT_c)               \
+  X(SignalReport, pyramid_data_model_uci_SignalReportMT_c)
+
+static int roundtrip(const char* root_id) {
+  std::string input((std::istreambuf_iterator<char>(std::cin)),
+                    std::istreambuf_iterator<char>());
+  const pcl_codec_t* codec = pcl_codec_plugin_entry(nullptr);
+  if (!codec) { std::fputs("FAIL: no codec\n", stderr); return 1; }
+  pcl_msg_t in{};
+  in.data = input.data();
+  in.size = static_cast<uint32_t>(input.size());
+  in.type_name = codec->content_type;
+
+#define TRY_ROOT(element, ctype)                                           \
+  if (std::strcmp(root_id, #element) == 0) {                               \
+    ctype c{};                                                             \
+    if (codec->decode(nullptr, #element, &in, &c) != PCL_OK) {             \
+      std::fputs("FAIL: decode " #element "\n", stderr);                   \
+      return 1;                                                            \
+    }                                                                      \
+    pcl_msg_t out{};                                                       \
+    if (codec->encode(nullptr, #element, &c, &out) != PCL_OK) {            \
+      std::fputs("FAIL: encode " #element "\n", stderr);                   \
+      return 1;                                                            \
+    }                                                                      \
+    std::fwrite(out.data, 1, out.size, stdout);                            \
+    std::fputc('\n', stdout);                                              \
+    return 0;                                                              \
+  }
+  P1_ROOTS(TRY_ROOT)
+#undef TRY_ROOT
+  std::fputs("FAIL: unknown root id\n", stderr);
+  return 1;
+}
+
+static int selftest() {
   uci::ActionCommandStatusMT m{};
   m.security_information.classification = uci::ClassificationEnum::U;
   uci::OwnerProducerChoiceType op{};
@@ -66,4 +121,11 @@ int main() {
   std::printf("%s\n", json1.c_str());
   std::puts("RT_OK");
   return 0;
+}
+
+int main(int argc, char** argv) {
+  if (argc == 3 && std::strcmp(argv[1], "--roundtrip") == 0) {
+    return roundtrip(argv[2]);
+  }
+  return selftest();
 }
