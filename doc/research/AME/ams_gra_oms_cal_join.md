@@ -238,6 +238,27 @@ recompiles against any provider's CAL SDK; nothing about the artifact is
 reusable across providers without recompilation, and nothing about the
 bytes on the bus is portable at all.
 
+**Can the headers themselves be generated from the spec + XSD?** Mostly —
+that is the document's stated purpose (its full title is the "C++ CAL
+*Interface Generation* Specification"): namespace mapping, name-derivation
+rules, generated-header file naming and directory layout
+(`<rootDirectory>/<cxxNamespace>/type/<TypeName>.h`, `uci/base/` for the
+framework), framework-class signatures, and the accessor-method naming
+templates are all normative. But the spec deliberately determines the
+*API*, not the *header bytes* ("implementation independent and only
+specifies the prototypes"): factory class names/locations for obtaining a
+typed Reader/Writer, inline bodies, private sections, and some
+name-collision edges retain latitude (at least as legible in the
+unofficial Markdown conversion — the official `.docx` tables may close
+some of this). Two independent generators therefore produce
+**API-compatible, not interchangeable**, header sets. Consequences: the
+portability guarantee to build on is "our source compiles against any
+provider's shipped headers", never "we bring our own headers to a
+provider's library" (§4.5); our generated mapping code (§4.1) only needs
+the normative naming rules, which are fully specified; and a
+self-generated conformant header set is still exactly what a toy/reference
+CAL conformance harness needs (§7).
+
 ### 2.4 The LA-CAL (OMSC-SPC-013): a concrete wire, no API
 
 The Language-Agnostic CAL is the mirror image — a **protocol
