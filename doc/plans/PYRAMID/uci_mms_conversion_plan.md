@@ -12,8 +12,14 @@ pruning gate). The D6 reconciliation against `uci_seam_example` is recorded
 in `pim/uci_generated/README.md`: conversion supersedes the hand contract
 in fidelity, wire-compatible throughout, one new codec-gen rule identified
 (`base`-field flattening, Phase 2). `pim/test_xsd2proto.py`: 27 tests.
-Next: Phase 2 (generalize the OMS-JSON codec generator). Incorporates
-a review of the A-GRA integration state as of 2026-07-11 (§2).
+**Phase 2 is largely complete** (see its progress note): the C++ OMS-JSON
+emitter is generalized (sidecar wire names, enums, oneofs, nested-base
+flattening), the seam output is frozen byte-identical (golden +
+`pim/test_oms_json_gen.py`, 11 tests), and the generated P1 codec compiles
+and round-trips end-to-end (opt-in smoke, demonstrated green). Remaining
+in Phase 2: Ada emitter generalization and the D4(a) XSD-validation
+harness. Incorporates a review of the A-GRA integration state as of
+2026-07-11 (§2).
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/a_gra_standard_review.md`](../../research/AME/a_gra_standard_review.md)
@@ -257,10 +263,11 @@ from 6 roots; byte-stability guarded by
 in fidelity (real choice arms, real `ID_Type` composition, real facets),
 is wire-compatible throughout, and surfaces one required Phase-2 codec-gen
 rule — XSD-extension `base` fields must flatten into the parent JSON
-object on the wire. Bonus at-scale proof: P2 also converts strict-clean
-(1,163 messages + 297 enums, `--check`-stable, parseable; hub fan-in
-`ID_Type` 74 / `SystemID_Type` 49 / `ForeignKeyType` 40) — its tree stays
-untracked until the Phase-4 pruning gate.
+object on the wire (implemented in Phase 2). Bonus at-scale proof: P2 also
+converts strict-clean (1,163 messages + 297 enums, `--check`-stable,
+parseable; hub fan-in `ID_Type` 74 / `SystemID_Type` 49 /
+`ForeignKeyType` 40) — its tree stays untracked until the Phase-4 pruning
+gate.
 
 1. `pim/xsd2proto.py`: parse the XSD (Python `xmlschema` or `lxml` — pick
    in-phase; no new C++ deps), resolve the profile closure, emit protos per
@@ -280,6 +287,32 @@ reconciliation against the hand-authored contract documented; closure
 report in the converter README.
 
 ### Phase 2 — Generalize the OMS-JSON codec generator (medium)
+
+**Progress (2026-07-11): the C++ emitter is generalized and proven; Ada
+generalization and the D4(a) XSD-validation harness remain.**
+`pim/cpp/oms_json_codec_gen.py` now emits one plugin per UCI-shaped
+data-model package: package/roots/wrapper-structs derived from the contract
+(no seam hard-coding), `wire_names.json` consumed as the authoritative name
+source (measured: 191 P1 fields where the old heuristic would mis-render
+the element name), enums as XSD literals with `*_UNSPECIFIED` rejected,
+oneofs per the pinned choice rule (active member's element key directly in
+the parent — pinned from the `la-cal-harness` XSD-derived generator before
+coding, as this phase required), nested-base flattening for 2-deep
+extension chains, and omit-empty arrays on the sidecar path.  The frozen
+regression bar holds **by construction**: the seam-tree output is
+byte-identical to the pre-generalization emitter (golden fixture +
+`pim/test_oms_json_gen.py::SeamRegressionTest`).  Proven live in this
+environment: the generated P1 codec (515 messages) object-compiles clean
+with g++ 13 and completes a byte-stable encode→decode→re-encode round trip
+(`OmsJsonCompileSmokeTest`, opt-in via `OMS_JSON_COMPILE_SMOKE=1`), with
+correct wire output verified key-by-key (`CUI_Basic`, `"RECEIVED"`,
+`OwnerProducer` choice, flattened `CommandID`).  Repeated `xs:choice`
+carriers fail generation loudly (`OmsJsonShapeError`) rather than emitting
+wrong JSON — absent from P1, tracked for P2.  The Ada emitter is
+shape-guarded: it still emits the exact seam contract, and skips (with a
+printed note) any other UCI package — true Ada generalization is the main
+remaining item of this phase, alongside the D4(a) harness-driven XSD
+validation loop.
 
 1. Remove the seam hard-coding: package name, root-message list, and
    Request-wrapper structs all derived from the contract tree + binding

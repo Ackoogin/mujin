@@ -11,8 +11,37 @@ from proto_parser import ProtoTypeIndex
 
 
 class AdaOmsJsonCodecGenerator:
+    """Seam-contract-only template emitter.
+
+    Unlike the C++ generator (generalized in UCI MMS plan Phase 2), this
+    package body is a hand-shaped template for the exact
+    ``pim/uci_seam_example`` contract: it references the seam's message
+    shapes and its two components packages by name.  It therefore guards on
+    that shape and SKIPs (with a printed note) for any other UCI package --
+    emitting it against an xsd2proto-generated tree would produce
+    non-compiling Ada referencing types that do not exist.  True Ada
+    generalization is tracked as remaining Phase-2 work in
+    doc/plans/PYRAMID/uci_mms_conversion_plan.md."""
+
+    _SEAM_COMPONENT_PACKAGES = (
+        'pyramid.components.uci.mission_autonomy.services.provided',
+        'pyramid.components.uci.c2_station.services.consumed',
+    )
+
     def __init__(self, index: ProtoTypeIndex):
         self.pf = next((p for p in index.files if p.package == 'pyramid.data_model.uci'), None)
+        if self.pf is not None:
+            packages = {p.package for p in index.files}
+            is_seam = (
+                self.pf.find_message('ActionCommand') is not None
+                and self.pf.find_message('ActionCommandStatus') is not None
+                and all(pkg in packages
+                        for pkg in self._SEAM_COMPONENT_PACKAGES))
+            if not is_seam:
+                print('  oms_json (Ada): package pyramid.data_model.uci is '
+                      'not the seam contract shape -- skipping (Ada '
+                      'generalization is pending Phase-2 work)')
+                self.pf = None
 
     def generate(self, out: Path) -> List[Path]:
         out.mkdir(parents=True, exist_ok=True)

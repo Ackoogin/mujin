@@ -28,8 +28,10 @@ class OmsJsonBackend(codec_backends.CodecBackend):
     def content_type(self) -> str:
         return 'application/oms-json'
 
-    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path, **_kwargs) -> List[Path]:
-        return CppOmsJsonCodecGenerator(index).generate(output_dir)
+    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path, **kwargs) -> List[Path]:
+        return CppOmsJsonCodecGenerator(
+            index, naming_policy=kwargs.get('naming_policy')
+        ).generate(output_dir)
 
     def generate_ada(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
         return AdaOmsJsonCodecGenerator(index).generate(output_dir)

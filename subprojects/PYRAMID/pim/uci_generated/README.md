@@ -40,5 +40,7 @@ wire-compatible at the OMS JSON level:
 Conclusion recorded for the Phase-1 exit: the conversion **supersedes** the
 hand contract in fidelity (real choice arms, real ID composition, real
 facets); `uci_seam_example` remains the frozen golden fixture per plan D6,
-and the one substantive rule the codec generator must add for the
-generated tree is **`base`-field flattening on the wire** (Phase 2).
+and the one substantive rule the codec generator needed —
+**`base`-field flattening on the wire** — was implemented in Phase 2
+(`pim/cpp/oms_json_codec_gen.py`; proven by the compile-and-run smoke in
+`pim/test_oms_json_gen.py`).
