@@ -488,3 +488,63 @@ both the canonical CMake `libpcl_core.a` and the matching LA-CAL plugin; the
 facade's generated topic ports explicitly receive their remote `asb` route;
 and the witness populates required UCI envelope fields and allows queued OWP
 status publications to drain before provider teardown.
+
+## Phase 6 progress (2026-07-11) — Kitty Hawk stack bring-up
+
+Unlike Phases 3–5 (a single pinned `infra/sleet` container run ad hoc),
+Phase 6 needs the full AMS GRA Hello World Kitty Hawk simulation: Supercell
+(DIS ground truth + JSBSim), Squall (RF/IR sensor sim), the
+`rf-fm-demod`/`ir-search-and-track` Skills, Sleet, and optionally
+Graupel/Worldview. Per the user's request this is now a **persistent local
+checkout** rather than a one-off spike: `getting-started` plus all eight
+constituent projects cloned at tag `v2026.06.01` under `external/ams-gra/`
+(git-ignored — see `/external/` in `.gitignore`), symlinked into
+`getting-started/` so its `include:`-based `compose.yaml` resolves against
+independent sibling clones. Exact recreation steps, image-pull gotchas
+(`viz/worldview` has no `:latest` tag, only `v2026.06.01`), the Sleet
+`services.d` local-registration override needed for any service beyond the
+kit's own baked-in ones, and known podman-3.4.4 quirks are written up in
+`subprojects/PYRAMID/doc/guides/ams_gra_starter_kit_bringup.md`.
+
+Brought up with `podman` + `podman-compose` (installed user-side via
+`pip install --user podman-compose`, no system package needed) — Docker was
+available on this host but `podman`/`podman-compose` were installed instead
+per the user's preference. All components except Prometheus/Grafana came up
+clean (those two need `host-gateway` support in `extra_hosts`, which podman
+3.4.4 predates — a benign, unrelated gap in the observability side-stack
+only).
+
+**Live traffic confirmed** against the running stack with a new read-only
+OWP sniffer (`pim/test_harness/lacal/kittyhawk_owp_sniff.py`, registered as
+scratch service `ame-sniffer` via the `services.d` override) subscribed to
+`mission.position-report`, `mission.signal-report`,
+`mission.observation-measurement-report`, and `mission.service-status`:
+
+- `PositionReport` — Supercell's Eagle-1 ownship kinematics (WGS84
+  lat/lon/alt + NED velocity), ~1 Hz.
+- `ObservationMeasurementReport` — `ir-search-and-track`'s LOS Az/El
+  detections referenced to the latest cached ownship position, several Hz.
+- `ServiceStatus` — `NORMAL` from both `rf-fm-demod` and
+  `ir-search-and-track` shortly after startup.
+- `SignalReport` (`rf-fm-demod`) was **not** observed in the initial ~40s
+  capture window. This is consistent with the scenario's own design (the
+  Kitty Hawk pentagon flight pattern is built so the ownship genuinely gains
+  and loses RF lock on the FM tower) rather than a fault — `energy_threshold`
+  gating on real (simulated) RF energy, not a fixed timer.
+
+One operational gotcha worth recording: restarting the `sleet` container
+alone (e.g. after editing its `services.d` mount) leaves
+`squall-rf-oms-adapter`/`squall-ir-oms-adapter` stuck emitting
+`owp publish error: Operation canceled` instead of reconnecting — they need
+an explicit `podman restart`. `rf-fm-demod-skill`/`ir-search-and-track-skill`
+both recover from a Sleet bounce unattended (their own bounded-retry loop
+per `docs/contracts.md`), so this looks specific to the Squall OMS-adapter
+binaries' OWP client, not a scenario-wide issue.
+
+**Scope note (2026-07-11):** the original Phase 6 payoff (WorldModel fact
+grounding + truth-vs-perceived against DIS) was AME-facing; AME now lives in
+a separate repo, so that scope is out of this plan. The PYRAMID-only
+remainder — extending the OMS JSON UCI codec to cover
+`ObservationMeasurementReport` and a PCL-only consumer harness against this
+live stack — is tracked in
+`doc/plans/PYRAMID/kitty_hawk_pcl_consumer_plan.md`, not here.

@@ -154,3 +154,7 @@ doc/research/AME/a-gra-main/*
 # colcon (ROS2 ament) build logs
 /log/
 subprojects/PYRAMID/log/
+
+# AMS GRA hello-world starter kit clones (LA-CAL integration plan Phase 6) --
+# persistent, git-ignored local working copies for Kitty Hawk demo bring-up.
+/external/

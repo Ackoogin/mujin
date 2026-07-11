@@ -12,8 +12,13 @@ bindings, with Ada codec compatibility** — is verified (2026-07-11):
 2026-07-11): a new `oms_json` generator backend (C++ + Ada) + a UCI-XSD-faithful
 `pim/uci_seam_example` contract generate the facade and a byte-equivalent,
 Ada-compiling OMS-JSON codec; the generated facade e2e completes the correlated
-round trip over real Sleet. The mixed-transport variant (step 2), guide §7 row,
-and stretch Phase 6 remain.
+round trip over real Sleet. The mixed-transport variant (step 2) and guide §7
+row remain. Stretch Phase 6 (MS-leg demo) is **superseded** — AME now lives
+in a separate repo, so its WorldModel-specific scope moved out; see the Phase
+6 section below and the successor plan
+[`kitty_hawk_pcl_consumer_plan.md`](kitty_hawk_pcl_consumer_plan.md). The
+Kitty Hawk stack bring-up done under the old Phase 6 (full stack live,
+traffic captured) carries forward as input to that plan.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -28,7 +33,10 @@ kit.
 [`pubsub_interaction_guide.md`](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md)
 (the interaction seam this rides),
 [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
-(plugin ABI, capability model).
+(plugin ABI, capability model),
+[`ams_gra_starter_kit_bringup.md`](../../../subprojects/PYRAMID/doc/guides/ams_gra_starter_kit_bringup.md)
+(Phase 6: recreating the full Kitty Hawk stack — Supercell/Squall/Sleet/
+Skills/Graupel/Worldview — as a persistent local checkout).
 
 ---
 
@@ -356,13 +364,36 @@ UCI command/report message pair the schema validates.
 **Exit gate:** rpc-impossible/pubsub-works matrix demonstrated over the
 real broker; `pubsub_interaction_guide.md` §7 table gains the row.
 
-### Phase 6 (stretch, AME-facing) — MS-leg demo
+### Phase 6 (stretch, originally AME-facing) — MS-leg demo — superseded
 
-Starter-kit review §5.2 executed over the new plugin instead of a bespoke
-spike: kit signal-report/track messages → typed decode → `StateUpdate` →
-WorldModel fact grounding, evaluated truth-vs-perceived against the Kitty
-Hawk DIS channel. Separately schedulable; it is an AME demo, not
-transport work, and must not gate rungs.
+Starter-kit review §5.2 originally scoped this as: kit signal-report/track
+messages → typed decode → `StateUpdate` → WorldModel fact grounding,
+evaluated truth-vs-perceived against the Kitty Hawk DIS channel. **AME now
+lives in a separate repo**, so that WorldModel-specific scope no longer
+belongs in this plan. It is superseded by
+[`kitty_hawk_pcl_consumer_plan.md`](kitty_hawk_pcl_consumer_plan.md), which
+keeps the PYRAMID/PCL-only part (a consumer harness proving the LA-CAL
+transport + OMS JSON codec against the *full live Kitty Hawk stack*, not
+just Sleet standalone or the `la-cal-harness` generator) and drops
+`StateUpdate`/WorldModel/DIS truth-vs-perceived entirely — that work, if
+still wanted, is a cross-repo concern for wherever AME lives now.
+
+**Progress (2026-07-11):** the infra half of this phase is done and stays
+valid input to the successor plan. The full Kitty Hawk stack (Supercell,
+Squall, Sleet, `rf-fm-demod`, `ir-search-and-track`, Graupel, Worldview) is
+cloned and running locally as a persistent, git-ignored checkout under
+`external/ams-gra/` via `podman`/`podman-compose` — see
+[`ams_gra_starter_kit_bringup.md`](../../../subprojects/PYRAMID/doc/guides/ams_gra_starter_kit_bringup.md)
+for the exact recreation steps. Live traffic confirmed over real Sleet with
+a read-only OWP sniffer (`pim/test_harness/lacal/kittyhawk_owp_sniff.py`):
+Supercell `PositionReport` (Eagle-1 ownship), `ir-search-and-track`
+`ObservationMeasurementReport` (LOS Az/El detections at several Hz), and
+`ServiceStatus NORMAL` from both Skills. `rf-fm-demod` `SignalReport` is
+intermittent by the scenario's own design (genuine RF lock gain/loss on the
+pentagon pattern) and wasn't observed in the initial capture window — not a
+failure. The remaining work (codec coverage for
+`ObservationMeasurementReport`, the PCL-only consumer harness) is tracked in
+the successor plan, not here.
 
 ---
 
