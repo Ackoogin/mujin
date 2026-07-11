@@ -289,10 +289,33 @@ The step that earns "interop" rather than "loopback through a broker":
 **Exit gate:** both interop directions green against
 independently-authored peers; codec round-trip suite green; SKIP-safe.
 
-### Phase 5 — The interaction seam over LA-CAL (small/medium)
+### Phase 5 — The interaction seam over LA-CAL (medium/large)
 
 The payoff phase: demonstrate that rung 1 composes with the seam that
 motivated it.
+
+**Vocabulary decision (2026-07-11):** the positive "pubsub-works over the
+real broker" leg is re-shaped onto a **UCI-message seam interaction** so it
+runs through real Sleet exactly like Phases 3–4, rather than routing the
+`agra_example` vocabulary Sleet's UCI 2.5 schema would reject (the same
+constraint Phase 3 hit). This upgrades Phase 5 from small/medium to
+medium/large: it needs a hand-authored UCI-shaped Request-port contract
+(beside `agra_example`, same grammar/options discipline) whose request +
+requirement topics carry UCI messages, plus per-role codec plugins — but the
+seam-facade harness structure and the `--realize request=pubsub
+--realize requirement=pubsub` manifest flow are unchanged from
+`agra_seam_interchange_test.cpp`. The RPC-impossible negative (step 3) is a
+static compose-time capability check needing no broker.
+
+**Codec implication (flagged 2026-07-11):** the seam harness currently routes
+*generated* proto3-JSON / FlatBuffers codecs, but Sleet only accepts **OMS
+JSON** conforming to the UCI XSD. So the UCI seam's request + requirement
+messages each need a hand-written `application/oms-json` codec (extending
+`pyramid_oms_json_codec_uci.cpp`, same pattern as PositionReport/SignalReport)
+— the generated `oms_json_backend.py` path stays deferred to rung 3 per §7.
+This is the main new authoring cost of the re-shape and must map the
+Request-port shape (Create/Read/Update/Cancel + requirement transitions) onto a
+UCI command/report message pair the schema validates.
 
 1. `lacal_seam_test`: the `agra_seam_interchange_test.cpp` component pair,
    unmodified component code, with the **pub/sub realization of both legs
