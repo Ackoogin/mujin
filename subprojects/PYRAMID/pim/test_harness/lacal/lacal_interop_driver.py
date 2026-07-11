@@ -85,18 +85,50 @@ def build_position_report(xsd_path: str) -> dict:
     return doc
 
 
+def _require(condition: bool, message: str) -> None:
+    # Explicit raise (not `assert`) so the oracle survives python -O / PYTHONOPTIMIZE.
+    if not condition:
+        raise ValueError(message)
+
+
 def validate_received(body: str) -> None:
-    """Assert a PCL-published PositionReport matches the expected shape/values."""
+    """Check a PCL-published PositionReport matches the expected shape and values.
+
+    Covers the header identity, message-data identity/enums, and the full
+    Position numerics -- i.e. the fields the PCL publisher sets deterministically
+    -- so a PASS reflects field-level fidelity, not just schema acceptance.
+    """
     doc = json.loads(body)
     report = doc[MESSAGE]
-    position = report["MessageData"]["InertialState"]["Position"]
-    assert abs(position["Latitude"] - LATITUDE_RAD) < 1e-9, position
-    assert abs(position["Longitude"] - LONGITUDE_RAD) < 1e-9, position
-    assert abs(position["Altitude"] - ALTITUDE_M) < 1e-9, position
-    assert position["AltitudeReference"] == ALTITUDE_REFERENCE, position
+
+    header = report["MessageHeader"]
+    _require(header["SystemID"]["UUID"] == SYSTEM_UUID, f"SystemID: {header}")
+    _require(header["ServiceID"]["UUID"] == SERVICE_UUID, f"ServiceID: {header}")
+    _require(header["Timestamp"] == TIMESTAMP, f"Timestamp: {header}")
+    _require(header["SchemaVersion"] == SCHEMA, f"SchemaVersion: {header}")
+    _require(header["Mode"] == "LIVE", f"Mode: {header}")
+
     security = report["SecurityInformation"]
-    assert security["Classification"] == "U", security
-    assert report["MessageHeader"]["SchemaVersion"] == SCHEMA
+    _require(security["Classification"] == "U", f"Classification: {security}")
+    _require(
+        security["OwnerProducer"][0]["GovernmentIdentifier"] == "USA",
+        f"OwnerProducer: {security}",
+    )
+
+    data = report["MessageData"]
+    _require(data["SystemID"]["UUID"] == SYSTEM_UUID, f"MessageData SystemID: {data}")
+    _require(data["Source"] == "ACTUAL", f"Source: {data}")
+    _require(data["CurrentOperatingDomain"] == "AIR", f"Domain: {data}")
+
+    position = data["InertialState"]["Position"]
+    _require(abs(position["Latitude"] - LATITUDE_RAD) < 1e-9, f"Latitude: {position}")
+    _require(abs(position["Longitude"] - LONGITUDE_RAD) < 1e-9, f"Longitude: {position}")
+    _require(abs(position["Altitude"] - ALTITUDE_M) < 1e-9, f"Altitude: {position}")
+    _require(
+        position["AltitudeReference"] == ALTITUDE_REFERENCE,
+        f"AltitudeReference: {position}",
+    )
+    _require(position["Timestamp"] == TIMESTAMP, f"Position Timestamp: {position}")
 
 
 async def _handshake(client: OWPClient, service_id: str, verbose: bool) -> Info:

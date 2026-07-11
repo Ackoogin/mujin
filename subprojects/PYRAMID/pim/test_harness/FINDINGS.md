@@ -342,13 +342,21 @@ independently-authored peer.** The AMS GRA `la-cal-harness` (its own async
   `LACAL_HARNESS_PYTHON`, or absent `UCI_XSD_PATH`; a reachable-but-rejecting
   Sleet is a FAIL.
 
-**Shape agreement is the load-bearing result.** The harness's XSD-derived
-`generate_minimal("PositionReport")` produces the same global-element structure
-(`PositionReport → SecurityInformation / MessageHeader / MessageData →
-InertialState.Position`) our hand-written codec derives from the same XSD —
-differing only by `$type` JSON annotations (stripped; not UCI content) and
-freely-chosen scalar values. Two independently-authored codecs converging on
-the wire shape from the shared XSD is what earns "interop" over "loopback".
+**Shape agreement is the load-bearing result — with a precise scope.** The
+harness's XSD-derived `generate_minimal("PositionReport")` produces the same
+global-element envelope (`PositionReport → SecurityInformation / MessageHeader /
+MessageData → InertialState.Position`) our hand-written codec derives from the
+same XSD, differing only by `$type` JSON annotations (stripped; not UCI
+content). The driver then **pins** the `SecurityInformation`, header identity,
+and `InertialState.Position` subtrees to fixed values for a deterministic
+cross-process comparison — so those pinned subtrees are authored by the driver,
+not proven to be independently generator-derived. What is independently
+established: (a) the harness's own OWP client + generator round-trip a
+schema-valid PositionReport that our typed bindings decode, and (b) our codec's
+output is decoded and value-checked by the foreign harness client, with Sleet
+validating both against the UCI XSD. That is genuine interop over "loopback";
+full field-by-field two-codec convergence on every nested element is *not*
+claimed.
 
 The verbose-mode handshake is used on both driver legs: the subscriber's `SUB`
 is `+OK`-acked before it signals readiness (BEST_EFFORT has no broker-side
@@ -411,6 +419,19 @@ would additionally require OMS-JSON codecs operating on the *generated* seam
 structs (the seam facade currently routes proto3-JSON / FlatBuffers), which is
 the `oms_json_backend.py` generator work deferred to rung 3 (§7). The facade's
 realization-agnostic component-code claim is already proven over SHM in
-`agra_seam_interchange_test`; Phase 5 proves the same interaction rides the
-LA-CAL/Sleet transport with a schema-valid UCI vocabulary. Wiring the generated
-facade end-to-end over LA-CAL is the honest follow-on.
+`agra_seam_interchange_test`; this leg proves the same *interaction pattern*
+rides the LA-CAL/Sleet transport with a schema-valid UCI vocabulary. Wiring the
+generated facade end-to-end over LA-CAL — **from a proto contract through
+generated bindings, with Ada codec compatibility** — is the active follow-on
+(directed 2026-07-11); until it lands, the "pubsub-works over the real broker"
+matrix cell is demonstrated but the *generated-facade* form of Phase 5 step 1
+is not yet complete.
+
+**Known harness limitation (readiness race).** `lacal_seam_test` and Phase 4
+direction A signal readiness with fixed sleeps (200 ms/300 ms) rather than a
+confirmed subscription: the C++ `owp` client's `subscribe()` queues `SUB` and
+ignores the `+OK`, so a slow broker could drop a best-effort message before the
+subscription registers. This is shared with the pre-existing `lacal_e2e_test`
+and is deterministic on localhost TCP; a non-flaky fix needs the `owp` client to
+surface SUB acknowledgement (Phase 4 direction B already uses the Python
+client's verbose `+OK`). Listed as a follow-on, not a blocker.

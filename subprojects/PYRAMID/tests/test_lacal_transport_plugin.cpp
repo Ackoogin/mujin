@@ -427,7 +427,12 @@ TEST(LacalPlugin, RpcEndpointOverPubsubPeerFailsClosed) {
                                        sizeof(diag)),
             PCL_ERR_STATE);
   EXPECT_EQ(routing, nullptr);
-  EXPECT_NE(std::string(diag).find("requires"), std::string::npos) << diag;
+  // Pin the intended path: PROVIDED requires RPC_UNARY, and the failure is the
+  // caps-mismatch diagnostic ("... provides caps 0x1" = PUBSUB) -- not merely
+  // some generic "requires" that another required-cap regression could match.
+  const std::string diag_text(diag);
+  EXPECT_NE(diag_text.find("requires RPC_UNARY"), std::string::npos) << diag;
+  EXPECT_NE(diag_text.find("provides caps"), std::string::npos) << diag;
   EXPECT_EQ(pcl_executor_get_transport_for_peer(exec, "asb"), nullptr);
 
   std::remove(path.c_str());

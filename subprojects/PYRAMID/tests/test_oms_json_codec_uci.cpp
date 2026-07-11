@@ -312,6 +312,34 @@ TEST(OmsJsonUciCodec, ActionCommandStatusRoundTripsAndCorrelates) {
   pcl_plugin_unload(handle);
 }
 
+TEST(OmsJsonUciCodec, DecodeRejectsEmptyRequiredStateFields) {
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_codec_t* codec = load_codec(&handle);
+  ASSERT_NE(codec, nullptr);
+
+  // ActionCommandStatus with an empty CommandProcessingState: the decoder must
+  // reject it (encode already rejects empty required text), so encode/decode
+  // stay inverses over the decoder's accepted domain.
+  const std::string status =
+      R"({"ActionCommandStatus":{"SecurityInformation":{"Classification":"U",)"
+      R"("OwnerProducer":[{"GovernmentIdentifier":"USA"}]},"MessageHeader":{)"
+      R"("SystemID":{"UUID":"550e8400-e29b-41d4-a716-446655440000"},)"
+      R"("Timestamp":"2026-07-11T12:00:00Z","SchemaVersion":"002.5.0",)"
+      R"("Mode":"LIVE"},"MessageData":{)"
+      R"("CommandID":{"UUID":"7c9e6679-7425-40de-944b-e07fc1f90ae7"},)"
+      R"("CommandProcessingState":""}}})";
+  pcl_msg_t msg{};
+  msg.data = status.data();
+  msg.size = static_cast<uint32_t>(status.size());
+  msg.type_name = "application/oms-json";
+  pyramid_uci_action_command_status_c decoded{};
+  EXPECT_EQ(codec->decode(codec->codec_ctx, "ActionCommandStatus", &msg,
+                          &decoded),
+            PCL_ERR_INVALID);
+
+  pcl_plugin_unload(handle);
+}
+
 TEST(OmsJsonUciCodec, RejectsInvalidUuidAndUnknownSchema) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_codec_t* codec = load_codec(&handle);

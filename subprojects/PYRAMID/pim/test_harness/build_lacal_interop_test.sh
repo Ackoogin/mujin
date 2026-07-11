@@ -92,7 +92,7 @@ SUB_PID=$!
 for _ in $(seq 1 100); do
   if [[ -f "${READY_A}" ]]; then break; fi
   if ! kill -0 "${SUB_PID}" 2>/dev/null; then
-    wait "${SUB_PID}"; echo "FAIL: PCL subscriber exited before ready"; exit 2
+    wait "${SUB_PID}" || true; echo "FAIL: PCL subscriber exited before ready"; exit 2
   fi
   sleep 0.1
 done
@@ -102,7 +102,7 @@ if ! "${LACAL_HARNESS_PYTHON}" "${DRIVER}" publish \
     --url "${SLEET_URL}" --xsd "${UCI_XSD_PATH}"; then
   echo "FAIL: harness publish (direction A) failed"; exit 2
 fi
-wait "${SUB_PID}"; SUB_PID=""
+wait "${SUB_PID}" || true; SUB_PID=""
 if [[ ! -f "${OUT_A}" ]] || ! grep -q '^position-ok$' "${OUT_A}"; then
   echo "FAIL: PCL subscriber did not decode the foreign PositionReport"; exit 2
 fi
@@ -116,7 +116,7 @@ SUB_PID=$!
 for _ in $(seq 1 150); do
   if [[ -f "${READY_B}" ]]; then break; fi
   if ! kill -0 "${SUB_PID}" 2>/dev/null; then
-    wait "${SUB_PID}"; echo "FAIL: harness subscriber exited before ready"; exit 2
+    wait "${SUB_PID}" || true; echo "FAIL: harness subscriber exited before ready"; exit 2
   fi
   sleep 0.1
 done

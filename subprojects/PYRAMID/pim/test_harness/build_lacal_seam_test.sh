@@ -26,13 +26,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" -DPYRAMID_ENABLE_OWP=ON >/dev/null
-cmake --build "${BUILD_DIR}" --target lacal_seam_test --parallel >/dev/null
-
 if [[ -z "${SLEET_URL:-}" ]]; then
   echo "SKIP: set SLEET_URL to a running Sleet with lacal/services loaded"
   exit 0
 fi
+
+cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" -DPYRAMID_ENABLE_OWP=ON >/dev/null
+cmake --build "${BUILD_DIR}" --target lacal_seam_test --parallel >/dev/null
 
 HOST_PORT=${SLEET_URL#ws://}
 HOST_PORT=${HOST_PORT%%/*}
@@ -77,7 +77,7 @@ PROV_PID=$!
 for _ in $(seq 1 100); do
   if [[ -f "${READY}" ]]; then break; fi
   if ! kill -0 "${PROV_PID}" 2>/dev/null; then
-    wait "${PROV_PID}"; echo "FAIL: provider exited before becoming ready"; exit 2
+    wait "${PROV_PID}" || true; echo "FAIL: provider exited before becoming ready"; exit 2
   fi
   sleep 0.1
 done

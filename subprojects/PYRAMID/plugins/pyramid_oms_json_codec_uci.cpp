@@ -291,8 +291,8 @@ void decode_action_command(const nlohmann::json& document,
   cmd->priority = capability.at("Ranking").at("Rank").at("Priority").get<int32_t>();
   copy_text(capability.at("ActionID").at("UUID"), cmd->action_uuid);
   if (!is_uuid(cmd->command_uuid) || !is_uuid(cmd->capability_uuid) ||
-      !is_uuid(cmd->action_uuid)) {
-    throw nlohmann::json::type_error::create(302, "invalid ActionCommand UUID", &root);
+      !is_uuid(cmd->action_uuid) || !required_text(cmd->command_state)) {
+    throw nlohmann::json::type_error::create(302, "invalid ActionCommand", &root);
   }
 }
 
@@ -320,8 +320,9 @@ void decode_action_command_status(const nlohmann::json& document,
   const auto& data = root.at("MessageData");
   copy_text(data.at("CommandID").at("UUID"), status->command_uuid);
   copy_text(data.at("CommandProcessingState"), status->command_processing_state);
-  if (!is_uuid(status->command_uuid)) {
-    throw nlohmann::json::type_error::create(302, "invalid ActionCommandStatus UUID",
+  if (!is_uuid(status->command_uuid) ||
+      !required_text(status->command_processing_state)) {
+    throw nlohmann::json::type_error::create(302, "invalid ActionCommandStatus",
                                              &root);
   }
 }
