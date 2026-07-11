@@ -20,6 +20,18 @@ if(PYRAMID_ENABLE_OWP)
         ASIO_STANDALONE
         PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>")
     gtest_discover_tests(test_lacal_transport_plugin TEST_PREFIX owp. DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_oms_json_codec_uci test_oms_json_codec_uci.cpp)
+    add_dependencies(test_oms_json_codec_uci pyramid_codec_oms_json_uci)
+    target_link_libraries(test_oms_json_codec_uci
+        PRIVATE pcl_core nlohmann_json::nlohmann_json GTest::gtest_main ${CMAKE_DL_LIBS})
+    target_include_directories(test_oms_json_codec_uci PRIVATE
+        "${PCL_ROOT_DIR}/include" "${PYRAMID_ROOT_DIR}/include")
+    target_compile_definitions(test_oms_json_codec_uci PRIVATE
+        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci>"
+        PYRAMID_LACAL_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/lacal")
+    gtest_discover_tests(test_oms_json_codec_uci
+        TEST_PREFIX oms_json. DISCOVERY_MODE PRE_TEST)
 endif()
 
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)
@@ -1844,7 +1856,8 @@ foreach(_pyramid_test_target IN LISTS _pyramid_tests_build_targets)
             AND NOT _pyramid_test_target STREQUAL "test_pcl_codec_registry"
             AND NOT _pyramid_test_target STREQUAL "test_pcl_plugin_loader"
             AND NOT _pyramid_test_target STREQUAL "test_owp_client"
-            AND NOT _pyramid_test_target STREQUAL "test_lacal_transport_plugin")
+            AND NOT _pyramid_test_target STREQUAL "test_lacal_transport_plugin"
+            AND NOT _pyramid_test_target STREQUAL "test_oms_json_codec_uci")
         target_sources(${_pyramid_test_target} PRIVATE
             $<TARGET_OBJECTS:pyramid_cpp_test_codec_plugins>)
         target_link_libraries(${_pyramid_test_target} PRIVATE

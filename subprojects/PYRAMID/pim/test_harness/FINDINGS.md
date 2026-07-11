@@ -227,3 +227,37 @@ guards are present, but the Windows compile leg has not been run in this Linux
 workspace and remains a CI/toolchain verification item. Phase 0 confirmed
 that Sleet validates against UCI 2.5, so Phase 4's kit-native OMS JSON codec
 prerequisite moves ahead of the real-Sleet Phase 3 harness.
+
+## LA-CAL integration rung 1 — Phase 4 codec prerequisite (2026-07-11)
+
+The real-Sleet path now has a deliberately small UCI 2.5 codec subset rather
+than attempting to hand-model the full 100k-line schema. The selected messages
+have concrete starter-kit roles: `SignalReport` is published by the independent
+`rf-fm-demod` Skill and consumed by PYRAMID; `PositionReport` is consumed by
+that Skill and can be published by PYRAMID. Frozen, bounded C structs live in
+`include/pyramid/oms_json_types.h`, and
+`libpyramid_codec_oms_json_uci.so` exposes codec ABI v2 with content type
+`application/oms-json`.
+
+The codec reproduces the upstream RF Skill's accepted minimal/enriched JSON
+shape, validates RFC-4122 UUID text, extracts the RF
+`Parametrics.Frequency.FrequencyAverage` field while tolerating unrelated
+optional UCI fields, and implements the OMS JSON `NaN`/`Infinity` string
+mapping. Fixed-size C fields avoid cross-DLL ownership for decoded values;
+encoded buffers use `pcl_alloc`/`pcl_free`.
+
+**Pinned independent sources.** The LA-CAL harness is commit
+`9ea4cd2ebb5b6ed13e050391020bacfb1388ac60`; its UCI schema pin is
+`73a286fc4b881d9f328dbd64148525606a92c33a`. The RF Skill fixture/builder is
+tag `v2026.06.01`, commit
+`af13bd2926b15253e795920c91320733a29927ea`. Fixture provenance is recorded
+beside the JSON files under `tests/fixtures/lacal/`.
+
+**Verification (Linux).** `test_oms_json_codec_uci` is 6/6 green: plugin
+ABI/content type; foreign SignalReport golden encode and enriched decode;
+foreign PositionReport golden encode and round trip; OMS special floating
+point tokens; invalid UUID and unknown-schema negatives.
+
+**Progress:** the codec/golden-fixture prerequisite is complete. Phase 4 is
+not yet at its exit gate because live independently-authored peer traffic still
+depends on the Phase 3 Sleet harness. Phase 3 is now unblocked.

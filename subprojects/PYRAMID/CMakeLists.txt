@@ -472,6 +472,18 @@ unset(PYRAMID_CODEC_PLUGIN_SRC)
 unset(PYRAMID_CODEC_PLUGIN_STEM)
 unset(PYRAMID_CODEC_PLUGIN_TARGET)
 
+if(PYRAMID_ENABLE_OWP)
+    add_library(pyramid_codec_oms_json_uci MODULE
+        "${PYRAMID_ROOT_DIR}/plugins/pyramid_oms_json_codec_uci.cpp")
+    target_link_libraries(pyramid_codec_oms_json_uci
+        PRIVATE pcl_core nlohmann_json::nlohmann_json)
+    target_include_directories(pyramid_codec_oms_json_uci
+        PRIVATE
+            "${PCL_ROOT_DIR}/include"
+            "${PYRAMID_ROOT_DIR}/include")
+    list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS pyramid_codec_oms_json_uci)
+endif()
+
 if(PYRAMID_ENABLE_PROTOBUF)
     if(NOT TARGET protobuf::libprotobuf)
         find_package(Protobuf CONFIG QUIET)

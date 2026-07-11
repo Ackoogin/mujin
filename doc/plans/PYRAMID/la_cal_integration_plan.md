@@ -1,8 +1,8 @@
 # LA-CAL Integration Plan — Rung 1 of the OMS CAL Join
 
-**Status:** in progress — Phases 0–2 implemented and verified on Linux;
-Phase 4 is next because Phase 0 confirmed that Sleet schema-validates payloads,
-so the OMS JSON/kit-native vocabulary prerequisite must precede Phase 3.
+**Status:** in progress — Phases 0–2 and the Phase 4 codec prerequisite are
+implemented and verified on Linux. Phase 3 (real Sleet) is next; live
+foreign-peer tests will then close the remainder of Phase 4.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -211,8 +211,8 @@ harness `.bat` files).
 
 ### Phase 3 — E2E through real Sleet, kit-native vocabulary (medium)
 
-**Progress:** waiting on Phase 4's OMS JSON codec and frozen kit-native
-message subset, as required by the Phase 0 Sleet validation finding.
+**Progress:** next. Phase 4's prerequisite codec and frozen kit-native
+`SignalReport`/`PositionReport` subset are complete.
 
 Two PCL processes joined **only** by a locally-running Sleet:
 
@@ -242,9 +242,10 @@ behaviour, and the fail-closed negatives all demonstrated by
 
 ### Phase 4 — OMS JSON codec + foreign-peer interop (medium)
 
-**Progress:** next implementation phase. Its codec/golden-fixture subset is
-being executed before Phase 3; live foreign-peer interop remains the Phase 4
-exit activity after the Sleet harness exists.
+**Progress:** codec prerequisite complete (2026-07-11). The frozen C ABI,
+`application/oms-json` plugin, and upstream-derived `SignalReport` and
+`PositionReport` golden tests are green. Live foreign-peer interop remains the
+Phase 4 exit activity after the Phase 3 Sleet harness exists.
 
 The step that earns "interop" rather than "loopback through a broker":
 
