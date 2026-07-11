@@ -362,16 +362,24 @@ class Converter:
         self._dedupe_field_names(spec, context)
 
     def _convert_particles(self, spec: MessageSpec, parent: ET.Element,
-                           number: int, context: str) -> int:
+                           number: int, context: str,
+                           optional_group: bool = False) -> int:
         for child in parent:
             if child.tag == f"{XS}sequence":
                 if child.get("maxOccurs", "1") not in ("", "1"):
                     self.index._unsupported(f"repeated xs:sequence in {context}")
                     continue
-                number = self._convert_particles(spec, child, number, context)
+                # An optional group (minOccurs="0") makes every child
+                # optional on the wire even when the child itself defaults
+                # to minOccurs="1" -- absence of the group is legal.
+                number = self._convert_particles(
+                    spec, child, number, context,
+                    optional_group=optional_group
+                    or child.get("minOccurs", "1") == "0")
             elif child.tag == f"{XS}element":
                 number = self._convert_element(spec, child, number, context,
-                                               oneof=None)
+                                               oneof=None,
+                                               optional_group=optional_group)
             elif child.tag == f"{XS}choice":
                 number = self._convert_choice(spec, child, number, context)
             elif child.tag == f"{XS}any":
@@ -430,7 +438,13 @@ class Converter:
 
     def _convert_element(self, spec: MessageSpec, element: ET.Element,
                          number: int, context: str,
-                         oneof: Optional[str]) -> int:
+                         oneof: Optional[str],
+                         optional_group: bool = False) -> int:
+        # Occurrence constraints always belong to the referencing particle;
+        # a global element declaration cannot carry them, so they must be
+        # read before any ref swap.
+        min_occurs = element.get("minOccurs", "1")
+        max_occurs = element.get("maxOccurs", "1")
         if element.get("ref"):
             ref = local_name(element.get("ref", ""))
             target = self.index.elements.get(ref)
@@ -440,8 +454,6 @@ class Converter:
             element = target
         wire = element.get("name", "")
         type_ref = element.get("type", "")
-        min_occurs = element.get("minOccurs", "1")
-        max_occurs = element.get("maxOccurs", "1")
         repeated = max_occurs not in ("", "1")
         comment = _doc_text(element)
 
@@ -497,7 +509,7 @@ class Converter:
                 proto_type, kind, type_comment = synth, "message", []
         elif repeated:
             label = "repeated"
-        elif min_occurs == "0":
+        elif min_occurs == "0" or optional_group:
             label = "optional"
 
         spec.fields.append(FieldSpec(

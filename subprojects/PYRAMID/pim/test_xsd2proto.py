@@ -97,6 +97,24 @@ class MappingRuleTest(unittest.TestCase):
         self.assertEqual(self.field("TestCommandMDT", "target").label,
                          "repeated")
 
+    def test_element_ref_keeps_referencing_particle_occurrences(self):
+        # <xs:element ref="uci:Remark" minOccurs="0" maxOccurs="unbounded"/>:
+        # the occurrence constraints live on the referencing particle, not
+        # on the global declaration (Codex review of PR #120).
+        remark = self.field("TestCommandMDT", "remark")
+        self.assertEqual(remark.label, "repeated")
+        self.assertEqual(remark.proto_type, "string")
+        self.assertEqual(remark.wire_name, "Remark")
+
+    def test_optional_sequence_group_propagates_to_children(self):
+        # <xs:sequence minOccurs="0"> children default to minOccurs="1" but
+        # are optional on the wire because the group may be absent
+        # (Codex review of PR #120).
+        self.assertEqual(self.field("TestCommandMDT", "grouped_label").label,
+                         "optional")
+        self.assertEqual(self.field("TestCommandMDT", "grouped_count").label,
+                         "optional")
+
     def test_inline_choice_becomes_oneof_with_shared_numbering(self):
         by_label = self.field("TestCommandMDT", "by_label")
         by_number = self.field("TestCommandMDT", "by_number")
