@@ -1,0 +1,72 @@
+{
+  "_comment": [
+    "Schema-drop pin manifest for the UCI MMS conversion plan",
+    "(doc/plans/PYRAMID/uci_mms_conversion_plan.md, Phase 0).",
+    "Each drop pins the exact upstream artefacts xsd2proto.py may consume.",
+    "sha256 == null means the pin is awaiting its trust-on-first-use",
+    "bootstrap: run fetch_schemas.py in an environment that can reach the",
+    "source, copy the printed hash into this file, and commit.  Until a",
+    "drop is pinned, fetch_schemas.py treats its files as UNVERIFIED and",
+    "says so loudly; it never silently trusts an unpinned file twice."
+  ],
+  "drops": {
+    "uci_2_5_0": {
+      "description": "UCI 2.5 message definitions -- the schema the pinned Sleet v2026.06.01 container validates every PUB/MSG body against (INIT schema_version 002.5.0). Governs profile P1.",
+      "schema_version": "002.5.0",
+      "files": [
+        {
+          "name": "UCI_MessageDefinitions_v2_5_0.xsd",
+          "sha256": null,
+          "sources": [
+            {
+              "kind": "env",
+              "env": "UCI_XSD_PATH",
+              "note": "Same variable the Phase-4 LA-CAL interop driver uses; may point at the file itself or a directory containing it."
+            },
+            {
+              "kind": "checkout",
+              "glob": "external/ams-gra/**/UCI_MessageDefinitions_v2_5_0.xsd",
+              "note": "The persistent Kitty Hawk checkout (ams_gra_starter_kit_bringup.md); Sleet loads this file, so any complete checkout contains it."
+            }
+          ]
+        }
+      ]
+    },
+    "agra_5_0a": {
+      "description": "A-GRA / ASK 5.0a message definitions (UCI 2.3 base + MA_* extensions) -- the drop the formal MMS (MA L1 Compliance Table 3-1) is defined against. Governs profile P2. Sibling of uci_2_5_0, NOT the same schema: generated trees are never shared across drops.",
+      "schema_version": "005.0a.ASK-20260423-f1380e7",
+      "files": [
+        {
+          "name": "A-GRA_MessageDefinitions_v5_0_a.xsd",
+          "sha256": "2e17ffcf193ab69944709cf737c36ac90b571b3acf83c503fb434f721934e0b3",
+          "sources": [
+            {
+              "kind": "env",
+              "env": "AGRA_XSD_DIR",
+              "note": "Directory containing the ASK 5.0a Schema/ files (e.g. a local clone of the a-gra repo)."
+            },
+            {
+              "kind": "url",
+              "url": "https://raw.githubusercontent.com/open-arsenal/a-gra/main/Schema/A-GRA_MessageDefinitions_v5_0_a.xsd",
+              "note": "Public ASK 5.0a release. sha256 bootstrapped 2026-07-11 from this URL; the fetched schema's own version attribute matches the pinned schema_version. Replacing 'main' with the upstream commit hash is still wanted (the GitHub API was unreachable from the bootstrap environment); content integrity is carried by the sha256 pin either way."
+            }
+          ]
+        },
+        {
+          "name": "A-GRA_SecurityMarkings_v5_0_a.xsd",
+          "sha256": "711284414f67898dbe1b3cfffd41e28760d2cb1ca5985c56ef5b8fc813814e9e",
+          "sources": [
+            {
+              "kind": "env",
+              "env": "AGRA_XSD_DIR"
+            },
+            {
+              "kind": "url",
+              "url": "https://raw.githubusercontent.com/open-arsenal/a-gra/main/Schema/A-GRA_SecurityMarkings_v5_0_a.xsd"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -11,7 +11,7 @@ were removed. What remains is:
 | **Live plan** (proposed, not yet scheduled) | [`pyramid_split_and_tobj_pim_migration_plan.md`](pyramid_split_and_tobj_pim_migration_plan.md) |
 | **Live plan** (in progress; Phases 0–4 and Phase 5 step 1 verified against real Sleet; Phase 6 superseded) | [`la_cal_integration_plan.md`](la_cal_integration_plan.md) — LA-CAL (`owp`) transport plugin + OMS JSON codec, rung 1 of the OMS CAL join |
 | **Live plan** (proposed; supersedes the AME-facing scope of Phase 6 above) | [`kitty_hawk_pcl_consumer_plan.md`](kitty_hawk_pcl_consumer_plan.md) — PCL-only consumer proof against the full live Kitty Hawk stack |
-| **Live plan** (proposed; includes a review of the A-GRA integration state) | [`uci_mms_conversion_plan.md`](uci_mms_conversion_plan.md) — `xsd2proto` + profile ladder: from the hand-authored UCI seam test cases to a GRA-scale minimum message set converted from the XSD (rung 3) |
+| **Live plan** (in progress; converter built and proven strict-clean at scale against the pinned A-GRA 5.0a drop; P1 gated on the UCI 2.5 XSD) | [`uci_mms_conversion_plan.md`](uci_mms_conversion_plan.md) — `xsd2proto` + profile ladder: from the hand-authored UCI seam test cases to a GRA-scale minimum message set converted from the XSD (rung 3) |
 | **Architecture reference** | `subprojects/PYRAMID/doc/architecture/` |
 | Full text of any retired document | git history (`git log --diff-filter=D --oneline -- doc/plans/PYRAMID doc/reports/PYRAMID doc/reviews/PYRAMID`) |
 

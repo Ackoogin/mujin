@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Profile P2 -- the A-GRA planning core (uci_mms_conversion_plan.md §5).",
+    "The MA_* planning/approval substance from the a-gra standard review",
+    "§6.1/§6.2, plus the UCI plan/approval/status types their closures pull",
+    "in automatically.  Validation tier (a) offline only -- no live",
+    "validator for this drop exists in-repo, and no compliance is claimed.",
+    "",
+    "STATUS: roots reconciled against the real 5.0a drop's 841 top-level",
+    "elements (2026-07-11; the review-guessed MA_MissionPlanStatus does not",
+    "exist -- the drop carries MA_MissionPlanActivationStatus).  Field-table",
+    "reconciliation against the MA L1 Compliance Document §4 remains a",
+    "Phase-4 item.  Root names follow the top-level *element* names (the MT",
+    "suffix belongs to the element's type, not the element).  Expect the",
+    "closure report to drive pruning; do not grow this list without",
+    "reading that report."
+  ],
+  "profile": "p2_agra_planning_core",
+  "drop": "agra_5_0a",
+  "schema_version": "005.0a.ASK-20260423-f1380e7",
+  "proto_package": "pyramid.data_model.agra",
+  "roots": [
+    "MA_Action",
+    "MA_ActionStatus",
+    "MA_ApprovalPolicy",
+    "MA_ApprovalRequest",
+    "MA_ApprovalRequestStatus",
+    "MA_MissionPlan",
+    "MA_MissionPlanActivationCommand",
+    "MA_MissionPlanCommand",
+    "MA_MissionPlanCommandStatus",
+    "MA_MissionPlanActivationStatus",
+    "MA_MissionPlanExecutionStatus",
+    "MA_PlanningFunction",
+    "MA_PlanningFunctionSettingsCommand",
+    "MA_PlanningFunctionStatus",
+    "MA_Response",
+    "MA_Task",
+    "MA_TaskStatus",
+    "MissionContingencyAlert"
+  ]
+}
