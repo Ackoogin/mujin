@@ -244,7 +244,9 @@ struct RoutedSubData {
 struct MockTransportState {
   int publish_count = 0;
   int invoke_count = 0;
+  int subscribe_count = 0;
   std::string last_name;
+  std::string last_type;
 };
 
 struct FanoutState {
@@ -351,6 +353,90 @@ static pcl_status_t mock_publish(void* ctx, const char* topic, const pcl_msg_t*)
   state->publish_count++;
   state->last_name = topic ? topic : "";
   return PCL_OK;
+}
+
+static pcl_status_t mock_subscribe(void* ctx, const char* topic,
+                                   const char* type_name) {
+  auto* state = static_cast<MockTransportState*>(ctx);
+  state->subscribe_count++;
+  state->last_name = topic ? topic : "";
+  state->last_type = type_name ? type_name : "";
+  return PCL_OK;
+}
+
+TEST(PclExecutor, SubscriberPortRegistersWithNamedTransportDuringSetup) {
+  RoutedSubData data;
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  transport.subscribe = mock_subscribe;
+  transport.adapter_ctx = &transport_state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    const char* peers[] = {"peer_a"};
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "remote/topic", "RemoteMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void* inner_ud) {
+          static_cast<RoutedSubData*>(inner_ud)->received = true;
+        },
+        ud);
+    return port ? pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1)
+                : PCL_ERR_NOMEM;
+  };
+
+  auto* c = pcl_container_create("remote_sub", &cbs, &data);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &transport), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  EXPECT_EQ(transport_state.subscribe_count, 1);
+  EXPECT_EQ(transport_state.last_name, "remote/topic");
+  EXPECT_EQ(transport_state.last_type, "RemoteMsg");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+TEST(PclExecutor, LateNamedTransportRegistersExistingSubscriberPort) {
+  RoutedSubData data;
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  transport.subscribe = mock_subscribe;
+  transport.adapter_ctx = &transport_state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    const char* peers[] = {"peer_a"};
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "remote/topic", "RemoteMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void* inner_ud) {
+          static_cast<RoutedSubData*>(inner_ud)->received = true;
+        },
+        ud);
+    return port ? pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1)
+                : PCL_ERR_NOMEM;
+  };
+
+  auto* c = pcl_container_create("late_remote_sub", &cbs, &data);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  EXPECT_EQ(transport_state.subscribe_count, 0);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &transport), PCL_OK);
+  EXPECT_EQ(transport_state.subscribe_count, 1);
+  EXPECT_EQ(transport_state.last_name, "remote/topic");
+  EXPECT_EQ(transport_state.last_type, "RemoteMsg");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
 }
 
 static pcl_status_t mock_invoke_async(void*            ctx,

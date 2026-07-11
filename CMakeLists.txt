@@ -15,6 +15,7 @@ set(AME_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/AME")
 option(UNMANNED_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
 option(UNMANNED_BUILD_AME "Build the AME subproject and AME-only dependencies" OFF)
 option(PYRAMID_ENABLE_FLATBUFFERS "Enable FlatBuffers codec/transport for PYRAMID" ON)
+option(PYRAMID_ENABLE_OWP "Enable the PYRAMID OMS WebSocket Protocol client" ON)
 
 # ---------------------------------------------------------------------------
 # Shared third-party dependencies
@@ -103,7 +104,13 @@ endif()
 if(AME_LLM)
     find_package(CURL REQUIRED)
 endif()
-if(AME_FOXGLOVE)
+endif()
+
+# Websocket++ and standalone Asio are header-only dependencies shared by the
+# AME Foxglove bridge and the PYRAMID OWP client.  OWP may be enabled without
+# building AME, so this cannot be nested under UNMANNED_BUILD_AME.
+if((UNMANNED_BUILD_AME AND AME_FOXGLOVE)
+   OR (UNMANNED_BUILD_PYRAMID AND PYRAMID_ENABLE_OWP))
     FetchContent_Declare(
         websocketpp
         GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
@@ -125,7 +132,6 @@ if(AME_FOXGLOVE)
     if(NOT asio_POPULATED)
         FetchContent_Populate(asio)
     endif()
-endif()
 endif()
 
 FetchContent_Declare(

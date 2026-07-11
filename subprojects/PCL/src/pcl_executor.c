@@ -219,6 +219,86 @@ static const char* port_peer_id_at(const pcl_executor_t* e,
   return (index < port->peer_count) ? port->peer_ids[index] : NULL;
 }
 
+static pcl_status_t subscribe_port_with_transport(
+    const pcl_executor_t* e,
+    const pcl_port_t*     port,
+    const char*           peer_id,
+    const pcl_transport_t* transport) {
+  uint32_t i;
+  uint32_t peer_count;
+
+  if (!e || !port || !transport || port->type != PCL_PORT_SUBSCRIBER) {
+    return PCL_OK;
+  }
+  if ((port_route_mode(e, port) & PCL_ROUTE_REMOTE) == 0u) return PCL_OK;
+
+  peer_count = port_peer_count(e, port);
+  if (peer_id) {
+    for (i = 0; i < peer_count; ++i) {
+      const char* routed_peer = port_peer_id_at(e, port, i);
+      if (routed_peer && strcmp(routed_peer, peer_id) == 0) break;
+    }
+    if (i == peer_count) return PCL_OK;
+  } else if (peer_count != 0u) {
+    return PCL_OK;
+  }
+
+  if (!transport->subscribe) return PCL_ERR_NOT_FOUND;
+  return transport->subscribe(transport->adapter_ctx, port->name,
+                              port->type_name);
+}
+
+static pcl_status_t subscribe_container_ports(pcl_executor_t* e,
+                                              pcl_container_t* c) {
+  uint32_t pi;
+
+  for (pi = 0; pi < c->port_count; ++pi) {
+    const pcl_port_t* port = &c->ports[pi];
+    uint32_t peer_count;
+    uint32_t i;
+    pcl_status_t rc;
+
+    if (port->type != PCL_PORT_SUBSCRIBER ||
+        (port_route_mode(e, port) & PCL_ROUTE_REMOTE) == 0u) {
+      continue;
+    }
+
+    peer_count = port_peer_count(e, port);
+    if (peer_count == 0u) {
+      if (!e->has_transport) continue;
+      rc = subscribe_port_with_transport(e, port, NULL, &e->transport);
+      if (rc != PCL_OK) return rc;
+      continue;
+    }
+
+    for (i = 0; i < peer_count; ++i) {
+      const char* peer_id = port_peer_id_at(e, port, i);
+      const pcl_transport_t* transport = find_named_transport(e, peer_id);
+      if (!transport) continue;
+      rc = subscribe_port_with_transport(e, port, peer_id, transport);
+      if (rc != PCL_OK) return rc;
+    }
+  }
+  return PCL_OK;
+}
+
+static pcl_status_t subscribe_existing_ports(pcl_executor_t* e,
+                                             const char* peer_id,
+                                             const pcl_transport_t* transport) {
+  uint32_t ci;
+  uint32_t pi;
+
+  for (ci = 0; ci < e->container_count; ++ci) {
+    const pcl_container_t* c = e->containers[ci];
+    for (pi = 0; pi < c->port_count; ++pi) {
+      pcl_status_t rc = subscribe_port_with_transport(
+          e, &c->ports[pi], peer_id, transport);
+      if (rc != PCL_OK) return rc;
+    }
+  }
+  return PCL_OK;
+}
+
 static int route_accepts(uint32_t route_mode,
                          uint32_t source_route_mode) {
   return (route_mode & source_route_mode) != 0u;
@@ -344,12 +424,19 @@ void pcl_executor_destroy(pcl_executor_t* e) {
 // -- Container management ------------------------------------------------
 
 pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c) {
+  pcl_status_t rc;
   if (!e || !c) return PCL_ERR_INVALID;
   pcl_mutex_lock(&e->containers_lock);
   if (e->container_count >= PCL_MAX_CONTAINERS) {
     pcl_mutex_unlock(&e->containers_lock);
     return PCL_ERR_NOMEM;
   }
+  pcl_mutex_unlock(&e->containers_lock);
+
+  rc = subscribe_container_ports(e, c);
+  if (rc != PCL_OK) return rc;
+
+  pcl_mutex_lock(&e->containers_lock);
   e->containers[e->container_count++] = c;
   c->executor = e;
   pcl_mutex_unlock(&e->containers_lock);
@@ -766,8 +853,14 @@ pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
                                                   const pcl_transport_t* transport,
                                                   pcl_transport_caps_t   caps) {
   uint32_t i;
+  pcl_status_t rc;
 
   if (!e || !peer_id) return PCL_ERR_INVALID;
+
+  if (transport) {
+    rc = subscribe_existing_ports(e, peer_id, transport);
+    if (rc != PCL_OK) return rc;
+  }
 
   for (i = 0; i < e->transport_count; ++i) {
     if (e->transports[i].in_use &&

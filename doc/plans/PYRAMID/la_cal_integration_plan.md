@@ -1,6 +1,8 @@
 # LA-CAL Integration Plan — Rung 1 of the OMS CAL Join
 
-**Status:** proposed (not yet scheduled)
+**Status:** in progress — Phases 0–2 implemented and verified on Linux;
+Phase 4 is next because Phase 0 confirmed that Sleet schema-validates payloads,
+so the OMS JSON/kit-native vocabulary prerequisite must precede Phase 3.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -105,6 +107,10 @@ the whole path proven against independently-authored infrastructure
 
 ### Phase 0 — Recon and pinning (small)
 
+**Progress:** complete (2026-07-11). See
+`subprojects/PYRAMID/pim/test_harness/FINDINGS.md` and
+`pim/test_harness/lacal/owp_grammar.md`.
+
 The one phase with no code deliverable; everything after it keys off its
 answers.
 
@@ -135,6 +141,8 @@ the other branch differs).
 
 ### Phase 1 — `owp` client core (small/medium)
 
+**Progress:** complete (2026-07-11); mock-server and golden-frame suite green.
+
 A plain C++17 library with **no PCL dependency**, so it unit-tests in
 isolation and could serve non-PCL uses later.
 
@@ -163,6 +171,11 @@ isolation and could serve non-PCL uses later.
 captured real-Sleet frames byte-for-byte.
 
 ### Phase 2 — LA-CAL transport plugin (medium)
+
+**Progress:** implemented and verified on Linux (2026-07-11). The plugin load,
+INIT failure, identity, executor/broker round-trip, content-type guard, and
+manifest QoS rollback tests are green. Windows compilation remains to be run
+in the Windows CI/toolchain environment.
 
 `subprojects/PYRAMID/plugins/pyramid_lacal_transport_plugin.cpp`, exported
 symbols exactly per the ABI (`pcl_plugin.h`), with
@@ -196,7 +209,10 @@ PUBSUB-only plugin):
 build compiles (websocketpp/MSVC parity note carried like the other
 harness `.bat` files).
 
-### Phase 3 — E2E through real Sleet, own vocabulary (medium)
+### Phase 3 — E2E through real Sleet, kit-native vocabulary (medium)
+
+**Progress:** waiting on Phase 4's OMS JSON codec and frozen kit-native
+message subset, as required by the Phase 0 Sleet validation finding.
 
 Two PCL processes joined **only** by a locally-running Sleet:
 
@@ -225,6 +241,10 @@ behaviour, and the fail-closed negatives all demonstrated by
 `build_lacal_e2e_test.sh` in `pim/test_harness/` + FINDINGS.md entry.
 
 ### Phase 4 — OMS JSON codec + foreign-peer interop (medium)
+
+**Progress:** next implementation phase. Its codec/golden-fixture subset is
+being executed before Phase 3; live foreign-peer interop remains the Phase 4
+exit activity after the Sleet harness exists.
 
 The step that earns "interop" rather than "loopback through a broker":
 

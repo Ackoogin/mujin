@@ -114,3 +114,116 @@ one manifest for the complete worked-example sequence (Phase E,
 plan-terminal). All the harnesses above except `contract_routing_validation`
 now move real bytes over real transports, not just compose-time
 validation.
+
+## LA-CAL integration rung 1 — Phase 0 recon/pinning (2026-07-11)
+
+Plan: `doc/plans/PYRAMID/la_cal_integration_plan.md`. Phase 0 is the one
+phase with no code deliverable; everything after it keys off these answers.
+No local Sleet run was needed to close the gate — the `owp` grammar is
+pinned from the **normative spec cross-checked against Sleet's reference
+implementation**, which is more reproducible than a captured session and is
+the authoritative source a capture would only sample.
+
+**Sources.** OMSC-SPC-013 RevB (`open-arsenal/oms`,
+`docs_markdown_unofficial/20_OMSC-SPC-013_...md`, tables 5.1-1…5.1-7, §6.1)
+and Sleet `sleet-types/src/owp.rs` (Apache-2.0). They agree on every point.
+
+**Pinned grammar** → `lacal/owp_grammar.md` (the frozen contract Phase 1
+implements against): subprotocol token `owp`; one op per WS text frame;
+space/tab delimiter with consecutive-collapse, CR/LF not delimiters (JSON
+bodies survive); `INIT`/`INFO` carry JSON, `SUB
+<sid> <message_name> <topic> [group]`, `PUB <topic> <msg>`,
+`MSG <sid> <msg>`, `UNSUB <sid>`, `+OK` (verbose, first `+OK` precedes
+`INFO`), `-ERR <name> [details]`. Identity (System/Service UUIDs, server_id,
+version) comes from `INFO`.
+
+**Exit-gate decisions:**
+
+- **D2 (QoS) resolved → BEST_EFFORT default.** OMSC-SPC-013 does not address
+  QoS/reliability/buffering; the plugin declares BEST_EFFORT, with an
+  explicit `"declare_reliability":"reliable"` deploy override the only path
+  to a RELIABLE claim (UDP-downgrade convention).
+- **Vocabulary decision made → kit-native UCI on the real-Sleet path.**
+  Sleet validates every PUB/MSG body against the UCI XSD
+  (`schema_version="002.5.0"`, `UCI_MessageDefinitions_v2_5_0.xsd`) and
+  requires `message_name` to be a UCI global element. The hand-authored
+  `agra_example` (`MA_*`) vocabulary is a UCI-2.3 A-GRA extension not in the
+  OMS-2.5 UCI set, so it cannot go through Sleet. **Phases 3–4 (real Sleet)
+  adopt the kit-native UCI message set; Phases 1–2 are unaffected** — they
+  run against an in-process mock server we control, which does not
+  schema-validate. This is the plan's Risk-table fallback, now confirmed as
+  the required branch.
+
+**Licensing.** Sleet and the starter-kit repos are Apache-2.0; the OMS/UCI
+document repos are public U.S. Federal Government works. No upstream code is
+copied into this repo — `owp_grammar.md` is an original pinning note citing
+sources.
+
+**Exit gate: met.** Frame grammar + schema/validation behaviour documented;
+D2 resolved; demo-vocabulary decision made. Phase 1 unblocked.
+
+## LA-CAL integration rung 1 — Phase 1 owp client core (2026-07-11)
+
+A PCL-free C++17 client core lands: `subprojects/PYRAMID/src/owp/`
+(`owp_frame.{hpp,cpp}` table-driven serialize/parse, `owp_client.{hpp,cpp}`
+websocketpp/asio client — one worker thread, INIT→INFO fail-closed with a
+bounded timeout naming url+service_id (D3), identity from INFO (D6),
+verbose `+OK`-before-`INFO` ordering, `-ERR` propagation, worker-thread MSG
+dispatch, explicit close/join, no auto-reconnect in v1). Built as static lib
+`pyramid_owp` behind a new `PYRAMID_ENABLE_OWP` option (default ON;
+websocketpp+asio fetched under `AME_FOXGLOVE OR PYRAMID_ENABLE_OWP`). Tests
+in `tests/test_owp_client.cpp` (googletest, in-process websocketpp mock
+server), CTest-registered under the `owp.` prefix and excluded from the
+PCL codec-plugin auto-linkage loop to keep the "no PCL dependency" boundary.
+
+**Verification (mine).** `cmake --preset default` + build; `ctest -R owp`
+→ **6/6 green** on Linux (g++ 11.4). The socket path could not run in the
+implementing sandbox (loopback bind denied there), so verification here
+surfaced and closed three defects that only appear when the mock actually
+runs: (1) client handlers were registered *after* `get_connection()`, so the
+connection was created handler-less and never signalled open — reordered
+before `get_connection()`; (2) the open handler rejected any connection whose
+echoed subprotocol wasn't exactly `owp`, failing valid opens where the echo
+is empty (a genuine decline is already caught by `fail_handler`) — relaxed to
+reject only a non-empty mismatch; (3) the hand-rolled INFO JSON parser held
+its text by `const&` while `objectField()` built a sub-parser over a
+temporary substring — dangling reference (UB) on the nested `uuids` object —
+fixed by storing the buffer by value. Golden-string frame tests match the
+`owp_grammar.md` examples byte-for-byte.
+
+**Exit gate: met.** Mock-server unit suite green; grammar round-trips the
+pinned golden frames. (Byte-for-byte against *live* Sleet frames is a
+Phase-3 item — no live capture exists yet; the golden strings are the
+spec-pinned stand-in.) Phase 2 (LA-CAL transport plugin) unblocked.
+
+## LA-CAL integration rung 1 — Phase 2 transport plugin (2026-07-11)
+
+The PUBSUB-only `pyramid_lacal_transport_plugin` now wraps `pyramid_owp`
+behind the PCL transport ABI. Entry performs the bounded `INIT` → `INFO`
+handshake and fails closed on an unreachable broker, timeout, or broker
+`-ERR`; INFO supplies the exported System and Service identities. The
+adapter declares `PCL_CAP_PUBSUB` and BEST_EFFORT by default, guards
+`application/oms-json`, queues `PUB` without blocking, maps subscriber ports
+to `SUB`, and posts `MSG` ingress through the executor's deep-copy remote
+queue. Teardown closes the WebSocket and joins its worker before `dlclose`.
+
+Phase 2 also closed a pre-existing PCL setup gap exposed by a real broker:
+the transport ABI documented `subscribe` as being called once per subscriber
+port, but the executor never invoked it. `pcl_executor_add` now subscribes
+matching ports through already-registered named/default transports, and late
+named-transport registration subscribes matching existing ports. This keeps
+manifest-driven LA-CAL composition functional without test-only calls into
+the transport vtable.
+
+**Verification (Linux, `build-flatbuffers-only`).** The OWP client suite is
+6/6 green; the LA-CAL plugin suite is 6/6 green (ABI/caps/QoS, unanswered and
+rejected INIT, content-type guard, INFO identity, broker round-trip, and
+RELIABLE-over-BEST_EFFORT manifest rollback); the shared PCL executor suite is
+35/35 green; and transport-routing is 31/31 green. The broker round-trip uses
+two real executors and requires no direct test-side `subscribe` call.
+
+**Exit status:** Linux exit gate met. Windows-specific exports and socket
+guards are present, but the Windows compile leg has not been run in this Linux
+workspace and remains a CI/toolchain verification item. Phase 0 confirmed
+that Sleet validates against UCI 2.5, so Phase 4's kit-native OMS JSON codec
+prerequisite moves ahead of the real-Sleet Phase 3 harness.

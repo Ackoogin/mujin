@@ -14,6 +14,7 @@ endif()
 option(PYRAMID_ENABLE_FLATBUFFERS "Enable FlatBuffers codec/transport for PYRAMID" ON)
 option(PYRAMID_ENABLE_GRPC "Enable gRPC transport projection for PYRAMID" OFF)
 option(PYRAMID_ENABLE_ROS2 "Enable ROS2 semantic transport projection for PYRAMID" ON)
+option(PYRAMID_ENABLE_OWP "Enable the OMS WebSocket Protocol client" ON)
 set(PYRAMID_GRPC_TAG "v1.72.0" CACHE STRING "gRPC git tag to fetch when PYRAMID_ENABLE_GRPC is ON")
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -843,6 +844,25 @@ endforeach()
 unset(_pyramid_plugin_dep)
 
 add_subdirectory(core)
+
+if(PYRAMID_ENABLE_OWP)
+    add_subdirectory(src/owp)
+
+    # LA-CAL (OMS WebSocket Protocol) transport plugin: a PUBSUB-only shared
+    # MODULE wrapping the PCL-free owp client. pyramid_owp is built PIC (see
+    # src/owp/CMakeLists.txt) so it can be linked into this .so.
+    add_library(pyramid_lacal_transport_plugin MODULE
+        "${PYRAMID_ROOT_DIR}/plugins/pyramid_lacal_transport_plugin.cpp")
+    target_link_libraries(pyramid_lacal_transport_plugin
+        PRIVATE pcl_core pyramid_owp)
+    target_include_directories(pyramid_lacal_transport_plugin
+        PRIVATE
+            "${PCL_ROOT_DIR}/include"
+            "${PYRAMID_ROOT_DIR}/src/owp")
+    if(TARGET pyramid_plugins)
+        add_dependencies(pyramid_plugins pyramid_lacal_transport_plugin)
+    endif()
+endif()
 
 # Example component, bridge demo and the test suite are wired to the default
 # proto/ component set (they reference specific generated `pyramid_services_*`

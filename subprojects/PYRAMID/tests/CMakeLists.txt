@@ -1,5 +1,27 @@
 include(GoogleTest)
 
+if(PYRAMID_ENABLE_OWP)
+    find_package(Threads REQUIRED)
+    add_executable(test_owp_client test_owp_client.cpp)
+    target_link_libraries(test_owp_client PRIVATE pyramid_owp GTest::gtest_main Threads::Threads)
+    target_include_directories(test_owp_client PRIVATE ${websocketpp_SOURCE_DIR} ${asio_SOURCE_DIR}/asio/include)
+    target_compile_definitions(test_owp_client PRIVATE ASIO_STANDALONE)
+    gtest_discover_tests(test_owp_client TEST_PREFIX owp. DISCOVERY_MODE PRE_TEST)
+
+    # Phase 2: LA-CAL transport plugin loopback (in-process owp broker + two
+    # executors). dlopen()s the plugin .so, so it depends on but does not link it.
+    add_executable(test_lacal_transport_plugin test_lacal_transport_plugin.cpp)
+    add_dependencies(test_lacal_transport_plugin pyramid_lacal_transport_plugin)
+    target_link_libraries(test_lacal_transport_plugin
+        PRIVATE pcl_core GTest::gtest_main Threads::Threads ${CMAKE_DL_LIBS})
+    target_include_directories(test_lacal_transport_plugin PRIVATE
+        "${PCL_ROOT_DIR}/include" ${websocketpp_SOURCE_DIR} ${asio_SOURCE_DIR}/asio/include)
+    target_compile_definitions(test_lacal_transport_plugin PRIVATE
+        ASIO_STANDALONE
+        PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>")
+    gtest_discover_tests(test_lacal_transport_plugin TEST_PREFIX owp. DISCOVERY_MODE PRE_TEST)
+endif()
+
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)
 set(PROTO_BINDINGS_DIR ${PYRAMID_CPP_BINDINGS_DIR})
 
@@ -1820,7 +1842,9 @@ get_property(_pyramid_tests_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS
 foreach(_pyramid_test_target IN LISTS _pyramid_tests_build_targets)
     if(_pyramid_test_target MATCHES "^test_"
             AND NOT _pyramid_test_target STREQUAL "test_pcl_codec_registry"
-            AND NOT _pyramid_test_target STREQUAL "test_pcl_plugin_loader")
+            AND NOT _pyramid_test_target STREQUAL "test_pcl_plugin_loader"
+            AND NOT _pyramid_test_target STREQUAL "test_owp_client"
+            AND NOT _pyramid_test_target STREQUAL "test_lacal_transport_plugin")
         target_sources(${_pyramid_test_target} PRIVATE
             $<TARGET_OBJECTS:pyramid_cpp_test_codec_plugins>)
         target_link_libraries(${_pyramid_test_target} PRIVATE
