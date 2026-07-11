@@ -302,7 +302,8 @@ schema loaded: 722 elements / 4612 types) produced:
   the typed `PositionReport` (lat/lon radians, altitude, `WGS_HAE` reference).
 - **Dead-Sleet SKIP:** unreachable `SLEET_URL` → `SKIP: Sleet is unreachable`.
 - **Absent-config SKIP:** no env → `SKIP: set SLEET_URL, or set SLEET_BIN…`.
-- **Fail-closed negatives** (mock-server unit tests, unconditional in CTest):
+- **Fail-closed negatives** (mock-server unit tests, CTest-registered
+  whenever `PYRAMID_ENABLE_OWP` is on — no live Sleet needed):
   unanswered INIT and `-ERR`-rejected INIT both return NULL from the plugin
   entry (`FailsClosedWhenInitUnanswered`, `FailsClosedWhenInitRejected`); a
   RELIABLE-floored route over a BEST_EFFORT declaration fails routing closed
@@ -316,3 +317,7 @@ without conflicting with the real-Sleet path. `OmsJsonUciCodec` suite 6/6 green.
 The schema-valid enum on the wire is `WGS_HAE`; the codec passes
 `AltitudeReference` through opaquely, so the same codec serves both the
 upstream fixture and the Sleet path.
+
+The captured PASS output and Sleet routing log are committed at
+`lacal/sleet_e2e_run.log` for auditability (the run is manually launched, not
+part of the default CTest suite, since it needs a live Sleet).

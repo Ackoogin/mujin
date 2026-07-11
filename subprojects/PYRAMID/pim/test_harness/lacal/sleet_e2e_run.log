@@ -1,0 +1,27 @@
+# Captured LA-CAL Phase 3 real-Sleet run
+# Date: 2026-07-11
+# Sleet image: registry.gitlab.com/open-arsenal/ams-gra/hello-world-sk/infra/sleet:v2026.06.01
+#              (tag v2026.06.01, commit e38f61d8ce0d75c8508434a52f2ed77c69cf6a3b)
+# Schema:      UCI_MessageDefinitions_v2_5_0.xsd (OAC-STD-002 RevE, v2.5.0)
+# Command:     SLEET_URL=ws://127.0.0.1:21402 build_lacal_e2e_test.sh
+# (Codegen/build output elided; this file records only the routing evidence.)
+# ---------------------------------------------------------------
+
+## harness result
+PASS: cross-process PCL -> Sleet -> PCL PositionReport delivery
+
+## sleet server log (ANSI stripped, routing evidence)
+INFO sleet: schema loaded schema_version="002.5.0" elements=722 types=4612 facets=8169
+INFO sleet::server: listening addr=0.0.0.0:21402
+INFO connection{id=2}: sleet::server: accepted
+INFO connection{id=2 service_id="pyramid-subscriber"}: sleet::server: initialized schema=002.5.0 service_id=pyramid-subscriber
+INFO connection{id=3}: sleet::server: accepted
+INFO connection{id=3 service_id="pyramid-publisher"}: sleet::server: initialized schema=002.5.0 service_id=pyramid-publisher
+INFO connection{id=2 service_id="pyramid-subscriber"}: sleet::server: disconnected
+INFO connection{id=3 service_id="pyramid-publisher"}: sleet::server: disconnected
+
+# The publisher's schema-valid PositionReport (radians + AltitudeReference=WGS_HAE)
+# was accepted by Sleet under the pinned UCI 2.5 XSD and delivered to the
+# subscriber, which decoded the typed struct -- hence the PASS above. A payload
+# carrying AltitudeReference=WGS84 is rejected by this schema (allowed enum:
+# WGS_HAE, MSL, ALTITUDE_BAROMETRIC, AGL); see FINDINGS.md Phase 3 exit note.
