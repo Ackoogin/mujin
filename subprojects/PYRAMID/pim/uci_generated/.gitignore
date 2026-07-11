@@ -1,0 +1,6 @@
+# Generated drop trees are deliberately untracked until their check-in
+# gates pass (see README.md): uci_2_5_0/ with the Phase-1 exit
+# (reconciliation documented), agra_5_0a/ with the Phase-4 exit (closure
+# pruned, posture note resolved).  Remove the matching entry when a tree
+# is promoted to checked-in, reviewable output per plan D2.
+/*/
