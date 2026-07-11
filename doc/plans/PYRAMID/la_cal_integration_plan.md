@@ -1,10 +1,10 @@
 # LA-CAL Integration Plan — Rung 1 of the OMS CAL Join
 
-**Status:** in progress — Phases 0–2 and the Phase 4 codec prerequisite are
-implemented and verified on Linux. Phase 3 has a working harness and has
-reached real-Sleet schema validation; one enum correction and a clean rerun
-remain before its exit gate. Live foreign-peer tests will then close the
-remainder of Phase 4.
+**Status:** in progress — Phases 0–3 and the Phase 4 codec prerequisite are
+implemented and verified on Linux. Phase 3 is complete: real-Sleet
+cross-process PositionReport delivery passes against the pinned Sleet
+container, with the SKIP paths and fail-closed negatives demonstrated. Live
+foreign-peer interop remains to close the rest of Phase 4; Phases 5–6 follow.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -213,15 +213,16 @@ harness `.bat` files).
 
 ### Phase 3 — E2E through real Sleet, kit-native vocabulary (medium)
 
-**Progress:** in progress (2026-07-11). The cross-process harness, scratch
+**Progress:** complete (2026-07-11). The cross-process harness, scratch
 service registrations, build integration, and graceful no-Sleet/dead-Sleet
-SKIPs are implemented. A pinned Sleet `v2026.06.01` instance accepts both
-services' INIT registrations and receives the publisher frame. The frame now
-uses radians as required by UCI, but Sleet rejects the remaining
-`AltitudeReference="WGS84"`; its schema permits `WGS_HAE` instead. Handover:
-make that E2E payload/expectation correction, rerun through Sleet, then record
-the delivery result and fail-closed negatives. The Phase 3 exit gate is not
-yet met.
+SKIPs are implemented. Against the pinned Sleet `v2026.06.01` container (UCI
+2.5 schema loaded), both services INIT-register and the publisher's
+schema-valid `PositionReport` (radians + `WGS_HAE`) is routed to and decoded
+by the subscriber: `PASS: cross-process PCL -> Sleet -> PCL PositionReport
+delivery`. Dead-Sleet and absent-config SKIPs, plus the fail-closed negatives
+(unanswered/rejected INIT → NULL entry; RELIABLE floor over BEST_EFFORT →
+routing fails closed) are all green. See FINDINGS.md "Phase 3 exit
+(2026-07-11)".
 
 Two PCL processes joined **only** by a locally-running Sleet:
 

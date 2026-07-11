@@ -287,3 +287,32 @@ with the pinned Sleet schema; preserve its provenance and decide separately
 whether to retain it as an upstream compatibility fixture or add a
 schema-valid fixture. The radians/ABI edits and new Phase 3 files in this
 checkpoint have not received a final regression run.
+
+## LA-CAL integration rung 1 — Phase 3 exit (2026-07-11)
+
+**Phase 3 exit gate met.** The `WGS84` → `WGS_HAE` correction in
+`lacal_e2e_test.cpp` (publisher payload + subscriber expectation) makes the
+publisher frame schema-valid against the pinned UCI 2.5 XSD. Rerun against the
+pinned Sleet container (`registry.gitlab.com/open-arsenal/ams-gra/hello-world-sk/infra/sleet:v2026.06.01`,
+schema loaded: 722 elements / 4612 types) produced:
+
+- **`PASS: cross-process PCL -> Sleet -> PCL PositionReport delivery`** — both
+  scratch services INIT-registered (`pyramid-publisher`, `pyramid-subscriber`),
+  Sleet accepted and routed the schema-valid frame, and the subscriber decoded
+  the typed `PositionReport` (lat/lon radians, altitude, `WGS_HAE` reference).
+- **Dead-Sleet SKIP:** unreachable `SLEET_URL` → `SKIP: Sleet is unreachable`.
+- **Absent-config SKIP:** no env → `SKIP: set SLEET_URL, or set SLEET_BIN…`.
+- **Fail-closed negatives** (mock-server unit tests, unconditional in CTest):
+  unanswered INIT and `-ERR`-rejected INIT both return NULL from the plugin
+  entry (`FailsClosedWhenInitUnanswered`, `FailsClosedWhenInitRejected`); a
+  RELIABLE-floored route over a BEST_EFFORT declaration fails routing closed
+  (`ReliableFloorOverBestEffortFailsClosed`). `owp.*` suite 12/12 green.
+
+**Fixture decision.** The upstream RF-Skill `position_report.json` golden
+fixture retains `WGS84`: `test_oms_json_codec_uci` exercises codec round-trip
+fidelity, not Sleet schema validation, so the upstream provenance value is kept
+without conflicting with the real-Sleet path. `OmsJsonUciCodec` suite 6/6 green.
+
+The schema-valid enum on the wire is `WGS_HAE`; the codec passes
+`AltitudeReference` through opaquely, so the same codec serves both the
+upstream fixture and the Sleet path.

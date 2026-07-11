@@ -96,7 +96,7 @@ bool fill_position(pyramid_uci_position_report_c* report) {
          set_text(report->source, "ACTUAL") &&
          set_text(report->current_operating_domain, "AIR") &&
          set_text(report->position_timestamp, "2026-07-11T12:00:00Z") &&
-         set_text(report->altitude_reference, "WGS84") &&
+         set_text(report->altitude_reference, "WGS_HAE") &&
          ((report->latitude_rad = 0.8989737191417272), true) &&
          ((report->longitude_rad = -0.002230530784048753), true) &&
          ((report->altitude_m = 1250.0), true) &&
@@ -177,7 +177,7 @@ void on_position(pcl_container_t*, const pcl_msg_t* message, void* user_data) {
                  std::abs(position.latitude_rad - 0.8989737191417272) < 1e-9 &&
                  std::abs(position.longitude_rad + 0.002230530784048753) < 1e-9 &&
                  std::abs(position.altitude_m - 1250.0) < 1e-9 &&
-                 std::strcmp(position.altitude_reference, "WGS84") == 0;
+                 std::strcmp(position.altitude_reference, "WGS_HAE") == 0;
   if (state->valid) {
     std::ofstream(state->output) << "position-ok\n";
   }
