@@ -17,6 +17,10 @@ alignment analysis for the PCL/PYRAMID bindings.
 LA-CAL/OMS/UCI simulation environment relevant to the onboard MS leg and the
 "OMS/CAL access may be controlled" risk below, plus MEL data-plane mappings
 onto PCL.
+[`ams_gra_oms_cal_join.md`](ams_gra_oms_cal_join.md) (2026-07-11) — how the
+PYRAMID binding layer joins an OMS CAL: the now-public OMS v2.5 spec set
+(CAL / C++ CAL / LA-CAL), what is and isn't standardized, and the
+plugin-shaped integration options enabled by the interaction-facade seam.
 **Inputs reviewed:** `A-GRA_MessageDefinitions_v5_0_a.xsd` (155,020 lines, 8.6 MB),
 `A-GRA_SecurityMarkings_v5_0_a.xsd` (5,472 lines), ASK 5.0a Start Here Guide
 (public release, 21 APR 2026), and the eight interface-volume PDFs from the
@@ -790,6 +794,13 @@ contract. Phases 3–4 are where genuinely new capability lives.
   (WebSocket+JSON) implementation and UCI simulation environment; see
   [`ams_gra_starter_kit_review.md`](ams_gra_starter_kit_review.md) §5.
   EXI/DMS remains unmitigated.
+  *Update 2026-07-11:* the OMS/CAL access risk is now **fully retired at
+  the specification level** — the complete OMS Standard v2.5 document set,
+  including the CAL Specification (OMSC-SPC-001), the C++ CAL API spec
+  (OMSC-SPC-008), and the Language-Agnostic CAL wire spec (OMSC-SPC-013),
+  is public at github.com/open-arsenal/oms. What remains non-public is any
+  C++ CAL *implementation* (platform deliverables). Join analysis:
+  [`ams_gra_oms_cal_join.md`](ams_gra_oms_cal_join.md).
 - **Standard churn.** 5.0a is the first public release (Apr 2026), two
   commits in the repo; field numbering/versioning discipline for regenerated
   protos must be designed in from the start (deterministic field numbers from
@@ -811,6 +822,7 @@ contract. Phases 3–4 are where genuinely new capability lives.
 
 - Worked E2E example (companion doc): [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md)
 - AMS GRA starter kit review (companion doc): [`ams_gra_starter_kit_review.md`](ams_gra_starter_kit_review.md)
+- OMS CAL join analysis (companion doc): [`ams_gra_oms_cal_join.md`](ams_gra_oms_cal_join.md)
 - A-GRA repository: https://github.com/open-arsenal/a-gra (Schema/, Documentation/, ASK 5.0a Start Here Guide); local copy at `doc/research/AME/a-gra-main/`
 - USAF A-GRA/CCA reporting: [The Aviationist](https://theaviationist.com/2026/02/14/usaf-integrates-a-gra-architecture-mission-autonomy-ccas/), [ExecutiveGov](https://www.executivegov.com/articles/air-force-a-gra-cca-open-architecture)
 - In-repo: `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.autonomy.proto`,
