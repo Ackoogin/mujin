@@ -32,6 +32,18 @@ if(PYRAMID_ENABLE_OWP)
         PYRAMID_LACAL_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/lacal")
     gtest_discover_tests(test_oms_json_codec_uci
         TEST_PREFIX oms_json. DISCOVERY_MODE PRE_TEST)
+
+    add_executable(lacal_e2e_test
+        "${PYRAMID_ROOT_DIR}/pim/test_harness/lacal_e2e_test.cpp")
+    add_dependencies(lacal_e2e_test
+        pyramid_lacal_transport_plugin pyramid_codec_oms_json_uci)
+    target_link_libraries(lacal_e2e_test
+        PRIVATE pcl_core nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS})
+    target_include_directories(lacal_e2e_test PRIVATE
+        "${PCL_ROOT_DIR}/include" "${PYRAMID_ROOT_DIR}/include")
+    target_compile_definitions(lacal_e2e_test PRIVATE
+        PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>"
+        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci>")
 endif()
 
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)

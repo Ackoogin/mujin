@@ -90,8 +90,8 @@ void fill_position_report(pyramid_uci_position_report_c* report) {
            "550e8400-e29b-41d4-a716-446655440000");
   set_text(report->source, "ACTUAL");
   set_text(report->current_operating_domain, "AIR");
-  report->latitude_deg = 1.0;
-  report->longitude_deg = 1.0;
+  report->latitude_rad = 1.0;
+  report->longitude_rad = 1.0;
   report->altitude_m = 1.0;
   set_text(report->position_timestamp, "2026-01-01T00:00:00Z");
   report->has_altitude_reference = true;
@@ -176,8 +176,8 @@ TEST(OmsJsonUciCodec, PositionReportMatchesForeignSkillFixtureAndRoundTrips) {
             PCL_OK);
   EXPECT_STREQ(decoded.report_system_uuid,
                "550e8400-e29b-41d4-a716-446655440000");
-  EXPECT_DOUBLE_EQ(decoded.latitude_deg, 1.0);
-  EXPECT_DOUBLE_EQ(decoded.longitude_deg, 1.0);
+  EXPECT_DOUBLE_EQ(decoded.latitude_rad, 1.0);
+  EXPECT_DOUBLE_EQ(decoded.longitude_rad, 1.0);
   EXPECT_DOUBLE_EQ(decoded.altitude_m, 1.0);
   EXPECT_TRUE(decoded.has_altitude_reference);
   EXPECT_STREQ(decoded.altitude_reference, "WGS84");
@@ -193,8 +193,8 @@ TEST(OmsJsonUciCodec, HandlesOmsSpecialFloatingPointTokens) {
 
   pyramid_uci_position_report_c report;
   fill_position_report(&report);
-  report.latitude_deg = std::numeric_limits<double>::quiet_NaN();
-  report.longitude_deg = std::numeric_limits<double>::infinity();
+  report.latitude_rad = std::numeric_limits<double>::quiet_NaN();
+  report.longitude_rad = std::numeric_limits<double>::infinity();
   report.altitude_m = -std::numeric_limits<double>::infinity();
   pcl_msg_t encoded{};
   ASSERT_EQ(codec->encode(codec->codec_ctx, "PositionReport", &report,
@@ -215,8 +215,8 @@ TEST(OmsJsonUciCodec, HandlesOmsSpecialFloatingPointTokens) {
   ASSERT_EQ(codec->decode(codec->codec_ctx, "PositionReport", &encoded,
                           &decoded),
             PCL_OK);
-  EXPECT_TRUE(std::isnan(decoded.latitude_deg));
-  EXPECT_EQ(decoded.longitude_deg, std::numeric_limits<double>::infinity());
+  EXPECT_TRUE(std::isnan(decoded.latitude_rad));
+  EXPECT_EQ(decoded.longitude_rad, std::numeric_limits<double>::infinity());
   EXPECT_EQ(decoded.altitude_m, -std::numeric_limits<double>::infinity());
 
   codec->free_msg(codec->codec_ctx, &encoded);

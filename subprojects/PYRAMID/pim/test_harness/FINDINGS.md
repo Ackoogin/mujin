@@ -261,3 +261,29 @@ point tokens; invalid UUID and unknown-schema negatives.
 **Progress:** the codec/golden-fixture prerequisite is complete. Phase 4 is
 not yet at its exit gate because live independently-authored peer traffic still
 depends on the Phase 3 Sleet harness. Phase 3 is now unblocked.
+
+## LA-CAL integration rung 1 — Phase 3 handover (2026-07-11)
+
+The cross-process `lacal_e2e_test` and coordinator script are implemented.
+They compose the real LA-CAL transport and OMS JSON codec through routing
+manifests, provide publisher/subscriber modes, register two scratch services,
+and skip cleanly when Sleet is absent or unreachable. The binary builds in
+`build-all-off`; both skip paths were exercised successfully.
+
+A local container using pinned Sleet tag `v2026.06.01` (commit
+`e38f61d8ce0d75c8508434a52f2ed77c69cf6a3b`) accepted both INIT
+registrations. Real schema validation first showed that UCI position latitude
+and longitude are radians; the ABI, codec, tests, and E2E payload were updated
+accordingly. The subsequent publisher frame reached Sleet but was rejected
+because `AltitudeReference="WGS84"` is not in the pinned schema enum. Sleet
+reports the allowed values as `ALTITUDE_BAROMETRIC`, `WGS_HAE`, `MSL`, and
+`AGL`.
+
+**Handover:** change the E2E payload and callback expectation to `WGS_HAE`,
+then rerun the real-Sleet delivery and fail-closed negatives. Do not mark
+Phase 3 complete until the subscriber receives the frame. The upstream RF
+Skill PositionReport golden fixture also contains `WGS84`, which conflicts
+with the pinned Sleet schema; preserve its provenance and decide separately
+whether to retain it as an upstream compatibility fixture or add a
+schema-valid fixture. The radians/ABI edits and new Phase 3 files in this
+checkpoint have not received a final regression run.

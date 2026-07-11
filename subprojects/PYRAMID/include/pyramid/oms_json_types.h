@@ -46,8 +46,8 @@ typedef struct {
   char report_system_uuid[PYRAMID_OMS_UUID_SIZE];
   char source[PYRAMID_OMS_TOKEN_SIZE];
   char current_operating_domain[PYRAMID_OMS_TOKEN_SIZE];
-  double latitude_deg;
-  double longitude_deg;
+  double latitude_rad;
+  double longitude_rad;
   double altitude_m;
   char position_timestamp[PYRAMID_OMS_TIMESTAMP_SIZE];
   bool has_altitude_reference;

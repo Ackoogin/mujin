@@ -179,8 +179,8 @@ nlohmann::json encode_position_report(
   }
 
   nlohmann::json position = {
-      {"Latitude", encode_number(report.latitude_deg)},
-      {"Longitude", encode_number(report.longitude_deg)},
+      {"Latitude", encode_number(report.latitude_rad)},
+      {"Longitude", encode_number(report.longitude_rad)},
       {"Altitude", encode_number(report.altitude_m)},
       {"Timestamp", report.position_timestamp}};
   if (report.has_altitude_reference) {
@@ -240,8 +240,8 @@ void decode_position_report(const nlohmann::json& document,
   copy_text(data.at("CurrentOperatingDomain"),
             report->current_operating_domain);
   const auto& position = data.at("InertialState").at("Position");
-  report->latitude_deg = decode_number(position.at("Latitude"));
-  report->longitude_deg = decode_number(position.at("Longitude"));
+  report->latitude_rad = decode_number(position.at("Latitude"));
+  report->longitude_rad = decode_number(position.at("Longitude"));
   report->altitude_m = decode_number(position.at("Altitude"));
   copy_text(position.at("Timestamp"), report->position_timestamp);
   auto altitude_reference = position.find("AltitudeReference");

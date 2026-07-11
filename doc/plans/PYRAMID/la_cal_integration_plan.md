@@ -1,8 +1,10 @@
 # LA-CAL Integration Plan — Rung 1 of the OMS CAL Join
 
 **Status:** in progress — Phases 0–2 and the Phase 4 codec prerequisite are
-implemented and verified on Linux. Phase 3 (real Sleet) is next; live
-foreign-peer tests will then close the remainder of Phase 4.
+implemented and verified on Linux. Phase 3 has a working harness and has
+reached real-Sleet schema validation; one enum correction and a clean rerun
+remain before its exit gate. Live foreign-peer tests will then close the
+remainder of Phase 4.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -211,8 +213,15 @@ harness `.bat` files).
 
 ### Phase 3 — E2E through real Sleet, kit-native vocabulary (medium)
 
-**Progress:** next. Phase 4's prerequisite codec and frozen kit-native
-`SignalReport`/`PositionReport` subset are complete.
+**Progress:** in progress (2026-07-11). The cross-process harness, scratch
+service registrations, build integration, and graceful no-Sleet/dead-Sleet
+SKIPs are implemented. A pinned Sleet `v2026.06.01` instance accepts both
+services' INIT registrations and receives the publisher frame. The frame now
+uses radians as required by UCI, but Sleet rejects the remaining
+`AltitudeReference="WGS84"`; its schema permits `WGS_HAE` instead. Handover:
+make that E2E payload/expectation correction, rerun through Sleet, then record
+the delivery result and fail-closed negatives. The Phase 3 exit gate is not
+yet met.
 
 Two PCL processes joined **only** by a locally-running Sleet:
 
