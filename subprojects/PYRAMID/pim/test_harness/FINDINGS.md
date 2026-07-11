@@ -321,3 +321,40 @@ upstream fixture and the Sleet path.
 The captured PASS output and Sleet routing log are committed at
 `lacal/sleet_e2e_run.log` for auditability (the run is manually launched, not
 part of the default CTest suite, since it needs a live Sleet).
+
+## LA-CAL integration rung 1 — Phase 4 exit (2026-07-11)
+
+**Phase 4 exit gate met — both interop directions green against the
+independently-authored peer.** The AMS GRA `la-cal-harness` (its own async
+`OWPClient` + XSD-derived `OMSJsonGenerator`, installed editable under Python
+3.12) drives `lacal_interop_driver.py` as the foreign peer opposite a PCL
+`lacal_e2e_test` process, joined only by the pinned Sleet container:
+
+- **Direction A (we consume foreign):** the harness publishes an XSD-derived
+  OMS JSON `PositionReport`; Sleet `+OK`-accepts it as schema-valid; the PCL
+  subscriber typed-decodes it → `position-ok`.
+  `PASS A: harness -> Sleet -> PCL PositionReport`.
+- **Direction B (foreign consumes us):** the PCL publisher publishes; the
+  harness OWP client subscribes, receives the `MSG`, and validates the OMS JSON
+  body against the expected `PositionReport` shape and values.
+  `PASS B: PCL -> Sleet -> harness PositionReport`.
+- **SKIP-safe:** the coordinator SKIPs on unreachable `SLEET_URL`, absent
+  `LACAL_HARNESS_PYTHON`, or absent `UCI_XSD_PATH`; a reachable-but-rejecting
+  Sleet is a FAIL.
+
+**Shape agreement is the load-bearing result.** The harness's XSD-derived
+`generate_minimal("PositionReport")` produces the same global-element structure
+(`PositionReport → SecurityInformation / MessageHeader / MessageData →
+InertialState.Position`) our hand-written codec derives from the same XSD —
+differing only by `$type` JSON annotations (stripped; not UCI content) and
+freely-chosen scalar values. Two independently-authored codecs converging on
+the wire shape from the shared XSD is what earns "interop" over "loopback".
+
+The verbose-mode handshake is used on both driver legs: the subscriber's `SUB`
+is `+OK`-acked before it signals readiness (BEST_EFFORT has no broker-side
+retention, so the peer's `PUB` must not race an inactive subscription), and the
+publisher's `PUB` draws a `+OK`/`-ERR` so a schema rejection surfaces loudly.
+
+Captured PASS output committed at `lacal/interop_run.log`. Codec round-trip
+suite (`OmsJsonUciCodec`, 6/6) and `owp.*` (12/12) remain green; the Phase 4
+codec prerequisite was recorded earlier.

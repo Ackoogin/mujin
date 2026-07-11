@@ -33,3 +33,34 @@ subscriber routes `mission.position-report`, registers its PCL subscriber, and
 waits. The publisher loads the OMS JSON codec plugin, encodes the frozen UCI
 PositionReport C struct, and publishes it. Success requires the subscriber to
 decode and verify the typed position after Sleet routes it.
+
+## Phase 4 foreign-peer interop (`build_lacal_interop_test.sh`)
+
+Runs the PCL transport against the **independently authored** AMS GRA
+`la-cal-harness` as the opposite peer, proving both interop directions through
+Sleet:
+
+- **A (we consume foreign):** the harness OWP client publishes an XSD-derived
+  OMS JSON `PositionReport`; the PCL subscriber typed-decodes it.
+- **B (foreign consumes us):** the PCL publisher publishes; the harness OWP
+  client subscribes, receives, and validates the OMS JSON.
+
+`lacal_interop_driver.py` is the foreign peer: it drives the harness's own
+`OWPClient` and `OMSJsonGenerator`, pinning identity/position fields to the
+values the PCL binary asserts so the cross-process comparison is deterministic.
+The `lacal-harness` service must be registered (see `services/`).
+
+Install the harness peer into a Python 3.12+ venv, then run:
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/pip install -e /path/to/la-cal-harness
+SLEET_URL=ws://127.0.0.1:21402 \
+LACAL_HARNESS_PYTHON=$PWD/.venv/bin/python \
+UCI_XSD_PATH=/path/to/UCI_MessageDefinitions_v2_5_0.xsd \
+./build_lacal_interop_test.sh
+```
+
+The script SKIPs (exit 0) when `SLEET_URL` is unreachable, no harness-capable
+Python is given, or the XSD is absent; a reachable Sleet that then rejects any
+step is a FAIL. A captured PASS run is committed at `interop_run.log`.

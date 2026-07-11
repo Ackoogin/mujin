@@ -1,10 +1,10 @@
 # LA-CAL Integration Plan — Rung 1 of the OMS CAL Join
 
-**Status:** in progress — Phases 0–3 and the Phase 4 codec prerequisite are
-implemented and verified on Linux. Phase 3 is complete: real-Sleet
-cross-process PositionReport delivery passes against the pinned Sleet
-container, with the SKIP paths and fail-closed negatives demonstrated. Live
-foreign-peer interop remains to close the rest of Phase 4; Phases 5–6 follow.
+**Status:** in progress — Phases 0–4 are implemented and verified on Linux.
+Phase 3 (real-Sleet cross-process delivery) and Phase 4 (OMS JSON codec +
+foreign-peer interop, both directions, against the AMS GRA `la-cal-harness`)
+are complete against the pinned Sleet container. Phases 5 (interaction seam
+over LA-CAL) and 6 (stretch AME MS-leg demo) remain.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -252,10 +252,17 @@ behaviour, and the fail-closed negatives all demonstrated by
 
 ### Phase 4 — OMS JSON codec + foreign-peer interop (medium)
 
-**Progress:** codec prerequisite complete (2026-07-11). The frozen C ABI,
-`application/oms-json` plugin, and upstream-derived `SignalReport` and
-`PositionReport` golden tests are green. Live foreign-peer interop remains the
-Phase 4 exit activity after the Phase 3 Sleet harness exists.
+**Progress:** complete (2026-07-11). The frozen C ABI, `application/oms-json`
+plugin, and upstream-derived `SignalReport`/`PositionReport` golden tests are
+green (codec prerequisite). Foreign-peer interop now passes **both directions**
+against the independently-authored AMS GRA `la-cal-harness` through the pinned
+Sleet container: `PASS A` (harness publishes XSD-derived OMS JSON → PCL
+typed-decodes) and `PASS B` (PCL publishes → harness subscribes and validates),
+driven by `pim/test_harness/lacal/lacal_interop_driver.py` +
+`build_lacal_interop_test.sh` (SKIP-safe on absent Sleet/harness/XSD). The
+harness's XSD-derived generator and our hand-written codec agree on the wire
+shape — the result that earns "interop". See FINDINGS.md "Phase 4 exit
+(2026-07-11)".
 
 The step that earns "interop" rather than "loopback through a broker":
 
