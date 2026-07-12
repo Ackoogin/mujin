@@ -18,6 +18,7 @@ if(PYRAMID_ENABLE_OWP)
         "${PCL_ROOT_DIR}/include" ${websocketpp_SOURCE_DIR} ${asio_SOURCE_DIR}/asio/include)
     target_compile_definitions(test_lacal_transport_plugin PRIVATE
         ASIO_STANDALONE
+        _WEBSOCKETPP_CPP11_STL_
         PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>")
     gtest_discover_tests(test_lacal_transport_plugin TEST_PREFIX owp. DISCOVERY_MODE PRE_TEST)
 

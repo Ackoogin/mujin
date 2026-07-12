@@ -18,7 +18,14 @@ in a separate repo, so its WorldModel-specific scope moved out; see the Phase
 6 section below and the successor plan
 [`kitty_hawk_pcl_consumer_plan.md`](kitty_hawk_pcl_consumer_plan.md). The
 Kitty Hawk stack bring-up done under the old Phase 6 (full stack live,
-traffic captured) carries forward as input to that plan.
+traffic captured) carries forward as input to that plan. **Windows parity
+(2026-07-12):** the Phase 2 exit gate's outstanding Windows compile leg is
+now closed — mock-broker suites (owp client, LA-CAL plugin, OMS JSON codec)
+build and pass clean on native MSVC after one small fix, and the
+Sleet-dependent `.sh` harnesses SKIP correctly under Git Bash on Windows.
+The generated-facade path is a known exception: it needs git symlink
+support (`core.symlinks=true` + creation privilege) that this environment
+doesn't have. See §4 Phase 2 and FINDINGS.md for detail.
 **Date:** 2026-07-11
 **Design source:**
 [`doc/research/AME/ams_gra_oms_cal_join.md`](../../research/AME/ams_gra_oms_cal_join.md)
@@ -191,10 +198,21 @@ captured real-Sleet frames byte-for-byte.
 
 ### Phase 2 — LA-CAL transport plugin (medium)
 
-**Progress:** implemented and verified on Linux (2026-07-11). The plugin load,
-INIT failure, identity, executor/broker round-trip, content-type guard, and
-manifest QoS rollback tests are green. Windows compilation remains to be run
-in the Windows CI/toolchain environment.
+**Progress:** implemented and verified on Linux (2026-07-11) and Windows
+(2026-07-12). The plugin load, INIT failure, identity, executor/broker
+round-trip, content-type guard, and manifest QoS rollback tests are green on
+both. Windows required one fix: `pyramid_owp` was missing the
+`_WEBSOCKETPP_CPP11_STL_` define that `ame_foxglove` already carries for the
+same MSVC `__cplusplus`-detection issue in websocketpp, which otherwise fails
+to compile (`boost/version.hpp` not found). See FINDINGS.md "LA-CAL
+integration rung 1 — Windows compile/test leg closed (2026-07-12)" for the
+fix, the full Windows test results (owp client 6/6, LA-CAL plugin 7/7, OMS
+JSON codec 9/9), confirmation that the Sleet-dependent `.sh` harnesses SKIP
+cleanly under Git Bash on Windows, and a newly-found Windows gap: the
+generated-facade path depends on 3 git symlinks under `pim/uci_p1_seam/`
+that don't materialize on a stock Windows checkout (git symlink support
+requires both `core.symlinks=true` *before clone* and Developer Mode/
+`SeCreateSymbolicLinkPrivilege`, neither of which this environment has).
 
 `subprojects/PYRAMID/plugins/pyramid_lacal_transport_plugin.cpp`, exported
 symbols exactly per the ABI (`pcl_plugin.h`), with
@@ -419,7 +437,7 @@ the successor plan, not here.
 | Reconnect-less v1 client turns broker restarts into hard failures | Accepted for v1 (fail closed beats silent gaps); reconnect + resubscribe is a listed follow-on |
 | Known routing gap: manifest `peer` id not threaded into transports (`transport_codec_plugin_system.md` §known gaps) | Same workaround as the `agra_*` harnesses: `peer_id` in the plugin's own `config_json`; the structural fix stays in TODO WS-D |
 | Kit/schema drift (starter kit is "early development", A-GRA/OMS schema versions are siblings) | Pin exact upstream commits + `INIT.schema` value in FINDINGS; surface mismatch, don't coerce |
-| Windows parity (podman/Sleet tooling is Linux-first) | Mock-server tests are cross-platform; Sleet E2E documented Linux-only, like the other harness `.sh` proofs |
+| Windows parity (podman/Sleet tooling is Linux-first) | Verified 2026-07-12: mock-server suites (owp client, LA-CAL plugin, OMS JSON codec) build and pass on native MSVC after one fix (`_WEBSOCKETPP_CPP11_STL_`, see FINDINGS.md); Sleet-dependent `.sh` harnesses SKIP cleanly under Git Bash. Sleet E2E itself remains Linux/podman-only. The generated-facade path additionally needs `core.symlinks=true` + symlink-creation privilege on Windows (3 git symlinks under `pim/uci_p1_seam/`), which this environment lacked — untested end-to-end on Windows |
 
 ## 7. Follow-ons deliberately outside this plan
 

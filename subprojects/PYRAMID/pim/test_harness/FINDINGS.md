@@ -1,5 +1,113 @@
 # New PIM proto — plugin-system viability (record)
 
+## LA-CAL integration rung 1 — Windows compile/test leg closed (2026-07-12)
+
+The Windows compile leg flagged as outstanding since Phase 2 (this file,
+"Phase 2 transport plugin") is now run, on native MSVC (VS 2022, `default`
+preset, `Release`), against a working tree with no other uncommitted
+changes. Two environment/code gaps were found and fixed or documented; all
+mock-broker test suites are green.
+
+**Root cause of "targets don't exist": `PYRAMID_BUILD_TESTS` cached OFF.**
+The pre-existing `build/` tree had `PYRAMID_BUILD_TESTS:BOOL=OFF` cached
+(set in some earlier session, likely for a proto-agnostic plugin-only
+build), which silences the entire `tests/` subdirectory — not just the
+LA-CAL targets. `PYRAMID_ENABLE_OWP=ON` alone was not sufficient. Re-running
+`cmake --preset default -DPYRAMID_BUILD_TESTS=ON` restored `test_owp_client`,
+`test_lacal_transport_plugin`, `test_oms_json_codec_uci`, `lacal_e2e_test`,
+and `lacal_seam_test` to the generated project set. No project-code change
+needed; noted here because the stale `test_tobj_*` etc. `.vcxproj` files
+left over from a prior configure made the build tree *look* like tests were
+already wired when they weren't — trust `cmake --build --target <name>`,
+not file listings, to check whether a target is live.
+
+**Real bug found and fixed: MSVC never took the websocketpp C++11 path.**
+`pyramid_owp` (and, transitively, `pyramid_lacal_transport_plugin`) failed
+to compile with `C1083: Cannot open include file: 'boost/version.hpp'`.
+Cause: websocketpp's `common/random.hpp` (and `common/type_traits.hpp`)
+gate their C++11 `<random>`/`<type_traits>` path on `__cplusplus >=
+201103L`, but MSVC reports `__cplusplus` as `199711L` unless `/Zc:__cplusplus`
+is passed project-wide — which this repo does not do — so it fell through
+to `#include <boost/version.hpp>`, which isn't a dependency here. This is
+the exact issue `ame_foxglove` already works around
+(`subprojects/AME/src/CMakeLists.txt` / `foxglove_bridge.cpp`) via the
+`_WEBSOCKETPP_CPP11_STL_` define, but the define was never carried over to
+`pyramid_owp` when it was split out as a PCL-free library. Fixed by adding
+`target_compile_definitions(pyramid_owp PUBLIC _WEBSOCKETPP_CPP11_STL_)` to
+`subprojects/PYRAMID/src/owp/CMakeLists.txt` (propagates to
+`pyramid_lacal_transport_plugin` and `test_owp_client` via the link graph)
+plus the same define directly on `test_lacal_transport_plugin`
+(`subprojects/PYRAMID/tests/CMakeLists.txt`), which embeds its own
+in-process websocketpp mock broker and does not link `pyramid_owp`.
+
+**Verification (Windows, native `build/`, MSVC, Release).** All five
+owp/lacal/codec targets and their harness executables now build clean:
+`pyramid_owp`, `pyramid_lacal_transport_plugin`, `pyramid_codec_oms_json_uci`,
+`test_owp_client`, `test_lacal_transport_plugin`, `test_oms_json_codec_uci`,
+`lacal_e2e_test`, `lacal_seam_test`. Running the mock-broker suites directly:
+
+```
+test_owp_client.exe            6/6  PASSED
+test_lacal_transport_plugin.exe 7/7 PASSED  (incl. FailsClosedWhenInitUnanswered,
+                                              FailsClosedWhenInitRejected,
+                                              RejectsMismatchedContentType,
+                                              ReliableFloorOverBestEffortFailsClosed,
+                                              RpcEndpointOverPubsubPeerFailsClosed)
+test_oms_json_codec_uci.exe    9/9  PASSED
+```
+
+**Sleet-dependent `.sh` harnesses run correctly under Git Bash on Windows
+and SKIP cleanly.** `build_lacal_e2e_test.sh`, `build_lacal_seam_test.sh`,
+and `build_lacal_interop_test.sh` were run with no `SLEET_URL`/`SLEET_BIN`
+set. Each printed its documented `SKIP: ...` message and exited 0 —
+including `build_lacal_e2e_test.sh`, which does a **from-scratch** `cmake -S
+... -B build-flatbuffers-only -DPYRAMID_ENABLE_OWP=ON` configure and MSVC
+build of the whole owp/lacal chain before reaching the SKIP check, so this
+also re-proves the fix above against a second, independently-configured
+build tree. This confirms the harness *convention* (bash driver + SKIP
+discipline), not just the binaries, is portable to Windows/Git Bash. Actual
+Sleet E2E delivery is still unverified on Windows — Sleet itself only runs
+via the Linux/podman starter kit — and remains out of scope here, per the
+plan's risk table.
+
+**New Windows gap found, not fixed: the generated-facade path
+(`build_lacal_generated_seam_test.sh`, Phase 5 step 1 / successor plan's
+generated-P1 seam) does not run on a stock Windows checkout.** Two
+independent blockers:
+
+1. `python3` on `PATH` resolves to the Microsoft Store app-execution-alias
+   stub, not a real interpreter, on this machine (`py` launcher works fine,
+   `python3 --version` from a real install would too) — a local
+   environment/PATH quirk, not a repo bug, but worth calling out since the
+   script hardcodes `python3`.
+2. More fundamentally: `pim/cpp/oms_json_codec_gen.py`'s `_WireNames`
+   sidecar lookup reads `pim/uci_p1_seam/wire_names.json`, which is a
+   **git symlink** (mode `120000`) to
+   `../uci_generated/uci_2_5_0/wire_names.json`, along with two sibling
+   `.proto` symlinks in the same tree. `core.symlinks` was `false` in this
+   checkout, so git materialized these as plain-text files containing the
+   literal link-target path — `json.loads()` on that text fails with
+   `Expecting value: line 1 column 1 (char 0)`. Setting
+   `git config core.symlinks true` and re-checking out the three affected
+   paths (`wire_names.json`, `pyramid.data_model.uci.proto`,
+   `pyramid.options.proto`) then failed with `Permission denied` creating
+   the symlinks — this Windows account has neither Developer Mode nor
+   `SeCreateSymbolicLinkPrivilege`, so real symlinks can't be created at
+   all, even with the git setting corrected. Reverted (`core.symlinks
+   false`, re-checked out the placeholder files) to leave the tree as
+   found. **Net: Phase 5 step 1's generated-facade regeneration and the
+   Phase-6-successor's generated-P1 seam (`kitty_hawk_pcl_consumer_plan.md`)
+   cannot be regenerated on a Windows checkout without either (a) an
+   elevated/Developer-Mode account plus `core.symlinks=true` set *before*
+   the initial clone, or (b) replacing these three symlinks with real
+   files/copies.** This is scoped narrowly — exactly 3 symlinks exist in
+   the whole repo, all here — but is a genuine, previously-undocumented
+   Windows portability gap.
+
+**Files changed:** `subprojects/PYRAMID/src/owp/CMakeLists.txt`,
+`subprojects/PYRAMID/tests/CMakeLists.txt` (both additive
+`target_compile_definitions`, no behaviour change on Linux).
+
 ## Phase 3 exit: generated P1 seam + Kitty Hawk consumer, both live-verified over real Sleet (2026-07-12)
 
 `pim/uci_p1_seam/` is the new overlay that puts the PIM port grammar
