@@ -28,22 +28,24 @@ extern "C" {
 namespace ma = pyramid::components::uci::mission_autonomy::services::provided;
 namespace c2 = pyramid::components::uci::c2_station::services::consumed;
 namespace uci = pyramid::domain_model::uci;
+namespace uci_port_grammar = pyramid::domain_model::uci_port_grammar;
 
 namespace {
 
 using namespace std::chrono_literals;
 constexpr const char* kCommandId = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
-void fillUciEnvelope(uci::SecurityInformation& security,
-                     uci::MessageHeader& header) {
-  security.classification = "U";
-  security.owner_producer.push_back({"USA"});
-  header.system_id.uuid.uuid = "550e8400-e29b-41d4-a716-446655440000";
+void fillUciEnvelope(uci::SecurityInformationType& security,
+                     uci::HeaderType& header) {
+  security.classification = uci::ClassificationEnum::U;
+  security.owner_producer.push_back(
+      uci::OwnerProducerChoiceType{uci::OwnerProducerEnum::Usa, tl::nullopt});
+  header.system_id.uuid = "550e8400-e29b-41d4-a716-446655440000";
   header.service_id.emplace();
-  header.service_id->uuid.uuid = "6eefc2b6-08d4-4c39-8267-b1f21745bc90";
+  header.service_id->uuid = "6eefc2b6-08d4-4c39-8267-b1f21745bc90";
   header.timestamp = "2026-07-11T12:00:00Z";
   header.schema_version = "002.5.0";
-  header.mode = "LIVE";
+  header.mode = uci::MessageModeEnum::Live;
 }
 
 bool writeText(const std::filesystem::path& path, const std::string& text) {
@@ -100,14 +102,15 @@ class ProviderHandler final : public ma::ActioncommandRequestPortHandler {
   }
 
   ma::Ack onCreate(const ma::ActionCommand_Service_Request& request) override {
-    if (!request.action_command || !writer_) return uci::kAckFail;
+    if (!request.action_command || !writer_) return uci_port_grammar::kAckFail;
     const auto& command = *request.action_command;
-    if (command.message_data.command.empty()) return uci::kAckFail;
-    const std::string& id = command.message_data.command.front().capability.command_id.uuid.uuid;
+    if (command.message_data.command.empty()) return uci_port_grammar::kAckFail;
+    if (!command.message_data.command.front().capability) return uci_port_grammar::kAckFail;
+    const std::string& id = command.message_data.command.front().capability->base.command_id.uuid;
     send(id, "RECEIVED");
     send(id, "ACCEPTED");
     saw_create_ = true;
-    return uci::kAckOk;
+    return uci_port_grammar::kAckOk;
   }
 
   bool sawCreate() const { return saw_create_; }
@@ -115,10 +118,13 @@ class ProviderHandler final : public ma::ActioncommandRequestPortHandler {
  private:
   void send(const std::string& id, const char* state) {
     ma::ActionCommand_Service_Requirement transition;
-    uci::ActionCommandStatus status;
+    uci::ActionCommandStatusMT status;
     fillUciEnvelope(status.security_information, status.message_header);
-    status.message_data.command_id.uuid.uuid = id;
-    status.message_data.command_processing_state = state;
+    status.message_data.base.command_id.uuid = id;
+    status.message_data.base.command_processing_state =
+        std::strcmp(state, "RECEIVED") == 0
+            ? uci::CommandProcessingStateEnum::Received
+            : uci::CommandProcessingStateEnum::Accepted;
     transition.action_command_status = std::move(status);
     (void)writer_->send(transition);
   }
@@ -217,8 +223,11 @@ int runConsumer(const std::string& url, const std::filesystem::path& output,
       c2::Query{}, [&states](const c2::ActionCommand_Service_Requirement& transition) {
         if (transition.action_command_status) {
           const auto& status = *transition.action_command_status;
-          if (status.message_data.command_id.uuid.uuid == kCommandId) {
-            states.push_back(status.message_data.command_processing_state);
+          if (status.message_data.base.command_id.uuid == kCommandId) {
+            states.push_back(status.message_data.base.command_processing_state ==
+                                     uci::CommandProcessingStateEnum::Received
+                                 ? "RECEIVED"
+                                 : "ACCEPTED");
           }
         }
       });
@@ -226,13 +235,14 @@ int runConsumer(const std::string& url, const std::filesystem::path& output,
   std::this_thread::sleep_for(300ms);
 
   c2::ActionCommand_Service_Request request;
-  uci::ActionCommand command;
+  uci::ActionCommandMT command;
   fillUciEnvelope(command.security_information, command.message_header);
-  uci::Command command_item;
-  command_item.capability.command_id.uuid.uuid = kCommandId;
-  command_item.capability.command_state = "NEW";
-  command_item.capability.capability_id.uuid.uuid = "6da3573c-2863-47a9-80cd-52b1ee2b4077";
-  command_item.capability.action_id.uuid.uuid = "eacfc454-2741-4d15-aeac-15c573d94090";
+  uci::ActionCommandType command_item;
+  command_item.capability.emplace();
+  command_item.capability->base.command_id.uuid = kCommandId;
+  command_item.capability->base.command_state = uci::CommandStateEnum::New;
+  command_item.capability->capability_id.uuid = "6da3573c-2863-47a9-80cd-52b1ee2b4077";
+  command_item.capability->action_id.base.uuid = "eacfc454-2741-4d15-aeac-15c573d94090";
   command.message_data.command.push_back(std::move(command_item));
   request.action_command = std::move(command);
   const auto submit = component.client().submit(request).get();

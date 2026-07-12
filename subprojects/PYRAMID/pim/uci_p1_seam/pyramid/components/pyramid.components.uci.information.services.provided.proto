@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package pyramid.components.uci.information.services.provided;
+
+import "google/protobuf/empty.proto";
+import "pyramid/options/pyramid.options.proto";
+import "pyramid/data_model/pyramid.data_model.uci.proto";
+
+message ObservationMeasurementReport_Service_Information {
+  oneof payload {
+    pyramid.data_model.uci.ObservationMeasurementReportMT observation_measurement_report = 1;
+  }
+}
+
+message PositionReport_Service_Information {
+  oneof payload {
+    pyramid.data_model.uci.PositionReportMT position_report = 1;
+  }
+}
+
+service PositionReport_Service {
+  rpc Read(google.protobuf.Empty) returns (stream PositionReport_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "mission.position-report" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message SignalReport_Service_Information {
+  oneof payload {
+    pyramid.data_model.uci.SignalReportMT signal_report = 1;
+  }
+}
+
+service SignalReport_Service {
+  rpc Read(google.protobuf.Empty) returns (stream SignalReport_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "mission.signal-report" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+service ObservationMeasurementReport_Service {
+  rpc Read(google.protobuf.Empty) returns (stream ObservationMeasurementReport_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "mission.observation-measurement-report" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message ServiceStatus_Service_Information {
+  oneof payload {
+    pyramid.data_model.uci.ServiceStatusMT service_status = 1;
+  }
+}
+
+service ServiceStatus_Service {
+  rpc Read(google.protobuf.Empty) returns (stream ServiceStatus_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "mission.service-status" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}

@@ -1,3 +1,6 @@
+// Frozen golden fixture: this codec is the byte-equivalence baseline for the
+// generated UCI codec. Never add messages here; new UCI messages use the
+// xsd2proto + oms_json_codec_gen path.
 /// \file pyramid_oms_json_codec_uci.cpp
 /// \brief OMS JSON codec for the initial UCI 2.5 starter-kit message subset.
 

@@ -179,15 +179,20 @@ class _PackageEmitter:
                 if m.name in referenced]
 
     def _resolve_wrappers(self) -> List[dict]:
-        """Request-port wrapper messages whose variants live in this
-        package: [{name, wire_struct, variants:[(field, type_short)]}]."""
+        """Thin service wrappers around package roots.
+
+        Request/Requirement wrappers may carry multiple variants; Information
+        wrappers carry one. Both cross the codec boundary as the active UCI
+        root rather than as a PIM wrapper object.
+        """
         wrappers = []
         seen = set()
         for other in self.index.files:
             for msg in other.messages:
                 parts = msg.name.split('_Service_')
                 if len(parts) != 2 or parts[1] not in ('Request',
-                                                       'Requirement'):
+                                                       'Requirement',
+                                                       'Information'):
                     continue
                 if msg.name in seen:
                     # Provided/consumed mirrors declare identical wrappers;
@@ -199,6 +204,8 @@ class _PackageEmitter:
                             for f in msg.oneofs[0].fields]
                 if not variants or any(v not in self.msgs
                                        for _, v in variants):
+                    continue
+                if parts[1] == 'Information' and len(variants) != 1:
                     continue
                 seen.add(msg.name)
                 wrappers.append({

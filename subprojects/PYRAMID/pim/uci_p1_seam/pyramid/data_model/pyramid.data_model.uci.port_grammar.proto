@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package pyramid.data_model.uci_port_grammar;
+
+// Small local port-grammar support types -- not XSD content, so they are not
+// part of the xsd2proto-converted tree this overlay otherwise symlinks in
+// (pyramid.data_model.uci.proto). Mirrors pim/uci_seam_example's identical
+// hand-authored definitions, in a distinct package (rather than reopening
+// pyramid.data_model.uci) because the C++ type-header emitter maps one
+// generated header per package name: a second file declaring the same
+// package as the checked-in xsd2proto tree silently clobbers that tree's
+// generated header instead of merging with it. The generated data-model
+// proto is a symlink to the checked-in, byte-stability guarded xsd2proto
+// output and must not be hand-edited.
+message Identifier { string id = 1; }
+message Ack { bool success = 1; }
+message Query {}

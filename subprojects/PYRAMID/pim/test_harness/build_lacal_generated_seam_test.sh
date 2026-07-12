@@ -21,13 +21,17 @@ trap cleanup EXIT
 echo "== generating UCI bindings =="
 rm -rf "$gen" "$scratch"
 mkdir -p "$gen" "$scratch"
-python3 "$pyramid/pim/generate_bindings.py" "$pyramid/pim/uci_seam_example" "$gen" \
+python3 "$pyramid/pim/generate_bindings.py" "$pyramid/pim/uci_p1_seam" "$gen" \
   --languages cpp --backends oms_json >/dev/null
 # The interaction facade's generic streaming helper requires these query
 # fields; UCI's request contract declares an empty Query.  They are local
 # client-side subscription controls and never serialized by the OMS codec.
+# Query lives in the distinct uci_port_grammar package/header (see
+# pim/uci_p1_seam/pyramid/data_model/pyramid.data_model.uci.port_grammar.proto)
+# rather than pyramid_data_model_uci_types.hpp, so it doesn't collide with the
+# checked-in xsd2proto tree's own per-package types header.
 sed -i 's/struct Query {$/struct Query {\n    std::vector<std::string> id = {};\n    tl::optional<bool> one_shot;/' \
-  "$gen/pyramid_data_model_uci_types.hpp"
+  "$gen/pyramid_data_model_uci_port_grammar_types.hpp"
 
 build_root="${PYRAMID_BUILD_DIR:-$root}"
 [[ -d "$build_root" ]] || {
@@ -75,7 +79,8 @@ main_pkgs=(pyramid_data_model_uci pyramid_components_uci_mission_autonomy_servic
            pyramid_components_uci_c2_station_services_consumed)
 srcs=("$here/lacal_generated_seam_test.cpp"
       "$gen/pyramid_services_uci_mission_autonomy_provided.cpp"
-      "$gen/pyramid_services_uci_c2_station_consumed.cpp")
+      "$gen/pyramid_services_uci_c2_station_consumed.cpp"
+      "$gen/pyramid_data_model_uci_port_grammar_cabi_marshal.cpp")
 for pkg in "${main_pkgs[@]}"; do
   for suffix in _codec.cpp _cabi_marshal.cpp; do
     [[ -f "$gen/$pkg$suffix" ]] && srcs+=("$gen/$pkg$suffix")

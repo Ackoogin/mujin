@@ -55,7 +55,6 @@ extern "C" {
 #include "owp_client.hpp"
 
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -145,6 +144,17 @@ std::string owp_message_name(const char* type_name, const char* topic) {
   if (declared == "ActionCommand_Service_Request") return "ActionCommand";
   if (declared == "ActionCommand_Service_Requirement") {
     return "ActionCommandStatus";
+  }
+  // Generated information-port wrappers are a 1:1 "<Root>_Service_Information"
+  // envelope around exactly one UCI root message -- strip the wrapper suffix
+  // to recover the wire/XSD element name Sleet expects, same rationale as
+  // the Request/Requirement wrappers above.
+  static constexpr char kInfoSuffix[] = "_Service_Information";
+  static constexpr std::size_t kInfoSuffixLen = sizeof(kInfoSuffix) - 1;
+  if (declared.size() > kInfoSuffixLen &&
+      declared.compare(declared.size() - kInfoSuffixLen, kInfoSuffixLen,
+                       kInfoSuffix) == 0) {
+    return declared.substr(0, declared.size() - kInfoSuffixLen);
   }
   return declared;
 }

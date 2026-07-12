@@ -1,5 +1,92 @@
 # New PIM proto — plugin-system viability (record)
 
+## Phase 3 exit: generated P1 seam + Kitty Hawk consumer, both live-verified over real Sleet (2026-07-12)
+
+`pim/uci_p1_seam/` is the new overlay that puts the PIM port grammar
+(Request/Requirement command ports, four PUBLISH-pattern information ports)
+on top of the checked-in xsd2proto-converted P1 tree (`pim/uci_generated/uci_2_5_0/`)
+instead of the hand-authored `uci_seam_example`. `lacal_generated_seam_test`
+now generates from this overlay and exercises the real `ActionCommandMT`/
+`ActionCommandStatusMT` shape (composed `MessageType base`, `ID_Type`
+composition, real `oneof` arms) end to end. The frozen hand codec
+(`pyramid_oms_json_codec_uci.cpp`) is untouched beyond a header comment
+marking it the permanent byte-equivalence golden fixture — no new messages
+go there; new UCI messages ride the generated (xsd2proto + `oms_json_codec_gen.py`)
+path from here on.
+
+**Both live proofs pass against the persistent `external/ams-gra` Kitty Hawk
+stack (podman), confirmed with a from-clean rebuild (no debug instrumentation,
+byte-identical `pcl_executor.c` to HEAD):**
+
+```
+$ SLEET_URL=ws://... build_lacal_generated_seam_test.sh
+PASS: generated UCI facade LA-CAL seam over Sleet
+
+$ KITTYHAWK_SLEET_URL=ws://... build_kittyhawk_consumer_test.sh
+PositionReport: PASS (11 valid samples)
+ObservationMeasurementReport: PASS (3 valid samples)
+ServiceStatus: PASS (rf-fm-demod=1 ir-search-and-track=1)
+SignalReport: PASS (16 decoded samples)
+PASS: Kitty Hawk generated-P1 consumer over Sleet
+```
+
+Getting there surfaced three real, previously-latent bugs — none specific
+to this overlay, all fixed at the shared-tooling level:
+
+1. **`wire_names.json` root-mapping only worked by accident before.** The
+   generated P1 tree suffixes root message *types* with `MT` while the XSD
+   *element* name stays bare (`ActionCommand` the element → `ActionCommandMT`
+   the type — see `pim/uci_generated/README.md`). The C++ OMS-JSON codec
+   generator (`pim/cpp/oms_json_codec_gen.py`) already resolved the
+   element name correctly from `wire_names.json`'s `roots` map — the actual
+   bug was that `pim/uci_p1_seam/`'s own `wire_names.json` symlink pointed
+   one directory level too deep (`.../pyramid/data_model/wire_names.json`,
+   which doesn't exist) instead of the tree root
+   (`.../uci_generated/uci_2_5_0/wire_names.json`); a second file reopening
+   the checked-in `pyramid.data_model.uci` package to add the three PIM
+   port-grammar helper types (`Ack`/`Identifier`/`Query` — not XSD content)
+   also silently clobbered that package's generated C++ types header, since
+   the emitter keys one header per package name, not per source file — fixed
+   by giving those three helpers their own `pyramid.data_model.uci_port_grammar`
+   package instead of reopening the checked-in one.
+2. **The codec generator never learned the single-variant "Information"
+   wrapper shape.** `oms_json_codec_gen.py`'s wrapper-unwrap detection
+   handled the two-variant Request/Requirement command wrapper
+   (`oneof { CommandType a=1; StatusType b=2; }`) but not the simpler
+   one-variant information wrapper this overlay's four PUBLISH-pattern
+   ports use (`X_Service_Information { oneof payload { XMT x=1; } }`) —
+   `decode()`'s dispatch fell through to `PCL_ERR_NOT_FOUND` for every
+   `*_Service_Information` id with no exception and no log, so the Kitty
+   Hawk consumer's four subscriptions registered fine but silently received
+   nothing. Generalized `_resolve_wrappers()` to accept single-variant
+   wrappers too (same emission path, one arm instead of two); confirmed via
+   `pim/test_oms_json_gen.py` (16 tests) that the seam-example golden output
+   and the ActionCommand P1 path are both unaffected.
+3. **The LA-CAL transport plugin's wire-message-name mapping was also
+   command-wrapper-specific.** `owp_message_name()` in
+   `pyramid_lacal_transport_plugin.cpp` had hardcoded
+   `ActionCommand_Service_Request`/`_Requirement` → bare-root-name mappings
+   for the OWP `SUB` frame's message name, with no equivalent for
+   `*_Service_Information`; without it Sleet rejected the `SUB` with
+   `unknown message name PositionReport_Service_Information` etc. Added a
+   general `_Service_Information` suffix-strip rule (a clean 1:1 mapping,
+   unlike the irregular Request/Requirement pair).
+
+Local git-ignored registration: `external/ams-gra/sleet/services.d.local/kittyhawk-consumer.toml`
+(mirrors the sibling `ame-sniffer.toml`/`seam-ma.toml`/`seam-c2.toml`
+registrations already in that directory). Sleet only scans
+`services.d.local` at container startup, so a registration change needs
+`podman-compose up -d --force-recreate sleet`, which per the bring-up guide's
+known gotcha requires an explicit `podman restart squall-rf-oms-adapter
+squall-ir-oms-adapter` afterward or those two adapters stay wedged.
+
+Regression bar held throughout: `pytest subprojects/PYRAMID/tests` (41
+passed), `unittest pim/test_proto_parser.py` (3 passed),
+`pim/test_oms_json_gen.py` (16 passed), and the default `pyramid` contract
+layout's generated output confirmed byte-identical to pre-change (compared
+via `tests/generation_baseline.py` against a clean worktree at the prior
+commit).
+
 **Question:** can components from the new proto set (`subprojects/PYRAMID/pim/test/`)
 communicate through the PCL/plugin runtime?
 

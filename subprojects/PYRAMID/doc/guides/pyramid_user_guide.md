@@ -251,6 +251,7 @@ live in `pim/test_harness/` (`build_agra_*.sh`, findings in
 | Architecture | [`generated_bindings.md`](../architecture/generated_bindings.md) | Canonical binding/codec/transport reference |
 | Architecture | [`cpp_component_authoring.md`](../architecture/cpp_component_authoring.md) | Writing C++ components on the generated facades |
 | Architecture | [`transport_codec_plugin_system.md`](../architecture/transport_codec_plugin_system.md) | Plugin ABI, capability model, routing, deployment |
+| Architecture | [`oms_agra_compatibility.md`](../architecture/oms_agra_compatibility.md) | Current OMS/CAL, AMS-GRA, and A-GRA compatibility status, with diagrams and known quirks |
 | Architecture | [`ros2_transport_semantics.md`](../architecture/ros2_transport_semantics.md) | ROS2 mapping rules |
 | Architecture | [`pyramid_interaction_semantics.md`](../architecture/pyramid_interaction_semantics.md) | Interaction patterns/topics/QoS in the contract |
 | Architecture | [`generic_contract_layout.md`](../architecture/generic_contract_layout.md) | Arbitrary proto trees, naming policies, `binding_manifest.json` |

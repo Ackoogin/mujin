@@ -46,4 +46,7 @@ c2_agra_flatbuffers_codec.dll
 *.ilk
 generated_lacal_generated_seam/
 lacal_generated_seam_test
+generated_kittyhawk_consumer/
+kittyhawk_consumer_test
+kittyhawk_consumer_scratch/
 *.so

@@ -1,6 +1,6 @@
 # Kitty Hawk PCL Consumer Proof — PYRAMID-only Successor to LA-CAL Phase 6
 
-**Status:** proposed, not yet scheduled.
+**Status:** done (2026-07-12).
 **Date:** 2026-07-11.
 **Supersedes:** the AME-facing scope of
 [`la_cal_integration_plan.md`](la_cal_integration_plan.md) Phase 6
@@ -139,6 +139,18 @@ independent AMS GRA producers; the harness decodes a real, multi-minute
 run of live Kitty Hawk traffic (not a fixture) end to end with no decode
 errors; `SignalReport` is handled as scenario-intermittent rather than
 asserted present. FINDINGS.md gains the exit entry.
+
+**Met (2026-07-12).** Deliverable 1 (extending the frozen hand codec)
+was superseded per `uci_mms_conversion_plan.md` Phase 3 — `ObservationMeasurementReport`
+and `ServiceStatus` ride the generated xsd2proto path instead, alongside
+`PositionReport`/`SignalReport` as four information-service ports over
+`pim/uci_p1_seam/`. `build_kittyhawk_consumer_test.sh` decodes all four
+against the live stack (`PositionReport`, `ObservationMeasurementReport`,
+`ServiceStatus` present every run; `SignalReport` decoded when the pentagon
+flight pattern has RF lock, correctly treated as inconclusive-not-failing
+otherwise). See `pim/test_harness/FINDINGS.md`'s dated entry for the exact
+PASS output and the codec-generator/transport-plugin bugs this run
+surfaced and fixed.
 
 ## 7. Cross-repo note
 

@@ -187,6 +187,7 @@ cmake/                   Shared CMake support files
 | [Assurance Plan](doc/plans/AME/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
 | [PYRAMID User Guide](subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Engineers, integrators | High-level PYRAMID design/usage with diagrams; entry point to all PYRAMID docs |
 | [PCL/PYRAMID Binding Generation Overview](subprojects/PYRAMID/doc/architecture/pcl_pyramid_binding_generation_overview.md) | Engineers | Broad architecture for how PYRAMID contracts become generated bindings that run on PCL |
+| [OMS / AMS-GRA / A-GRA Compatibility](subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) | Engineers, integrators | Current compatibility status with the OMS/CAL wire protocol, the AMS-GRA reference stack, and the A-GRA compliance standard, with diagrams and known quirks |
 | [Generated Bindings](subprojects/PYRAMID/doc/architecture/generated_bindings.md) | Engineers | PYRAMID service/codegen pipeline and generated bindings |
 | [PCL Component Design](subprojects/PCL/doc/architecture/component_container_design.md) | Engineers | PCL component/container integration design |
 | [PYRAMID Remaining Work](doc/todo/PYRAMID/TODO.md) | Engineers, programme leads | The single tracker for remaining PCL/PYRAMID work |

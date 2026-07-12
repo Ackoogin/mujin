@@ -362,6 +362,28 @@ codec suites green; Ada parity holds.
 
 ### Phase 3 — P1 live proof and hand-codec retirement (small/medium)
 
+**Progress: complete — exit gate met, live-verified (2026-07-12).**
+`pim/uci_p1_seam/` adds the PIM interaction/information overlay over the
+checked-in converted P1 tree; the generated seam witness now builds from
+it, exercising the real `ActionCommandMT`/`ActionCommandStatusMT` C++ shape
+(composed `MessageType base`, `ID_Type` composition, real `oneof` arms).
+`ObservationMeasurementReport`/`ServiceStatus` (with the companion
+`PositionReport`/`SignalReport` topics) ride the generated path as four
+information-service ports. The legacy hand codec is explicitly frozen as
+the byte-equivalence fixture; no message was added to it. Both live
+proofs pass against the persistent `external/ams-gra` Kitty Hawk stack from
+a from-clean rebuild: `build_lacal_generated_seam_test.sh` → `PASS:
+generated UCI facade LA-CAL seam over Sleet`; `build_kittyhawk_consumer_test.sh`
+→ all four information topics PASS with real decoded samples (see
+`pim/test_harness/FINDINGS.md`'s dated entry for the exact counts and the
+three real bugs this surfaced and fixed — a `wire_names.json` symlink
+pointed at the wrong path, `oms_json_codec_gen.py` never generated
+wrapper-unwrap handling for single-variant information wrappers, and the
+LA-CAL plugin's OWP message-name mapping needed the same generalization).
+`python3 -m pytest subprojects/PYRAMID/tests`, `pim/test_proto_parser.py`,
+and `pim/test_oms_json_gen.py` stay green; default `pyramid` contract
+layout output confirmed byte-identical to pre-change.
+
 1. Re-point the seam harnesses (`lacal_seam_test`,
    `lacal_generated_seam_test`) and the Phase-4 interop driver at the
    generated P1 tree; rerun against pinned Sleet — all existing PASSes
