@@ -61,4 +61,5 @@ subprojects\AME\scripts\build.bat
 | [Quick start](doc/guides/quickstart.md) | Build, run, tests, and Foxglove setup |
 | [Planning and execution guide](doc/guides/planning_execution_user_guide.md) | Mission flow, PDDL terms, BT nodes, and PYRAMID integration |
 | [Authoring tool user guide](doc/guides/authoring_tool_user_guide.md) | Graphical domain/scenario authoring, validation, preview, and import/export workflow |
+| [AME vs A-GRA slide deck](doc/slides/ame_agra_positioning.md) | **Slide deck**: AME and its position against the A-GRA Mission Autonomy standard |
 | [Remaining work](../../doc/todo/AME/TODO.md) | Open AME roadmap items |

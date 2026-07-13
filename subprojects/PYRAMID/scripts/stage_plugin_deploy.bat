@@ -11,7 +11,11 @@ REM     plugins\   codec plugin .dll(s) for the component + the transport plugin
 REM     include\   client-facing headers   (pcl\*  and  pyramid\*  generated facade)
 REM     src\       the generated contract facade the client compiles against
 REM     lib\       static libraries a client links (.lib)
-REM     MANIFEST.txt   plugin .dll paths (feed to --codec-plugin / PCL_CODEC_PLUGIN_PATH)
+REM     codec_manifest.txt      codec .dll paths (point PCL_CODEC_MANIFEST /
+REM                             --codec-manifest at it, or list via --codec-plugin
+REM                             / the PYRAMID_CODEC_PLUGINS env var for Ada)
+REM     transport_manifest.txt  transport .dll paths (pass via --transport-plugin)
+REM     MANIFEST.txt   all staged plugin .dll paths (review/audit listing)
 REM     README.md      how to build a client and run it against the plugin
 REM
 REM The codec plugin is the single cross-language .dll (it consumes the frozen
@@ -212,7 +216,7 @@ for %%M in (!comp_modules!) do (
 if not defined staged_modules set "staged_modules= <none>"
 echo    marshalling modules:!staged_modules!
 
-REM --- MANIFEST: absolute plugin paths (for --codec-plugin / PCL_CODEC_PLUGIN_PATH) ---
+REM --- MANIFEST: absolute plugin paths (review/audit listing of every staged .dll) ---
 type nul > "%dest%\MANIFEST.txt"
 for %%F in ("%dest%\plugins\*.dll") do echo %%~fF>>"%dest%\MANIFEST.txt"
 

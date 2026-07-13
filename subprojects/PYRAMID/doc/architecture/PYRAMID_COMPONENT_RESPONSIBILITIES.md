@@ -1,5 +1,15 @@
 ﻿# PYRAMID Technical Standard Component Responsibilities
 
+## Summary
+
+This is the repository's reference extraction of the **PYRAMID Technical
+Standard's component responsibility map**: every component defined by the
+standard (section `5.4.2.x`) with its responsibilities (`5.4.2.x.4`), each
+assigned a stable, globally unique `PYR-RESP-####` identifier. Use it to
+trace a component implementation or requirement (e.g. Tactical Objects
+`HLR.md`) back to the exact standard responsibility it discharges, without
+needing the standard document itself to hand.
+
 - Source: `ref/20250224-PYRAMID_Technical_Standard_V1-O.md` (unversioned local copy of the PYRAMID Technical Standard; `ref/` is gitignored, obtain the standard separately)
 - Scope: Components in `5.4.2.x` with responsibilities in `5.4.2.x.4`
 - Responsibility ID format: `PYR-RESP-####` (globally unique)

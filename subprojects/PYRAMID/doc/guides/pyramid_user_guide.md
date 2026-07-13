@@ -250,6 +250,7 @@ live in `pim/test_harness/` (`build_agra_*.sh`, findings in
 | Architecture | [`pcl_pyramid_binding_generation_overview.md`](../architecture/pcl_pyramid_binding_generation_overview.md) | How contracts become runnable PCL components (with diagrams) |
 | Architecture | [`generated_bindings.md`](../architecture/generated_bindings.md) | Canonical binding/codec/transport reference |
 | Architecture | [`cpp_component_authoring.md`](../architecture/cpp_component_authoring.md) | Writing C++ components on the generated facades |
+| Architecture | [`build_artefacts.md`](../architecture/build_artefacts.md) | High-level map of all build artefacts (static libs, marshal libs, plugins, executables) and deployment config files |
 | Architecture | [`transport_codec_plugin_system.md`](../architecture/transport_codec_plugin_system.md) | Plugin ABI, capability model, routing, deployment |
 | Architecture | [`oms_agra_compatibility.md`](../architecture/oms_agra_compatibility.md) | Current OMS/CAL, AMS-GRA, and A-GRA compatibility status, with diagrams and known quirks |
 | Architecture | [`ros2_transport_semantics.md`](../architecture/ros2_transport_semantics.md) | ROS2 mapping rules |
