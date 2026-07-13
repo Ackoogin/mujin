@@ -11,7 +11,11 @@
 #     include/   client-facing headers   (pcl/*  and  pyramid/*  generated facade)
 #     src/       the generated contract facade the client compiles against
 #     lib/       static libraries a client links (.a)
-#     MANIFEST.txt   plugin .so paths (feed to --codec-plugin / PCL_CODEC_PLUGIN_PATH)
+#     codec_manifest.txt      codec .so paths (point PCL_CODEC_MANIFEST /
+#                             --codec-manifest at it, or list via --codec-plugin
+#                             / the PYRAMID_CODEC_PLUGINS env var for Ada)
+#     transport_manifest.txt  transport .so paths (pass via --transport-plugin)
+#     MANIFEST.txt   all staged plugin .so paths (review/audit listing)
 #     README.md      how to build a client and run it against the plugin
 #
 # The codec plugin is the single cross-language .so (it consumes the frozen
@@ -35,7 +39,7 @@ while [[ $# -gt 0 ]]; do
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
     --out)       OUT_DIR="$2";   shift 2 ;;
     --clean)     CLEAN=1;        shift ;;
-    -h|--help)   sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)   sed -n '2,27p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -159,7 +163,7 @@ for comp in "${COMPONENTS[@]}"; do
   done
   echo "   marshalling modules: ${staged_modules[*]:-<none>}"
 
-  # --- MANIFEST: absolute plugin paths (for --codec-plugin / PCL_CODEC_PLUGIN_PATH) ---
+  # --- MANIFEST: absolute plugin paths (review/audit listing of every staged .so) ---
   ( cd "${dest}/plugins" && ls -1 ./*.so 2>/dev/null | sed "s|^\./|${dest}/plugins/|" ) > "${dest}/MANIFEST.txt" || true
 
   # --- codec_manifest.txt: codec plugin paths the runtime auto-loads ----------

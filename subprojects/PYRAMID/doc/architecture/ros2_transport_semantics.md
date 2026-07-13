@@ -1,10 +1,14 @@
 # ROS2 Transport Semantics
 
-This page defines the canonical ROS2 mapping for PYRAMID/PCL transport
-semantics.
+## Summary
 
-It is the design reference for the generated `ros2` backend and the shared
-support layer under `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp`.
+This page defines the canonical ROS2 mapping for PYRAMID/PCL transport
+semantics: how contract topics, unary services, and streaming services
+project onto ROS2 topics/services, what travels typed (`pyramid_msgs`) vs
+enveloped, and the threading rule that hands ROS2 callbacks back to the PCL
+executor. It is the design reference for the generated `ros2` backend, the
+shared support layer under `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp`, and the
+coupled ROS2 plugin.
 
 ## Purpose
 

@@ -200,9 +200,10 @@ On Linux/macOS, use the `.sh` counterparts.
 ## Running against the plugins
 
 Load `plugins\pcl_transport_socket_plugin.dll` (or `_shared_memory_plugin`)
-plus the codec plugin(s) your component needs via `--codec-plugin` /
-`PCL_CODEC_PLUGIN_PATH` (or a codec manifest), exactly as in the main
-PYRAMID transport/codec plugin system. A client links only `pcl_core` +
+plus the codec plugin(s) your component needs via `--codec-plugin`, a codec
+manifest (`PCL_CODEC_MANIFEST` / `--codec-manifest`), or — for Ada clients —
+the path-separated `PYRAMID_CODEC_PLUGINS` environment variable, exactly as
+in the main PYRAMID transport/codec plugin system. A client links only `pcl_core` +
 the generated marshalling/facade code it compiles from `sdk_project\generated`
 -- no wire codec, no transport is linked directly; both are composed at
 run time from `plugins\` and your freshly built codec `.dll`.
