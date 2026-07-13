@@ -7,6 +7,7 @@
 #include <vector>
 
 extern "C" {
+#include "pcl/pcl_alloc.h"
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_transport.h"
@@ -598,8 +599,10 @@ TEST(PclStreaming, DirectTransportContextSendEndAbortCancel) {
   EXPECT_TRUE(tctx.stream_send_called);
   EXPECT_EQ(tctx.last_handle, reinterpret_cast<void*>(0x1001));
 
+  // pcl_stream_end/abort free the context with pcl_free (HeapFree on
+  // Windows), so it must be allocated with pcl_calloc, not CRT calloc.
   pcl_stream_context_t* end_ctx =
-      static_cast<pcl_stream_context_t*>(calloc(1, sizeof(*end_ctx)));
+      static_cast<pcl_stream_context_t*>(pcl_calloc(1, sizeof(*end_ctx)));
   ASSERT_NE(end_ctx, nullptr);
   end_ctx->transport = &transport;
   end_ctx->transport_ctx = reinterpret_cast<void*>(0x1002);
@@ -610,7 +613,7 @@ TEST(PclStreaming, DirectTransportContextSendEndAbortCancel) {
 
   tctx.stream_end_called = false;
   pcl_stream_context_t* abort_ctx =
-      static_cast<pcl_stream_context_t*>(calloc(1, sizeof(*abort_ctx)));
+      static_cast<pcl_stream_context_t*>(pcl_calloc(1, sizeof(*abort_ctx)));
   ASSERT_NE(abort_ctx, nullptr);
   abort_ctx->transport = &transport;
   abort_ctx->transport_ctx = reinterpret_cast<void*>(0x1003);

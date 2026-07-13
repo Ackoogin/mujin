@@ -268,8 +268,12 @@ begin
 
    -- -- Cleanup ----------------------------------------------------------------
 
-   Pcl_Bindings.Destroy_Container (Container);
-   Pcl_Bindings.Destroy_Executor (Exec);
+   --  The transport must be destroyed while the executor is still alive:
+   --  pcl_socket_transport_destroy unregisters itself from ctx->executor,
+   --  so destroying the executor first leaves it a dangling pointer and
+   --  raises EXCEPTION_ACCESS_VIOLATION during teardown.
    Pcl_Transport_Plugin.Destroy (Transport_Handle, Transport_Vtable);
+   Pcl_Bindings.Destroy_Executor (Exec);
+   Pcl_Bindings.Destroy_Container (Container);
    Unload_Codec_Plugins;
 end Ada_Tobj_Client;

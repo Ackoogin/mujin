@@ -12,6 +12,7 @@
 #include <string>
 
 extern "C" {
+#include "pcl/pcl_alloc.h"
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_transport.h"
@@ -1917,8 +1918,10 @@ TEST(PclContainerRobust, ServiceRespondWithDirectContextTransport) {
   };
   transport.adapter_ctx = &tctx;
 
+  // pcl_service_respond frees the context with pcl_free (HeapFree on
+  // Windows), so it must be allocated with pcl_calloc, not CRT calloc.
   pcl_svc_context_t* ctx =
-      static_cast<pcl_svc_context_t*>(calloc(1, sizeof(*ctx)));
+      static_cast<pcl_svc_context_t*>(pcl_calloc(1, sizeof(*ctx)));
   ASSERT_NE(ctx, nullptr);
   ctx->transport = &transport;
   ctx->transport_ctx = reinterpret_cast<void*>(0x4321);
