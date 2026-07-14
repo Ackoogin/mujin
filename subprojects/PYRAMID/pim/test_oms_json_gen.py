@@ -14,31 +14,94 @@ OMS_JSON_COMPILE_SMOKE=1 in an environment with a C++17 toolchain and a
 nlohmann/json single header (see OmsJsonCompileSmokeTest).
 """
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import parse_proto_tree, ProtoTypeIndex
-from cpp.oms_json_codec_gen import CppOmsJsonCodecGenerator, OmsJsonShapeError
+from cpp.naming import _DEFAULT_NAMING_POLICY
+from cpp.oms_json_codec_gen import (
+    CppOmsJsonCodecGenerator,
+    OmsJsonShapeError,
+    _PackageEmitter,
+)
+from cpp.types_gen import find_scalar_wrappers
 from ada.oms_json_codec_gen import AdaOmsJsonCodecGenerator
 import xsd2proto
 
 PIM_DIR = Path(__file__).resolve().parent
 SEAM_TREE = PIM_DIR / "uci_seam_example"
 P1_TREE = PIM_DIR / "uci_generated" / "uci_2_5_0"
+P2_TREE = PIM_DIR / "uci_generated" / "agra_5_0a"
+REPEATED_CHOICE_TREE = (
+    PIM_DIR / "test_oms_json_gen_fixtures" / "repeated_choice_member"
+)
 GOLDEN = PIM_DIR / "test_oms_json_gen_fixtures" / "seam_codec_plugin.golden.cpp"
+
+
+def _p2_closure_counts():
+    report = json.loads((P2_TREE / "closure_report.json").read_text(
+        encoding="utf-8"))
+    return report["counts"]
 
 
 def generate_cpp(tree: Path, out: Path):
     files = parse_proto_tree(tree)
     return CppOmsJsonCodecGenerator(ProtoTypeIndex(files)).generate(out)
+
+
+def _shape_error_category(message: str) -> str:
+    """Stable inventory categories for the P2-wide shape probe."""
+    if "repeated xs:choice carriers" in message:
+        return "repeated choice carrier"
+    if "scalar-wrapper alias" in message:
+        return "scalar-wrapper alias"
+    if "extension base" in message and "oneof" in message:
+        return "extension base carrying oneof"
+    if "unresolved type" in message:
+        return "unresolved type"
+    return "other"
+
+
+def _probe_cpp_shapes(files):
+    """Attempt both per-message emission paths and inventory every gap.
+
+    This deliberately includes synthesized messages.  Although normal full
+    generation handles their list payload inline and skips standalone codec
+    functions, probing all parsed messages catches sidecar or wrapper drift.
+    """
+    index = ProtoTypeIndex(files)
+    aliases = find_scalar_wrappers(index)
+    inventory = {}
+    attempts = 0
+    messages = 0
+    for pf in files:
+        if not pf.messages or pf.services:
+            continue
+        emitter = _PackageEmitter(index, pf, _DEFAULT_NAMING_POLICY, aliases)
+        for msg in pf.messages:
+            messages += 1
+            for operation in (emitter._encode, emitter._decode):
+                attempts += 1
+                try:
+                    operation(io.StringIO(), msg)
+                except OmsJsonShapeError as exc:
+                    category = _shape_error_category(str(exc))
+                    entry = inventory.setdefault(category, {
+                        "messages": set(), "details": set(),
+                    })
+                    entry["messages"].add(msg.name)
+                    entry["details"].add(str(exc))
+    return messages, attempts, inventory
 
 
 class SeamRegressionTest(unittest.TestCase):
@@ -134,6 +197,112 @@ class P1SidecarGenerationTest(unittest.TestCase):
         self.assertNotIn("Wire {", self.text)
 
 
+class RepeatedChoiceMemberFixtureTest(unittest.TestCase):
+    """Pinned A-GRA repeated-choice-member wire shape for both emitters.
+
+    la-cal-harness, driven by A-GRA_MessageDefinitions_v5_0_a.xsd, emits
+    PolygonPointChoiceType as ``{"Point2D": [...]}`` and
+    LinePointChoiceType as ``{"Point": [...]}``.  The fixture is the small
+    equivalent: the selected arm's element name owns the JSON array directly;
+    the synthesized ``*_List`` message never adds an object level.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        files = parse_proto_tree(REPEATED_CHOICE_TREE)
+        index = ProtoTypeIndex(files)
+        cpp_paths = CppOmsJsonCodecGenerator(index).generate(
+            Path(cls.tmp.name) / "cpp")
+        ada_paths = AdaOmsJsonCodecGenerator(index).generate(
+            Path(cls.tmp.name) / "ada")
+        cls.cpp = cpp_paths[0].read_text(encoding="utf-8")
+        cls.ada = next(p for p in ada_paths if p.suffix == ".adb") \
+            .read_text(encoding="utf-8")
+        cls.wire = json.loads((REPEATED_CHOICE_TREE /
+                               "expected_wire_shape.json").read_text(
+                                   encoding="utf-8"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_fixture_pins_member_key_to_array_without_wrapper_object(self):
+        choice = self.wire["ChoiceFixture"]["PointChoice"]
+        self.assertEqual(list(choice), ["Point"])
+        self.assertIsInstance(choice["Point"], list)
+        self.assertEqual(choice["Point"], [{"X": 1.0}, {"X": 2.0}])
+
+    def test_cpp_emits_and_decodes_the_member_array_inline(self):
+        self.assertIn(
+            'for(const auto& x:(*m.point).items) '
+            'a.push_back(encode_PointType(x))', self.cpp)
+        self.assertIn(
+            'if (j.contains("Point")) { '
+            'uci::PointChoiceType_Point_List w{}; for (const auto& x : '
+            'j.at("Point")) w.items.push_back(decode_PointType(x)); '
+            'r.point = w; }', self.cpp)
+        self.assertNotIn("encode_PointChoiceType_Point_List", self.cpp)
+
+    def test_ada_emits_the_member_array_inline(self):
+        self.assertIn(
+            "if M.Has_Point and then M.Point.Items /= null and then "
+            "M.Point.Items'Length > 0 then", self.ada)
+        self.assertIn(
+            "Append (A, Encode_Point_Type (M.Point.Items (I)));", self.ada)
+        self.assertIn('Add (B, "Point", To_String (V));', self.ada)
+        self.assertNotIn("Encode_Point_Choice_Type_Point_List", self.ada)
+
+    def test_both_emitters_reject_multiple_active_choice_arms(self):
+        self.assertIn(
+            "(m.point ? 1 : 0) + (m.relative ? 1 : 0)", self.cpp)
+        self.assertIn(
+            "Boolean'Pos (M.Has_Point) + Boolean'Pos (M.Has_Relative)",
+            self.ada)
+
+
+@unittest.skipUnless(
+    os.environ.get("OMS_JSON_P2_GENERATION") == "1",
+    "set OMS_JSON_P2_GENERATION=1 to run the full P2 closure probe",
+)
+class P2SidecarGenerationTest(unittest.TestCase):
+    """Opt-in full A-GRA P2 shape probe and generation closure gate."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not P2_TREE.is_dir():
+            raise unittest.SkipTest("P2 generated tree is absent")
+        cls.files = parse_proto_tree(P2_TREE)
+
+    def test_all_closure_messages_have_zero_cpp_shape_errors(self):
+        messages, attempts, inventory = _probe_cpp_shapes(self.files)
+        expected_messages = _p2_closure_counts()["messages"]
+        printable = {
+            category: {
+                "messages": sorted(entry["messages"]),
+                "details": sorted(entry["details"]),
+            }
+            for category, entry in inventory.items()
+        }
+        self.assertEqual(messages, expected_messages)
+        self.assertEqual(attempts, expected_messages * 2)
+        self.assertEqual(inventory, {}, json.dumps(printable, indent=2))
+
+    def test_full_p2_cpp_and_ada_generation_completes(self):
+        index = ProtoTypeIndex(self.files)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cpp = CppOmsJsonCodecGenerator(index).generate(root / "cpp")
+            ada = AdaOmsJsonCodecGenerator(index).generate(root / "ada")
+        self.assertEqual(
+            [p.name for p in cpp],
+            ["pyramid_data_model_agra_oms_json_codec_plugin.cpp"])
+        self.assertEqual(
+            sorted(p.name for p in ada),
+            ["pyramid-data_model-agra-oms_json_codec.adb",
+             "pyramid-data_model-agra-oms_json_codec.ads"])
+
+
 class RepeatedChoiceCarrierTest(unittest.TestCase):
     def test_repeated_choice_carrier_fails_loud(self):
         """xsd2proto -> codec-gen end to end: the fixture schema's TargetType
@@ -161,6 +330,62 @@ class RepeatedChoiceCarrierTest(unittest.TestCase):
             with self.assertRaises(OmsJsonShapeError) as ctx:
                 generate_cpp(root / "test_fixture", Path(tmp) / "out")
         self.assertIn("TargetType", str(ctx.exception))
+
+
+class UnspecifiedXsdLiteralFixtureTest(unittest.TestCase):
+    """A real XSD UNSPECIFIED literal remains distinct from presence state."""
+
+    @classmethod
+    def setUpClass(cls):
+        profile = {
+            "profile": "p_fixture", "drop": "test_fixture",
+            "schema_version": "FIXTURE-1",
+            "proto_package": "pyramid.data_model.uci_fixture",
+            "roots": ["TestCommandStatus"],
+        }
+        schema = PIM_DIR / "test_xsd2proto_fixtures" / "uci_fixture.xsd"
+        conv = xsd2proto.Converter(
+            xsd2proto.SchemaIndex([schema], lax=False), profile)
+        conv.convert()
+        cls.tmp = tempfile.TemporaryDirectory()
+        tree = Path(cls.tmp.name) / "tree"
+        for rel, content in xsd2proto.outputs(conv).items():
+            path = tree / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        files = parse_proto_tree(tree)
+        index = ProtoTypeIndex(files)
+        cpp_paths = CppOmsJsonCodecGenerator(index).generate(
+            Path(cls.tmp.name) / "cpp")
+        ada_paths = AdaOmsJsonCodecGenerator(index).generate(
+            Path(cls.tmp.name) / "ada")
+        cls.cpp = cpp_paths[0].read_text(encoding="utf-8")
+        cls.ada = next(path for path in ada_paths if path.suffix == ".adb") \
+            .read_text(encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_cpp_encodes_and_decodes_the_real_xsd_literal(self):
+        self.assertIn(
+            'case uci::ModeEnum::UnspecifiedXsdLiteral: '
+            'return "UNSPECIFIED";', self.cpp)
+        self.assertIn(
+            'if (s=="UNSPECIFIED") return '
+            'uci::ModeEnum::UnspecifiedXsdLiteral;', self.cpp)
+
+    def test_cpp_rejects_the_zero_sentinel(self):
+        self.assertNotIn(
+            'case uci::ModeEnum::Unspecified: return', self.cpp)
+        self.assertIn("enum value not on the UCI wire", self.cpp)
+
+    def test_ada_encodes_literal_and_rejects_zero_sentinel(self):
+        self.assertIn(
+            'when Enum_UnspecifiedXsdLiteral => return """UNSPECIFIED""";',
+            self.ada)
+        self.assertIn('when Enum_Unspecified =>', self.ada)
+        self.assertIn('"ModeEnum value not on the UCI wire"', self.ada)
 
 
 class AdaGeneralizedEmitterTest(unittest.TestCase):
@@ -218,6 +443,9 @@ def _find_nlohmann():
     env = os.environ.get("NLOHMANN_JSON_INCLUDE")
     if env and (Path(env) / "nlohmann" / "json.hpp").is_file():
         return Path(env)
+    bundled = PIM_DIR.parent / "core" / "external"
+    if (bundled / "nlohmann" / "json.hpp").is_file():
+        return bundled
     return None
 
 
@@ -293,6 +521,50 @@ class OmsJsonCompileSmokeTest(unittest.TestCase):
             root["SecurityInformation"]["OwnerProducer"][0]
                 ["GovernmentIdentifier"], "USA")
         self.assertNotIn("Activity", root["MessageData"])  # omit-empty
+
+
+class P2OmsJsonCompileSmokeTest(unittest.TestCase):
+    """Opt-in object compile of the generated full-closure A-GRA codec TU."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.nlohmann = _require_toolchain()
+        if not P2_TREE.is_dir():
+            raise unittest.SkipTest("P2 generated tree is absent")
+
+    def test_p2_cpp_codec_object_compiles(self):
+        repo = PIM_DIR.parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gen = root / "gen"
+            subprocess.run(
+                [sys.executable, str(PIM_DIR / "generate_bindings.py"),
+                 str(P2_TREE), str(gen), "--languages", "cpp",
+                 "--backends", "oms_json"],
+                check=True, capture_output=True)
+            source = (gen / "oms_json" / "cpp" /
+                      "pyramid_data_model_agra_oms_json_codec_plugin.cpp")
+            output = root / "p2_oms_json_codec.o"
+            command = [
+                "g++", "-std=c++17", "-O1", "-c", str(source),
+                "-o", str(output),
+                f"-I{gen}", f"-I{self.nlohmann}",
+                f"-I{repo / 'subprojects' / 'PCL' / 'include'}",
+                f"-I{repo / 'subprojects' / 'PYRAMID' / 'core' / 'external'}",
+            ]
+            if os.name == "nt":
+                # The full closure instantiates more COFF sections than the
+                # default MinGW object format permits in one translation unit.
+                command.append("-Wa,-mbig-obj")
+            started = time.perf_counter()
+            build = subprocess.run(command, capture_output=True, text=True)
+            elapsed = time.perf_counter() - started
+            self.assertEqual(
+                build.returncode, 0,
+                f"P2 object compile failed after {elapsed:.1f}s:\n"
+                + build.stderr[-8000:])
+            self.assertTrue(output.is_file())
+            print(f"P2 OMS-JSON codec object compile: {elapsed:.1f}s")
 
 
 def _strip_type_annotations(node):

@@ -1,6 +1,3 @@
-# Generated drop trees are checked in once their check-in gates pass
-# (see README.md).  uci_2_5_0/ (profile P1) is promoted -- tracked, with
-# test_xsd2proto.py guarding byte-stability against the pinned drop.
-# agra_5_0a/ (profile P2) awaits the Phase-4 exit (closure pruning +
-# posture note); remove its entry when promoted per plan D2.
-/agra_5_0a/
+# Generated drop trees are checked in once their check-in gates pass (see
+# README.md).  Both uci_2_5_0/ (profile P1) and agra_5_0a/ (profile P2) are
+# promoted and guarded for byte stability by test_xsd2proto.py.

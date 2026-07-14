@@ -52,6 +52,7 @@
 
   <xs:simpleType name="ModeEnum">
     <xs:restriction base="xs:string">
+      <xs:enumeration value="UNSPECIFIED"/>
       <xs:enumeration value="REAL"/>
       <xs:enumeration value="SIMULATED"/>
       <xs:enumeration value="EXERCISE"/>

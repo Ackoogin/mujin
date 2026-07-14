@@ -15,7 +15,11 @@ Two paths, mirroring the C++ emitter (UCI MMS conversion plan Phase 2):
   emitted in sorted order (matching nlohmann's object ordering on the C++
   side), enums as XSD literals with ``*_Unspecified`` raising, oneofs as
   the active member's element key, codegen-time flattening of retained
-  extension-base members, and omit-empty arrays.
+  extension-base members, and omit-empty arrays.  The repeated-choice-member
+  wire rule is pinned against la-cal-harness over A-GRA 5.0a:
+  ``PolygonPointChoiceType`` emits ``{"Point2D":[...]}`` and
+  ``LinePointChoiceType`` emits ``{"Point":[...]}``; the synthesized list
+  wrapper is native representation only, not another JSON object level.
 
 Presence envelope (documented deviation from C++): the native Ada record
 layer carries ``Has_`` flags only for optional scalars and oneof members
@@ -618,7 +622,7 @@ class _AdaPackageEmitter:
             for v in enum.values:
                 ada_val = self._enum_ada_value(enum, v)
                 suf = enum.suffix_of(v.name)
-                if (suf or v.name).upper().endswith('UNSPECIFIED'):
+                if (suf or v.name).upper() == 'UNSPECIFIED':
                     w(f'         when {ada_val} =>')
                     w('            raise Constraint_Error with '
                       f'"{enum.name} value not on the UCI wire";')

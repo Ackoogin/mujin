@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package pyramid.data_model.choice_fixture;
+
+message PointType {
+  double x = 1;
+}
+
+message RelativeType {
+  string label = 1;
+}
+
+message PointChoiceType {
+  oneof choice {
+    PointChoiceType_Point_List point = 1;
+    RelativeType relative = 2;
+  }
+}
+
+// synthesized list wrapper for repeated choice member Point in PointChoiceType (choice)
+message PointChoiceType_Point_List {
+  repeated PointType items = 1;
+}
+
+message ChoiceFixture {
+  PointChoiceType point_choice = 1;
+}

@@ -1,0 +1,48 @@
+{
+  "package": "pyramid.data_model.choice_fixture",
+  "roots": {
+    "ChoiceFixture": "ChoiceFixture"
+  },
+  "messages": {
+    "PointType": {
+      "fields": {
+        "x": {
+          "element": "X"
+        }
+      }
+    },
+    "RelativeType": {
+      "fields": {
+        "label": {
+          "element": "Label"
+        }
+      }
+    },
+    "PointChoiceType": {
+      "fields": {
+        "point": {
+          "element": "Point"
+        },
+        "relative": {
+          "element": "Relative"
+        }
+      }
+    },
+    "PointChoiceType_Point_List": {
+      "fields": {
+        "items": {
+          "element": "Point"
+        }
+      },
+      "synthesized": true
+    },
+    "ChoiceFixture": {
+      "fields": {
+        "point_choice": {
+          "element": "PointChoice"
+        }
+      }
+    }
+  },
+  "enums": {}
+}

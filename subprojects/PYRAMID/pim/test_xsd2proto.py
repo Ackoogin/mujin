@@ -145,8 +145,18 @@ class MappingRuleTest(unittest.TestCase):
     def test_enum_gets_prefixed_values_and_unspecified_sentinel(self):
         self.assertIn("ModeEnum", self.conv.enums)
         self.assertIn("  MODE_ENUM_UNSPECIFIED = 0;", self.proto)
-        self.assertIn("  MODE_ENUM_REAL = 1;", self.proto)
+        self.assertIn("  MODE_ENUM_UNSPECIFIED_XSD_LITERAL = 1;", self.proto)
+        self.assertIn("  MODE_ENUM_REAL = 2;", self.proto)
         self.assertIn("  PROCESSING_STATE_ENUM_REJECTED = 3;", self.proto)
+
+    def test_enum_unspecified_literal_disambiguation_cannot_collide(self):
+        spec = xsd2proto.EnumSpec(
+            proto_name="ModeEnum", xsd_name="ModeEnum",
+            literals=["UNSPECIFIED", "UNSPECIFIED_XSD_LITERAL"])
+        self.assertEqual(spec.value_name("UNSPECIFIED"),
+                         "MODE_ENUM_UNSPECIFIED_XSD_LITERAL_2")
+        self.assertEqual(spec.value_name("UNSPECIFIED_XSD_LITERAL"),
+                         "MODE_ENUM_UNSPECIFIED_XSD_LITERAL")
 
     def test_simple_type_alias_collapses_to_scalar_with_facet_comment(self):
         uuid_field = self.field("SystemID_Type", "uuid")
@@ -194,6 +204,10 @@ class MappingRuleTest(unittest.TestCase):
         self.assertEqual(uuid["element"], "UUID")
         self.assertEqual(self.wire["enums"]["ModeEnum"]["MODE_ENUM_REAL"],
                          "REAL")
+        self.assertEqual(
+            self.wire["enums"]["ModeEnum"]
+                     ["MODE_ENUM_UNSPECIFIED_XSD_LITERAL"],
+            "UNSPECIFIED")
         self.assertEqual(self.wire["roots"]["TestCommand"], "TestCommandMT")
 
     def test_closure_report_counts_and_fan_in(self):
@@ -307,22 +321,22 @@ class RealAgraP2ConversionTest(unittest.TestCase):
         cls.profile = json.loads(
             (PIM_DIR / "uci_profiles" / "p2_agra_planning_core.json")
             .read_text(encoding="utf-8"))
+        index = xsd2proto.SchemaIndex(cls.xsds, lax=False)
+        cls.conv = xsd2proto.Converter(index, cls.profile)
+        cls.conv.convert()
 
     def test_p2_converts_strict_and_parses(self):
-        index = xsd2proto.SchemaIndex(self.xsds, lax=False)
-        conv = xsd2proto.Converter(index, self.profile)
-        conv.convert()  # strict: any unsupported construct raises
-        self.assertEqual(len(conv.roots), len(self.profile["roots"]))
-        report = json.loads(xsd2proto.emit_closure_report(conv))
+        self.assertEqual(len(self.conv.roots), len(self.profile["roots"]))
+        report = json.loads(xsd2proto.emit_closure_report(self.conv))
         self.assertEqual(report["skipped"], [])
-        # Closure scale recorded 2026-07-11: 1163 messages / 297 enums.
+        # Closure scale recorded 2026-07-14: 1169 messages / 297 enums.
         # A pinned-drop re-run must reproduce it exactly; a changed count
         # on the same sha256-pinned bytes means converter behaviour drift.
-        self.assertEqual(report["counts"]["messages"], 1163)
+        self.assertEqual(report["counts"]["messages"], 1169)
         self.assertEqual(report["counts"]["enums"], 297)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for rel, content in xsd2proto.outputs(conv).items():
+            for rel, content in xsd2proto.outputs(self.conv).items():
                 if not rel.endswith(".proto"):
                     continue
                 path = root / rel
@@ -331,8 +345,72 @@ class RealAgraP2ConversionTest(unittest.TestCase):
             files = parse_proto_tree(root)
         pf = files[0]
         self.assertEqual(pf.package, "pyramid.data_model.agra")
-        self.assertEqual(len(pf.messages), 1163)
+        self.assertEqual(len(pf.messages), 1169)
         self.assertEqual(len(pf.enums), 297)
+
+    def test_both_real_unspecified_literals_are_disambiguated(self):
+        conv = xsd2proto.Converter(self.conv.index, self.profile)
+        expected = {
+            "MA_NominationEnum":
+                "MA_NOMINATION_ENUM_UNSPECIFIED_XSD_LITERAL",
+            "MA_TaskPluralityEnum":
+                "MA_TASK_PLURALITY_ENUM_UNSPECIFIED_XSD_LITERAL",
+        }
+        for enum_name, value_name in expected.items():
+            kind, proto_name, _ = conv.resolve_simple(enum_name)
+            self.assertEqual(kind, "enum")
+            self.assertEqual(proto_name, enum_name)
+            self.assertEqual(
+                conv.enums[enum_name].value_name("UNSPECIFIED"), value_name)
+
+    def test_checked_in_p2_tree_is_current(self):
+        """The G1 byte-stability guard: the committed
+        pim/uci_generated/agra_5_0a/ tree must equal a fresh conversion."""
+        out_dir = PIM_DIR / "uci_generated" / "agra_5_0a"
+        for rel, content in xsd2proto.outputs(self.conv).items():
+            path = out_dir / rel
+            self.assertTrue(path.is_file(), f"missing checked-in {rel}")
+            self.assertEqual(path.read_text(encoding="utf-8"), content,
+                             f"{rel} drifted -- rerun xsd2proto.py "
+                             "uci_profiles/p2_agra_planning_core.json and "
+                             "commit")
+
+    def test_p2_wire_names_cover_every_field(self):
+        """G1 wire-name guard for every independently keyed proto field.
+
+        Every emitted message and non-``base`` field, including all
+        synthesized list-wrapper ``items`` fields, must have its exact XSD
+        element name in the sidecar.  Composition-only ``base`` fields are
+        the sole exception: the codec flattens them and never derives or
+        emits a key for the carrier itself.  This does not exercise codec
+        generation; it prevents that generator from reaching its missing-
+        sidecar error path for any independently keyed P2 field.
+        """
+        wire = json.loads(xsd2proto.outputs(self.conv)["wire_names.json"])
+        self.assertEqual(wire["roots"], self.conv.roots)
+        self.assertEqual(set(wire["roots"]), set(self.profile["roots"]))
+        self.assertEqual(len(wire["roots"]), 20)
+        self.assertEqual(set(wire["messages"]), set(self.conv.messages))
+
+        for message_name, message in self.conv.messages.items():
+            sidecar = wire["messages"][message_name]
+            expected = {field.proto_name: field.wire_name
+                        for field in message.fields
+                        if field.proto_name != "base"}
+            self.assertEqual(set(sidecar["fields"]), set(expected),
+                             message_name)
+            for field_name, element_name in expected.items():
+                self.assertTrue(element_name,
+                                f"{message_name}.{field_name} has no exact "
+                                "XSD element name")
+                self.assertEqual(
+                    sidecar["fields"][field_name]["element"], element_name,
+                    f"{message_name}.{field_name}")
+            for field in message.fields:
+                if field.proto_name == "base":
+                    self.assertEqual(field.wire_name, "", message_name)
+            self.assertEqual(bool(sidecar.get("synthesized")),
+                             message.synthesized, message_name)
 
 
 def _find_real_uci_xsds():

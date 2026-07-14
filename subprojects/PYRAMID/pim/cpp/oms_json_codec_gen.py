@@ -19,7 +19,10 @@ independently-authored ``la-cal-harness`` XSD-derived generator:
 * ``xs:choice`` (proto oneof): the active member's element key appears
   directly in the parent object -- no wrapper, no discriminator;
 * repeated choice *members* (synthesized ``*_List`` wrappers from
-  xsd2proto) render as an array under the member's element key;
+  xsd2proto) render as an array under the member's element key.  Pinned
+  against la-cal-harness over A-GRA 5.0a: ``PolygonPointChoiceType`` emits
+  ``{"Point2D":[...]}`` and ``LinePointChoiceType`` emits
+  ``{"Point":[...]}``; the synthesized wrapper is not a wire object;
 * enums: the XSD enumeration literal verbatim (sidecar-authoritative;
   enum-prefix-strip heuristic otherwise); ``*_UNSPECIFIED`` never appears
   on the wire -- encoding it is an error;
@@ -342,7 +345,7 @@ class _PackageEmitter:
             parses = []
             for v in enum.values:
                 suf = enum.suffix_of(v.name)
-                if (suf or v.name).upper().endswith('UNSPECIFIED'):
+                if (suf or v.name).upper() == 'UNSPECIFIED':
                     continue  # never on the UCI wire
                 cpp = screaming_to_pascal(suf) if suf else v.name
                 lit = self.wire.enum_literal(enum.name, v.name, suf)
