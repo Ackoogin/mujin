@@ -508,6 +508,27 @@ def _fbs_type(field: ProtoField, index: ProtoTypeIndex, current_package: str = '
     return base
 
 
+def _import_has_fbs_schema(index: ProtoTypeIndex, imported: str) -> bool:
+    """Return whether a known proto import produces a FlatBuffers schema.
+
+    Options-only proto files are parsed into the index but deliberately produce
+    no ``.fbs`` output. Emitting an include for one leaves otherwise valid
+    schemas with an unresolvable dependency at ``flatc`` time.
+    """
+    normalized = imported.replace('\\', '/')
+    if Path(normalized).name.endswith('.options.proto'):
+        return False
+    matches = [
+        pf for pf in index.files
+        if pf.path.as_posix() == normalized
+        or pf.path.as_posix().endswith('/' + normalized)
+    ]
+    if not matches:
+        imported_name = Path(normalized).name
+        matches = [pf for pf in index.files if pf.path.name == imported_name]
+    return not matches or any(pf.messages or pf.enums for pf in matches)
+
+
 def _flatbuffers_union_name(oneof_name: str) -> str:
     return ''.join(w.capitalize() for w in oneof_name.split('_')) + 'Union'
 
@@ -607,7 +628,9 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('// Do not edit -- regenerate from proto source\n\n')
 
             for imported in pf.imports:
-                if not imported.endswith('.proto') or imported.startswith('google/protobuf/'):
+                if (not imported.endswith('.proto')
+                        or imported.startswith('google/protobuf/')
+                        or not _import_has_fbs_schema(index, imported)):
                     continue
                 include_stem = Path(imported).stem
                 if (getattr(naming, 'layout', 'pyramid') == 'pyramid'
@@ -618,7 +641,9 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             if pf.imports:
                 filtered_imports = [
                     imported for imported in pf.imports
-                    if imported.endswith('.proto') and not imported.startswith('google/protobuf/')
+                    if (imported.endswith('.proto')
+                        and not imported.startswith('google/protobuf/')
+                        and _import_has_fbs_schema(index, imported))
                 ]
                 if filtered_imports:
                     f.write('\n')

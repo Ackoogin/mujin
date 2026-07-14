@@ -42,6 +42,11 @@ compliance, and the tooling that would scale to it (the XSD→proto
 converter) is proven to work on the A-GRA drop but stops at the offline
 conversion step by design.
 
+Gap closure is planned as **WS-G / G1** in the canonical
+[`PYRAMID TODO`](../../../../doc/todo/PYRAMID/TODO.md#ws-g--formal-a-gra-oms-codec-closure).
+Until its offline and independent-peer acceptance gates pass, formal A-GRA OMS
+support remains explicitly unsupported rather than inferred from the P1 path.
+
 ## Pipeline and where each stage currently stands
 
 ```mermaid

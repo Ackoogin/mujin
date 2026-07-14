@@ -1,6 +1,14 @@
-# A-GRA example contract: `agra.mission_autonomy` / `agra.c2_station`
+# A-GRA-vocabulary port-grammar fixture
 
-Phase B of the SHM/UDP proving plan (the retired
+> **Not an OMS wire contract.** This hand-authored tree tests PYRAMID's port
+> grammar, classifier, routing metadata, and generated JSON/FlatBuffers
+> bindings using A-GRA-like names. It was not derived from the formal A-GRA
+> XSD, has no authoritative `wire_names.json`, and must not be used to claim
+> OMS JSON or A-GRA wire compatibility. Use the proven UCI 2.5 P1 seam for
+> current OMS/CAL work; see
+> [`doc/architecture/oms_agra_compatibility.md`](../../doc/architecture/oms_agra_compatibility.md).
+
+This fixture originated in Phase B of the SHM/UDP proving plan (the retired
 `agra_pubsub_shm_udp_proving_plan.md` — design intent summarised in
 [`doc/plans/PYRAMID/README.md`](../../../../doc/plans/PYRAMID/README.md),
 full text in git history):

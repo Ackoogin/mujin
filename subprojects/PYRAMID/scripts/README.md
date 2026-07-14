@@ -41,25 +41,32 @@ subprojects/PYRAMID/scripts/build_plugins.sh
 # Also build protobuf + the coupled gRPC target plugin, and stage per-component
 # deployment dirs (chains stage_plugin_deploy.sh):
 subprojects/PYRAMID/scripts/build_plugins.sh --grpc --stage
+
+# GRA runtime profile: also require the OMS JSON codec and LA-CAL WebSocket
+# transport (OWP):
+subprojects/PYRAMID/scripts/build_plugins.sh --gra
 ```
 
 ```bat
 subprojects\PYRAMID\scripts\build_plugins.bat
 subprojects\PYRAMID\scripts\build_plugins.bat --grpc --stage
+subprojects\PYRAMID\scripts\build_plugins.bat --gra
 ```
 
-Options: `--build-dir DIR`, `--grpc`, `--jobs N`, `--clean`, `--stage`,
+Options: `--proto-dir DIR`, `--build-dir DIR`, `--grpc`, `--gra`, `--jobs N`, `--clean`, `--stage`,
 `--stage-out DIR` (run with `--help` for details). On Linux this produces
 `libpyramid_codec_<codec>_<component>.so`, `libpcl_transport_{socket,shared_memory}_plugin.so`,
 and (with `--grpc`) `libpyramid_grpc_coupled_plugin.so`; the Windows `.bat`
 builds the MSVC equivalents (`pyramid_codec_<codec>_<component>.dll`,
 `pcl_transport_{socket,shared_memory}_plugin.dll`, `pyramid_grpc_coupled_plugin.dll`).
+With `--gra`, the build explicitly enables OWP and also produces
+`pyramid_codec_oms_json_uci` plus `pyramid_lacal_transport_plugin`.
 See
 [`../doc/architecture/transport_codec_plugin_system.md`](../doc/architecture/transport_codec_plugin_system.md).
 
 `stage_plugin_deploy.sh` / `stage_plugin_deploy.bat` (called by `--stage`, or run
 standalone against an existing build dir) lays out per-component deployment dirs
-with the plugins, client-facing headers/sources, the minimal link libraries
+with the plugins, client-facing headers/sources, the generated link libraries
 (`.a` on Linux, `.lib` on Windows), and auto-load manifests.
 
 ### Ada consumers (`build_ada.sh`)
@@ -127,6 +134,25 @@ contracts, and a standalone CMake/GNAT project template into
 built `--build-dir` (default `build-flatbuffers-only`) with
 `PYRAMID_ENABLE_FLATBUFFERS=ON`, `PYRAMID_GENERATE_CPP_BINDINGS=ON` — e.g. run
 `build_plugins.bat`/`.sh` first.
+
+Use `--proto-dir <contract-tree>` to choose the contracts copied into the
+distribution. Add `--gra` to require and package the OMS JSON codec plus the
+LA-CAL WebSocket transport; `create_sdk --gra` deliberately requires an
+explicit `--proto-dir`. For a distribution parity run using the
+A-GRA-vocabulary port-grammar fixture:
+
+```bat
+subprojects\PYRAMID\scripts\create_sdk.bat --skip-build --no-ada --verify --gra ^
+  --proto-dir subprojects\PYRAMID\pim\agra_example ^
+  --out dist\pcl_pyramid_sdk_agra
+```
+
+Omit `--skip-build` for a release build from scratch; use the `.sh` counterpart
+
+This verifies the generated JSON/FlatBuffers plugins for the fixture and
+separately load-tests the OMS/CAL runtime modules. The fixture is not derived
+from the formal A-GRA XSD and is not an OMS wire-compatibility proof; see
+[`../pim/agra_example/README.md`](../pim/agra_example/README.md).
 
 Recommended release flow:
 

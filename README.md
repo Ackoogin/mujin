@@ -186,6 +186,8 @@ cmake/                   Shared CMake support files
 | [Remaining Work](doc/todo/AME/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
 | [Assurance Plan](doc/plans/AME/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
 | [PYRAMID User Guide](subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Engineers, integrators | High-level PYRAMID design/usage with diagrams; entry point to all PYRAMID docs |
+| [PYRAMID Plugin System](subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) | Component authors, deployers | Plugin types, ABI, loading/configuration, routing, capabilities, staging, and known limitations |
+| [PCL/PYRAMID Offline SDK](subprojects/PYRAMID/doc/architecture/sdk_packaging.md) | Maintainers, downstream SDK users | Package and verify a self-contained proto-to-plugin SDK, including custom contracts and the GRA runtime profile |
 | [PCL/PYRAMID Binding Generation Overview](subprojects/PYRAMID/doc/architecture/pcl_pyramid_binding_generation_overview.md) | Engineers | Broad architecture for how PYRAMID contracts become generated bindings that run on PCL |
 | [OMS / AMS-GRA / A-GRA Compatibility](subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) | Engineers, integrators | Current compatibility status with the OMS/CAL wire protocol, the AMS-GRA reference stack, and the A-GRA compliance standard, with diagrams and known quirks |
 | [Generated Bindings](subprojects/PYRAMID/doc/architecture/generated_bindings.md) | Engineers | PYRAMID service/codegen pipeline and generated bindings |

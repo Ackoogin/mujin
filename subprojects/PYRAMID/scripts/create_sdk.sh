@@ -20,13 +20,15 @@
 #
 # Usage:
 #   create_sdk.sh [--out DIR] [--config Release|Debug] [--no-ada] [--skip-build]
-#                 [--build-dir DIR] [--verify] [--jobs N]
+#                 [--build-dir DIR] [--proto-dir DIR] [--gra] [--verify] [--jobs N]
 #
 # Defaults: --out dist/pcl_pyramid_sdk, --config Release, Ada libs built when a
 #           GNAT toolchain is on PATH, full configure+build, build dir
 #           build-flatbuffers-only. --build-dir overrides the build/package dir
 #           and is meant to be paired with --skip-build to reuse an existing,
 #           already-configured build (it must have FlatBuffers + C++ bindings on).
+#           --gra requires an explicit --proto-dir and packages the OMS JSON
+#           codec + LA-CAL WebSocket transport.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,12 +41,16 @@ CONFIG="Release"
 WITH_ADA=1
 SKIP_BUILD=0
 VERIFY=0
+PROTO_DIR=""
+GRA=0
 JOBS="$( (command -v nproc >/dev/null && nproc) || echo 4)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out)        OUT_DIR="$2"; shift 2 ;;
     --build-dir)  BUILD_DIR="$2"; shift 2 ;;
+    --proto-dir)  PROTO_DIR="$2"; shift 2 ;;
+    --gra)        GRA=1; shift ;;
     --config)     CONFIG="$2"; shift 2 ;;
     --no-ada)     WITH_ADA=0; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
@@ -54,6 +60,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "[create_sdk] unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+if [[ "${GRA}" -eq 1 && -z "${PROTO_DIR}" ]]; then
+  echo "[create_sdk] ERROR: --gra requires --proto-dir; select the intended OMS/A-GRA contract explicitly." >&2
+  exit 2
+fi
 
 case "${CONFIG}" in
   Release) BUILD_PRESET="flatbuffers-only-release" ;;
@@ -75,7 +86,10 @@ else
 fi
 
 step "step 3/6: build codec/transport plugins (build_plugins.sh)"
-"${SCRIPT_DIR}/build_plugins.sh" --build-dir "${BUILD_DIR}"
+BUILD_PLUGIN_ARGS=(--build-dir "${BUILD_DIR}" --jobs "${JOBS}")
+[[ "${GRA}" -eq 1 ]] && BUILD_PLUGIN_ARGS+=(--gra)
+[[ -n "${PROTO_DIR}" ]] && BUILD_PLUGIN_ARGS+=(--proto-dir "${PROTO_DIR}")
+"${SCRIPT_DIR}/build_plugins.sh" "${BUILD_PLUGIN_ARGS[@]}"
 
 if [[ "${WITH_ADA}" -eq 1 ]]; then
   if command -v gnatmake >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1; then
@@ -90,11 +104,16 @@ else
 fi
 
 step "step 5/6: package the SDK (package_sdk.sh --clean --out ${OUT_DIR})"
-"${SCRIPT_DIR}/package_sdk.sh" --build-dir "${BUILD_DIR}" --out "${OUT_DIR}" --clean
+PACKAGE_ARGS=(--build-dir "${BUILD_DIR}" --out "${OUT_DIR}" --clean)
+[[ "${GRA}" -eq 1 ]] && PACKAGE_ARGS+=(--gra)
+if [[ -n "${PROTO_DIR}" ]]; then
+  PACKAGE_ARGS+=(--proto-dir "${PROTO_DIR}")
+fi
+"${SCRIPT_DIR}/package_sdk.sh" "${PACKAGE_ARGS[@]}"
 
 if [[ "${VERIFY}" -eq 1 ]]; then
   step "step 6/6: verify the packaged SDK end-to-end (build_sdk.sh)"
-  "${OUT_DIR}/scripts/build_sdk.sh"
+  "${OUT_DIR}/scripts/build_sdk.sh" --jobs "${JOBS}"
 else
   echo "[create_sdk] step 6/6: verification skipped (pass --verify to build+smoke-test the package)."
 fi

@@ -19,6 +19,8 @@ REM     pyramid_codec_json_<component>.dll
 REM     pyramid_codec_flatbuffers_<component>.dll
 REM     pcl_transport_socket_plugin.dll
 REM     pcl_transport_shared_memory_plugin.dll
+REM     [pyramid_codec_oms_json_uci.dll]       (with --gra)
+REM     [pyramid_lacal_transport_plugin.dll]   (with --gra)
 REM     [pyramid_grpc_coupled_plugin.dll]   (with --grpc)
 REM
 REM   optionally:  stage per-component deployment dirs (stage_plugin_deploy.bat)
@@ -27,7 +29,7 @@ REM The codec plugin is the single cross-language .dll (it consumes the frozen
 REM pyramid_<Type>_c C struct) and is loaded from both C++ and Ada clients.
 REM
 REM Usage:
-REM   build_plugins.bat [--proto-dir DIR] [--build-dir DIR] [--grpc] [--jobs N]
+REM   build_plugins.bat [--proto-dir DIR] [--build-dir DIR] [--grpc] [--gra] [--jobs N]
 REM                     [--clean] [--stage] [--stage-out DIR]
 REM
 REM Options:
@@ -38,6 +40,8 @@ REM                    (use a distinct --build-dir or --clean).
 REM   --build-dir DIR  CMake build directory          (default: <repo>\build-plugins)
 REM   --grpc           also build protobuf + the coupled gRPC target plugin
 REM                    (fetches gRPC from source on first configure -- needs network)
+REM   --gra            force OMS/CAL support on: build the OMS JSON codec and
+REM                    LA-CAL WebSocket transport plugin
 REM   --jobs N         parallel build jobs            (default: %NUMBER_OF_PROCESSORS%)
 REM   --clean          delete the build dir before configuring
 REM   --stage          after building, stage per-component deployment dirs
@@ -54,6 +58,7 @@ set "BUILD_DIR=%REPO_ROOT%\build-plugins"
 set "STAGE_OUT=%REPO_ROOT%\dist\plugin_deploy"
 set "PROTO_DIR="
 set "ENABLE_GRPC=0"
+set "ENABLE_GRA=0"
 set "DO_STAGE=0"
 set "CLEAN=0"
 set "JOBS=%NUMBER_OF_PROCESSORS%"
@@ -64,6 +69,7 @@ if "%~1"=="" goto done_args
 if /i "%~1"=="--proto-dir" (set "PROTO_DIR=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--build-dir" (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--grpc"      (set "ENABLE_GRPC=1" & shift & goto parse_args)
+if /i "%~1"=="--gra"       (set "ENABLE_GRA=1" & shift & goto parse_args)
 if /i "%~1"=="--jobs"      (set "JOBS=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--clean"     (set "CLEAN=1" & shift & goto parse_args)
 if /i "%~1"=="--stage"     (set "DO_STAGE=1" & shift & goto parse_args)
@@ -85,6 +91,8 @@ exit /b 0
 :done_args
 set "GRPC=off"
 if "%ENABLE_GRPC%"=="1" set "GRPC=on"
+set "GRA=off"
+if "%ENABLE_GRA%"=="1" set "GRA=on"
 
 REM Resolve --proto-dir to an absolute path so CMake (run from BUILD_DIR) finds it.
 if defined PROTO_DIR (
@@ -102,6 +110,7 @@ echo [build_plugins] repo      : %REPO_ROOT%
 echo [build_plugins] build-dir : %BUILD_DIR%
 echo [build_plugins] proto-dir : %PROTO_DISP%
 echo [build_plugins] grpc      : %GRPC%
+echo [build_plugins] gra       : %GRA%
 echo [build_plugins] jobs      : %JOBS%
 
 if "%CLEAN%"=="1" (
@@ -124,6 +133,9 @@ REM Redirect the proto set (e.g. pim\test) when --proto-dir was given.
 set "PROTO_ARGS="
 if defined PROTO_DIR set "PROTO_ARGS=-DPYRAMID_PROTO_DIR=%PROTO_DIR%"
 
+set "GRA_ARGS="
+if "%ENABLE_GRA%"=="1" set "GRA_ARGS=-DPYRAMID_ENABLE_OWP=ON"
+
 echo [build_plugins] configure ...
 cmake -S "%REPO_ROOT%" -B "%BUILD_DIR%" ^
   -DCMAKE_BUILD_TYPE=Release ^
@@ -134,7 +146,7 @@ cmake -S "%REPO_ROOT%" -B "%BUILD_DIR%" ^
   -DPYRAMID_ENABLE_FLATBUFFERS=ON ^
   -DPYRAMID_GENERATE_CPP_BINDINGS=ON ^
   -DPYRAMID_BUILD_TESTS=OFF ^
-  %GRPC_ARGS% %PROTO_ARGS%
+  %GRPC_ARGS% %GRA_ARGS% %PROTO_ARGS%
 if errorlevel 1 exit /b 1
 
 echo [build_plugins] build pyramid_plugins ...
@@ -145,14 +157,10 @@ echo.
 echo [build_plugins] produced plugins:
 REM Codec plugins are named pyramid_codec_<codec>_<component>.dll (no "plugin"
 REM in the name); transport/coupled plugins carry "_plugin".
-for %%P in (pyramid_codec_*.dll pcl_transport_socket_plugin.dll pcl_transport_shared_memory_plugin.dll pyramid_grpc_coupled_plugin.dll) do (
-  for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\subprojects\%%P" 2^>nul') do (
-    set "found=%%F"
-    setlocal enabledelayedexpansion
-    echo   !found:%BUILD_DIR%\=!
-    endlocal
-  )
-)
+for /r "%BUILD_DIR%\subprojects" %%F in (pyramid_codec_*.dll) do if exist "%%F" echo   %%F
+for /r "%BUILD_DIR%\subprojects" %%F in (pcl_transport_*_plugin.dll) do if exist "%%F" echo   %%F
+for /r "%BUILD_DIR%\subprojects" %%F in (pyramid_lacal_transport_plugin.dll) do if exist "%%F" echo   %%F
+for /r "%BUILD_DIR%\subprojects" %%F in (pyramid_*_coupled_plugin.dll) do if exist "%%F" echo   %%F
 
 if "%DO_STAGE%"=="1" (
   echo.

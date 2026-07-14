@@ -82,15 +82,11 @@ LINK_LIBS=(
   "${PCL_SRCDIR}/libpcl_core.a"
 )
 
-# All known data-model modules (used as a fallback closure when per-component
-# detection finds nothing).
-ALL_MARSHAL_MODULES=(common base tactical autonomy sensors sensorproducts radar)
-
 # Discover components from the built codec plugin .so names:
 #   libpyramid_codec_<codec>_<component>.so
 mapfile -t COMPONENTS < <(
   find "${PYRAMID_LIBDIR}" -maxdepth 1 -name 'libpyramid_codec_*.so' -printf '%f\n' 2>/dev/null \
-    | sed -E 's/^libpyramid_codec_(json|flatbuffers|protobuf)_(.*)\.so$/\2/' \
+    | sed -nE 's/^libpyramid_codec_(json|flatbuffers|protobuf)_(.*)\.so$/\2/p' \
     | sort -u
 )
 [[ ${#COMPONENTS[@]} -gt 0 ]] || { echo "ERROR: no codec plugin .so found in ${PYRAMID_LIBDIR}" >&2; exit 1; }
@@ -141,25 +137,17 @@ for comp in "${COMPONENTS[@]}"; do
     cp -f "${f}" "${dest}/src/"
   done
 
-  # --- lib: framework + per-module marshalling closure -----------------------
+  # --- lib: framework + generated marshalling archives -----------------------
   for l in "${LINK_LIBS[@]}"; do [[ -f "${l}" ]] && cp -f "${l}" "${dest}/lib/"; done
+  [[ -f "${PYRAMID_LIBDIR}/libpyramid_generated_marshal.a" ]] && \
+    cp -f "${PYRAMID_LIBDIR}/libpyramid_generated_marshal.a" "${dest}/lib/"
 
-  # Module closure: the data-model modules this component's codec actually
-  # marshals (from the generated codec plugin's *_cabi_marshal.hpp includes).
-  # Staging only these means a tactical_objects deployment changes when
-  # tactical/common/base change -- not when autonomy/sensors/... change.
-  mapfile -t comp_modules < <(
-    grep -rhoE 'pyramid_data_model_[a-z]+_cabi_marshal' \
-      "${GEN_DIR}"/pyramid_services_"${comp}"_*_codec_plugin.cpp 2>/dev/null \
-      | sed -E 's/pyramid_data_model_([a-z]+)_cabi_marshal/\1/' | sort -u
-  )
-  if [[ ${#comp_modules[@]} -eq 0 ]]; then
-    comp_modules=("${ALL_MARSHAL_MODULES[@]}")
-  fi
   staged_modules=()
-  for m in "${comp_modules[@]}"; do
-    ml="${PYRAMID_LIBDIR}/libpyramid_marshal_${m}.a"
-    if [[ -f "${ml}" ]]; then cp -f "${ml}" "${dest}/lib/"; staged_modules+=("${m}"); fi
+  for ml in "${PYRAMID_LIBDIR}"/libpyramid_marshal_*.a; do
+    [[ -f "${ml}" ]] || continue
+    cp -f "${ml}" "${dest}/lib/"
+    m="$(basename "${ml}" .a)"
+    staged_modules+=("${m#libpyramid_marshal_}")
   done
   echo "   marshalling modules: ${staged_modules[*]:-<none>}"
 
@@ -211,15 +199,13 @@ The codec plugin is the **single cross-language** \`.so\` — it consumes the fr
 \`\`\`sh
 g++ -std=c++17 my_client.cpp src/*.cpp \\
     -Iinclude -Iinclude/pyramid \\
-    lib/libpcl_core.a lib/libpyramid_marshal_*.a \\
+    lib/libpcl_core.a lib/libpyramid_generated_marshal.a \\
     -lpthread -ldl -o my_client
 \`\`\`
-The client links only the framework + the native<->C-struct marshalling for
-this component's data-model module closure (\`lib/libpyramid_marshal_<module>.a\`)
-— no JSON, no FlatBuffers, no codec, and **no transport**. Both the codec and the
-socket transport arrive as \`.so\` plugins composed at run time. Because only the
-closure modules are shipped, an edit to an unrelated data-model module leaves
-this deployment unchanged.
+The client links only the framework + the generated native<->C-struct
+marshalling archive (\`lib/libpyramid_generated_marshal.a\`) — no JSON, no
+FlatBuffers, no codec, and **no transport**. Both the codec and the socket
+transport arrive as \`.so\` plugins composed at run time.
 
 ## Run against the plugins
 \`\`\`sh

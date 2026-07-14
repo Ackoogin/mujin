@@ -416,9 +416,9 @@ routing at least one endpoint from **each** side of a group fails closed at
 and one endpoint from each side). Any number of same-side endpoints route
 together freely; endpoints in no group are unaffected.
 
-### Generated manifests
+### Generated validation manifests
 
-You rarely write these by hand. `binding_manifest.json` carries an
+`binding_manifest.json` carries an
 `interactions` section (each leg's service endpoints, topic endpoint, and
 per-command projectability), and
 `subprojects/PYRAMID/pim/test_harness/contract_routing_manifest.py` derives
@@ -430,6 +430,14 @@ floor:
 python3 contract_routing_manifest.py binding_manifest.json plugin.so out.pcl \
     --realize request=rpc --realize requirement=pubsub
 ```
+
+This helper is currently scoped to the routing validation harness: it emits
+`{"mode":"rpc"}` / `{"mode":"pubsub"}` for the harness's stub transport.
+It is useful for checking endpoint selection and exclusivity, but it does not
+emit production SHM, UDP, socket, gRPC, or ROS2 configuration. For those
+plugins, retain the generated `exclusive` and `route` lines and author the
+`transport` lines with the plugin-specific fields described in the
+[user guide](pyramid_user_guide.md#load-and-configure-transports).
 
 ### Transport notes worth knowing
 
@@ -469,13 +477,13 @@ papers over the difference:
 
 | Example | What it shows | Where |
 |---|---|---|
-| `agra_interaction_facade_example` | **The copied example for new components**: a runnable, documented two-component facade showcase (`RequestPortProvider`/`RequestPortClient`) against the A-GRA contract, realization picked at the command line (`--binding=rpc`\|`pubsub`) via the same `configureInteractionBinding()` manifest string both sides consume | `subprojects/PYRAMID/examples/cpp/agra_interaction_facade_example.cpp` |
+| `agra_interaction_facade_example` | **The copied example for new components**: a runnable, documented two-component facade showcase (`RequestPortProvider`/`RequestPortClient`) against the A-GRA-vocabulary fixture, realization picked at the command line (`--binding=rpc`\|`pubsub`) via the same `configureInteractionBinding()` manifest string both sides consume | `subprojects/PYRAMID/examples/cpp/agra_interaction_facade_example.cpp` |
 | `test_pcl_generated_interaction_facade` | The facade API in-process: submit/transitions/TransitionWriter under both bindings, remoteAck honesty, D2 fail-closed, query filtering, snapshot re-publication | `subprojects/PYRAMID/tests/` |
 | `agra_seam_interchange_test` | **The terminal proof**: one compiled component pair, cross-process over real SHM, run as rpc/rpc, pubsub/pubsub, and mixed rpc/pubsub purely by manifest + config; dual-routing negative gate | `subprojects/PYRAMID/pim/test_harness/build_agra_seam_interchange_test.sh` |
 | `agra_shm_comms_test` | The correlated pair over cross-process SHM via raw `publish*`/`subscribe*` primitives (pre-facade; shows what the facade owns for you) | `pim/test_harness/build_agra_shm_comms_test.sh` |
 | `agra_udp_proof_test` | BEST_EFFORT information topic over real UDP + the RELIABLE-over-UDP fail-closed negative | `pim/test_harness/build_agra_udp_proof_test.sh` |
 | `agra_mixed_route_test` | One deployment, two transports: reliable pair over SHM, best-effort data over UDP, all contract-derived | `pim/test_harness/build_agra_mixed_route_test.sh` |
-| A-GRA example contract | The hand-authored, options-stamped contract all of the above drive | `subprojects/PYRAMID/pim/agra_example/README.md` |
+| A-GRA-vocabulary port-grammar fixture | The hand-authored, options-stamped non-OMS contract used to exercise the APIs above | `subprojects/PYRAMID/pim/agra_example/README.md` |
 
 ## 8. Ada
 

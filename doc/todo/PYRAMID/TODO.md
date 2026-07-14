@@ -1,6 +1,6 @@
 # PYRAMID — Consolidated TODO & Plan
 
-**Last consolidated: 2026-07-10.** This is the single tracker for remaining
+**Last consolidated: 2026-07-14.** This is the single tracker for remaining
 PCL/PYRAMID work. Completed workstreams have been folded into "Delivered"
 below; the executed plans, reviews, and status reports that used to carry
 their detail were removed in the 2026-07-10 doc review — their design
@@ -13,6 +13,8 @@ Live companion documents:
 | Document | Role |
 |----------|------|
 | [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **Live plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
+| [`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md) | **Live plan:** XSD-to-proto profile ladder; Phase 3/P1 is live-proven, while Phase 4/P2 supplies the detailed background for WS-G below |
+| [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) | Current support boundary and evidence for UCI 2.5/AMS-GRA versus formal A-GRA |
 | [`pyramid_user_guide.md`](../../../subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Single high-level user guide (design intent, usage, diagrams) |
 | [`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md) | Stable design reference for shipped Tactical Objects; one open design point (D-list row below) |
 | [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) / [`ros2_transport_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md) | How the plugin/codec system and the ROS2 mapping work |
@@ -65,6 +67,7 @@ see below for what's still open).
 | 1 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
 | 2 | F2(b) Tactical Objects example (rides on PIM migration plan) | S/M |
 | 3 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
+| 4 | G1 Formal A-GRA P2 OMS codec and CAL validation (requires the G1 prerequisites) | L |
 
 ---
 
@@ -121,6 +124,94 @@ pattern) are done — see Delivered. Remaining:
   grammar-conforming — rides on
   [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
   (the legacy CRUD services are not port-grammar shapes today).
+
+---
+
+## WS-G — Formal A-GRA OMS codec closure
+
+### G1. Generate and validate the A-GRA P2 OMS/CAL profile
+
+**Status:** planned, not scheduled. This workstream closes the gap between the
+offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,
+interoperable OMS JSON codec. The current `pim/agra_example/` remains a
+non-wire port-grammar fixture and is not an input to this workstream.
+
+**Goal:** produce a schema-derived A-GRA P2 contract, generated OMS JSON codec,
+interaction facade, and LA-CAL deployment profile that can be packaged by the
+offline SDK and validated against an independent conformant endpoint. This is
+codec/transport support, not a claim of full A-GRA platform compliance.
+
+**Prerequisites (must be recorded before implementation starts):**
+
+1. Pin the authorized A-GRA 5.0a schema source and checksum, and resolve the
+   redistribution posture. Raw XSD remains fetch-not-vendor unless its licence
+   explicitly permits redistribution.
+2. Approve the P2 root list and closure budget from
+   `pim/uci_profiles/p2_agra_planning_core.json`, including the exact OMS
+   schema identifier used during LA-CAL `INIT`.
+3. Identify an independent A-GRA-compatible OMS/CAL validator or peer plus
+   authoritative fixtures. UCI 2.5 Sleet evidence cannot validate the UCI 2.3
+   plus `MA_*` A-GRA drop.
+
+**Plan:**
+
+1. **Materialize the contract.** Re-run `xsd2proto --check` for P2, prune the
+   transitive closure deliberately, and produce a deterministic proto tree,
+   closure report, and authoritative `wire_names.json`. No wire name may depend
+   on snake-to-Pascal fallback.
+2. **Add the interaction overlay.** Define the minimum Request/Requirement and
+   Information ports needed by the approved P2 roots, with A-GRA topic names,
+   correlation identifiers, QoS floors, and schema/drop identity explicit in
+   the generated manifest.
+3. **Close generator shapes.** Extend and test the OMS generator only where P2
+   demonstrates a missing XSD shape (choice, enum, attributes, optional/nil,
+   inheritance, or wrapper unwrapping). Generate C++ and Ada bindings/codecs
+   from the same proto plus wire-name sidecar; do not add hand-written `MA_*`
+   encoding tables.
+4. **Prove offline fidelity.** Validate representative and boundary instances
+   for every selected global root against the authoritative XSD; add semantic
+   round trips, deterministic goldens, malformed-input negatives, schema-drop
+   mismatch negatives, and C++/Ada wire-parity coverage.
+5. **Create a distinct runtime profile.** Build a profile-specific
+   `application/oms-json` codec plugin whose artifact/schema identity cannot be
+   confused with `pyramid_codec_oms_json_uci`. Pair it with the existing
+   `pyramid_lacal_transport_plugin`, and make `create_sdk --gra --proto-dir`
+   package the matching P2 contract and codec rather than an unrelated fixture
+   or UCI 2.5 starter codec.
+6. **Run independent interoperability.** Exercise LA-CAL `INIT`, `SUB`, `PUB`,
+   and `MSG` in both directions against the designated A-GRA peer. Cover at
+   least one `MA_*` command/status correlation and one information publication,
+   including fail-closed schema, capability, and QoS mismatches.
+7. **Publish the evidence boundary.** Record schema commit/checksum, profile
+   roots, generated artifact hashes, validator/peer version, commands, and
+   results. Update the user guide, SDK guide, and compatibility matrix without
+   broadening the claim beyond the tested P2 profile.
+
+**Acceptance:**
+
+- A clean checkout can reproducibly materialize the approved P2 proto,
+  `wire_names.json`, closure report, facade, and codec without hand-authored
+  wire mappings.
+- Every selected P2 global root passes authoritative offline XSD validation and
+  C++ encode/decode tests; generated Ada output object-compiles and matches C++
+  wire bytes, unless Ada support is explicitly waived in the profile decision.
+- The profile-specific codec dynamically loads through the PCL codec ABI and
+  refuses the wrong schema/drop; the LA-CAL transport retains its existing ABI,
+  PUBSUB capability, teardown, and QoS tests.
+- The packaged offline SDK builds the P2 bindings and codec, then smoke-tests a
+  representative `MA_*` payload through the packaged codec and LA-CAL plugin.
+- Bidirectional traffic is accepted by an independent A-GRA-compatible
+  OMS/CAL peer. Until this evidence exists, status remains **offline-only** and
+  the repository must not describe formal A-GRA OMS support as delivered.
+
+**Non-goals:** full P3/Table 3-1 coverage; EXI/DMS offboard transport;
+`agra_c2_bridge` mission semantics, approval policy, or AME goal mapping; and
+general A-GRA certification beyond the selected, evidenced P2 OMS/CAL profile.
+
+Detailed conversion design and current P2 measurements remain in
+[`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md)
+Phase 4; the live support statement remains
+[`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md).
 
 ---
 

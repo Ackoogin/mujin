@@ -173,10 +173,12 @@ streaming endpoint at compose time, not at first call. An `exclusive
 mutually-exclusive realizations of one interaction leg (e.g. a Request port's
 command rpcs vs its `.request` topic): routing endpoints from both sides of one
 group fails closed with a precise diagnostic, in either declaration order.
-Generated manifests (`contract_routing_manifest.py`, from
+Validation-harness manifests (`pim/test_harness/contract_routing_manifest.py`, from
 `binding_manifest.json`'s `interactions` section) emit these groups and route
 exactly one side per leg — see the
 [pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md).
+That helper currently emits stub-plugin config; production transport config is
+authored per the table below.
 Components *serving* RPC over a manifest-routed transport must retrieve and
 activate the transport's gateway container via
 `pcl_transport_routing_get_gateway()` after load, or inbound requests are
@@ -214,7 +216,8 @@ sequenceDiagram
 The opaque `config_json` is stored and exposed to the codec via `codec_ctx`
 (generated plugins) or consumed directly by the transport (e.g. the socket
 plugin reads `{"role","host","port","executor"}`; shm reads
-`{"bus_name","participant_id","executor"}`; the coupled ROS2 plugin reads
+`{"bus_name","participant_id","executor"}`; UDP reads
+`{"remote_host","remote_port","local_port","peer_id","executor"}`; the coupled ROS2 plugin reads
 `{"node_name","executor"}` and stands up an rclcpp node + spin thread). Coupled
 targets are intended to be loadable twice against the same `.so` -- once via
 `pcl_plugin_load_transport`, once via `pcl_plugin_load_codec` -- presenting both
@@ -327,7 +330,7 @@ plugin at runtime. The directional/wiring knobs travel as one opaque
 |--------|--------------------------|
 | socket | `role: provided\|consumed` (aliases `server`/`client`), `host`, `port`, `executor` |
 | shared memory | `bus_name`, `participant_id`, `executor` |
-| udp | `host`, `port`, `executor` (symmetric pub/sub) |
+| udp | `remote_host`, `remote_port`, optional `local_port`/`peer_id`, `executor` (symmetric pub/sub) |
 | gRPC coupled | `role: provided\|consumed` (alias `mode: server\|client`), `address`, aggregated component set, `executor` |
 | ROS2 coupled | `role: provided\|consumed`, `node_name`, `executor` |
 

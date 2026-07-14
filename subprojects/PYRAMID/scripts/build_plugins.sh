@@ -22,6 +22,8 @@
 #     libpcl_transport_socket_plugin.so
 #     libpcl_transport_shared_memory_plugin.so
 #     libpcl_transport_udp_plugin.so
+#     [libpyramid_codec_oms_json_uci.so]       (with --gra)
+#     [libpyramid_lacal_transport_plugin.so]   (with --gra)
 #     [libpyramid_grpc_coupled_plugin.so]   (with --grpc)
 #
 #   optionally:  stage per-component deployment dirs (stage_plugin_deploy.sh)
@@ -30,7 +32,7 @@
 # pyramid_<Type>_c C struct) and is loaded from both C++ and Ada clients.
 #
 # Usage:
-#   build_plugins.sh [--proto-dir DIR] [--build-dir DIR] [--grpc] [--jobs N]
+#   build_plugins.sh [--proto-dir DIR] [--build-dir DIR] [--grpc] [--gra] [--jobs N]
 #                    [--clean] [--stage] [--stage-out DIR]
 #
 # Options:
@@ -41,6 +43,8 @@
 #   --build-dir DIR  CMake build directory          (default: <repo>/build-plugins)
 #   --grpc           also build protobuf + the coupled gRPC target plugin
 #                    (fetches gRPC from source on first configure -- needs network)
+#   --gra            force OMS/CAL support on: build the OMS JSON codec and
+#                    LA-CAL WebSocket transport plugin
 #   --jobs N         parallel build jobs            (default: nproc)
 #   --clean          delete the build dir before configuring
 #   --stage          after building, stage per-component deployment dirs
@@ -57,6 +61,7 @@ BUILD_DIR="${REPO_ROOT}/build-plugins"
 STAGE_OUT="${REPO_ROOT}/dist/plugin_deploy"
 PROTO_DIR=""
 ENABLE_GRPC=0
+ENABLE_GRA=0
 DO_STAGE=0
 CLEAN=0
 JOBS="$( (command -v nproc >/dev/null && nproc) || echo 4)"
@@ -66,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     --proto-dir) PROTO_DIR="$2"; shift 2 ;;
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
     --grpc)      ENABLE_GRPC=1; shift ;;
+    --gra)       ENABLE_GRA=1; shift ;;
     --jobs)      JOBS="$2"; shift 2 ;;
     --clean)     CLEAN=1; shift ;;
     --stage)     DO_STAGE=1; shift ;;
@@ -87,6 +93,7 @@ echo "[build_plugins] repo      : ${REPO_ROOT}"
 echo "[build_plugins] build-dir : ${BUILD_DIR}"
 echo "[build_plugins] proto-dir : ${PROTO_DIR:-<default: PYRAMID/proto>}"
 echo "[build_plugins] grpc      : $([[ ${ENABLE_GRPC} -eq 1 ]] && echo on || echo off)"
+echo "[build_plugins] gra       : $([[ ${ENABLE_GRA} -eq 1 ]] && echo on || echo off)"
 echo "[build_plugins] jobs      : ${JOBS}"
 
 if [[ ${CLEAN} -eq 1 ]]; then
@@ -117,6 +124,9 @@ if [[ ${ENABLE_GRPC} -eq 1 ]]; then
 else
   CMAKE_ARGS+=(-DPYRAMID_ENABLE_PROTOBUF=OFF -DPYRAMID_ENABLE_GRPC=OFF)
 fi
+if [[ ${ENABLE_GRA} -eq 1 ]]; then
+  CMAKE_ARGS+=(-DPYRAMID_ENABLE_OWP=ON)
+fi
 if [[ -n "${PROTO_DIR}" ]]; then
   CMAKE_ARGS+=(-DPYRAMID_PROTO_DIR="${PROTO_DIR}")
 fi
@@ -134,6 +144,7 @@ echo "[build_plugins] produced plugins:"
 find "${BUILD_DIR}/subprojects" \
      \( -name 'libpyramid_codec_*.so' \
         -o -name 'libpcl_transport_*_plugin.so' \
+        -o -name 'libpyramid_lacal_transport_plugin.so' \
         -o -name 'libpyramid_grpc_coupled_plugin.so' \) \
      2>/dev/null | sort | sed "s|${BUILD_DIR}/|  |"
 

@@ -16,10 +16,12 @@ REM   gcc/ar are on PATH):
 REM     subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 REM
 REM Usage:
-REM   package_sdk.bat [--build-dir DIR] [--gnat-pcl-dir DIR] [--out DIR] [--clean]
+REM   package_sdk.bat [--build-dir DIR] [--gnat-pcl-dir DIR] [--proto-dir DIR]
+REM                   [--gra] [--out DIR] [--clean]
 REM
 REM Defaults: --build-dir build-flatbuffers-only
 REM           --gnat-pcl-dir <build-dir>\ada_gnat_pcl
+REM           --proto-dir subprojects\PYRAMID\proto
 REM           --out dist\pcl_pyramid_sdk
 setlocal enabledelayedexpansion
 
@@ -28,13 +30,17 @@ for %%I in ("%SCRIPT_DIR%..\..\..") do set "REPO_ROOT=%%~fI"
 
 set "BUILD_DIR=%REPO_ROOT%\build-flatbuffers-only"
 set "GNAT_PCL_DIR="
+set "PROTO_DIR="
 set "OUT_DIR=%REPO_ROOT%\dist\pcl_pyramid_sdk"
 set "CLEAN=0"
+set "GRA=0"
 
 :parse_args
 if "%~1"=="" goto done_args
 if /i "%~1"=="--build-dir"    (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--gnat-pcl-dir" (set "GNAT_PCL_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--proto-dir"    (set "PROTO_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--gra"          (set "GRA=1" & shift & goto parse_args)
 if /i "%~1"=="--out"          (set "OUT_DIR=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--clean"        (set "CLEAN=1" & shift & goto parse_args)
 if /i "%~1"=="-h"     goto usage
@@ -61,10 +67,24 @@ for %%I in ("%OUT_DIR%") do set "OUT_DIR=%%~fI"
 set "PYRAMID_ROOT=%REPO_ROOT%\subprojects\PYRAMID"
 set "PCL_ROOT=%REPO_ROOT%\subprojects\PCL"
 set "SDK_TEMPLATE=%PYRAMID_ROOT%\sdk_template"
+if not defined PROTO_DIR set "PROTO_DIR=%PYRAMID_ROOT%\proto"
+for %%I in ("%PROTO_DIR%") do set "PROTO_DIR=%%~fI"
+
+if not exist "%PROTO_DIR%" (
+  echo [package_sdk] ERROR: proto dir not found: %PROTO_DIR%>&2
+  exit /b 1
+)
+dir /b /s "%PROTO_DIR%\*.proto" >nul 2>&1
+if errorlevel 1 (
+  echo [package_sdk] ERROR: no .proto contracts found under %PROTO_DIR%>&2
+  exit /b 1
+)
 
 echo [package_sdk] repo         : %REPO_ROOT%
 echo [package_sdk] build-dir    : %BUILD_DIR%
 echo [package_sdk] gnat-pcl-dir : %GNAT_PCL_DIR%
+echo [package_sdk] proto-dir    : %PROTO_DIR%
+echo [package_sdk] gra profile  : %GRA%
 echo [package_sdk] out          : %OUT_DIR%
 
 if not exist "%BUILD_DIR%" (
@@ -83,8 +103,10 @@ set "PCL_LIB_DEBUG="
 set "PCL_LIB_RELEASE="
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pcl_core.lib" 2^>nul') do (
   echo %%F | findstr /i "\\Debug\\" >nul && set "PCL_LIB_DEBUG=%%F"
-  echo %%F | findstr /i "\\Release\\" >nul && set "PCL_LIB_RELEASE=%%F"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "PCL_LIB_RELEASE=%%F"
 )
+if exist "%BUILD_DIR%\subprojects\PCL\src\Debug\pcl_core.lib" set "PCL_LIB_DEBUG=%BUILD_DIR%\subprojects\PCL\src\Debug\pcl_core.lib"
+if exist "%BUILD_DIR%\subprojects\PCL\src\Release\pcl_core.lib" set "PCL_LIB_RELEASE=%BUILD_DIR%\subprojects\PCL\src\Release\pcl_core.lib"
 if not defined PCL_LIB_RELEASE if not defined PCL_LIB_DEBUG (
   echo [package_sdk] ERROR: no pcl_core.lib found under %BUILD_DIR%>&2
   exit /b 1
@@ -93,8 +115,9 @@ if not defined PCL_LIB_RELEASE if not defined PCL_LIB_DEBUG (
 set "FLATC_EXE="
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\flatc.exe" 2^>nul') do (
   if not defined FLATC_EXE set "FLATC_EXE=%%F"
-  echo %%F | findstr /i "\\Release\\" >nul && set "FLATC_EXE=%%F"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "FLATC_EXE=%%F"
 )
+if exist "%BUILD_DIR%\_deps\flatbuffers-build\Release\flatc.exe" set "FLATC_EXE=%BUILD_DIR%\_deps\flatbuffers-build\Release\flatc.exe"
 if not defined FLATC_EXE (
   echo [package_sdk] ERROR: flatc.exe not found under %BUILD_DIR% -- build with PYRAMID_ENABLE_FLATBUFFERS=ON.>&2
   exit /b 1
@@ -110,15 +133,40 @@ set "TRANSPORT_SOCKET_DLL="
 set "TRANSPORT_SHM_DLL="
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pcl_transport_socket_plugin.dll" 2^>nul') do (
   if not defined TRANSPORT_SOCKET_DLL set "TRANSPORT_SOCKET_DLL=%%F"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "TRANSPORT_SOCKET_DLL=%%F"
 )
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pcl_transport_shared_memory_plugin.dll" 2^>nul') do (
   if not defined TRANSPORT_SHM_DLL set "TRANSPORT_SHM_DLL=%%F"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "TRANSPORT_SHM_DLL=%%F"
 )
+if exist "%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_socket_plugin.dll" set "TRANSPORT_SOCKET_DLL=%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_socket_plugin.dll"
+if exist "%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_shared_memory_plugin.dll" set "TRANSPORT_SHM_DLL=%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_shared_memory_plugin.dll"
 if not defined TRANSPORT_SOCKET_DLL (
   echo [package_sdk] WARN: pcl_transport_socket_plugin.dll not found under %BUILD_DIR%
 )
 if not defined TRANSPORT_SHM_DLL (
   echo [package_sdk] WARN: pcl_transport_shared_memory_plugin.dll not found under %BUILD_DIR%
+)
+
+set "OMS_CODEC_DLL="
+set "LACAL_TRANSPORT_DLL="
+for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pyramid_codec_oms_json_uci.dll" 2^>nul') do (
+  if not defined OMS_CODEC_DLL set "OMS_CODEC_DLL=%%F"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "OMS_CODEC_DLL=%%F"
+)
+for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pyramid_lacal_transport_plugin.dll" 2^>nul') do (
+  if not defined LACAL_TRANSPORT_DLL set "LACAL_TRANSPORT_DLL=%%F"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "LACAL_TRANSPORT_DLL=%%F"
+)
+if exist "%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_codec_oms_json_uci.dll" set "OMS_CODEC_DLL=%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_codec_oms_json_uci.dll"
+if exist "%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_lacal_transport_plugin.dll" set "LACAL_TRANSPORT_DLL=%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_lacal_transport_plugin.dll"
+if "%GRA%"=="1" if not defined OMS_CODEC_DLL (
+  echo [package_sdk] ERROR: --gra requires pyramid_codec_oms_json_uci.dll; rebuild with build_plugins.bat --gra.>&2
+  exit /b 1
+)
+if "%GRA%"=="1" if not defined LACAL_TRANSPORT_DLL (
+  echo [package_sdk] ERROR: --gra requires pyramid_lacal_transport_plugin.dll; rebuild with build_plugins.bat --gra.>&2
+  exit /b 1
 )
 
 if not exist "%GNAT_PCL_DIR%\libpcl_core.a" (
@@ -168,6 +216,8 @@ if exist "%GNAT_PCL_DIR%\libpcl_core.a" (
 echo [package_sdk] copying prebuilt transport plugins ...
 if defined TRANSPORT_SOCKET_DLL copy /y "%TRANSPORT_SOCKET_DLL%" "%OUT_DIR%\plugins\" >nul
 if defined TRANSPORT_SHM_DLL    copy /y "%TRANSPORT_SHM_DLL%"    "%OUT_DIR%\plugins\" >nul
+if "%GRA%"=="1" copy /y "%OMS_CODEC_DLL%" "%OUT_DIR%\plugins\" >nul
+if "%GRA%"=="1" copy /y "%LACAL_TRANSPORT_DLL%" "%OUT_DIR%\plugins\" >nul
 
 echo [package_sdk] copying flatc.exe ...
 copy /y "%FLATC_EXE%" "%OUT_DIR%\tools\flatc.exe" >nul
@@ -181,7 +231,7 @@ mkdir "%OUT_DIR%\generator\topic_metadata" 2>nul
 xcopy /y /q "%PYRAMID_ROOT%\pim\topic_metadata\*.json" "%OUT_DIR%\generator\topic_metadata\" >nul
 
 echo [package_sdk] copying starter proto contracts ...
-xcopy /y /q /s /i "%PYRAMID_ROOT%\proto\pyramid" "%OUT_DIR%\proto\pyramid" >nul
+xcopy /y /q /s /i "%PROTO_DIR%\*" "%OUT_DIR%\proto\" >nul
 
 echo [package_sdk] copying Ada PCL bindings (source only) ...
 xcopy /y /q "%PCL_ROOT%\bindings\ada\*.ads" "%OUT_DIR%\gnat\pcl_bindings\" >nul
@@ -202,6 +252,8 @@ xcopy /y /q /s /i "%SDK_TEMPLATE%\scripts" "%OUT_DIR%\scripts" >nul
 REM --- Manifest ------------------------------------------------------------
 > "%OUT_DIR%\MANIFEST.txt" echo # PCL/PYRAMID offline SDK -- packaged from %BUILD_DIR%
 >>"%OUT_DIR%\MANIFEST.txt" echo # gnat-pcl-dir: %GNAT_PCL_DIR%
+>>"%OUT_DIR%\MANIFEST.txt" echo # proto-dir: %PROTO_DIR%
+>>"%OUT_DIR%\MANIFEST.txt" echo # gra-profile: %GRA%
 for /f "delims=" %%F in ('dir /b /s /a:-d "%OUT_DIR%" 2^>nul') do (
   set "p=%%F"
   setlocal enabledelayedexpansion

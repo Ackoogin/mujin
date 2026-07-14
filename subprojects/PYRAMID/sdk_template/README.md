@@ -13,21 +13,23 @@ include/        PCL public headers + vendored header-only deps
                 (nlohmann/json.hpp, tl/optional.hpp, flatbuffers/*.h)
 lib/msvc/       prebuilt pcl_core.lib (Debug + Release)
 lib/gnat/       prebuilt libpcl_core.a + libpcl_transport_*.a (GNAT/mingw)
-plugins/        prebuilt, proto-agnostic transport plugins
-                (pcl_transport_socket_plugin.dll, ..._shared_memory_plugin.dll)
+plugins/        prebuilt transport plugins; a --gra package also contains the
+                LA-CAL WebSocket transport and tested UCI OMS JSON codec
 tools/          flatc.exe (FlatBuffers schema compiler)
 generator/      the proto -> bindings generator (pure Python, stdlib only)
 proto/          starter .proto contracts -- edit or extend these
 sdk_project/    standalone CMake project: builds C++ codec plugin DLLs
                 and small smoke-test executables
 gnat/           standalone GNAT project: builds the Ada codec archive
-scripts/        the three commands below
+scripts/        generation, plugin/Ada build, and end-to-end commands
 MANIFEST.txt    full file listing written by the packaging step
 ```
 
-Only the **codec** plugins (JSON/FlatBuffers, one per component/service) are
-proto-dependent and built by you. The **transport** plugins never change when
-you edit `.proto` -- they ship prebuilt in `plugins/`.
+The generated **codec** plugins (JSON/FlatBuffers, one per component/service)
+are proto-dependent and built by you. The **transport** plugins do not change
+when you edit `.proto` and ship prebuilt in `plugins/`. A distribution made
+with `--gra` also carries the prebuilt, tested UCI 2.5 OMS JSON codec; it is not
+a codec for arbitrary replacement contracts.
 
 ## Prerequisites
 
@@ -52,8 +54,30 @@ subprojects/PYRAMID/scripts/create_sdk.sh --verify
 That runs the whole flow below end-to-end — configure, build, plugins, optional
 Ada libs, package into `dist\pcl_pyramid_sdk`, and (`--verify`) build + smoke-test
 the packaged SDK. Run `create_sdk.bat --help` for options (`--out`, `--config`,
-`--no-ada`, `--skip-build`, `--build-dir`). The numbered steps below are the same
-flow spelled out for when you need to run or debug a single stage.
+`--no-ada`, `--skip-build`, `--build-dir`, `--proto-dir`, `--gra`, `--jobs`). `--proto-dir` selects
+the contract tree copied into the package's `proto/` directory; it does not need
+to be the repository's legacy `subprojects/PYRAMID/proto` tree. The numbered
+steps below are the same flow spelled out for when you need to run or debug a
+single stage.
+
+For example, package the GRA runtime modules and verify the non-wire
+A-GRA-vocabulary fixture against the same offline workflow a downstream user
+receives:
+
+```bat
+subprojects\PYRAMID\scripts\create_sdk.bat --verify --gra ^
+  --proto-dir subprojects\PYRAMID\pim\agra_example ^
+  --out dist\pcl_pyramid_sdk_agra
+```
+
+Use `--skip-build` to reuse an existing `build-flatbuffers-only` tree. Pass
+`--jobs 1` if the target's MSBuild/filesystem combination reports a transient
+file-sharing failure during parallel custom commands.
+
+This example tree is an A-GRA-vocabulary port-grammar fixture, not an OMS wire
+contract. The run verifies its generated JSON/FlatBuffers plugins and
+separately verifies that the packaged OMS JSON codec and LA-CAL WebSocket
+transport load with the expected PCL ABI.
 
 Run these steps inside the full monorepo before handing the SDK directory to a
 downstream user.
@@ -93,7 +117,11 @@ downstream user.
    ```
    The default output is `dist\pcl_pyramid_sdk` on Windows and
    `dist/pcl_pyramid_sdk` on Linux/macOS. Use `--out <dir>` to select another
-   destination.
+   destination. Add `--proto-dir <contract-tree>` to choose the contracts
+   shipped under the SDK's `proto/`; the default is
+   `subprojects/PYRAMID/proto`.
+   For a GRA runtime package, add `--gra` to steps 2 and 4 and pass the chosen
+   contract tree with `--proto-dir` in step 4.
 5. Inspect the package:
    ```bat
    type dist\pcl_pyramid_sdk\MANIFEST.txt
@@ -145,6 +173,9 @@ same offline workflow the user will use later:
    This builds:
    - `sdk_codec_plugin_load_smoke`: loads every generated codec plugin and
      confirms JSON and, when present, FlatBuffers codecs registered.
+   - `sdk_gra_plugin_load_smoke` (only in a `--gra` package): loads the UCI OMS
+     JSON codec and checks the LA-CAL WebSocket transport ABI and PUBSUB
+     capability without needing a live CAL server.
    - `sdk_tactical_objects_fail_closed_smoke`: starter-contract check that the
      generated tactical_objects facade rejects encode/decode calls when no
      matching codec is registered.
@@ -156,10 +187,10 @@ same offline workflow the user will use later:
    ctest --test-dir build --output-on-failure -C Release -R '^sdk_'
    ```
 
-The tactical_objects smoke app is only added when the starter tactical_objects
-generated facade exists. If you later replace `proto/` with a contract set that
-does not define tactical_objects, the generic codec plugin load smoke test still
-runs.
+The tactical_objects smoke app is only added when the selected contract tree's
+tactical_objects generated facade exists. If you later replace `proto/` with a
+contract set that does not define tactical_objects, the generic codec plugin
+load smoke test still runs.
 
 ## Downstream: build your contracts
 

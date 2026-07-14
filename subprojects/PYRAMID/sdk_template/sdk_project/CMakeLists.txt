@@ -118,7 +118,9 @@ if(PYRAMID_SDK_ENABLE_FLATBUFFERS)
             add_custom_command(
                 OUTPUT "${_out}"
                 COMMAND "${CMAKE_COMMAND}" -E make_directory "${SDK_FLATBUFFERS_GEN_DIR}"
-                COMMAND $<TARGET_FILE:flatc> --cpp --gen-object-api -o "${SDK_FLATBUFFERS_GEN_DIR}" "${_schema}"
+                COMMAND $<TARGET_FILE:flatc> --cpp --gen-object-api
+                    -I "${SDK_FLATBUFFERS_SCHEMA_DIR}"
+                    -o "${SDK_FLATBUFFERS_GEN_DIR}" "${_schema}"
                 DEPENDS flatc "${_schema}"
                 COMMENT "Generating FlatBuffers header for ${_stem}.fbs"
                 VERBATIM
@@ -247,6 +249,40 @@ add_test(NAME sdk_codec_plugin_load_smoke
     COMMAND sdk_codec_plugin_load_smoke)
 
 set(PYRAMID_SDK_SMOKE_TARGETS sdk_codec_plugin_load_smoke)
+
+# A --gra distribution carries two prebuilt runtime modules in addition to the
+# codecs generated from its bundled contract. Validate that both modules remain
+# loadable from the standalone SDK and expose the expected stable PCL ABI.
+if(WIN32)
+    set(_pyramid_sdk_oms_codec
+        "${SDK_ROOT_DIR}/plugins/pyramid_codec_oms_json_uci.dll")
+    set(_pyramid_sdk_lacal_transport
+        "${SDK_ROOT_DIR}/plugins/pyramid_lacal_transport_plugin.dll")
+else()
+    set(_pyramid_sdk_oms_codec
+        "${SDK_ROOT_DIR}/plugins/libpyramid_codec_oms_json_uci.so")
+    set(_pyramid_sdk_lacal_transport
+        "${SDK_ROOT_DIR}/plugins/libpyramid_lacal_transport_plugin.so")
+endif()
+
+if(EXISTS "${_pyramid_sdk_oms_codec}" OR EXISTS "${_pyramid_sdk_lacal_transport}")
+    if(NOT EXISTS "${_pyramid_sdk_oms_codec}"
+            OR NOT EXISTS "${_pyramid_sdk_lacal_transport}")
+        message(FATAL_ERROR
+            "Incomplete GRA runtime profile: both the OMS JSON codec and "
+            "LA-CAL WebSocket transport must be present under plugins/.")
+    endif()
+
+    add_executable(sdk_gra_plugin_load_smoke
+        smoke_tests/sdk_gra_plugin_load_smoke.cpp)
+    target_link_libraries(sdk_gra_plugin_load_smoke PRIVATE pcl_core)
+    target_compile_definitions(sdk_gra_plugin_load_smoke PRIVATE
+        PYRAMID_SDK_OMS_CODEC_PATH="${_pyramid_sdk_oms_codec}"
+        PYRAMID_SDK_LACAL_TRANSPORT_PATH="${_pyramid_sdk_lacal_transport}")
+    add_test(NAME sdk_gra_plugin_load_smoke
+        COMMAND sdk_gra_plugin_load_smoke)
+    list(APPEND PYRAMID_SDK_SMOKE_TARGETS sdk_gra_plugin_load_smoke)
+endif()
 
 set(_pyramid_sdk_tobj_consumed_src
     "${SDK_GENERATED_DIR}/pyramid_services_tactical_objects_consumed.cpp")

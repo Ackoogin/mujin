@@ -17,10 +17,12 @@
 #     subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh
 #
 # Usage:
-#   package_sdk.sh [--build-dir DIR] [--gnat-pcl-dir DIR] [--out DIR] [--clean]
+#   package_sdk.sh [--build-dir DIR] [--gnat-pcl-dir DIR] [--proto-dir DIR]
+#                  [--gra] [--out DIR] [--clean]
 #
 # Defaults: --build-dir build-flatbuffers-only
 #           --gnat-pcl-dir <build-dir>/ada_gnat_pcl
+#           --proto-dir subprojects/PYRAMID/proto
 #           --out dist/pcl_pyramid_sdk
 set -euo pipefail
 
@@ -29,13 +31,17 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 BUILD_DIR="${REPO_ROOT}/build-flatbuffers-only"
 GNAT_PCL_DIR=""
+PROTO_DIR=""
 OUT_DIR="${REPO_ROOT}/dist/pcl_pyramid_sdk"
 CLEAN=0
+GRA=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --build-dir)    BUILD_DIR="$2"; shift 2 ;;
     --gnat-pcl-dir) GNAT_PCL_DIR="$2"; shift 2 ;;
+    --proto-dir)    PROTO_DIR="$2"; shift 2 ;;
+    --gra)          GRA=1; shift ;;
     --out)          OUT_DIR="$2"; shift 2 ;;
     --clean)        CLEAN=1; shift ;;
     -h|--help)      sed -n '2,24p' "${BASH_SOURCE[0]}"; exit 0 ;;
@@ -53,10 +59,19 @@ OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 PYRAMID_ROOT="${REPO_ROOT}/subprojects/PYRAMID"
 PCL_ROOT="${REPO_ROOT}/subprojects/PCL"
 SDK_TEMPLATE="${PYRAMID_ROOT}/sdk_template"
+[[ -n "${PROTO_DIR}" ]] || PROTO_DIR="${PYRAMID_ROOT}/proto"
+[[ -d "${PROTO_DIR}" ]] || { echo "[package_sdk] ERROR: proto dir not found: ${PROTO_DIR}" >&2; exit 1; }
+PROTO_DIR="$(cd "${PROTO_DIR}" && pwd)"
+[[ -n "$(find "${PROTO_DIR}" -name '*.proto' -type f -print -quit)" ]] || {
+  echo "[package_sdk] ERROR: no .proto contracts found under ${PROTO_DIR}" >&2
+  exit 1
+}
 
 echo "[package_sdk] repo         : ${REPO_ROOT}"
 echo "[package_sdk] build-dir    : ${BUILD_DIR}"
 echo "[package_sdk] gnat-pcl-dir : ${GNAT_PCL_DIR}"
+echo "[package_sdk] proto-dir    : ${PROTO_DIR}"
+echo "[package_sdk] gra profile  : ${GRA}"
 echo "[package_sdk] out          : ${OUT_DIR}"
 
 if [[ ${CLEAN} -eq 1 ]]; then
@@ -87,6 +102,17 @@ TRANSPORT_SOCKET_SO="$(find "${BUILD_DIR}" -name 'libpcl_transport_socket_plugin
 TRANSPORT_SHM_SO="$(find "${BUILD_DIR}" -name 'libpcl_transport_shared_memory_plugin.so' 2>/dev/null | head -1 || true)"
 [[ -n "${TRANSPORT_SOCKET_SO}" ]] || echo "[package_sdk] WARN: libpcl_transport_socket_plugin.so not found under ${BUILD_DIR}"
 [[ -n "${TRANSPORT_SHM_SO}" ]]    || echo "[package_sdk] WARN: libpcl_transport_shared_memory_plugin.so not found under ${BUILD_DIR}"
+
+OMS_CODEC_SO="$(find "${BUILD_DIR}" -name 'libpyramid_codec_oms_json_uci.so' 2>/dev/null | head -1 || true)"
+LACAL_TRANSPORT_SO="$(find "${BUILD_DIR}" -name 'libpyramid_lacal_transport_plugin.so' 2>/dev/null | head -1 || true)"
+if [[ ${GRA} -eq 1 && -z "${OMS_CODEC_SO}" ]]; then
+  echo "[package_sdk] ERROR: --gra requires libpyramid_codec_oms_json_uci.so; rebuild with build_plugins.sh --gra." >&2
+  exit 1
+fi
+if [[ ${GRA} -eq 1 && -z "${LACAL_TRANSPORT_SO}" ]]; then
+  echo "[package_sdk] ERROR: --gra requires libpyramid_lacal_transport_plugin.so; rebuild with build_plugins.sh --gra." >&2
+  exit 1
+fi
 
 if [[ ! -f "${GNAT_PCL_DIR}/libpcl_core.a" ]]; then
   if command -v gcc >/dev/null 2>&1; then
@@ -123,6 +149,10 @@ fi
 echo "[package_sdk] copying prebuilt transport plugins ..."
 [[ -n "${TRANSPORT_SOCKET_SO}" ]] && cp -f "${TRANSPORT_SOCKET_SO}" "${OUT_DIR}/plugins/"
 [[ -n "${TRANSPORT_SHM_SO}" ]]    && cp -f "${TRANSPORT_SHM_SO}"    "${OUT_DIR}/plugins/"
+if [[ ${GRA} -eq 1 ]]; then
+  cp -f "${OMS_CODEC_SO}" "${OUT_DIR}/plugins/"
+  cp -f "${LACAL_TRANSPORT_SO}" "${OUT_DIR}/plugins/"
+fi
 
 echo "[package_sdk] copying flatc ..."
 cp -f "${FLATC_BIN}" "${OUT_DIR}/tools/flatc"
@@ -139,7 +169,7 @@ mkdir -p "${OUT_DIR}/generator/topic_metadata"
 cp -f "${PYRAMID_ROOT}"/pim/topic_metadata/*.json "${OUT_DIR}/generator/topic_metadata/"
 
 echo "[package_sdk] copying starter proto contracts ..."
-cp -rf "${PYRAMID_ROOT}/proto/pyramid" "${OUT_DIR}/proto/"
+cp -rf "${PROTO_DIR}/." "${OUT_DIR}/proto/"
 
 echo "[package_sdk] copying Ada PCL bindings (source only) ..."
 cp -f "${PCL_ROOT}"/bindings/ada/*.ads "${OUT_DIR}/gnat/pcl_bindings/" 2>/dev/null || true
@@ -165,6 +195,8 @@ chmod +x "${OUT_DIR}"/scripts/*.sh
 {
   echo "# PCL/PYRAMID offline SDK -- packaged from ${BUILD_DIR}"
   echo "# gnat-pcl-dir: ${GNAT_PCL_DIR}"
+  echo "# proto-dir: ${PROTO_DIR}"
+  echo "# gra-profile: ${GRA}"
   find "${OUT_DIR}" -type f | sed "s|${OUT_DIR}/||" | sort
 } > "${OUT_DIR}/MANIFEST.txt"
 

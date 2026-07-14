@@ -13,6 +13,7 @@ Three things are pinned here:
 """
 import hashlib
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -124,6 +125,42 @@ class AgraExampleClassificationTest(unittest.TestCase):
                 for rpc in svc.rpcs
             )
         )
+
+
+class AgraExampleFlatBuffersTest(unittest.TestCase):
+    def test_generated_schemas_only_include_generated_schema_files(self):
+        generator = Path(__file__).resolve().parent / "generate_bindings.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "generated"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(generator),
+                    str(AGRA_ROOT),
+                    str(out),
+                    "--languages",
+                    "cpp",
+                    "--backends",
+                    "flatbuffers",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            schema_dir = out / "flatbuffers" / "cpp"
+            schemas = sorted(schema_dir.glob("*.fbs"))
+            self.assertTrue(schemas)
+            for schema in schemas:
+                includes = re.findall(
+                    r'^include "([^"]+)";',
+                    schema.read_text(encoding="utf-8"),
+                    re.MULTILINE,
+                )
+                for included in includes:
+                    self.assertTrue(
+                        (schema_dir / included).is_file(),
+                        f"{schema.name} includes missing schema {included}",
+                    )
 
 
 if __name__ == "__main__":

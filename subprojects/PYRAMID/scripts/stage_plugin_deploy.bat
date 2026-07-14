@@ -65,16 +65,23 @@ set "GEN_DIR=%BUILD_DIR%\generated\pyramid_cpp_bindings"
 REM Discover the multi-config output directories that actually hold the plugins.
 REM (VS generators drop .dll/.lib under a per-config subdir, e.g. Release\.)
 set "PYRAMID_LIBDIR="
-for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\subprojects\PYRAMID\pyramid_codec_*.dll" 2^>nul') do (
-  if not defined PYRAMID_LIBDIR set "PYRAMID_LIBDIR=%%~dpF"
+for %%K in (json flatbuffers protobuf) do (
+  for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\subprojects\PYRAMID\pyramid_codec_%%K_*.dll" 2^>nul') do (
+    if not defined PYRAMID_LIBDIR set "PYRAMID_LIBDIR=%%~dpF"
+    echo %%F | findstr /i /l /c:"\Release\" >nul && set "PYRAMID_LIBDIR=%%~dpF"
+  )
 )
+if exist "%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_codec_json_*.dll" set "PYRAMID_LIBDIR=%BUILD_DIR%\subprojects\PYRAMID\Release\"
 set "PCL_SRCDIR="
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\subprojects\PCL\src\pcl_transport_socket_plugin.dll" 2^>nul') do (
   if not defined PCL_SRCDIR set "PCL_SRCDIR=%%~dpF"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "PCL_SRCDIR=%%~dpF"
 )
+if exist "%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_socket_plugin.dll" set "PCL_SRCDIR=%BUILD_DIR%\subprojects\PCL\src\Release\"
 if not defined PCL_SRCDIR (
   for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\subprojects\PCL\src\pcl_core.lib" 2^>nul') do (
     if not defined PCL_SRCDIR set "PCL_SRCDIR=%%~dpF"
+    echo %%F | findstr /i /l /c:"\Release\" >nul && set "PCL_SRCDIR=%%~dpF"
   )
 )
 
@@ -93,27 +100,25 @@ if not defined PYRAMID_LIBDIR (
 
 echo build-dir : %BUILD_DIR%
 echo out       : %OUT_DIR%
+echo codecs   : %PYRAMID_LIBDIR%
+echo transports: %PCL_SRCDIR%
 if "%CLEAN%"=="1" (
   echo cleaning %OUT_DIR%
   for /d %%D in ("%OUT_DIR%\*") do rmdir /s /q "%%D"
   del /q "%OUT_DIR%\*" >nul 2>&1
 )
 
-REM All known data-model modules (used as a fallback closure when per-component
-REM detection finds nothing).
-set "ALL_MARSHAL_MODULES=common base tactical autonomy sensors sensorproducts radar"
-
 REM Discover components from the built codec plugin .dll names:
 REM   pyramid_codec_<codec>_<component>.dll
 set "COMPONENTS="
-for /f "delims=" %%F in ('dir /b "%PYRAMID_LIBDIR%pyramid_codec_*.dll" 2^>nul') do (
-  set "stem=%%~nF"
-  set "stem=!stem:pyramid_codec_json_=!"
-  set "stem=!stem:pyramid_codec_flatbuffers_=!"
-  set "stem=!stem:pyramid_codec_protobuf_=!"
-  if not defined seen_!stem! (
-    set "seen_!stem!=1"
-    set "COMPONENTS=!COMPONENTS! !stem!"
+for %%K in (json flatbuffers protobuf) do (
+  for /f "delims=" %%F in ('dir /b "%PYRAMID_LIBDIR%pyramid_codec_%%K_*.dll" 2^>nul') do (
+    set "stem=%%~nF"
+    set "stem=!stem:pyramid_codec_%%K_=!"
+    if not defined seen_!stem! (
+      set "seen_!stem!=1"
+      set "COMPONENTS=!COMPONENTS! !stem!"
+    )
   )
 )
 if "%COMPONENTS%"=="" (
@@ -193,24 +198,17 @@ for %%F in ("%GEN_DIR%\pyramid_services_%comp%_*.cpp") do (
   if errorlevel 1 copy /y "%%~fF" "%dest%\src\" >nul
 )
 
-REM --- lib: framework + per-module marshalling closure -----------------------
+REM --- lib: framework + generated marshalling archives -----------------------
 if exist "%PCL_SRCDIR%pcl_core.lib" copy /y "%PCL_SRCDIR%pcl_core.lib" "%dest%\lib\" >nul
+if exist "%PYRAMID_LIBDIR%pyramid_generated_marshal.lib" copy /y "%PYRAMID_LIBDIR%pyramid_generated_marshal.lib" "%dest%\lib\" >nul
 
-REM Module closure: the data-model modules this component's codec actually
-REM marshals (from the generated codec plugin's *_cabi_marshal includes).
-REM Staging only these means a tactical_objects deployment changes when
-REM tactical/common/base change -- not when autonomy/sensors/... change.
-set "comp_modules="
-for %%M in (%ALL_MARSHAL_MODULES%) do (
-  findstr /m /c:"pyramid_data_model_%%M_cabi_marshal" "%GEN_DIR%\pyramid_services_%comp%_*_codec_plugin.cpp" >nul 2>&1
-  if not errorlevel 1 set "comp_modules=!comp_modules! %%M"
-)
-if not defined comp_modules set "comp_modules=%ALL_MARSHAL_MODULES%"
 set "staged_modules="
-for %%M in (!comp_modules!) do (
-  if exist "%PYRAMID_LIBDIR%pyramid_marshal_%%M.lib" (
-    copy /y "%PYRAMID_LIBDIR%pyramid_marshal_%%M.lib" "%dest%\lib\" >nul
-    set "staged_modules=!staged_modules! %%M"
+for %%L in ("%PYRAMID_LIBDIR%pyramid_marshal_*.lib") do (
+  if exist "%%~fL" (
+    copy /y "%%~fL" "%dest%\lib\" >nul
+    set "module=%%~nL"
+    set "module=!module:pyramid_marshal_=!"
+    set "staged_modules=!staged_modules! !module!"
   )
 )
 if not defined staged_modules set "staged_modules= <none>"
@@ -267,20 +265,18 @@ for %%F in ("%dest%\plugins\*.dll") do >>"%rm%" echo - `%%~nxF`
 >>"%rm%" echo.
 >>"%rm%" echo ## Build a client (plugin-only: no wire codec, no transport linked)
 >>"%rm%" echo Compile your client together with the generated facade in `src\`, adding
->>"%rm%" echo `include\` and `include\pyramid\` to the include path, and link `lib\pcl_core.lib`
->>"%rm%" echo plus the per-module `lib\pyramid_marshal_*.lib`. With MSVC:
+>>"%rm%" echo `include\` and `include\pyramid\` to the include path, and link the PCL and
+>>"%rm%" echo generated marshalling archives. With MSVC:
 >>"%rm%" echo.
 >>"%rm%" echo ```bat
 >>"%rm%" echo cl /std:c++17 /EHsc my_client.cpp src\*.cpp ^^
 >>"%rm%" echo    /Iinclude /Iinclude\pyramid ^^
->>"%rm%" echo    lib\pcl_core.lib lib\pyramid_marshal_*.lib
+>>"%rm%" echo    lib\pcl_core.lib lib\pyramid_generated_marshal.lib
 >>"%rm%" echo ```
->>"%rm%" echo The client links only the framework + the native^<-^>C-struct marshalling for
->>"%rm%" echo this component's data-model module closure (`lib\pyramid_marshal_^<module^>.lib`)
+>>"%rm%" echo The client links only the framework + the generated native^<-^>C-struct
+>>"%rm%" echo marshalling archive (`lib\pyramid_generated_marshal.lib`)
 >>"%rm%" echo -- no JSON, no FlatBuffers, no codec, and **no transport**. Both the codec and
->>"%rm%" echo the socket transport arrive as `.dll` plugins composed at run time. Because only
->>"%rm%" echo the closure modules are shipped, an edit to an unrelated data-model module leaves
->>"%rm%" echo this deployment unchanged.
+>>"%rm%" echo the socket transport arrive as `.dll` plugins composed at run time.
 >>"%rm%" echo.
 >>"%rm%" echo ## Run against the plugins
 >>"%rm%" echo Name each plugin explicitly via `--codec-plugin` / `--transport-plugin`, or set

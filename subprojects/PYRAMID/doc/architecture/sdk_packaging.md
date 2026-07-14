@@ -16,7 +16,7 @@ the runtime concepts this builds on.
 
 | Role | Runs | Produces |
 |------|------|----------|
-| Maintainer | `package_sdk.bat`/`.sh`, inside this repo, against an already-built `build-flatbuffers-only`-style build dir | A deploy directory (default `dist/pcl_pyramid_sdk`) |
+| Maintainer | `package_sdk.bat`/`.sh`, inside this repo, against an already-built `build-flatbuffers-only`-style build dir; optionally selects a contract tree with `--proto-dir` | A deploy directory (default `dist/pcl_pyramid_sdk`) |
 | Downstream user | `scripts/generate_bindings` -> `scripts/build_plugins` (optionally `--smoke-tests`, then `scripts/build_ada`), inside the deploy directory only | Codec plugin `.dll`/`.so`, smoke-test executables, and optionally an Ada codec archive built from their own `proto/` tree |
 
 Everything the maintainer step needs (source, FetchContent-resolved
@@ -89,7 +89,7 @@ pcl_pyramid_sdk/
   plugins/                       prebuilt transport plugins
   tools/flatc(.exe)              prebuilt FlatBuffers schema compiler
   generator/                     pim/*.py generator (pure Python)
-  proto/pyramid/                 starter .proto contracts to edit/extend
+  proto/                         selected starter .proto contract tree to edit/extend
   sdk_project/                   standalone CMake project (C++ codec plugins + smoke tests)
   gnat/                          standalone GNAT project (Ada C-ABI archive + bindings)
   scripts/                       generate_bindings, build_plugins, build_ada
@@ -110,7 +110,9 @@ pcl_pyramid_sdk/
    `package_sdk` can attempt this automatically, but the explicit step makes a
    missing GNAT/GCC toolchain visible before packaging.
 4. Run `subprojects/PYRAMID/scripts/package_sdk.* --build-dir build-flatbuffers-only --clean`
-   with `--out <dir>` when the default `dist/pcl_pyramid_sdk` is not desired.
+   with `--out <dir>` when the default `dist/pcl_pyramid_sdk` is not desired,
+   and `--proto-dir <dir>` to package a contract tree other than
+   `subprojects/PYRAMID/proto`.
 5. Check `<out>/MANIFEST.txt` and run the downstream verification flow from the
    packaged directory before release.
 
@@ -127,6 +129,45 @@ codecs. With the bundled starter contracts, a second smoke app also compiles
 the tactical_objects consumed facade and verifies it fails closed when no codec
 is registered. That second app is guarded by CMake so custom downstream proto
 sets that omit tactical_objects can still use the generic plugin-load smoke.
+For a package created with `--gra`, `sdk_gra_plugin_load_smoke` additionally
+loads the prebuilt OMS JSON codec, verifies `application/oms-json`, opens the
+LA-CAL WebSocket transport, and checks its ABI, entry point, and PUBSUB
+capability without requiring a live CAL server.
+
+### GRA runtime distribution parity
+
+The repository's A-GRA-vocabulary port-grammar fixture is a useful non-legacy
+SDK contract-generation target because it contains one provided component, its
+consumed mirror, Request and Information ports, distinct
+RELIABLE/BEST_EFFORT topics, and no Tactical Objects facade. It is deliberately
+not the OMS wire-compatibility target.
+From the repository root on Windows:
+
+```bat
+subprojects\PYRAMID\scripts\create_sdk.bat --verify --gra ^
+  --proto-dir subprojects\PYRAMID\pim\agra_example ^
+  --out dist\pcl_pyramid_sdk_agra
+```
+
+The POSIX script accepts the same options. `--gra` requires an explicit
+`--proto-dir`, forces `PYRAMID_ENABLE_OWP=ON`, and requires the package to
+contain `pyramid_codec_oms_json_uci` plus
+`pyramid_lacal_transport_plugin`. `--verify` runs the packaged
+`scripts/build_sdk` command and therefore proves that the selected proto tree,
+copied generator, vendored dependencies, standalone CMake project, generated
+JSON/FlatBuffers codec plugins, and generic plugin-load smoke test work without
+the monorepo in the downstream build path. The Tactical Objects fail-closed
+smoke is expected to be absent for this contract tree. If a Windows filesystem
+or MSBuild installation reports a file-sharing failure while running parallel
+custom commands, repeat with `--jobs 1`; `create_sdk` forwards this setting to
+both its monorepo plugin build and packaged-SDK verification.
+
+This is distribution parity, not an A-GRA compliance claim. The hand-authored
+`agra_example` proves A-GRA-vocabulary port grammar and generated
+JSON/FlatBuffers plugins. It is not the XSD-derived shape accepted by the OMS
+codec generator. The packaged OMS codec is the tested UCI 2.5 starter subset;
+formal A-GRA OMS codec generation remains outside the current supported path.
+See [`oms_agra_compatibility.md`](oms_agra_compatibility.md).
 
 ## Key files
 
