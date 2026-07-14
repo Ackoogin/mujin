@@ -131,7 +131,44 @@ pattern) are done — see Delivered. Remaining:
 
 ### G1. Generate and validate the A-GRA P2 OMS/CAL profile
 
-**Status:** planned, not scheduled. This workstream closes the gap between the
+**Status: in progress (2026-07-14).** Checkpoint log for session handover:
+
+- **Prerequisites 1–3 discharged.** Decision record:
+  [`pim/uci_profiles/README.md`](../../../subprojects/PYRAMID/pim/uci_profiles/README.md)
+  ("P2 conversion-scope decision"). Root list approved and then grown to 20
+  (the two `*CommandStatus` messages the Command-2 pattern needs); size
+  budget 1,169 messages + 297 enums; validator designated: Sleet
+  v2026.06.01 loaded with the pinned A-GRA 5.0a schema.
+- **Validator leg de-risked live** (WSL podman, container
+  `sleet-agra-probe`, host port 21412, config under git-ignored
+  `external/ams-gra/sleet-agra/`): Sleet loads the A-GRA schema (841
+  elements / 4,845 types), accepts OWP `INIT` with schema literal
+  `005.0a.ASK`, routes PUB/SUB/MSG, schema-validates payloads (rejected a
+  harness-generated instance on a UUID facet), and fails closed on wrong
+  schema, unknown service, and unauthorized topic. Evidence to be folded
+  into `pim/test_harness/FINDINGS.md` at step 7.
+- **Drop-delta finding:** A-GRA 5.0a UUIDs are `xs:hexBinary` length-16
+  (32 hex chars, no hyphens), unlike UCI 2.5's hyphenated form; the
+  la-cal-harness generator hardcodes hyphenated UUIDs, so P2 instance
+  generation must set UUIDs itself.
+- **Step 1 (materialize the contract): landed in the working tree.** The
+  20-root P2 tree is generated and checked in under
+  `pim/uci_generated/agra_5_0a/` with byte-stability and wire-name-coverage
+  guards in `pim/test_xsd2proto.py`. A converter defect the drop exposed
+  (XSD enums carrying their own `UNSPECIFIED` literal colliding with the
+  synthetic zero sentinel) is fixed with `_XSD_LITERAL` disambiguation.
+- **Step 3 (generator shapes): probed complete.** A P2-wide probe found
+  zero missing shapes in the C++/Ada OMS-JSON emitters; the repeated-choice
+  wire form is pinned from the la-cal-harness against the A-GRA XSD
+  (member element name keyed to a JSON array in the parent; fixtures under
+  `pim/test_oms_json_gen_fixtures/repeated_choice_member/`).
+- Remaining: step 2 (interaction overlay `pim/agra_p2_seam/`), step 4
+  (offline fidelity suite), step 5 (distinct codec plugin + `--gra` SDK
+  packaging), step 6 (bidirectional Sleet interop + fail-closed
+  negatives), step 7 (evidence publication; the compatibility matrix and
+  user guide still describe P2 as offline-only until then).
+
+This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,
 interoperable OMS JSON codec. The current `pim/agra_example/` remains a
 non-wire port-grammar fixture and is not an input to this workstream.
