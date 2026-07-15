@@ -247,6 +247,15 @@ class BindingArtifactManifest:
         self.add_codec_plugins(plugin_paths)
 
     def record_backend_outputs(self, backend_name: str, paths) -> None:
+        if backend_name == 'oms_json':
+            # Declare the OMS-JSON codec plugin as a build role, so the build
+            # creates the profile's codec target from the manifest rather than
+            # from a filename convention -- and so a consumer can tell this
+            # profile-specific artifact apart from the frozen UCI 2.5 starter
+            # codec, which is hand-written and not generated from any tree.
+            self.add_codec_plugins(
+                [path for path in paths
+                 if Path(path).name.endswith('_codec_plugin.cpp')])
         if backend_name == 'flatbuffers':
             self.add_paths(
                 'flatbuffers_schemas',
@@ -391,6 +400,11 @@ def _codec_plugin_content_type(filename: str) -> str:
         return 'application/protobuf'
     if '_ros2_' in filename:
         return 'application/ros2'
+    # Must precede the plain-JSON fallback: an OMS-JSON plugin's filename
+    # also contains "_json_", but it speaks the UCI global-element envelope
+    # on application/oms-json, not the generic JSON projection.
+    if '_oms_json_' in filename:
+        return 'application/oms-json'
     return 'application/json'
 
 
@@ -726,9 +740,10 @@ def main():
     print(f'Languages: {", ".join(sorted(langs))}')
     print()
 
+    binding_metadata = _load_binding_metadata(proto_dir)
     manifest = BindingArtifactManifest(
         args.contract_layout, proto_dir, output_dir, proto_files,
-        metadata=_load_binding_metadata(proto_dir))
+        metadata=binding_metadata)
     manifest.add_selected_backend_protos(backend_names, proto_files)
     manifest.add_contract_topics(contract)
     manifest.add_endpoint_requirements(contract)
@@ -783,6 +798,7 @@ def main():
             naming_policy=contract.naming_policy,
             proto_import_root=manifest.proto_import_root,
             contract=contract,
+            metadata=binding_metadata,
         )
         for backend_name, files in results.items():
             print(f'  {backend_name}: {len(files)} files generated')

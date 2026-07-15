@@ -272,6 +272,36 @@ class AgraP2SeamGenerationTest(unittest.TestCase):
     def test_manifest_identity(self):
         self.assertEqual(self.manifest["metadata"], IDENTITY)
 
+    def test_the_oms_json_codec_is_a_declared_build_role(self):
+        """Plan step 5: the build must create this profile's codec target
+        from a declared role, not from a filename convention, and the
+        artifact must be impossible to confuse with the frozen UCI 2.5
+        starter codec (pyramid_codec_oms_json_uci), which is hand-written
+        and generated from no tree at all."""
+        plugins = {entry["target"]: entry
+                   for entry in self.manifest["codec_plugins"]}
+        target = "pyramid_data_model_agra_oms_json_codec_plugin"
+        self.assertIn(target, plugins)
+        self.assertNotIn("pyramid_codec_oms_json_uci", plugins)
+        self.assertEqual(plugins[target]["content_type"],
+                         "application/oms-json")
+        self.assertEqual(
+            plugins[target]["source"],
+            "oms_json/cpp/pyramid_data_model_agra_oms_json_codec_plugin.cpp")
+        self.assertTrue((self.out / plugins[target]["source"]).is_file())
+
+    def test_the_codec_carries_the_contract_schema_identity(self):
+        """The generated codec must be able to refuse another drop, so the
+        drop identity has to reach the artifact itself rather than living
+        only in the manifest a packager reads."""
+        source = (self.out / "oms_json" / "cpp" /
+                  "pyramid_data_model_agra_oms_json_codec_plugin.cpp"
+                  ).read_text(encoding="utf-8")
+        for key, value in IDENTITY.items():
+            self.assertIn(f'{{"{key}","{value}"}}', source,
+                          f"{key} missing from the codec's schema identity")
+        self.assertIn("identity_admits", source)
+
     def test_manifest_contains_all_topics_and_interactions(self):
         self.assertEqual(len(self.manifest["topics"]), 20)
         self.assertEqual(

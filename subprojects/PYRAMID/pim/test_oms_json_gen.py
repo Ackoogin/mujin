@@ -43,6 +43,9 @@ PIM_DIR = Path(__file__).resolve().parent
 SEAM_TREE = PIM_DIR / "uci_seam_example"
 P1_TREE = PIM_DIR / "uci_generated" / "uci_2_5_0"
 P2_TREE = PIM_DIR / "uci_generated" / "agra_5_0a"
+# The A-GRA P2 contract as packaged: the generated data model above plus the
+# interaction overlay and the drop identity in binding_metadata.json.
+P2_CONTRACT = PIM_DIR / "agra_p2_seam"
 REPEATED_CHOICE_TREE = (
     PIM_DIR / "test_oms_json_gen_fixtures" / "repeated_choice_member"
 )
@@ -813,12 +816,20 @@ class AgraUuidNormalizationTest(unittest.TestCase):
 def _build_p2_driver() -> Path:
     """Generate P2 bindings and compile the round-trip driver, once per run.
 
+    Built from the interaction overlay rather than the bare data-model tree,
+    because the overlay is the contract the SDK actually packages: it is the
+    only input that carries binding_metadata.json, so it is the only one
+    whose codec has a schema identity to check.  The data model underneath is
+    a byte-identical copy of P2_TREE's (pim/test_agra_p2_seam.py guards that),
+    so the round trips below test the same codec either way -- this way they
+    test the artifact that ships.
+
     Slower than the P1 driver: the A-GRA closure is 1192 messages."""
     if "p2_exe" in _DRIVER_DIR:
         return _DRIVER_DIR["p2_exe"]
     nlohmann = _require_toolchain()
-    if not P2_TREE.is_dir():
-        raise unittest.SkipTest("P2 generated tree is absent")
+    if not P2_CONTRACT.is_dir():
+        raise unittest.SkipTest("P2 contract overlay is absent")
     import atexit
     tmp = Path(tempfile.mkdtemp(prefix="oms_json_p2_smoke_"))
     atexit.register(shutil.rmtree, tmp, ignore_errors=True)
@@ -827,7 +838,7 @@ def _build_p2_driver() -> Path:
     gen = tmp / "gen"
     subprocess.run(
         [sys.executable, str(PIM_DIR / "generate_bindings.py"),
-         str(P2_TREE), str(gen), "--languages", "cpp",
+         str(P2_CONTRACT), str(gen), "--languages", "cpp",
          "--backends", "oms_json"],
         check=True, capture_output=True)
     exe = tmp / "p2_driver"
@@ -911,6 +922,113 @@ def _add_p2_roundtrip_cases():
 
 
 _add_p2_roundtrip_cases()
+
+
+class SchemaIdentitySourceTest(unittest.TestCase):
+    """Plan step 5: a profile-specific codec knows which drop it was built
+    for.  These checks need no toolchain, so they run everywhere.
+
+    The identity is emitted only for a contract that carries
+    binding_metadata.json.  That is not an optimization -- it is what keeps
+    the frozen seam golden byte-identical (plan D4(b)), the same discipline
+    the UUID validators follow: emit a rule only where the tree uses it."""
+
+    def _plugin_source(self, tree: Path) -> str:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            subprocess.run(
+                [sys.executable, str(PIM_DIR / "generate_bindings.py"),
+                 str(tree), str(out), "--languages", "cpp",
+                 "--backends", "oms_json"],
+                check=True, capture_output=True)
+            sources = list((out / "oms_json" / "cpp").glob(
+                "*_oms_json_codec_plugin.cpp"))
+            self.assertEqual(len(sources), 1, f"{tree.name}: {sources}")
+            return sources[0].read_text(encoding="utf-8")
+
+    def test_the_agra_contract_emits_its_identity_and_the_check(self):
+        source = self._plugin_source(P2_CONTRACT)
+        identity = json.loads(
+            (P2_CONTRACT / "binding_metadata.json").read_text(
+                encoding="utf-8"))
+        for key, value in identity.items():
+            self.assertIn(f'{{"{key}","{value}"}}', source)
+        self.assertIn("identity_admits(config_json) ? &codec : nullptr",
+                      source)
+
+    def test_a_contract_without_metadata_keeps_the_unconditional_entry(self):
+        source = self._plugin_source(P1_TREE)
+        self.assertNotIn("kIdentity", source)
+        self.assertNotIn("identity_admits", source)
+        self.assertIn(
+            "const pcl_codec_t* pcl_codec_plugin_entry(const char*) "
+            "{ return &codec; }", source)
+
+
+class SchemaIdentityRuntimeTest(unittest.TestCase):
+    """Plan step 5, the runtime half: the A-GRA codec's PCL entry point
+    admits or refuses a loader configuration by its schema identity.
+
+    The entry contract makes config_json opaque and plugin-specific, so this
+    is the seam where a codec can decline to serve the wrong drop before any
+    traffic reaches it -- SchemaDropMismatchTest covers the message-level
+    refusals that catch what gets past the loader.
+
+    Opt-in: same gates as the round-trip tests."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.exe = _build_p2_driver()
+        cls.identity = json.loads(
+            (P2_CONTRACT / "binding_metadata.json").read_text(
+                encoding="utf-8"))
+
+    def _entry(self, config: str) -> str:
+        run = subprocess.run([str(self.exe), "--identity", config],
+                             capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        return run.stdout.strip()
+
+    def test_no_configuration_is_admitted(self):
+        # The PCL entry contract documents NULL as "no configuration": the
+        # loader asserts nothing, so there is nothing to contradict.
+        self.assertEqual(self._entry("null"), "ADMITTED")
+        self.assertEqual(self._entry("{}"), "ADMITTED")
+
+    def test_the_matching_drop_is_admitted(self):
+        self.assertEqual(self._entry(json.dumps(self.identity)), "ADMITTED")
+
+    def test_each_identity_key_is_checked_on_its_own(self):
+        for key, value in self.identity.items():
+            with self.subTest(key=key):
+                self.assertEqual(self._entry(json.dumps({key: value})),
+                                 "ADMITTED")
+                self.assertEqual(
+                    self._entry(json.dumps({key: value + "-wrong"})),
+                    "REFUSED", f"{key} is not actually checked")
+
+    def test_the_uci_drop_is_refused(self):
+        # The concrete confusion this exists to prevent: an SDK consumer
+        # pointing a UCI 2.5 deployment at the A-GRA codec.
+        self.assertEqual(
+            self._entry(json.dumps({"drop": "uci_2_5_0",
+                                    "schema_version": "002.5.0"})),
+            "REFUSED")
+
+    def test_one_wrong_key_refuses_even_when_the_others_match(self):
+        config = dict(self.identity)
+        config["schema_version"] = "005.0a.ASK-99999999-deadbee"
+        self.assertEqual(self._entry(json.dumps(config)), "REFUSED")
+
+    def test_unparseable_configuration_is_refused(self):
+        # A loader that meant to pin the drop but typed the config wrong must
+        # not silently get an unchecked codec.
+        self.assertEqual(self._entry("{not json"), "REFUSED")
+        self.assertEqual(self._entry('"a string, not an object"'), "REFUSED")
+
+    def test_keys_the_codec_has_no_identity_for_are_left_alone(self):
+        self.assertEqual(self._entry(json.dumps({"transport": "lacal"})),
+                         "ADMITTED")
 
 
 class SchemaDropMismatchTest(unittest.TestCase):

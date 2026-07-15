@@ -118,12 +118,22 @@ class _WireNames:
 
 
 class CppOmsJsonCodecGenerator:
-    """Generate one PCL codec plugin per UCI-shaped data-model package."""
+    """Generate one PCL codec plugin per UCI-shaped data-model package.
 
-    def __init__(self, index: ProtoTypeIndex, naming_policy=None):
+    ``metadata`` is the contract's ``binding_metadata.json`` object, when the
+    input tree carries one.  Its string entries become the plugin's schema
+    identity, which the PCL entry point checks against the loader's
+    configuration so a codec built for one drop refuses to serve another.
+    A tree without metadata emits no identity and no check, which is what
+    keeps the frozen seam golden byte-identical.
+    """
+
+    def __init__(self, index: ProtoTypeIndex, naming_policy=None,
+                 metadata=None):
         self.index = index
         self.naming = naming_policy or _DEFAULT_NAMING_POLICY
         self.aliases = find_scalar_wrappers(index)
+        self.identity = _string_identity(metadata)
 
     def generate(self, out: Path) -> List[Path]:
         out.mkdir(parents=True, exist_ok=True)
@@ -132,7 +142,7 @@ class CppOmsJsonCodecGenerator:
             if not pf.messages or pf.services:
                 continue
             emitter = _PackageEmitter(self.index, pf, self.naming,
-                                      self.aliases)
+                                      self.aliases, self.identity)
             if not emitter.roots:
                 continue  # no wire entry points -- not a UCI payload package
             prefix = pf.package.replace('.', '_')
@@ -142,12 +152,29 @@ class CppOmsJsonCodecGenerator:
         return paths
 
 
+def _string_identity(metadata):
+    """The string entries of a contract's binding metadata, sorted.
+
+    Only strings take part: the identity is compared against the loader's
+    JSON configuration by string equality, and a non-string entry has no
+    meaningful comparison there.  Sorting keeps generation deterministic
+    regardless of the order the metadata file happens to list its keys in.
+    """
+    if not isinstance(metadata, dict):
+        return []
+    return sorted(
+        (key, value) for key, value in metadata.items()
+        if isinstance(key, str) and isinstance(value, str)
+    )
+
+
 class _PackageEmitter:
     def __init__(self, index: ProtoTypeIndex, pf: ProtoFile, naming,
-                 aliases: Dict[str, str]):
+                 aliases: Dict[str, str], identity=None):
         self.index = index
         self.pf = pf
         self.naming = naming
+        self.identity = identity or []
         self.aliases = aliases
         self.wire = _WireNames(pf)
         self.prefix = pf.package.replace('.', '_')
@@ -322,7 +349,10 @@ class _PackageEmitter:
         f.write(f'#include "{self.prefix}_cabi_marshal.hpp"\n')
         f.write('#include <pcl/pcl_alloc.h>\n#include <pcl/pcl_codec.h>\n')
         f.write('#include <nlohmann/json.hpp>\n')
-        f.write('#include <cmath>\n#include <cstdint>\n#include <cstring>\n#include <limits>\n#include <string>\n\n')
+        f.write('#include <cmath>\n#include <cstdint>\n#include <cstring>\n#include <limits>\n#include <string>\n')
+        if self.identity:
+            f.write('#include <utility>\n')  # std::pair, for the identity table
+        f.write('\n')
         f.write('namespace {\nusing json = nlohmann::json;\n')
         f.write(f'namespace uci = {ns};\n')
         f.write('constexpr const char* kContentType = "application/oms-json";\n')
@@ -359,8 +389,53 @@ class _PackageEmitter:
         self._write_encode_dispatch(f)
         self._write_decode_dispatch(f)
         f.write('void free_msg(void*, pcl_msg_t* m) { if(!m)return; pcl_free(const_cast<void*>(m->data)); m->data=nullptr;m->size=0;m->type_name=nullptr; }\n'
-                'pcl_codec_t codec={PCL_CODEC_ABI_VERSION,kContentType,encode,decode,free_msg,nullptr};\n} // namespace\n\n'
-                'extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }\n')
+                'pcl_codec_t codec={PCL_CODEC_ABI_VERSION,kContentType,encode,decode,free_msg,nullptr};\n')
+        self._write_identity_check(f)
+        f.write('} // namespace\n\n')
+        if self.identity:
+            f.write('extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char* config_json) {\n'
+                    '  return identity_admits(config_json) ? &codec : nullptr;\n}\n')
+        else:
+            f.write('extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }\n')
+
+    def _write_identity_check(self, f) -> None:
+        """Emit the plugin's schema identity and the loader's admission check.
+
+        The PCL entry contract makes config_json opaque and plugin-specific,
+        so this is where a profile-specific codec can refuse to serve a drop
+        it was not generated from.  The rules, in the order the code applies
+        them:
+
+          * no configuration (NULL) means the loader asserts nothing, which
+            the ABI documents as "no configuration" -- serve it;
+          * configuration that names an identity key this codec also carries
+            must agree with it, or the plugin refuses to load;
+          * configuration this codec cannot parse, or that is not an object,
+            is refused rather than ignored -- a loader that meant to pin the
+            drop and typed the config wrong must not silently get an
+            unchecked codec;
+          * keys the codec has no identity for are left to other layers.
+
+        Emitted only for a contract that carries binding metadata, which is
+        what keeps the seam golden byte-identical.
+        """
+        if not self.identity:
+            return
+        entries = ' '.join(
+            f'{{"{key}","{value}"}},' for key, value in self.identity)
+        f.write('// Schema identity, from the contract\'s binding_metadata.json.\n')
+        f.write(f'const std::pair<const char*, const char*> kIdentity[] = {{ {entries} }};\n')
+        f.write('bool identity_admits(const char* config_json) {\n'
+                '  if (!config_json) return true;\n'
+                '  json cfg;\n'
+                '  try { cfg = json::parse(config_json); } catch (...) { return false; }\n'
+                '  if (!cfg.is_object()) return false;\n'
+                '  for (const auto& id : kIdentity) {\n'
+                '    if (!cfg.contains(id.first)) continue;\n'
+                '    const auto& v = cfg.at(id.first);\n'
+                '    if (!v.is_string() || v.get<std::string>() != id.second) return false;\n'
+                '  }\n'
+                '  return true;\n}\n')
 
     def _write_enum_helpers(self, f) -> None:
         if not self.pf.enums:

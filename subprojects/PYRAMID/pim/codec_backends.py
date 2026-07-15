@@ -73,7 +73,8 @@ def generate_all(index: ProtoTypeIndex, output_dir: Path,
                  backends: Optional[List[str]] = None,
                  naming_policy=None,
                  proto_import_root: Optional[Path] = None,
-                 contract=None) -> Dict[str, List[Path]]:
+                 contract=None,
+                 metadata=None) -> Dict[str, List[Path]]:
     """Generate codec files for all (or selected) backends and languages.
 
     Args:
@@ -84,6 +85,8 @@ def generate_all(index: ProtoTypeIndex, output_dir: Path,
         naming_policy: Optional layout naming policy for policy-aware backends.
         proto_import_root: Optional protoc import root for path-aware backends.
         contract: Optional neutral binding contract for contract-aware backends.
+        metadata: Optional contract identity (binding_metadata.json) for
+            backends that stamp it into the artifacts they generate.
 
     Returns:
         Dict mapping backend name to list of generated file paths.
@@ -108,6 +111,7 @@ def generate_all(index: ProtoTypeIndex, output_dir: Path,
                 naming_policy=naming_policy,
                 proto_import_root=proto_import_root,
                 contract=contract,
+                metadata=metadata,
             ))
 
         if 'ada' in langs:

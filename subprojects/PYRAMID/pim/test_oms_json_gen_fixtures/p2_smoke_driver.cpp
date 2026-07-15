@@ -169,9 +169,25 @@ static int selftest() {
   return 0;
 }
 
+// --identity <config_json>: ask the plugin entry point to admit this loader
+// configuration.  Prints ADMITTED or REFUSED.  Exit status is 0 either way:
+// a refusal is a correct answer, and the Python side asserts which answer it
+// expects.  The literal "null" stands for a NULL config pointer, which the
+// PCL entry contract defines as "no configuration".
+static int identity(const char* config_json) {
+  const bool null_config = std::strcmp(config_json, "null") == 0;
+  const pcl_codec_t* codec =
+      pcl_codec_plugin_entry(null_config ? nullptr : config_json);
+  std::puts(codec ? "ADMITTED" : "REFUSED");
+  return 0;
+}
+
 int main(int argc, char** argv) {
   if (argc == 3 && std::strcmp(argv[1], "--roundtrip") == 0) {
     return roundtrip(argv[2]);
+  }
+  if (argc == 3 && std::strcmp(argv[1], "--identity") == 0) {
+    return identity(argv[2]);
   }
   return selftest();
 }
