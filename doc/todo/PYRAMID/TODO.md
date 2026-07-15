@@ -264,12 +264,56 @@ pattern) are done — see Delivered. Remaining:
     `LACAL_HARNESS_SRC` still overrides. Its generator needs `lxml`,
     `xmlschema`, and `exrex`, which are not in the repo's Python
     environment; the WSL run used a venv with those installed.
-- Remaining: step 5 (distinct codec plugin + `--gra` SDK packaging), step
-  6 (bidirectional Sleet interop + fail-closed negatives), step 7
-  (evidence publication; the compatibility matrix and user guide still
-  describe P2 as offline-only until then). Steps 1-4 are done, so the
-  offline half of the acceptance list is met and the next session can
-  start at step 5.
+- **Step 5 (distinct runtime profile): in progress.**
+  - **Schema identity landed.** The generated OMS-JSON codec now carries the
+    contract's `binding_metadata.json` as a schema identity and checks it in
+    `pcl_codec_plugin_entry`, whose `config_json` the PCL ABI leaves opaque
+    and plugin-specific for exactly this purpose. An identity key the loader
+    names must agree; an unparseable or non-object config is refused rather
+    than ignored; a NULL config still means "no configuration". Trees without
+    metadata emit neither identity nor check, which keeps the frozen seam
+    golden byte-identical.
+  - **The build now creates the codec target.** Two gaps had kept the build
+    from seeing the generated OMS codec at all: `oms_json` was not in the
+    backend list even with `PYRAMID_ENABLE_OWP` on, and the OMS-JSON plugin
+    was neither recorded in the binding manifest nor given the right content
+    type (an OMS-JSON filename also contains `_json_`, so it was classified
+    as `application/json`). Fixed; the target is
+    `pyramid_codec_oms_json_agra`, built from the manifest role.
+  - **Naming decision (approved 2026-07-15):** the hand-written UCI 2.5
+    starter is now `pyramid_codec_oms_json_uci_starter`, freeing the plain
+    `pyramid_codec_oms_json_<module>` name for codecs generated from a real
+    contract — including the UCI one, which previously would have collided
+    with the fixture outright. `--gra` never packages the starter.
+  - **`--gra` packages the contract's codec.** `package_sdk` selects the
+    codecs generated from the selected contract and asks the binding manifest
+    whether one is expected, so a contract that declares a codec but failed to
+    build it fails the package, while a port-grammar contract that declares
+    none (`agra_example`) packages with a warning rather than a spurious
+    error. `create_sdk --gra` warns when pointed at `agra_example`.
+    Demonstrated 2026-07-15 in WSL: `--gra --proto-dir pim/agra_p2_seam`
+    produces a package whose `plugins/` holds exactly
+    `libpyramid_codec_oms_json_agra.so` and
+    `libpyramid_lacal_transport_plugin.so`, with the contract,
+    `wire_names.json`, and `binding_metadata.json` under `proto/`.
+  - **Blocker found, not yet fixed: the FlatBuffers backend cannot generate
+    this contract.** `create_sdk --gra --verify` fails inside the packaged
+    build. The generator emits a union arm for every `xs:choice` member, but a
+    FlatBuffers union may only hold tables; this contract has choices with
+    enum-typed arms (`OwnerProducerChoiceType.GovernmentIdentifier`), which
+    `flatc` rejects with "type referenced but not defined". The string arms of
+    the same choice already get wrapper tables, so the fix is to wrap enum
+    arms the same way. This is a pre-existing backend gap that any tree with
+    an enum-typed choice arm reaches (the P1/UCI tree has the same shape); it
+    is unrelated to the OMS codec, which builds and packages fine, but it
+    stands between here and the acceptance bullet "the packaged offline SDK
+    builds the P2 bindings and codec, then smoke-tests a representative `MA_*`
+    payload through the packaged codec and LA-CAL plugin".
+  - Remaining in step 5: the FlatBuffers enum-arm fix, then the packaged-SDK
+    `MA_*` smoke through the codec and LA-CAL plugin.
+- Remaining: step 6 (bidirectional Sleet interop + fail-closed negatives),
+  step 7 (evidence publication; the compatibility matrix and user guide still
+  describe P2 as offline-only until then).
 
 This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,

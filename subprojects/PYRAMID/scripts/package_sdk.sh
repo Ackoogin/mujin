@@ -103,11 +103,38 @@ TRANSPORT_SHM_SO="$(find "${BUILD_DIR}" -name 'libpcl_transport_shared_memory_pl
 [[ -n "${TRANSPORT_SOCKET_SO}" ]] || echo "[package_sdk] WARN: libpcl_transport_socket_plugin.so not found under ${BUILD_DIR}"
 [[ -n "${TRANSPORT_SHM_SO}" ]]    || echo "[package_sdk] WARN: libpcl_transport_shared_memory_plugin.so not found under ${BUILD_DIR}"
 
-OMS_CODEC_SO="$(find "${BUILD_DIR}" -name 'libpyramid_codec_oms_json_uci.so' 2>/dev/null | head -1 || true)"
+# The OMS codecs generated from the selected contract. The hand-written
+# UCI 2.5 starter subset (..._uci_starter) is deliberately excluded: it is a
+# frozen byte-equivalence fixture for the generated UCI codec, and shipping
+# it as "the" OMS codec of an A-GRA distribution is exactly the confusion
+# this packaging step exists to prevent.
+OMS_CODEC_SOS=()
+while IFS= read -r _so; do
+  [[ -n "${_so}" ]] && OMS_CODEC_SOS+=("${_so}")
+done < <(find "${BUILD_DIR}" -name 'libpyramid_codec_oms_json_*.so' \
+              ! -name 'libpyramid_codec_oms_json_uci_starter.so' \
+              2>/dev/null | sort)
 LACAL_TRANSPORT_SO="$(find "${BUILD_DIR}" -name 'libpyramid_lacal_transport_plugin.so' 2>/dev/null | head -1 || true)"
-if [[ ${GRA} -eq 1 && -z "${OMS_CODEC_SO}" ]]; then
-  echo "[package_sdk] ERROR: --gra requires libpyramid_codec_oms_json_uci.so; rebuild with build_plugins.sh --gra." >&2
-  exit 1
+# Whether an OMS codec is *expected* is the contract's answer, not a fixed
+# rule: the generator emits one only for a UCI-shaped data model. Ask the
+# binding manifest, so a contract that declares a codec but failed to build it
+# fails the package, while a port-grammar contract that declares none packages
+# cleanly with a warning rather than a spurious error.
+BINDING_MANIFEST="${BUILD_DIR}/generated/pyramid_cpp_bindings/binding_manifest.json"
+OMS_CODEC_DECLARED=0
+if [[ -f "${BINDING_MANIFEST}" ]] && grep -q '"application/oms-json"' "${BINDING_MANIFEST}"; then
+  OMS_CODEC_DECLARED=1
+fi
+if [[ ${GRA} -eq 1 && ${#OMS_CODEC_SOS[@]} -eq 0 ]]; then
+  if [[ ${OMS_CODEC_DECLARED} -eq 1 ]]; then
+    echo "[package_sdk] ERROR: the contract declares an OMS codec, but none was built." >&2
+    echo "[package_sdk]   Rebuild with: build_plugins.sh --gra --proto-dir <contract>" >&2
+    exit 1
+  fi
+  echo "[package_sdk] WARN: this contract declares no OMS codec, so the package will" >&2
+  echo "[package_sdk]   contain none. The codec is generated only from an XSD-derived," >&2
+  echo "[package_sdk]   UCI-shaped data model. For the formal A-GRA 5.0a P2 profile use:" >&2
+  echo "[package_sdk]     --proto-dir subprojects/PYRAMID/pim/agra_p2_seam" >&2
 fi
 if [[ ${GRA} -eq 1 && -z "${LACAL_TRANSPORT_SO}" ]]; then
   echo "[package_sdk] ERROR: --gra requires libpyramid_lacal_transport_plugin.so; rebuild with build_plugins.sh --gra." >&2
@@ -150,7 +177,11 @@ echo "[package_sdk] copying prebuilt transport plugins ..."
 [[ -n "${TRANSPORT_SOCKET_SO}" ]] && cp -f "${TRANSPORT_SOCKET_SO}" "${OUT_DIR}/plugins/"
 [[ -n "${TRANSPORT_SHM_SO}" ]]    && cp -f "${TRANSPORT_SHM_SO}"    "${OUT_DIR}/plugins/"
 if [[ ${GRA} -eq 1 ]]; then
-  cp -f "${OMS_CODEC_SO}" "${OUT_DIR}/plugins/"
+  for _so in "${OMS_CODEC_SOS[@]-}"; do
+    [[ -n "${_so}" ]] || continue
+    echo "[package_sdk]   OMS codec: $(basename "${_so}")"
+    cp -f "${_so}" "${OUT_DIR}/plugins/"
+  done
   cp -f "${LACAL_TRANSPORT_SO}" "${OUT_DIR}/plugins/"
 fi
 

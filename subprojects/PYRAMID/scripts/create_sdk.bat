@@ -65,6 +65,19 @@ if "%GRA%"=="1" if not defined PROTO_DIR (
   exit /b 2
 )
 
+REM agra_example proves A-GRA-vocabulary port grammar; it is not the XSD-derived
+REM shape the OMS codec generator accepts, so a package built from it carries no
+REM OMS codec at all. That is a legitimate distribution-parity exercise, but it
+REM is easy to mistake for the formal profile, so say so plainly.
+if "%GRA%"=="1" (
+  echo %PROTO_DIR% | findstr /i /l /c:"agra_example" >nul && (
+    echo [create_sdk] WARN: --proto-dir %PROTO_DIR% is a port-grammar fixture, 1>&2
+    echo [create_sdk]   not the XSD-derived P2 contract. The package will contain no 1>&2
+    echo [create_sdk]   A-GRA OMS codec. For the formal profile use: 1>&2
+    echo [create_sdk]     --proto-dir subprojects\PYRAMID\pim\agra_p2_seam 1>&2
+  )
+)
+
 if /i "%CONFIG%"=="Release" (set "BUILD_PRESET=flatbuffers-only-release") else if /i "%CONFIG%"=="Debug" (set "BUILD_PRESET=flatbuffers-only-debug") else (
   echo [create_sdk] ERROR: --config must be Release or Debug ^(got '%CONFIG%'^) 1>&2
   exit /b 2

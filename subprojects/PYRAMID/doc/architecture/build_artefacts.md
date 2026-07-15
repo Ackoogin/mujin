@@ -150,7 +150,8 @@ options allow (used by `scripts/build_plugins.*`).
 | `pyramid_codec_json_<component>` | `application/json` | always |
 | `pyramid_codec_flatbuffers_<component>` | `application/flatbuffers` | `PYRAMID_ENABLE_FLATBUFFERS` |
 | `pyramid_codec_protobuf_<component>` | `application/protobuf` | `PYRAMID_ENABLE_PROTOBUF` |
-| `pyramid_codec_oms_json_uci` | OMS JSON (UCI wire) | `PYRAMID_ENABLE_OWP` (hand-written; the generated UCI OMS-JSON codec supersedes it for the P1 tree) |
+| `pyramid_codec_oms_json_<module>` | `application/oms-json` | `PYRAMID_ENABLE_OWP`, and the contract tree has a UCI-shaped data model. Generated from the selected contract, one per data-model package with OMS wire roots (`pyramid_codec_oms_json_agra` for the A-GRA 5.0a P2 profile). Carries the contract's schema identity and refuses a loader configuration naming another drop. |
+| `pyramid_codec_oms_json_uci_starter` | OMS JSON (UCI wire) | `PYRAMID_ENABLE_OWP` (hand-written 4-root UCI 2.5 subset; a frozen byte-equivalence baseline for the generated UCI codec, not a contract codec — it is not packaged by `--gra`) |
 
 One codec `.so` serves both C++ and Ada: it consumes the frozen
 `pyramid_<T>_c` structs, so language never appears in the artefact set.

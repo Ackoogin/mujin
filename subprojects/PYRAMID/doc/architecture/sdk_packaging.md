@@ -151,8 +151,13 @@ subprojects\PYRAMID\scripts\create_sdk.bat --verify --gra ^
 
 The POSIX script accepts the same options. `--gra` requires an explicit
 `--proto-dir`, forces `PYRAMID_ENABLE_OWP=ON`, and requires the package to
-contain `pyramid_codec_oms_json_uci` plus
-`pyramid_lacal_transport_plugin`. `--verify` runs the packaged
+contain an OMS JSON codec generated from the selected contract
+(`pyramid_codec_oms_json_agra` for the A-GRA 5.0a P2 profile) plus
+`pyramid_lacal_transport_plugin`. The hand-written
+`pyramid_codec_oms_json_uci_starter` is never packaged by `--gra`: it is a
+frozen 4-root UCI 2.5 fixture kept as the byte-equivalence baseline for the
+generated UCI codec, and shipping it as an A-GRA distribution's OMS codec is
+the confusion this step exists to remove. `--verify` runs the packaged
 `scripts/build_sdk` command and therefore proves that the selected proto tree,
 copied generator, vendored dependencies, standalone CMake project, generated
 JSON/FlatBuffers codec plugins, and generic plugin-load smoke test work without
@@ -165,9 +170,40 @@ both its monorepo plugin build and packaged-SDK verification.
 This is distribution parity, not an A-GRA compliance claim. The hand-authored
 `agra_example` proves A-GRA-vocabulary port grammar and generated
 JSON/FlatBuffers plugins. It is not the XSD-derived shape accepted by the OMS
-codec generator. The packaged OMS codec is the tested UCI 2.5 starter subset;
-formal A-GRA OMS codec generation remains outside the current supported path.
-See [`oms_agra_compatibility.md`](oms_agra_compatibility.md).
+codec generator, so a package built from it contains **no** OMS codec at all,
+and `create_sdk --gra` now says so rather than quietly substituting the UCI 2.5
+starter subset. See [`oms_agra_compatibility.md`](oms_agra_compatibility.md).
+
+### Packaging the formal A-GRA 5.0a P2 profile
+
+The XSD-derived contract at `subprojects/PYRAMID/pim/agra_p2_seam` is the tree
+the OMS codec generator accepts. Packaging it produces a distribution whose
+codec is generated from that contract and carries its schema identity:
+
+```bat
+subprojects\PYRAMID\scripts\create_sdk.bat --gra ^
+  --proto-dir subprojects\PYRAMID\pim\agra_p2_seam ^
+  --out dist\pcl_pyramid_sdk_agra_p2
+```
+
+Note the absent `--verify`: the packaged build of this contract does not pass
+yet. The FlatBuffers generator emits a union arm for every `xs:choice` member,
+but a FlatBuffers union may only hold tables, and this contract has choices
+with enum-typed arms (`OwnerProducerChoiceType.GovernmentIdentifier`, for one),
+so `flatc` rejects the generated schema. That is a FlatBuffers backend gap
+unrelated to the OMS codec, tracked in
+[`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md) under WS-G/G1
+step 5. The OMS codec and the LA-CAL transport in the package are built and
+staged by the monorepo before packaging, so they are unaffected.
+
+The package contains `pyramid_codec_oms_json_agra` and
+`pyramid_lacal_transport_plugin` under `plugins/`, and the contract, its
+`wire_names.json`, and its `binding_metadata.json` under `proto/`. The codec
+refuses a loader configuration naming a different drop, so a UCI 2.5
+deployment cannot load it by mistake. This remains an OMS/CAL codec and
+transport claim for the tested P2 profile, not an A-GRA platform compliance
+claim; the interoperability evidence boundary is recorded in
+[`oms_agra_compatibility.md`](oms_agra_compatibility.md).
 
 ## Key files
 

@@ -253,16 +253,26 @@ set(PYRAMID_SDK_SMOKE_TARGETS sdk_codec_plugin_load_smoke)
 # A --gra distribution carries two prebuilt runtime modules in addition to the
 # codecs generated from its bundled contract. Validate that both modules remain
 # loadable from the standalone SDK and expose the expected stable PCL ABI.
+#
+# The OMS codec is discovered rather than named: it is generated from the
+# bundled contract, so its artifact name carries that contract's data-model
+# module (pyramid_codec_oms_json_agra for the A-GRA 5.0a P2 profile). A
+# distribution carries exactly one.
 if(WIN32)
-    set(_pyramid_sdk_oms_codec
-        "${SDK_ROOT_DIR}/plugins/pyramid_codec_oms_json_uci.dll")
+    file(GLOB _pyramid_sdk_oms_codecs
+        "${SDK_ROOT_DIR}/plugins/pyramid_codec_oms_json_*.dll")
     set(_pyramid_sdk_lacal_transport
         "${SDK_ROOT_DIR}/plugins/pyramid_lacal_transport_plugin.dll")
 else()
-    set(_pyramid_sdk_oms_codec
-        "${SDK_ROOT_DIR}/plugins/libpyramid_codec_oms_json_uci.so")
+    file(GLOB _pyramid_sdk_oms_codecs
+        "${SDK_ROOT_DIR}/plugins/libpyramid_codec_oms_json_*.so")
     set(_pyramid_sdk_lacal_transport
         "${SDK_ROOT_DIR}/plugins/libpyramid_lacal_transport_plugin.so")
+endif()
+list(SORT _pyramid_sdk_oms_codecs)
+set(_pyramid_sdk_oms_codec "")
+if(_pyramid_sdk_oms_codecs)
+    list(GET _pyramid_sdk_oms_codecs 0 _pyramid_sdk_oms_codec)
 endif()
 
 if(EXISTS "${_pyramid_sdk_oms_codec}" OR EXISTS "${_pyramid_sdk_lacal_transport}")

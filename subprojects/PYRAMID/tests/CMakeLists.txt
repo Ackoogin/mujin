@@ -23,13 +23,13 @@ if(PYRAMID_ENABLE_OWP)
     gtest_discover_tests(test_lacal_transport_plugin TEST_PREFIX owp. DISCOVERY_MODE PRE_TEST)
 
     add_executable(test_oms_json_codec_uci test_oms_json_codec_uci.cpp)
-    add_dependencies(test_oms_json_codec_uci pyramid_codec_oms_json_uci)
+    add_dependencies(test_oms_json_codec_uci pyramid_codec_oms_json_uci_starter)
     target_link_libraries(test_oms_json_codec_uci
         PRIVATE pcl_core nlohmann_json::nlohmann_json GTest::gtest_main ${CMAKE_DL_LIBS})
     target_include_directories(test_oms_json_codec_uci PRIVATE
         "${PCL_ROOT_DIR}/include" "${PYRAMID_ROOT_DIR}/include")
     target_compile_definitions(test_oms_json_codec_uci PRIVATE
-        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci>"
+        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci_starter>"
         PYRAMID_LACAL_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/lacal")
     gtest_discover_tests(test_oms_json_codec_uci
         TEST_PREFIX oms_json. DISCOVERY_MODE PRE_TEST)
@@ -37,26 +37,26 @@ if(PYRAMID_ENABLE_OWP)
     add_executable(lacal_e2e_test
         "${PYRAMID_ROOT_DIR}/pim/test_harness/lacal_e2e_test.cpp")
     add_dependencies(lacal_e2e_test
-        pyramid_lacal_transport_plugin pyramid_codec_oms_json_uci)
+        pyramid_lacal_transport_plugin pyramid_codec_oms_json_uci_starter)
     target_link_libraries(lacal_e2e_test
         PRIVATE pcl_core nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS})
     target_include_directories(lacal_e2e_test PRIVATE
         "${PCL_ROOT_DIR}/include" "${PYRAMID_ROOT_DIR}/include")
     target_compile_definitions(lacal_e2e_test PRIVATE
         PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>"
-        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci>")
+        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci_starter>")
 
     add_executable(lacal_seam_test
         "${PYRAMID_ROOT_DIR}/pim/test_harness/lacal_seam_test.cpp")
     add_dependencies(lacal_seam_test
-        pyramid_lacal_transport_plugin pyramid_codec_oms_json_uci)
+        pyramid_lacal_transport_plugin pyramid_codec_oms_json_uci_starter)
     target_link_libraries(lacal_seam_test
         PRIVATE pcl_core nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS})
     target_include_directories(lacal_seam_test PRIVATE
         "${PCL_ROOT_DIR}/include" "${PYRAMID_ROOT_DIR}/include")
     target_compile_definitions(lacal_seam_test PRIVATE
         PYRAMID_LACAL_PLUGIN_PATH="$<TARGET_FILE:pyramid_lacal_transport_plugin>"
-        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci>")
+        PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci_starter>")
 endif()
 
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)

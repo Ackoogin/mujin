@@ -148,21 +148,44 @@ if not defined TRANSPORT_SHM_DLL (
   echo [package_sdk] WARN: pcl_transport_shared_memory_plugin.dll not found under %BUILD_DIR%
 )
 
+REM The OMS codec generated from the selected contract. The hand-written UCI
+REM 2.5 starter subset (..._uci_starter.dll) is deliberately excluded: it is a
+REM frozen byte-equivalence fixture for the generated UCI codec, and shipping
+REM it as "the" OMS codec of an A-GRA distribution is exactly the confusion
+REM this packaging step exists to prevent.
 set "OMS_CODEC_DLL="
 set "LACAL_TRANSPORT_DLL="
-for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pyramid_codec_oms_json_uci.dll" 2^>nul') do (
-  if not defined OMS_CODEC_DLL set "OMS_CODEC_DLL=%%F"
-  echo %%F | findstr /i /l /c:"\Release\" >nul && set "OMS_CODEC_DLL=%%F"
+for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pyramid_codec_oms_json_*.dll" 2^>nul') do (
+  echo %%~nxF | findstr /i /l /c:"_uci_starter.dll" >nul || (
+    if not defined OMS_CODEC_DLL set "OMS_CODEC_DLL=%%F"
+    echo %%F | findstr /i /l /c:"\Release\" >nul && set "OMS_CODEC_DLL=%%F"
+  )
 )
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pyramid_lacal_transport_plugin.dll" 2^>nul') do (
   if not defined LACAL_TRANSPORT_DLL set "LACAL_TRANSPORT_DLL=%%F"
   echo %%F | findstr /i /l /c:"\Release\" >nul && set "LACAL_TRANSPORT_DLL=%%F"
 )
-if exist "%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_codec_oms_json_uci.dll" set "OMS_CODEC_DLL=%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_codec_oms_json_uci.dll"
 if exist "%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_lacal_transport_plugin.dll" set "LACAL_TRANSPORT_DLL=%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_lacal_transport_plugin.dll"
+REM Whether an OMS codec is *expected* is the contract's answer, not a fixed
+REM rule: the generator emits one only for a UCI-shaped data model. Ask the
+REM binding manifest, so a contract that declares a codec but failed to build it
+REM fails the package, while a port-grammar contract that declares none packages
+REM cleanly with a warning rather than a spurious error.
+set "OMS_CODEC_DECLARED=0"
+set "BINDING_MANIFEST=%BUILD_DIR%\generated\pyramid_cpp_bindings\binding_manifest.json"
+if exist "%BINDING_MANIFEST%" (
+  findstr /l /c:"application/oms-json" "%BINDING_MANIFEST%" >nul && set "OMS_CODEC_DECLARED=1"
+)
 if "%GRA%"=="1" if not defined OMS_CODEC_DLL (
-  echo [package_sdk] ERROR: --gra requires pyramid_codec_oms_json_uci.dll; rebuild with build_plugins.bat --gra.>&2
-  exit /b 1
+  if "%OMS_CODEC_DECLARED%"=="1" (
+    echo [package_sdk] ERROR: the contract declares an OMS codec, but none was built.>&2
+    echo [package_sdk]   Rebuild with: build_plugins.bat --gra --proto-dir ^<contract^>>&2
+    exit /b 1
+  )
+  echo [package_sdk] WARN: this contract declares no OMS codec, so the package will>&2
+  echo [package_sdk]   contain none. The codec is generated only from an XSD-derived,>&2
+  echo [package_sdk]   UCI-shaped data model. For the formal A-GRA 5.0a P2 profile use:>&2
+  echo [package_sdk]     --proto-dir subprojects\PYRAMID\pim\agra_p2_seam>&2
 )
 if "%GRA%"=="1" if not defined LACAL_TRANSPORT_DLL (
   echo [package_sdk] ERROR: --gra requires pyramid_lacal_transport_plugin.dll; rebuild with build_plugins.bat --gra.>&2
@@ -216,7 +239,8 @@ if exist "%GNAT_PCL_DIR%\libpcl_core.a" (
 echo [package_sdk] copying prebuilt transport plugins ...
 if defined TRANSPORT_SOCKET_DLL copy /y "%TRANSPORT_SOCKET_DLL%" "%OUT_DIR%\plugins\" >nul
 if defined TRANSPORT_SHM_DLL    copy /y "%TRANSPORT_SHM_DLL%"    "%OUT_DIR%\plugins\" >nul
-if "%GRA%"=="1" copy /y "%OMS_CODEC_DLL%" "%OUT_DIR%\plugins\" >nul
+if "%GRA%"=="1" if defined OMS_CODEC_DLL echo [package_sdk]   OMS codec: %OMS_CODEC_DLL%
+if "%GRA%"=="1" if defined OMS_CODEC_DLL copy /y "%OMS_CODEC_DLL%" "%OUT_DIR%\plugins\" >nul
 if "%GRA%"=="1" copy /y "%LACAL_TRANSPORT_DLL%" "%OUT_DIR%\plugins\" >nul
 
 echo [package_sdk] copying flatc.exe ...
