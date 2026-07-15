@@ -227,12 +227,15 @@ def _field_kind_and_type(
         aliases: Dict[str, Tuple[str, str]],
 ) -> Tuple[str, str, str]:
     short = field.type.split('.')[-1]
+    # `bytes` is text here and maps to a FlatBuffers string (see
+    # _FBS_SCALAR_MAP), so it takes the string path through the codec too --
+    # CreateString rather than a scalar assignment.
     if field.type in _FBS_SCALAR_MAP:
-        kind = 'string' if field.type == 'string' else 'scalar'
+        kind = 'string' if field.type in ('string', 'bytes') else 'scalar'
         return kind, _FBS_SCALAR_MAP[field.type], field.type
     if short in aliases:
         proto_scalar, _ = aliases[short]
-        kind = 'string' if proto_scalar == 'string' else 'scalar'
+        kind = 'string' if proto_scalar in ('string', 'bytes') else 'scalar'
         return kind, _FBS_SCALAR_MAP[proto_scalar], proto_scalar
     if _resolve_enum(index, field.type):
         return 'enum', short, ''
@@ -482,7 +485,17 @@ _FBS_SCALAR_MAP = {
     'sint32': 'int', 'sint64': 'long',
     'fixed32': 'uint', 'fixed64': 'ulong',
     'sfixed32': 'int', 'sfixed64': 'long',
-    'bool': 'bool', 'string': 'string', 'bytes': '[ubyte]',
+    # `bytes` maps to a FlatBuffers string, not [ubyte], because in this
+    # repository a proto `bytes` field holds text rather than raw binary:
+    # xsd2proto emits it only for xs:hexBinary and xs:base64Binary, whose
+    # values are the lexical form (A-GRA's UUID is 32 hex characters), the
+    # generated C++ type is std::string (cpp/naming.py), and the OMS-JSON
+    # codec writes it as a JSON string. [ubyte] would make the FlatBuffers
+    # side a std::vector<uint8_t> and no longer assignable to or from the
+    # generated struct's std::string, which is what broke the A-GRA build --
+    # the rest of this backend already treats bytes as string-like (see
+    # _is_generated_string_like).
+    'bool': 'bool', 'string': 'string', 'bytes': 'string',
 }
 
 

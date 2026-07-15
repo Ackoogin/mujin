@@ -323,6 +323,22 @@ pattern) are done — see Delivered. Remaining:
     1,192-message data model. Note for whoever picks this up: the FlatBuffers
     C++ codec flattens oneof arms and never reads the union, so these schema
     changes have no C++ codec counterpart.
+  - **A fourth FlatBuffers defect, in the C++ codec rather than the schema:
+    `bytes` was projected as `[ubyte]`.** That made the FlatBuffers side a
+    `std::vector<uint8_t>` while the generated struct's field is
+    `std::string`, so the codec's `out.uuid = msg.uuid` did not compile in
+    either direction. `bytes` now maps to a FlatBuffers `string`, which is
+    what the rest of the backend already assumed (`_is_generated_string_like`
+    has always treated it as string-like). This is faithful rather than a
+    workaround: in this repository a proto `bytes` field holds *text*, not
+    raw binary — `xsd2proto` emits it only for `xs:hexBinary` and
+    `xs:base64Binary`, whose values are the lexical form (A-GRA's UUID is 32
+    hex characters), the generated C++ type is `std::string`, and the
+    OMS-JSON codec writes it as a JSON string. No existing wire format moved:
+    `bytes` appears exactly once in the repository's contracts (A-GRA's
+    `ID_Type.uuid`), so the `[ubyte]` projection had never been exercised.
+    This defect is A-GRA-specific, which is why P1 never surfaced it: UCI 2.5
+    types its UUID as `xs:string`.
   - Remaining in step 5: the packaged-SDK `MA_*` smoke through the codec and
     the LA-CAL plugin (the acceptance bullet), and the dynamic-load evidence
     the SDK's `sdk_gra_plugin_load_smoke` provides.

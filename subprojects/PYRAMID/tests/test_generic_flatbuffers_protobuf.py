@@ -97,9 +97,9 @@ PYRAMID_PROTOBUF_CPP_FILENAMES = {
 }
 
 
-# The three shapes an XSD-derived xs:choice produces that a naive union
-# emission gets wrong. Every one of these was a real defect, found when the
-# A-GRA 5.0a P2 contract first reached the FlatBuffers backend:
+# The shapes an XSD-derived contract produces that the FlatBuffers backend
+# used to get wrong. Every one of these was a real defect, found when the
+# A-GRA 5.0a P2 contract first reached this backend:
 #
 #   * an enum-typed arm (Marking.government_identifier) -- a union member must
 #     be a table, so this needs a wrapper;
@@ -108,7 +108,10 @@ PYRAMID_PROTOBUF_CPP_FILENAMES = {
 #     these collide;
 #   * two messages whose oneofs share a name (both "choice", which is what
 #     xsd2proto names every xs:choice) -- keying the union on that name alone
-#     gives both messages the same union.
+#     gives both messages the same union;
+#   * a bytes field (Identifier.uuid, from xs:hexBinary) -- projected as
+#     [ubyte] it becomes a std::vector<uint8_t> on the FlatBuffers side and no
+#     longer assigns to the generated struct's std::string.
 CHOICE_PROTO = """syntax = "proto3";
 package example.choice;
 
@@ -119,6 +122,10 @@ enum GovernmentEnum {
 
 message TaxonomyType {
   string label = 1;
+}
+
+message Identifier {
+  bytes uuid = 1;
 }
 
 message Marking {
@@ -379,6 +386,20 @@ def test_flatbuffers_union_arms_are_tables_named_per_message_and_field(
     # their proto field rather than their type.
     assert "Primary:TaxonomyType" in fbs
     assert "Secondary:TaxonomyType" in fbs
+
+
+def test_flatbuffers_projects_bytes_as_a_string(tmp_path: Path) -> None:
+    """A proto bytes field is text in this repository (xsd2proto emits it only
+    for xs:hexBinary/xs:base64Binary, and the generated C++ type is
+    std::string), so the FlatBuffers side must be a string too. Projected as
+    [ubyte] it becomes a std::vector<uint8_t>, and the generated codec's
+    assignment between the two no longer compiles."""
+    out_dir = tmp_path / "out"
+    _run_generator(_write_choice_proto(tmp_path), out_dir, "flatbuffers")
+    fbs = _fbs_text(out_dir)
+
+    assert "table Identifier {\n  uuid:string;\n}" in fbs
+    assert "[ubyte]" not in fbs
 
 
 def test_flatbuffers_choice_schema_compiles_with_flatc(tmp_path: Path) -> None:
