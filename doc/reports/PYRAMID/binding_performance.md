@@ -29,10 +29,9 @@ The main conclusions on this host are:
 - UDP averages `4.9-7.0 us` for raw, pre-encoded payload delivery and
   `6.9-14.0 us` for the full typed PYRAMID path. The difference depends mainly
   on the codec.
-- The current Linux shared-memory implementation is dominated by an internal
-  `nanosleep(1 ms)` after each mailbox scan. That is an implementation
-  artifact, not an intrinsic shared-memory cost and not benchmark executor
-  polling. It remains in the full-system result because deployed code pays it.
+- Shared-memory mailbox delivery is event-driven. Binary-codec median round
+  trip is now `15.2-18.8 us`, depending on the codec and binding path, instead
+  of the old approximately `1.05 ms` receive-polling result.
 
 ## What is measured
 
@@ -81,6 +80,12 @@ This design avoids the old pattern in which the benchmark repeatedly called
 interval between the two timestamps. Background executors may call
 `spin_once(..., 0)` to dispatch queued work, but that is normal execution and
 does not add an artificial timed wait.
+
+Shared-memory writers signal the destination mailbox after committing a frame.
+The receive thread waits on a process-shared semaphore on POSIX or a named
+auto-reset event on Windows. Its 1 millisecond timed wake remains only to
+refresh service advertisements when an idle executor's container set changes;
+an arriving frame wakes it immediately.
 
 The gRPC client is synchronous, so its interval is the ordinary call start to
 call return. ROS2 uses an event-driven `SingleThreadedExecutor::spin()`. Its PCL
@@ -149,12 +154,12 @@ All rows below measure round-trip time in microseconds.
 | Raw PCL / local / FlatBuffers | 216 | 0.0 | 0.0 | 0.0 | 0.1 |
 | Full PYRAMID / local / Protobuf | 102 | 2.2 | 2.2 | 2.2 | 2.3 |
 | Raw PCL / local / Protobuf | 102 | 0.0 | 0.0 | 0.0 | 0.1 |
-| Full PYRAMID / shared memory / JSON | 378 | 1,146.4 | 934.6 | 1,051.8 | 2,116.8 |
-| Raw PCL / shared memory / JSON | 378 | 1,084.1 | 951.7 | 1,051.7 | 2,111.0 |
-| Full PYRAMID / shared memory / FlatBuffers | 216 | 1,073.3 | 951.7 | 1,051.4 | 2,110.0 |
-| Raw PCL / shared memory / FlatBuffers | 216 | 1,084.9 | 249.7 | 1,047.2 | 2,103.8 |
-| Full PYRAMID / shared memory / Protobuf | 102 | 1,107.2 | 951.5 | 1,051.2 | 2,109.0 |
-| Raw PCL / shared memory / Protobuf | 102 | 1,062.2 | 927.4 | 1,053.2 | 2,108.5 |
+| Full PYRAMID / shared memory / JSON | 378 | 40.8 | 36.5 | 39.2 | 55.4 |
+| Raw PCL / shared memory / JSON | 378 | 15.4 | 14.3 | 15.1 | 19.1 |
+| Full PYRAMID / shared memory / FlatBuffers | 216 | 17.4 | 15.6 | 17.1 | 25.0 |
+| Raw PCL / shared memory / FlatBuffers | 216 | 15.3 | 13.3 | 15.2 | 21.1 |
+| Full PYRAMID / shared memory / Protobuf | 102 | 19.7 | 17.7 | 18.8 | 27.3 |
+| Raw PCL / shared memory / Protobuf | 102 | 17.1 | 15.6 | 16.9 | 21.4 |
 | Full PYRAMID / TCP socket / JSON | 378 | 38.5 | 34.6 | 36.4 | 97.1 |
 | Raw PCL / TCP socket / JSON | 378 | 14.5 | 13.4 | 13.9 | 21.0 |
 | Full PYRAMID / TCP socket / FlatBuffers | 216 | 17.1 | 15.8 | 16.3 | 24.5 |
@@ -165,13 +170,10 @@ All rows below measure round-trip time in microseconds.
 | Raw generated gRPC / Protobuf | 73 | 44.1 | 39.4 | 42.3 | 65.8 |
 
 The binary-codec binding overhead is small beside TCP and gRPC. JSON remains
-visible because its encode and decode work is much larger. Shared memory does
-not show a stable codec difference because the transport poll cadence is about
-two orders of magnitude larger than binary codec work. These shared-memory
-rows are therefore an as-implemented latency regression marker, not a measure
-of the underlying shared-memory primitive. The receive loop needs an
-event-driven, cross-process mailbox notification before this transport can
-provide a meaningful low-latency baseline without busy-spinning.
+visible because its encode and decode work is much larger. Event-driven mailbox
+notification removed roughly `1.0 ms` from the shared-memory median without a
+busy-spin setting. The raw binary rows now measure `15.3-17.1 us` round trip,
+and the full FlatBuffers and Protobuf paths add `2.1-2.6 us` on this run.
 
 The raw local rows round below the report's `0.1 us` precision. They are useful
 as a control showing that the local full rows mainly measure typed conversion
@@ -216,7 +218,7 @@ same-message raw/full performance pair.
 | ROS2/Fast DDS typed CDR | Plain rclcpp baseline and full PYRAMID ingress | Same generated message; forced `rmw_fastrtps_cpp` |
 | UDP | Raw PCL and full typed PYRAMID one-way delivery | Best-effort pub/sub |
 | LA-CAL OWP | Raw PCL transport plus separate OMS JSON plugin cost | Full generated UCI seam is functional-only today |
-| Shared memory | Raw PCL and full typed PYRAMID unary round trip | Current 1 ms internal poll cadence dominates |
+| Shared memory | Raw PCL and full typed PYRAMID unary round trip | Event-driven cross-process mailbox wake-up |
 | TCP socket | Raw PCL and full typed PYRAMID unary round trip | Same-host loopback |
 | APOS | Not reported | The repository target uses the development APOS stub; a number would measure the stub rather than the deployment platform |
 | ROS2 envelope fallback | Not reported | Typed CDR is the default production wire and the matched Fast DDS comparison |

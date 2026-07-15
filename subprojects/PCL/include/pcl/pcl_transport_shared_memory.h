@@ -1,7 +1,7 @@
 /// \file pcl_transport_shared_memory.h
 /// \brief Shared-memory-style central bus transport adapter for PCL.
 ///
-/// Each transport instance joins a process-local named bus as a participant
+/// Each transport instance joins a host-local named bus as a participant
 /// holding one mailbox slot inside an OS-named shared-memory region.  The
 /// adapter is symmetric: every participant can publish, subscribe, host
 /// provided services, and call remote services on other participants of the
@@ -30,9 +30,9 @@
 /// ## Gateway Container
 ///
 /// Service handlers must run on the executor thread (single-threaded
-/// runtime), but the bus poll thread is the one that drains SVC_REQ frames.
+/// runtime), but the bus receive thread is the one that drains SVC_REQ frames.
 /// The "gateway container" bridges the two: when a SVC_REQ arrives, the
-/// poll thread reformats it and posts it as remote ingress on an internal
+/// receive thread reformats it and posts it as remote ingress on an internal
 /// topic the gateway subscribes to with PCL_ROUTE_REMOTE.  On the next
 /// executor spin the gateway's subscriber callback wakes up, looks up the
 /// matching provided service via remote-aware port lookup (so per-peer
@@ -82,7 +82,7 @@ const pcl_transport_t* pcl_shared_memory_transport_get_transport(
 /// \brief Get the gateway container used to dispatch inbound service requests.
 ///
 /// The returned container subscribes to an internal bus topic populated by
-/// the transport's poll thread and invokes the matching provided service on
+/// the transport's receive thread and invokes the matching provided service on
 /// the executor thread (see file-level "Gateway Container" comment for the
 /// full flow).  Activate it and add it to the executor on any participant
 /// that wants to be reachable as a service provider; clients and pure

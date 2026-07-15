@@ -1759,6 +1759,10 @@ TEST_F(BindingPerformanceTest, RawPcl_Shmem_FlatBuffers) {
                     "application/flatbuffers", payload(), false);
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
+#if !defined(_WIN32)
+  EXPECT_LT(r.wall.p50_us, 750.0)
+      << "shared-memory receive regressed to the old 1 ms polling cadence";
+#endif
   printResult(r);
 }
 
