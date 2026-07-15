@@ -17,6 +17,7 @@ nlohmann/json single header (see OmsJsonCompileSmokeTest).
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -165,6 +166,14 @@ class P1SidecarGenerationTest(unittest.TestCase):
         self.assertNotIn('return "UNSPECIFIED"', self.text)
         self.assertIn("enum value not on the UCI wire", self.text)
 
+    def test_uci_uuids_keep_the_hyphenated_rfc_4122_form(self):
+        # UCI 2.5 types UUID as xs:string carrying the RFC-4122 pattern, so
+        # it converts to `string` and must use the 36-character validator.
+        # The hexBinary validator must not even be emitted for this tree.
+        self.assertIn("bool uuid(const std::string& s) { if (s.size() != 36)",
+                      self.text)
+        self.assertNotIn("uuid_hex", self.text)
+
     def test_nested_base_is_flattened_on_the_wire(self):
         # ActionCommandStatusMDT retains a CommandStatusBaseType base member
         # (2-deep extension chain); its fields merge into the parent object.
@@ -259,6 +268,43 @@ class RepeatedChoiceMemberFixtureTest(unittest.TestCase):
         self.assertIn(
             "Boolean'Pos (M.Has_Point) + Boolean'Pos (M.Has_Relative)",
             self.ada)
+
+
+class AgraUuidFormTest(unittest.TestCase):
+    """The A-GRA UUID lexical form, pinned on the cheap generator path.
+
+    Deliberately not behind the P2 closure-probe gate below: a UUID
+    validator that does not match the drop rejects every schema-valid
+    instance of it, which is exactly the failure this guards, and the
+    generation it needs costs a fraction of a second."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not P2_TREE.is_dir():
+            raise unittest.SkipTest("P2 generated tree is absent")
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.text = generate_cpp(P2_TREE, Path(cls.tmp.name))[0].read_text(
+            encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_agra_uuids_use_the_hexbinary_form(self):
+        # A-GRA 5.0a types UUID as xs:hexBinary length 16, which converts to
+        # `bytes`.  Validating those against the UCI hyphenated form rejected
+        # every schema-valid A-GRA instance until the validator followed the
+        # converted type.
+        self.assertIn(
+            "bool uuid_hex(const std::string& s) { if (s.size() != 32)",
+            self.text)
+        self.assertIn("if(!uuid_hex(s))", self.text)
+
+    def test_the_hyphenated_uci_validator_is_absent_from_the_agra_codec(self):
+        # No A-GRA UUID field converts to `string`, so the 36-character
+        # validator must not be emitted at all for this tree.
+        self.assertNotIn("if (s.size() != 36)", self.text)
+        self.assertNotIn("if(!uuid(s))", self.text)
 
 
 @unittest.skipUnless(
@@ -578,6 +624,80 @@ def _strip_type_annotations(node):
     return node
 
 
+def _harness_src():
+    """The la-cal-harness checkout, or None.
+
+    LACAL_HARNESS_SRC wins.  Otherwise try the known clone directory names
+    under external/ams-gra/: the repository is cloned under its short name
+    here, but its full upstream name is also accepted."""
+    env = os.environ.get("LACAL_HARNESS_SRC")
+    if env:
+        return Path(env) if (Path(env) / "la_cal_harness").is_dir() else None
+    external = PIM_DIR.parents[2] / "external" / "ams-gra"
+    for name in ("la-cal-harness",
+                 "ams-gra-hello-world-sk-test-la-cal-harness"):
+        candidate = external / name / "src"
+        if (candidate / "la_cal_harness").is_dir():
+            return candidate
+    return None
+
+
+def _load_harness_generator(xsd: Path):
+    """The harness's XSD-derived OMS JSON generator, or SKIP with a reason."""
+    src = _harness_src()
+    if src is None:
+        raise unittest.SkipTest(
+            "la-cal-harness not found under external/ams-gra -- clone it or "
+            "set LACAL_HARNESS_SRC")
+    if not xsd.is_file():
+        raise unittest.SkipTest(
+            f"{xsd.name} absent -- run pim/schemas/fetch_schemas.py")
+    sys.path.insert(0, str(src))
+    try:
+        from la_cal_harness.oms_json.generator import OMSJsonGenerator
+    except ImportError as exc:
+        raise unittest.SkipTest(f"harness deps missing: {exc}")
+    return OMSJsonGenerator(str(xsd))
+
+
+_HYPHENATED_UUID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+def _normalize_agra_uuids(node, seen=None):
+    """Rewrite the harness's hyphenated UUIDs into the A-GRA wire form.
+
+    Known harness gap (recorded in the WS-G/G1 checkpoint log): the
+    la-cal-harness generator emits RFC-4122 hyphenated UUID text whatever
+    the schema says, but A-GRA 5.0a types UUID as
+    ``UniversallyUniqueIdentifierType`` = ``xs:hexBinary`` length 16, whose
+    lexical form is 32 hex digits with no hyphens.  Left alone, every
+    harness instance would carry a schema-invalid UUID and the fidelity
+    claim below would be vacuous.
+
+    Patching this here rather than in the harness keeps the harness an
+    independent, unmodified implementation of the same XSD, which is what
+    makes the round-trip comparison evidence rather than a self-test.
+    ``pim/test_agra_p2_seam.py`` and this module's
+    ``AgraUuidNormalizationTest`` pin both halves: the raw value is invalid
+    against the schema type and the rewritten one is valid."""
+    if isinstance(node, dict):
+        out = {}
+        for key, value in node.items():
+            if (key == "UUID" and isinstance(value, str)
+                    and _HYPHENATED_UUID.match(value)):
+                if seen is not None:
+                    seen.append(value)
+                out[key] = value.replace("-", "").upper()
+            else:
+                out[key] = _normalize_agra_uuids(value, seen)
+        return out
+    if isinstance(node, list):
+        return [_normalize_agra_uuids(value, seen) for value in node]
+    return node
+
+
 class HarnessRoundTripTest(unittest.TestCase):
     """Plan D4(a): schema-derived instances through the generated codec.
 
@@ -596,25 +716,9 @@ class HarnessRoundTripTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.exe = _build_driver()
-        harness_src = Path(os.environ.get(
-            "LACAL_HARNESS_SRC",
-            PIM_DIR.parents[2] / "external" / "ams-gra" /
-            "ams-gra-hello-world-sk-test-la-cal-harness" / "src"))
-        if not (harness_src / "la_cal_harness").is_dir():
-            raise unittest.SkipTest(
-                f"la-cal-harness not found at {harness_src} -- clone it or "
-                "set LACAL_HARNESS_SRC")
-        xsd = PIM_DIR / "schemas" / "dl" / "uci_2_5_0" / \
-            "UCI_MessageDefinitions_v2_5_0.xsd"
-        if not xsd.is_file():
-            raise unittest.SkipTest(
-                "UCI 2.5 drop absent -- run pim/schemas/fetch_schemas.py")
-        sys.path.insert(0, str(harness_src))
-        try:
-            from la_cal_harness.oms_json.generator import OMSJsonGenerator
-        except ImportError as exc:
-            raise unittest.SkipTest(f"harness deps missing: {exc}")
-        cls.generator = OMSJsonGenerator(str(xsd))
+        cls.generator = _load_harness_generator(
+            PIM_DIR / "schemas" / "dl" / "uci_2_5_0" /
+            "UCI_MessageDefinitions_v2_5_0.xsd")
 
     def _roundtrip(self, root: str):
         doc = _strip_type_annotations(self.generator.generate_minimal(root))
@@ -643,6 +747,169 @@ class HarnessRoundTripTest(unittest.TestCase):
 
     def test_signal_report(self):
         self._roundtrip("SignalReport")
+
+
+_P2_ROOTS = json.loads(
+    (PIM_DIR / "uci_profiles" / "p2_agra_planning_core.json").read_text(
+        encoding="utf-8"))["roots"]
+
+_AGRA_XSD = (PIM_DIR / "schemas" / "dl" / "agra_5_0a" /
+             "A-GRA_MessageDefinitions_v5_0_a.xsd")
+
+
+class AgraUuidNormalizationTest(unittest.TestCase):
+    """Pin the harness UUID gap and the rewrite that closes it.
+
+    This is the load-bearing assumption behind AgraHarnessRoundTripTest, so
+    it is checked against the schema itself rather than assumed.  It needs
+    only the harness and xmlschema -- no C++ toolchain -- so it runs
+    wherever those import."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.generator = _load_harness_generator(_AGRA_XSD)
+        try:
+            import xmlschema
+        except ImportError as exc:
+            raise unittest.SkipTest(f"xmlschema missing: {exc}")
+        cls.uuid_type = xmlschema.XMLSchema(str(_AGRA_XSD)).types[
+            "UniversallyUniqueIdentifierType"]
+
+    def test_raw_harness_uuids_are_schema_invalid_and_rewrites_are_valid(self):
+        raw_total = 0
+        for root in _P2_ROOTS:
+            seen = []
+            _normalize_agra_uuids(self.generator.generate_minimal(root), seen)
+            self.assertTrue(
+                seen, f"{root}: expected at least one harness UUID field")
+            raw_total += len(seen)
+            for raw in seen:
+                self.assertFalse(
+                    self.uuid_type.is_valid(raw),
+                    f"{root}: harness UUID {raw!r} is unexpectedly valid -- "
+                    "if the harness gained facet awareness, drop the rewrite")
+                self.assertTrue(
+                    self.uuid_type.is_valid(raw.replace("-", "").upper()),
+                    f"{root}: rewritten UUID from {raw!r} is not valid "
+                    "against UniversallyUniqueIdentifierType")
+        self.assertEqual(raw_total, 53)
+
+    def test_rewrite_only_touches_hyphenated_uuid_fields(self):
+        already_wire_form = "0123456789ABCDEF0123456789ABCDEF"
+        doc = {
+            "UUID": already_wire_form,
+            "DescriptiveLabel": "1c1a4f2e-0000-4000-8000-000000000000",
+            "Nested": [{"UUID": "1c1a4f2e-0000-4000-8000-000000000000"}],
+        }
+        out = _normalize_agra_uuids(doc)
+        self.assertEqual(out["UUID"], already_wire_form)
+        self.assertEqual(out["DescriptiveLabel"],
+                         "1c1a4f2e-0000-4000-8000-000000000000")
+        self.assertEqual(out["Nested"][0]["UUID"],
+                         "1C1A4F2E000040008000000000000000")
+
+
+def _build_p2_driver() -> Path:
+    """Generate P2 bindings and compile the round-trip driver, once per run.
+
+    Slower than the P1 driver: the A-GRA closure is 1192 messages."""
+    if "p2_exe" in _DRIVER_DIR:
+        return _DRIVER_DIR["p2_exe"]
+    nlohmann = _require_toolchain()
+    if not P2_TREE.is_dir():
+        raise unittest.SkipTest("P2 generated tree is absent")
+    import atexit
+    tmp = Path(tempfile.mkdtemp(prefix="oms_json_p2_smoke_"))
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
+    repo = PIM_DIR.parents[2]
+    driver = PIM_DIR / "test_oms_json_gen_fixtures" / "p2_smoke_driver.cpp"
+    gen = tmp / "gen"
+    subprocess.run(
+        [sys.executable, str(PIM_DIR / "generate_bindings.py"),
+         str(P2_TREE), str(gen), "--languages", "cpp",
+         "--backends", "oms_json"],
+        check=True, capture_output=True)
+    exe = tmp / "p2_driver"
+    compile_cmd = [
+        "g++", "-std=c++17", "-O1", "-o", str(exe), str(driver),
+        str(gen / "oms_json" / "cpp" /
+            "pyramid_data_model_agra_oms_json_codec_plugin.cpp"),
+        str(gen / "pyramid_data_model_agra_cabi_marshal.cpp"),
+        f"-I{gen}", f"-I{nlohmann}",
+        f"-I{repo / 'subprojects' / 'PCL' / 'include'}",
+        f"-I{repo / 'subprojects' / 'PYRAMID' / 'core' / 'external'}",
+    ]
+    if os.name == "nt":
+        # Same COFF section limit the P2 object compile hits: the full
+        # closure exceeds what the default MinGW object format permits.
+        compile_cmd.append("-Wa,-mbig-obj")
+    started = time.perf_counter()
+    build = subprocess.run(compile_cmd, capture_output=True, text=True)
+    if build.returncode != 0:
+        raise AssertionError(
+            f"P2 driver build failed after {time.perf_counter() - started:.1f}s"
+            ":\n" + build.stderr[-8000:])
+    print(f"P2 round-trip driver build: {time.perf_counter() - started:.1f}s")
+    _DRIVER_DIR["p2_exe"] = exe
+    return exe
+
+
+class AgraHarnessRoundTripTest(unittest.TestCase):
+    """Plan step 4, the P2 half of D4(a): schema-derived A-GRA instances
+    through the generated P2 codec.
+
+    For every root in the p2_agra_planning_core profile, the
+    independently-authored la-cal-harness generator produces a minimal
+    instance from the pinned A-GRA 5.0a XSD; UUIDs are rewritten to the
+    drop's hexBinary wire form (see ``_normalize_agra_uuids``); the
+    generated codec must decode and re-encode it to a semantically
+    identical document.  As with P1, equality is simultaneously a
+    decode-fidelity, encode-fidelity, and schema-shape check, because the
+    input comes from a foreign implementation of the same schema.
+
+    Opt-in: OMS_JSON_COMPILE_SMOKE=1 plus a C++17 toolchain, nlohmann, and
+    an importable harness."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.generator = _load_harness_generator(_AGRA_XSD)
+        cls.exe = _build_p2_driver()
+
+    def _roundtrip(self, root: str):
+        doc = _normalize_agra_uuids(
+            _strip_type_annotations(self.generator.generate_minimal(root)))
+        run = subprocess.run(
+            [str(self.exe), "--roundtrip", root],
+            input=json.dumps(doc), capture_output=True, text=True)
+        self.assertEqual(
+            run.returncode, 0,
+            f"{root}: {run.stderr}\ninput: {json.dumps(doc)[:2000]}")
+        self.assertEqual(json.loads(run.stdout), doc, root)
+
+    def test_unknown_root_fails_closed(self):
+        run = subprocess.run(
+            [str(self.exe), "--roundtrip", "NotAnAgraRoot"],
+            input="{}", capture_output=True, text=True)
+        self.assertNotEqual(run.returncode, 0)
+
+    def test_malformed_input_fails_closed(self):
+        run = subprocess.run(
+            [str(self.exe), "--roundtrip", "MA_Task"],
+            input="{not json", capture_output=True, text=True)
+        self.assertNotEqual(run.returncode, 0)
+
+
+def _add_p2_roundtrip_cases():
+    """One test method per profile root, so a failure names the root."""
+    for root in _P2_ROOTS:
+        def case(self, root=root):
+            self._roundtrip(root)
+        case.__name__ = f"test_{root.lower()}"
+        case.__doc__ = f"Harness round trip for the {root} root."
+        setattr(AgraHarnessRoundTripTest, case.__name__, case)
+
+
+_add_p2_roundtrip_cases()
 
 
 class AdaCompileParityTest(unittest.TestCase):

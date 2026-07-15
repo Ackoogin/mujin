@@ -26,7 +26,10 @@ independently-authored ``la-cal-harness`` XSD-derived generator:
 * enums: the XSD enumeration literal verbatim (sidecar-authoritative;
   enum-prefix-strip heuristic otherwise); ``*_UNSPECIFIED`` never appears
   on the wire -- encoding it is an error;
-* NaN/Infinity as strings; UUID-named fields RFC-4122 validated.
+* NaN/Infinity as strings; UUID-named fields validated in the lexical form
+  their converted type implies -- ``string`` (an ``xs:string`` carrying the
+  RFC-4122 pattern, as in UCI 2.5) hyphenated, ``bytes`` (``xs:hexBinary``
+  length 16, as in A-GRA 5.0a) as 32 hex digits.
 
 Known unimplemented shape (loud, not silent): repeated ``xs:choice``
 itself (synthesized ``*_Choice`` wrapper as a message field) -- absent
@@ -230,6 +233,19 @@ class _PackageEmitter:
         return [m for m in self.pf.messages
                 if not self.wire.is_synthesized(m.name)]
 
+    def _uuid_forms(self) -> set:
+        """The UUID validators this package's fields actually call.
+
+        Scans every message, not just the emittable ones, because a
+        synthesized wrapper's field is emitted inline at its use site and
+        still calls a validator."""
+        forms = set()
+        for msg in self.pf.messages:
+            for fld in msg.all_fields():
+                if fld.name == 'uuid':
+                    forms.add(self._uuid_validator(fld))
+        return forms
+
     def _is_list_wrapper(self, type_name: str) -> Optional[ProtoField]:
         """If type is a synthesized single-repeated-'items' wrapper, return
         its items field (repeated choice member rule)."""
@@ -310,9 +326,18 @@ class _PackageEmitter:
         f.write('namespace {\nusing json = nlohmann::json;\n')
         f.write(f'namespace uci = {ns};\n')
         f.write('constexpr const char* kContentType = "application/oms-json";\n')
-        f.write('bool uuid(const std::string& s) { if (s.size() != 36) return false; '
-                'for (size_t i=0;i<s.size();++i) { if (i==8||i==13||i==18||i==23) { if(s[i]!=\'-\') return false; } '
-                'else if (!((s[i]>=\'0\'&&s[i]<=\'9\')||(s[i]>=\'a\'&&s[i]<=\'f\')||(s[i]>=\'A\'&&s[i]<=\'F\'))) return false; } return true; }\n')
+        # A UUID validator is emitted only for the lexical forms this tree
+        # actually uses, so a drop that never carries a hexBinary UUID keeps
+        # byte-identical output (the seam contract is frozen: plan D4(b)).
+        forms = self._uuid_forms()
+        if 'uuid' in forms:
+            f.write('bool uuid(const std::string& s) { if (s.size() != 36) return false; '
+                    'for (size_t i=0;i<s.size();++i) { if (i==8||i==13||i==18||i==23) { if(s[i]!=\'-\') return false; } '
+                    'else if (!((s[i]>=\'0\'&&s[i]<=\'9\')||(s[i]>=\'a\'&&s[i]<=\'f\')||(s[i]>=\'A\'&&s[i]<=\'F\'))) return false; } return true; }\n')
+        if 'uuid_hex' in forms:
+            f.write('bool uuid_hex(const std::string& s) { if (s.size() != 32) return false; '
+                    'for (size_t i=0;i<s.size();++i) { '
+                    'if (!((s[i]>=\'0\'&&s[i]<=\'9\')||(s[i]>=\'a\'&&s[i]<=\'f\')||(s[i]>=\'A\'&&s[i]<=\'F\'))) return false; } return true; }\n')
         f.write('json number(double v) { if (std::isnan(v)) return "NaN"; if (std::isinf(v)) return v > 0 ? "Infinity" : "-Infinity"; return v; }\n')
         f.write('double number_in(const json& v) { if (v.is_number()) return v.get<double>(); '
                 'auto s=v.get<std::string>(); if(s=="NaN") return std::numeric_limits<double>::quiet_NaN(); '
@@ -361,12 +386,27 @@ class _PackageEmitter:
 
     # -- per-message encode/decode -------------------------------------------
 
+    @staticmethod
+    def _uuid_validator(fld) -> str:
+        """The validator for a UUID field, chosen by its converted type.
+
+        The XSD facets already survive conversion as the field type, so the
+        drop's UUID lexical form is readable here without consulting the
+        schema again: `xs:hexBinary` (A-GRA 5.0a) converts to `bytes` and is
+        written as 32 hex digits, while `xs:string` carrying the RFC-4122
+        pattern (UCI 2.5) converts to `string` and keeps its hyphens.
+        Validating a hexBinary UUID against the hyphenated form rejects
+        every schema-valid instance of the drop, so this must follow the
+        type rather than the field name alone."""
+        return 'uuid_hex' if fld.type == 'bytes' else 'uuid'
+
     def _encode(self, f, msg: ProtoMessage) -> None:
         # UCI's IdentifierType is represented as a string in an enclosing
         # UUID element, not as an extra JSON object level.
         if msg.name == 'Uuid' and len(msg.fields) == 1 \
                 and msg.fields[0].name == 'uuid' and not msg.oneofs:
-            f.write('json encode_Uuid(const uci::Uuid& m) { if (!uuid(m.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return m.uuid; }\n\n')
+            check = self._uuid_validator(msg.fields[0])
+            f.write(f'json encode_Uuid(const uci::Uuid& m) {{ if (!{check}(m.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return m.uuid; }}\n\n')
             return
         f.write(f'json encode_{msg.name}(const uci::{msg.name}& m) {{ json o=json::object();\n')
         for item in self._walk(msg):
@@ -436,7 +476,8 @@ class _PackageEmitter:
             return f'number({access})'
         if fld.type in _SCALARS:
             if fld.name == 'uuid':
-                return f'([&]{{ if(!uuid({access})) throw json::type_error::create(302,"invalid UUID",nullptr); return json({access}); }})()'
+                check = self._uuid_validator(fld)
+                return f'([&]{{ if(!{check}({access})) throw json::type_error::create(302,"invalid UUID",nullptr); return json({access}); }})()'
             return access
         kind = self._field_kind(fld)
         short = self._short(fld.type)
@@ -447,7 +488,8 @@ class _PackageEmitter:
     def _decode(self, f, msg: ProtoMessage) -> None:
         if msg.name == 'Uuid' and len(msg.fields) == 1 \
                 and msg.fields[0].name == 'uuid' and not msg.oneofs:
-            f.write('uci::Uuid decode_Uuid(const json& j) { uci::Uuid r{}; r.uuid=j.get<std::string>(); if (!uuid(r.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return r; }\n\n')
+            check = self._uuid_validator(msg.fields[0])
+            f.write(f'uci::Uuid decode_Uuid(const json& j) {{ uci::Uuid r{{}}; r.uuid=j.get<std::string>(); if (!{check}(r.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return r; }}\n\n')
             return
         f.write(f'uci::{msg.name} decode_{msg.name}(const json& j) {{ uci::{msg.name} r{{}};\n')
         for item in self._walk(msg):
@@ -510,7 +552,8 @@ class _PackageEmitter:
                 cpp = {'int32':'int32_t','int64':'int64_t','uint32':'uint32_t','uint64':'uint64_t','sint32':'int32_t','sint64':'int64_t','fixed32':'uint32_t','fixed64':'uint64_t','sfixed32':'int32_t','sfixed64':'int64_t'}[fld.type]
                 out = f'{value}.get<{cpp}>()'
             if fld.name == 'uuid':
-                return f'([&]{{ auto s={out}; if(!uuid(s)) throw json::type_error::create(302,"invalid UUID",nullptr); return s; }})()'
+                check = self._uuid_validator(fld)
+                return f'([&]{{ auto s={out}; if(!{check}(s)) throw json::type_error::create(302,"invalid UUID",nullptr); return s; }})()'
             return out
         kind = self._field_kind(fld)
         short = self._short(fld.type)

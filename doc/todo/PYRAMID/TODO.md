@@ -157,11 +157,15 @@ pattern) are done — see Delivered. Remaining:
   guards in `pim/test_xsd2proto.py`. A converter defect the drop exposed
   (XSD enums carrying their own `UNSPECIFIED` literal colliding with the
   synthetic zero sentinel) is fixed with `_XSD_LITERAL` disambiguation.
-- **Step 3 (generator shapes): probed complete.** A P2-wide probe found
-  zero missing shapes in the C++/Ada OMS-JSON emitters; the repeated-choice
-  wire form is pinned from the la-cal-harness against the A-GRA XSD
-  (member element name keyed to a JSON array in the parent; fixtures under
-  `pim/test_oms_json_gen_fixtures/repeated_choice_member/`).
+- **Step 3 (generator shapes): probed complete, with one correction from
+  step 4 (see below).** A P2-wide probe found zero missing shapes in the
+  C++/Ada OMS-JSON emitters; the repeated-choice wire form is pinned from
+  the la-cal-harness against the A-GRA XSD (member element name keyed to a
+  JSON array in the parent; fixtures under
+  `pim/test_oms_json_gen_fixtures/repeated_choice_member/`). Note the
+  probe's limit: it only checks that emission does not raise, so it cannot
+  see an emitted rule that is wrong for the drop. Step 4 found exactly one
+  such case (the UUID validator).
 - **Step 2 (interaction overlay): landed in the working tree.** The overlay
   lives at `pim/agra_p2_seam/` and adds 16 services over the generated P2
   data model: four Request/Requirement command services (mission plan,
@@ -188,10 +192,54 @@ pattern) are done — see Delivered. Remaining:
     suffixes. Explicit contract topics (like A-GRA's element names) do not
     carry those suffixes, so it now falls back to the RPC role that owns
     the topic.
-- Remaining: step 4 (offline fidelity suite), step 5 (distinct codec
-  plugin + `--gra` SDK packaging), step 6 (bidirectional Sleet interop +
-  fail-closed negatives), step 7 (evidence publication; the compatibility
-  matrix and user guide still describe P2 as offline-only until then).
+- **Step 4 (offline fidelity): the round-trip loop is closed for all 20
+  roots; goldens and Ada parity still to do.** The P1 pattern now has a P2
+  twin in `pim/test_oms_json_gen.py`
+  (`AgraHarnessRoundTripTest`, one test per profile root plus unknown-root
+  and malformed-input negatives), driven by
+  `pim/test_oms_json_gen_fixtures/p2_smoke_driver.cpp`. Demonstrated green
+  2026-07-15 in WSL (Ubuntu, g++ 13.3): the P2 codec builds and all 20
+  roots decode and re-encode to a semantically identical document, with P1
+  re-run alongside to confirm no regression.
+  - **Defect this found (now fixed): the generated codec validated every
+    UUID against the UCI 2.5 hyphenated form.** The emitter picked the
+    validator by field *name*, so the A-GRA codec rejected every
+    schema-valid A-GRA UUID on both encode and decode, and all 20 roots
+    failed. The fix keys the validator on the converted field *type*,
+    which already carries the facet difference: UCI 2.5 types UUID as
+    `xs:string` with the RFC-4122 pattern and converts to `string` (36
+    characters, hyphenated), while A-GRA 5.0a types it as `xs:hexBinary`
+    length 16 and converts to `bytes` (32 hex digits, no hyphens). Each
+    validator is emitted only when the tree uses it, which keeps the
+    frozen seam golden byte-identical. Pinned by `AgraUuidFormTest` and
+    `P1SidecarGenerationTest.test_uci_uuids_keep_the_hyphenated_rfc_4122_form`,
+    both of which run without a toolchain.
+  - **Harness gap handled in our tests, not in the harness.** The
+    la-cal-harness emits hyphenated UUIDs whatever the schema says, so
+    `_normalize_agra_uuids` rewrites them to the A-GRA wire form before
+    they reach the codec. Patching the harness instead would have weakened
+    the evidence, since the round trip is only meaningful while the
+    harness stays an independent implementation of the same XSD.
+    `AgraUuidNormalizationTest` checks both halves against the schema type
+    itself (53 UUID fields across the 20 roots: every raw value invalid,
+    every rewritten value valid), so if the harness ever gains facet
+    awareness this fails loudly rather than silently rewriting nothing.
+  - The Ada emitter needs no matching change: it is encode-only and does
+    not validate UUIDs, so it has no hardcoded lexical form. The Ada
+    hits for `uuid` are all inside the frozen seam template.
+  - Remaining in step 4: deterministic goldens, schema-drop mismatch
+    negatives, and C++/Ada wire-parity coverage for P2.
+  - Note for reproduction: the harness lives at
+    `external/ams-gra/la-cal-harness/`, not the upstream long name the
+    tests previously defaulted to, so the P1 round trip had been skipping
+    silently in this checkout. `_harness_src` now accepts both names, and
+    `LACAL_HARNESS_SRC` still overrides. Its generator needs `lxml`,
+    `xmlschema`, and `exrex`, which are not in the repo's Python
+    environment; the WSL run used a venv with those installed.
+- Remaining: step 5 (distinct codec plugin + `--gra` SDK packaging), step
+  6 (bidirectional Sleet interop + fail-closed negatives), step 7
+  (evidence publication; the compatibility matrix and user guide still
+  describe P2 as offline-only until then).
 
 This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,
