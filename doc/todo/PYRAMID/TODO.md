@@ -296,21 +296,36 @@ pattern) are done — see Delivered. Remaining:
     `libpyramid_codec_oms_json_agra.so` and
     `libpyramid_lacal_transport_plugin.so`, with the contract,
     `wire_names.json`, and `binding_metadata.json` under `proto/`.
-  - **Blocker found, not yet fixed: the FlatBuffers backend cannot generate
-    this contract.** `create_sdk --gra --verify` fails inside the packaged
-    build. The generator emits a union arm for every `xs:choice` member, but a
-    FlatBuffers union may only hold tables; this contract has choices with
-    enum-typed arms (`OwnerProducerChoiceType.GovernmentIdentifier`), which
-    `flatc` rejects with "type referenced but not defined". The string arms of
-    the same choice already get wrapper tables, so the fix is to wrap enum
-    arms the same way. This is a pre-existing backend gap that any tree with
-    an enum-typed choice arm reaches (the P1/UCI tree has the same shape); it
-    is unrelated to the OMS codec, which builds and packages fine, but it
-    stands between here and the acceptance bullet "the packaged offline SDK
-    builds the P2 bindings and codec, then smoke-tests a representative `MA_*`
-    payload through the packaged codec and LA-CAL plugin".
-  - Remaining in step 5: the FlatBuffers enum-arm fix, then the packaged-SDK
-    `MA_*` smoke through the codec and LA-CAL plugin.
+  - **Three FlatBuffers defects found and fixed on the way to `--verify`.**
+    `create_sdk --gra --verify` failed inside the packaged build, in the
+    FlatBuffers backend rather than the OMS codec. All three are pre-existing
+    and reached by any XSD-derived tree, so the P1/UCI projection had them
+    too; none affects the OMS codec, the LA-CAL transport, or any wire
+    evidence recorded above.
+    1. **A union arm may not be an enum.** A FlatBuffers union member must be
+       a table. String arms already got a wrapper table; enum arms did not, so
+       `flatc` rejected the schema outright ("type referenced but not
+       defined": `OwnerProducerChoiceType.GovernmentIdentifier`). Enum arms
+       are now wrapped the same way.
+    2. **One union was shared by every choice type in the contract.** Unions
+       were named from the oneof name alone, and `xsd2proto` names every
+       `xs:choice` oneof `choice`, so all 183 tables carrying a choice pointed
+       at a single `ChoiceUnion` holding the arms of whichever message was
+       emitted first. This is the serious one: a build failure is loud, but
+       this is a silently wrong projection. Unions are now named per
+       (message, oneof).
+    3. **Two arms of one choice may share a type.** An unnamed union arm
+       contributes its *type* name to the union's implicit enum, so a choice
+       with two elements of the same type (`CapabilityTaxonomyType`, twice)
+       produced a duplicate. Arms are now named after their proto field, which
+       proto guarantees unique within the oneof.
+    Verified with real `flatc`: all six A-GRA schemas compile, including the
+    1,192-message data model. Note for whoever picks this up: the FlatBuffers
+    C++ codec flattens oneof arms and never reads the union, so these schema
+    changes have no C++ codec counterpart.
+  - Remaining in step 5: the packaged-SDK `MA_*` smoke through the codec and
+    the LA-CAL plugin (the acceptance bullet), and the dynamic-load evidence
+    the SDK's `sdk_gra_plugin_load_smoke` provides.
 - Remaining: step 6 (bidirectional Sleet interop + fail-closed negatives),
   step 7 (evidence publication; the compatibility matrix and user guide still
   describe P2 as offline-only until then).
