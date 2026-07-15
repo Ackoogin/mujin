@@ -63,6 +63,11 @@ CMake can consume via `PYRAMID_BINDING_SOURCE_MODE=manifest` instead of
 `topic_metadata/tactical_objects_topics.json` (not hardcoded). Full design:
 [`../doc/architecture/generic_contract_layout.md`](../doc/architecture/generic_contract_layout.md).
 
+An input tree may also contain `binding_metadata.json`. The file must contain a
+JSON object. The generator copies that object to the generated manifest's
+`metadata` field so a contract can carry deployment or schema identity without
+adding contract-specific command-line options to the generator.
+
 ## Build-Local Generation
 
 The CMake build invokes `generate_bindings.py` during configure when

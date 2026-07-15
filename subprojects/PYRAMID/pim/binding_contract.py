@@ -868,13 +868,21 @@ def _find_topic_by_role_suffix(
     sub_topics: Dict[str, BindingTopic],
     pub_topics: Dict[str, BindingTopic],
     wire_name_suffix: str,
+    rpc_names: Tuple[str, ...] = (),
 ) -> Optional[BindingTopic]:
     """The one topic (subscribe or publish side) whose wire name ends with
     `wire_name_suffix` (`.request` / `.requirement` / `.information`) -- the
     same suffix convention `_topic_for_role` uses to derive these wire names
-    and `contract_routing_manifest.py` already matches against today."""
-    for topic in (*sub_topics.values(), *pub_topics.values()):
+    and `contract_routing_manifest.py` already matches against today.
+
+    Explicit contract topics do not have to use those derived suffixes. For
+    them, fall back to the RPC role that owns the topic."""
+    topics = (*sub_topics.values(), *pub_topics.values())
+    for topic in topics:
         if topic.wire_name.endswith(wire_name_suffix):
+            return topic
+    for topic in topics:
+        if topic.rpc_name in rpc_names:
             return topic
     return None
 
@@ -919,7 +927,8 @@ def interaction_for_service(
 
     if service.port_kind == "information":
         read_rpc = next((r for r in service.rpcs if r.name == "Read"), None)
-        info_topic = _find_topic_by_role_suffix(sub_topics, pub_topics, ".information")
+        info_topic = _find_topic_by_role_suffix(
+            sub_topics, pub_topics, ".information", ("Read",))
         if read_rpc is None or info_topic is None:
             return None
         leg = InteractionLeg(
@@ -941,7 +950,8 @@ def interaction_for_service(
     command_rpcs = [
         rpc for rpc in service.rpcs if rpc.name in ("Create", "Update", "Cancel")
     ]
-    request_topic = _find_topic_by_role_suffix(sub_topics, pub_topics, ".request")
+    request_topic = _find_topic_by_role_suffix(
+        sub_topics, pub_topics, ".request", ("Create", "Update", "Cancel"))
     if command_rpcs and request_topic is not None:
         legs.append(InteractionLeg(
             name="request",
@@ -951,7 +961,8 @@ def interaction_for_service(
         ))
 
     read_rpc = next((r for r in service.rpcs if r.name == "Read"), None)
-    requirement_topic = _find_topic_by_role_suffix(sub_topics, pub_topics, ".requirement")
+    requirement_topic = _find_topic_by_role_suffix(
+        sub_topics, pub_topics, ".requirement", ("Read",))
     if read_rpc is not None and requirement_topic is not None:
         legs.append(InteractionLeg(
             name="requirement",

@@ -53,13 +53,14 @@ import backends  # noqa: F401
 
 
 _MANIFEST_NAME = 'binding_manifest.json'
+_METADATA_NAME = 'binding_metadata.json'
 
 
 class BindingArtifactManifest:
     """Accumulates generated binding artifact paths by build role."""
 
     def __init__(self, layout: str, proto_dir: Path, output_dir: Path,
-                 proto_files):
+                 proto_files, metadata=None):
         self._output_dir = output_dir
         self._proto_import_root = _infer_proto_import_root(
             proto_dir, proto_files)
@@ -96,6 +97,8 @@ class BindingArtifactManifest:
             'ros2_transport': [],
             'marshal_modules': [],
         }
+        if metadata is not None:
+            self._data['metadata'] = metadata
         self._seen = {
             key: set()
             for key, value in self._data.items()
@@ -335,6 +338,18 @@ def _display_path(path: Path) -> str:
         return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
     except ValueError:
         return path.resolve().as_posix()
+
+
+def _load_binding_metadata(proto_dir: Path):
+    """Load optional contract metadata copied verbatim into the manifest."""
+    path = proto_dir / _METADATA_NAME
+    if not path.is_file():
+        return None
+    with open(path, encoding='utf-8') as f:
+        metadata = json.load(f)
+    if not isinstance(metadata, dict):
+        raise ValueError(f'{path} must contain a JSON object')
+    return metadata
 
 
 def _infer_proto_import_root(proto_dir: Path, proto_files) -> Path:
@@ -712,7 +727,8 @@ def main():
     print()
 
     manifest = BindingArtifactManifest(
-        args.contract_layout, proto_dir, output_dir, proto_files)
+        args.contract_layout, proto_dir, output_dir, proto_files,
+        metadata=_load_binding_metadata(proto_dir))
     manifest.add_selected_backend_protos(backend_names, proto_files)
     manifest.add_contract_topics(contract)
     manifest.add_endpoint_requirements(contract)

@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package pyramid.components.agra.information.services.provided;
+
+import "google/protobuf/empty.proto";
+import "pyramid/options/pyramid.options.proto";
+import "pyramid/data_model/pyramid.data_model.agra.proto";
+
+message MA_Action_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_ActionMT ma_action = 1;
+  }
+}
+
+service MA_Action_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_Action_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_Action" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_MissionPlan_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_MissionPlanMT ma_mission_plan = 1;
+  }
+}
+
+service MA_MissionPlan_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_MissionPlan_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_MissionPlan" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_PlanningFunction_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_PlanningFunctionMT ma_planning_function = 1;
+  }
+}
+
+service MA_PlanningFunction_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_PlanningFunction_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_PlanningFunction" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_Response_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_ResponseMT ma_response = 1;
+  }
+}
+
+service MA_Response_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_Response_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_Response" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_Task_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_TaskMT ma_task = 1;
+  }
+}
+
+service MA_Task_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_Task_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_Task" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MissionContingencyAlert_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MissionContingencyAlertMT mission_contingency_alert = 1;
+  }
+}
+
+service MissionContingencyAlert_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MissionContingencyAlert_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MissionContingencyAlert" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_ActionStatus_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_ActionStatusMT ma_action_status = 1;
+  }
+}
+
+service MA_ActionStatus_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_ActionStatus_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_ActionStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_MissionPlanActivationStatus_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_MissionPlanActivationStatusMT ma_mission_plan_activation_status = 1;
+  }
+}
+
+service MA_MissionPlanActivationStatus_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_MissionPlanActivationStatus_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_MissionPlanActivationStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_MissionPlanExecutionStatus_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_MissionPlanExecutionStatusMT ma_mission_plan_execution_status = 1;
+  }
+}
+
+service MA_MissionPlanExecutionStatus_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_MissionPlanExecutionStatus_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_MissionPlanExecutionStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_PlanningFunctionStatus_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_PlanningFunctionStatusMT ma_planning_function_status = 1;
+  }
+}
+
+service MA_PlanningFunctionStatus_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_PlanningFunctionStatus_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_PlanningFunctionStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_TaskStatus_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_TaskStatusMT ma_task_status = 1;
+  }
+}
+
+service MA_TaskStatus_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_TaskStatus_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_TaskStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}
+
+message MA_ApprovalPolicy_Service_Information {
+  oneof payload {
+    pyramid.data_model.agra.MA_ApprovalPolicyMT ma_approval_policy = 1;
+  }
+}
+
+service MA_ApprovalPolicy_Service {
+  rpc Read(google.protobuf.Empty) returns (stream MA_ApprovalPolicy_Service_Information) {
+    option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_ApprovalPolicy" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
+  }
+}

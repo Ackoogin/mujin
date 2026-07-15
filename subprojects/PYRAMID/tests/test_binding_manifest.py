@@ -99,6 +99,28 @@ def test_generic_manifest_lists_generated_cpp_json_artifacts(
     _assert_manifest_artifacts_exist(out_dir, manifest)
 
 
+def test_manifest_copies_optional_binding_metadata(
+    telemetry_proto_dir: Path,
+    tmp_path: Path,
+) -> None:
+    metadata = {
+        "contract": "telemetry-fixture",
+        "deployment_schema": "fixture-v1",
+    }
+    (telemetry_proto_dir / "binding_metadata.json").write_text(
+        json.dumps(metadata), encoding="utf-8")
+    out_dir = tmp_path / "out"
+
+    _run_generator(
+        telemetry_proto_dir,
+        out_dir,
+        "--contract-layout",
+        "generic",
+    )
+
+    assert _load_manifest(out_dir)["metadata"] == metadata
+
+
 def test_pyramid_manifest_lists_existing_cpp_json_roles(tmp_path: Path) -> None:
     out_dir = tmp_path / "pyramid_out"
     proto_dir = PYRAMID_ROOT / "proto" / "pyramid"

@@ -162,11 +162,36 @@ pattern) are done — see Delivered. Remaining:
   wire form is pinned from the la-cal-harness against the A-GRA XSD
   (member element name keyed to a JSON array in the parent; fixtures under
   `pim/test_oms_json_gen_fixtures/repeated_choice_member/`).
-- Remaining: step 2 (interaction overlay `pim/agra_p2_seam/`), step 4
-  (offline fidelity suite), step 5 (distinct codec plugin + `--gra` SDK
-  packaging), step 6 (bidirectional Sleet interop + fail-closed
-  negatives), step 7 (evidence publication; the compatibility matrix and
-  user guide still describe P2 as offline-only until then).
+- **Step 2 (interaction overlay): landed in the working tree.** The overlay
+  lives at `pim/agra_p2_seam/` and adds 16 services over the generated P2
+  data model: four Request/Requirement command services (mission plan,
+  mission plan activation, planning function settings, approval request)
+  and twelve single-variant Information services. Topic names are the A-GRA
+  global element names; every operation is reliable/volatile with queue
+  depth 10. Notes for whoever picks this up:
+  - Correlation identifiers for each command/status pair are documented in
+    `pim/agra_p2_seam/README.md`. All of them bottom out in `ID_Type.uuid`,
+    which is 16 bytes and 32 unhyphenated hex characters on the wire.
+  - The overlay keeps byte-for-byte copies of the generated data-model
+    proto, `wire_names.json`, and the shared options proto rather than the
+    P1 overlay's symlinks, because a native Windows checkout may
+    materialize a symlink as a text file. `pim/test_agra_p2_seam.py`
+    compares each copy against its source, which guards a wire-name lookup
+    that would otherwise fail silently.
+  - Schema and drop identity travel through a new generic mechanism: an
+    input tree may contain `binding_metadata.json`, and
+    `generate_bindings.py` copies that object verbatim into the generated
+    manifest's `metadata` field. This keeps contract-specific identity out
+    of the generator's command-line options.
+  - `binding_contract.py` previously located a service's request,
+    requirement, or information topic only by matching derived wire-name
+    suffixes. Explicit contract topics (like A-GRA's element names) do not
+    carry those suffixes, so it now falls back to the RPC role that owns
+    the topic.
+- Remaining: step 4 (offline fidelity suite), step 5 (distinct codec
+  plugin + `--gra` SDK packaging), step 6 (bidirectional Sleet interop +
+  fail-closed negatives), step 7 (evidence publication; the compatibility
+  matrix and user guide still describe P2 as offline-only until then).
 
 This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,

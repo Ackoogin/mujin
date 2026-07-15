@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package pyramid.data_model.agra_port_grammar;
+
+// These port-grammar helpers are not part of the A-GRA XSD data model. They
+// use a distinct package because the binding generator emits one types header
+// per package. Reopening pyramid.data_model.agra here would replace the header
+// generated from the converted XSD tree instead of merging with it.
+message Identifier { string id = 1; }
+message Ack { bool success = 1; }
+message Query {}
