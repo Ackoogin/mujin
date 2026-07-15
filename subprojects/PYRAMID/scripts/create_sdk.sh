@@ -66,6 +66,17 @@ if [[ "${GRA}" -eq 1 && -z "${PROTO_DIR}" ]]; then
   exit 2
 fi
 
+# agra_example proves A-GRA-vocabulary port grammar; it is not the XSD-derived
+# shape the OMS codec generator accepts, so a package built from it carries no
+# OMS codec at all. That is a legitimate distribution-parity exercise, but it
+# is easy to mistake for the formal profile, so say so plainly.
+if [[ "${GRA}" -eq 1 && "${PROTO_DIR}" == *agra_example* ]]; then
+  echo "[create_sdk] WARN: --proto-dir ${PROTO_DIR} is a port-grammar fixture," >&2
+  echo "[create_sdk]   not the XSD-derived P2 contract. The package will contain no" >&2
+  echo "[create_sdk]   A-GRA OMS codec. For the formal profile use:" >&2
+  echo "[create_sdk]     --proto-dir subprojects/PYRAMID/pim/agra_p2_seam" >&2
+fi
+
 case "${CONFIG}" in
   Release) BUILD_PRESET="flatbuffers-only-release" ;;
   Debug)   BUILD_PRESET="flatbuffers-only-debug" ;;

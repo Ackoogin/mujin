@@ -227,12 +227,15 @@ def _field_kind_and_type(
         aliases: Dict[str, Tuple[str, str]],
 ) -> Tuple[str, str, str]:
     short = field.type.split('.')[-1]
+    # `bytes` is text here and maps to a FlatBuffers string (see
+    # _FBS_SCALAR_MAP), so it takes the string path through the codec too --
+    # CreateString rather than a scalar assignment.
     if field.type in _FBS_SCALAR_MAP:
-        kind = 'string' if field.type == 'string' else 'scalar'
+        kind = 'string' if field.type in ('string', 'bytes') else 'scalar'
         return kind, _FBS_SCALAR_MAP[field.type], field.type
     if short in aliases:
         proto_scalar, _ = aliases[short]
-        kind = 'string' if proto_scalar == 'string' else 'scalar'
+        kind = 'string' if proto_scalar in ('string', 'bytes') else 'scalar'
         return kind, _FBS_SCALAR_MAP[proto_scalar], proto_scalar
     if _resolve_enum(index, field.type):
         return 'enum', short, ''
@@ -482,7 +485,17 @@ _FBS_SCALAR_MAP = {
     'sint32': 'int', 'sint64': 'long',
     'fixed32': 'uint', 'fixed64': 'ulong',
     'sfixed32': 'int', 'sfixed64': 'long',
-    'bool': 'bool', 'string': 'string', 'bytes': '[ubyte]',
+    # `bytes` maps to a FlatBuffers string, not [ubyte], because in this
+    # repository a proto `bytes` field holds text rather than raw binary:
+    # xsd2proto emits it only for xs:hexBinary and xs:base64Binary, whose
+    # values are the lexical form (A-GRA's UUID is 32 hex characters), the
+    # generated C++ type is std::string (cpp/naming.py), and the OMS-JSON
+    # codec writes it as a JSON string. [ubyte] would make the FlatBuffers
+    # side a std::vector<uint8_t> and no longer assignable to or from the
+    # generated struct's std::string, which is what broke the A-GRA build --
+    # the rest of this backend already treats bytes as string-like (see
+    # _is_generated_string_like).
+    'bool': 'bool', 'string': 'string', 'bytes': 'string',
 }
 
 
@@ -531,6 +544,37 @@ def _import_has_fbs_schema(index: ProtoTypeIndex, imported: str) -> bool:
 
 def _flatbuffers_union_name(oneof_name: str) -> str:
     return ''.join(w.capitalize() for w in oneof_name.split('_')) + 'Union'
+
+
+def _flatbuffers_message_union_name(msg_name: str, oneof_name: str) -> str:
+    """The union type for one message's oneof.
+
+    A union must be named per message, not per oneof name. XSD-derived trees
+    name every ``xs:choice`` oneof ``choice``, so keying only on the oneof
+    name gives every choice type in the contract the same union -- carrying
+    whichever message's arms happened to be emitted first.
+    """
+    return f'{msg_name}{_flatbuffers_union_name(oneof_name)}'
+
+
+def _flatbuffers_union_arm_name(field_name: str) -> str:
+    """The member name for one union arm, from its proto field name.
+
+    Proto guarantees field names are unique within a oneof, so these are
+    unique within the union even when two arms share a type.
+    """
+    return ''.join(w.capitalize() for w in field_name.split('_'))
+
+
+def _needs_oneof_wrapper(field: ProtoField, index: ProtoTypeIndex) -> bool:
+    """Does this oneof arm need a wrapper table to sit in a union?
+
+    A FlatBuffers union member must be a table, so any arm that is not one --
+    a scalar or an enum -- has to be wrapped. Enums look like named types and
+    so read as if they could stand alone in a union; ``flatc`` rejects them
+    with "type referenced but not defined".
+    """
+    return field.type in _FBS_SCALAR_MAP or index.is_enum_type(field.type)
 
 
 def _flatbuffers_oneof_wrapper_name(msg_name: str, oneof_name: str, field_name: str) -> str:
@@ -666,7 +710,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             for msg in pf.messages:
                 for oo in msg.oneofs:
                     for field in oo.fields:
-                        if field.type not in _FBS_SCALAR_MAP:
+                        if not _needs_oneof_wrapper(field, index):
                             continue
                         wrapper_name = _flatbuffers_oneof_wrapper_name(msg.name, oo.name, field.name)
                         if wrapper_name in emitted_oneof_wrappers:
@@ -679,17 +723,26 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             emitted_unions = set()
             for msg in pf.messages:
                 for oo in msg.oneofs:
-                    union_name = _flatbuffers_union_name(oo.name)
+                    union_name = _flatbuffers_message_union_name(msg.name, oo.name)
                     if union_name in emitted_unions:
                         continue
                     emitted_unions.add(union_name)
                     f.write(f'union {union_name} {{\n')
                     for i, field in enumerate(oo.fields):
-                        member_type = _fbs_type_name(field.type, pf.package)
-                        if field.type in _FBS_SCALAR_MAP:
+                        if _needs_oneof_wrapper(field, index):
                             member_type = _flatbuffers_oneof_wrapper_name(msg.name, oo.name, field.name)
+                        else:
+                            member_type = _fbs_type_name(field.type, pf.package)
                         comma = ',' if i < len(oo.fields) - 1 else ''
-                        f.write(f'  {member_type}{comma}\n')
+                        # Name every arm after its proto field rather than
+                        # letting the type name stand in for it. An unnamed
+                        # arm contributes its type name to the union's implicit
+                        # enum, so two arms of one choice that share a type --
+                        # which XSD models freely, as two elements of the same
+                        # type -- would collide. The name also keeps the arm
+                        # identifiable when the type alone is ambiguous.
+                        arm = _flatbuffers_union_arm_name(field.name)
+                        f.write(f'  {arm}:{member_type}{comma}\n')
                     f.write('}\n\n')
 
             for msg in pf.messages:
@@ -697,7 +750,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 for fld in msg.fields:
                     f.write(f'  {fld.name}:{_fbs_type(fld, index, pf.package)};\n')
                 for oo in msg.oneofs:
-                    union_name = _flatbuffers_union_name(oo.name)
+                    union_name = _flatbuffers_message_union_name(msg.name, oo.name)
                     f.write(f'  {oo.name}:{union_name};\n')
                 f.write('}\n\n')
 

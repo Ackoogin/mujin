@@ -4,14 +4,37 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PYRAMID_ROOT = REPO_ROOT / "subprojects" / "PYRAMID"
 GENERATOR = PYRAMID_ROOT / "pim" / "generate_bindings.py"
+
+
+def _find_flatc():
+    """The flatc binary, or None. FLATC wins; otherwise take one from a
+    configured build tree, then PATH."""
+    env = os.environ.get("FLATC")
+    if env and Path(env).is_file():
+        return Path(env)
+    name = "flatc.exe" if os.name == "nt" else "flatc"
+    for build in sorted(REPO_ROOT.glob("build*")):
+        deps = build / "_deps"
+        if not deps.is_dir():
+            continue
+        for found in deps.rglob(name):
+            # rglob also matches CMake's flatc.dir/ and similar directories.
+            if found.is_file():
+                return found
+    which = shutil.which("flatc")
+    return Path(which) if which else None
 
 
 TELEMETRY_PROTO = """syntax = "proto3";
@@ -74,11 +97,65 @@ PYRAMID_PROTOBUF_CPP_FILENAMES = {
 }
 
 
+# The shapes an XSD-derived contract produces that the FlatBuffers backend
+# used to get wrong. Every one of these was a real defect, found when the
+# A-GRA 5.0a P2 contract first reached this backend:
+#
+#   * an enum-typed arm (Marking.government_identifier) -- a union member must
+#     be a table, so this needs a wrapper;
+#   * two arms of the same message type (Trigger.primary/secondary) -- an
+#     unnamed arm contributes its type name to the union's implicit enum, so
+#     these collide;
+#   * two messages whose oneofs share a name (both "choice", which is what
+#     xsd2proto names every xs:choice) -- keying the union on that name alone
+#     gives both messages the same union;
+#   * a bytes field (Identifier.uuid, from xs:hexBinary) -- projected as
+#     [ubyte] it becomes a std::vector<uint8_t> on the FlatBuffers side and no
+#     longer assigns to the generated struct's std::string.
+CHOICE_PROTO = """syntax = "proto3";
+package example.choice;
+
+enum GovernmentEnum {
+  GOVERNMENT_ENUM_UNSPECIFIED = 0;
+  GOVERNMENT_ENUM_USA = 1;
+}
+
+message TaxonomyType {
+  string label = 1;
+}
+
+message Identifier {
+  bytes uuid = 1;
+}
+
+message Marking {
+  oneof choice {
+    GovernmentEnum government_identifier = 1;
+    string nato_special_word = 2;
+  }
+}
+
+message Trigger {
+  oneof choice {
+    TaxonomyType primary = 1;
+    TaxonomyType secondary = 2;
+  }
+}
+"""
+
+
 def _write_telemetry_proto(tmp_path: Path) -> Path:
     proto_dir = tmp_path / "proto"
     proto_dir.mkdir()
     (proto_dir / "telemetry.proto").write_text(
         TELEMETRY_PROTO, encoding="utf-8")
+    return proto_dir
+
+
+def _write_choice_proto(tmp_path: Path) -> Path:
+    proto_dir = tmp_path / "choice_proto"
+    proto_dir.mkdir()
+    (proto_dir / "choice.proto").write_text(CHOICE_PROTO, encoding="utf-8")
     return proto_dir
 
 
@@ -270,3 +347,72 @@ def test_pyramid_protobuf_service_codec_is_generated_with_common_namespaces(
     assert "SerializeToString" in cpp_text and "ParseFromArray" in cpp_text
     # Must use the current sub-namespaced types, not the stale flat spelling.
     assert "pyramid::domain_model::GeodeticPosition" not in hpp_text
+
+
+def _fbs_text(out_dir: Path) -> str:
+    schemas = list((out_dir / "flatbuffers" / "cpp").glob("*.fbs"))
+    assert len(schemas) == 1, schemas
+    return schemas[0].read_text(encoding="utf-8")
+
+
+def test_flatbuffers_union_arms_are_tables_named_per_message_and_field(
+    tmp_path: Path,
+) -> None:
+    """A FlatBuffers union may only hold tables, its members' names must be
+    unique within it, and it belongs to one message's oneof.
+
+    Regression bar for three defects the A-GRA 5.0a P2 contract exposed; see
+    CHOICE_PROTO above for what each shape stands for."""
+    out_dir = tmp_path / "out"
+    _run_generator(_write_choice_proto(tmp_path), out_dir, "flatbuffers")
+    fbs = _fbs_text(out_dir)
+
+    # One union per (message, oneof), not one per oneof name.
+    assert "union MarkingChoiceUnion {" in fbs
+    assert "union TriggerChoiceUnion {" in fbs
+    assert "union ChoiceUnion {" not in fbs
+    assert "choice:MarkingChoiceUnion;" in fbs
+    assert "choice:TriggerChoiceUnion;" in fbs
+
+    # The enum arm is wrapped in a table; the bare enum never appears as a
+    # union member, which is what flatc rejects.
+    assert ("table MarkingChoiceUnionGovernmentIdentifierValue {\n"
+            "  value:GovernmentEnum;\n}") in fbs
+    assert "GovernmentIdentifier:MarkingChoiceUnionGovernmentIdentifierValue" \
+        in fbs
+    assert "\n  GovernmentEnum" not in fbs
+
+    # Two arms of the same type stay distinct, because arms are named after
+    # their proto field rather than their type.
+    assert "Primary:TaxonomyType" in fbs
+    assert "Secondary:TaxonomyType" in fbs
+
+
+def test_flatbuffers_projects_bytes_as_a_string(tmp_path: Path) -> None:
+    """A proto bytes field is text in this repository (xsd2proto emits it only
+    for xs:hexBinary/xs:base64Binary, and the generated C++ type is
+    std::string), so the FlatBuffers side must be a string too. Projected as
+    [ubyte] it becomes a std::vector<uint8_t>, and the generated codec's
+    assignment between the two no longer compiles."""
+    out_dir = tmp_path / "out"
+    _run_generator(_write_choice_proto(tmp_path), out_dir, "flatbuffers")
+    fbs = _fbs_text(out_dir)
+
+    assert "table Identifier {\n  uuid:string;\n}" in fbs
+    assert "[ubyte]" not in fbs
+
+
+def test_flatbuffers_choice_schema_compiles_with_flatc(tmp_path: Path) -> None:
+    """The generated schema is accepted by the real flatc, which is the only
+    authority on what a union may contain. Skips where flatc is absent."""
+    flatc = _find_flatc()
+    if flatc is None:
+        pytest.skip("flatc not found; build FlatBuffers or set FLATC")
+    out_dir = tmp_path / "out"
+    _run_generator(_write_choice_proto(tmp_path), out_dir, "flatbuffers")
+    schema_dir = out_dir / "flatbuffers" / "cpp"
+    result = subprocess.run(
+        [str(flatc), "--cpp", "-o", str(tmp_path / "hdr"),
+         "-I", str(schema_dir), str(next(schema_dir.glob("*.fbs")))],
+        capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

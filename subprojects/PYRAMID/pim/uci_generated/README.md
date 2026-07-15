@@ -15,12 +15,15 @@ D2, generated trees are checked in for reviewability:
 
 - **`uci_2_5_0/` (profile P1) — checked in** (2026-07-11): 515 messages
   (6 synthesized) + 188 enums from 6 roots, converted strict-clean.
-- **`agra_5_0a/` (profile P2) — not yet**: converts today (strict-clean,
-  1,163 messages + 297 enums from 18 roots, `test_xsd2proto.py` pins the
-  counts) but check-in is a Phase-4 exit-gate item, after deliberate
-  closure pruning (top fan-in hubs: `ID_Type` 74, `SystemID_Type` 49,
-  `ForeignKeyType` 40) and the derived-artefact posture note in
-  `pim/schemas/README.md`.
+- **`agra_5_0a/` (profile P2) — checked in** (2026-07-14): schema version
+  `005.0a.ASK-20260423-f1380e7`; 1,169 messages (30 synthesized) + 297
+  enums from 20 roots, converted strict-clean from the sha256-pinned drop
+  in [`pim/schemas/schema_manifest.json`](../schemas/schema_manifest.json).
+  `RealAgraP2ConversionTest.test_checked_in_p2_tree_is_current` is the
+  byte-stability guard.  The closure approval and marginal analysis are in
+  the [`P2 closure decision`](../uci_profiles/README.md#p2-closure-decision--g1-prerequisite-record-2026-07-14).
+  This tree is offline-only contract material until WS-G/G1's interop
+  acceptance passes; its presence makes no A-GRA OMS support claim.
 
 ## P1 reconciliation against `pim/uci_seam_example` (plan D6)
 

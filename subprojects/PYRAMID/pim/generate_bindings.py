@@ -53,13 +53,14 @@ import backends  # noqa: F401
 
 
 _MANIFEST_NAME = 'binding_manifest.json'
+_METADATA_NAME = 'binding_metadata.json'
 
 
 class BindingArtifactManifest:
     """Accumulates generated binding artifact paths by build role."""
 
     def __init__(self, layout: str, proto_dir: Path, output_dir: Path,
-                 proto_files):
+                 proto_files, metadata=None):
         self._output_dir = output_dir
         self._proto_import_root = _infer_proto_import_root(
             proto_dir, proto_files)
@@ -96,6 +97,8 @@ class BindingArtifactManifest:
             'ros2_transport': [],
             'marshal_modules': [],
         }
+        if metadata is not None:
+            self._data['metadata'] = metadata
         self._seen = {
             key: set()
             for key, value in self._data.items()
@@ -244,6 +247,15 @@ class BindingArtifactManifest:
         self.add_codec_plugins(plugin_paths)
 
     def record_backend_outputs(self, backend_name: str, paths) -> None:
+        if backend_name == 'oms_json':
+            # Declare the OMS-JSON codec plugin as a build role, so the build
+            # creates the profile's codec target from the manifest rather than
+            # from a filename convention -- and so a consumer can tell this
+            # profile-specific artifact apart from the frozen UCI 2.5 starter
+            # codec, which is hand-written and not generated from any tree.
+            self.add_codec_plugins(
+                [path for path in paths
+                 if Path(path).name.endswith('_codec_plugin.cpp')])
         if backend_name == 'flatbuffers':
             self.add_paths(
                 'flatbuffers_schemas',
@@ -337,6 +349,18 @@ def _display_path(path: Path) -> str:
         return path.resolve().as_posix()
 
 
+def _load_binding_metadata(proto_dir: Path):
+    """Load optional contract metadata copied verbatim into the manifest."""
+    path = proto_dir / _METADATA_NAME
+    if not path.is_file():
+        return None
+    with open(path, encoding='utf-8') as f:
+        metadata = json.load(f)
+    if not isinstance(metadata, dict):
+        raise ValueError(f'{path} must contain a JSON object')
+    return metadata
+
+
 def _infer_proto_import_root(proto_dir: Path, proto_files) -> Path:
     packages = [pf.package for pf in proto_files if pf.package]
     first_segments = {pkg.split('.')[0] for pkg in packages}
@@ -376,6 +400,11 @@ def _codec_plugin_content_type(filename: str) -> str:
         return 'application/protobuf'
     if '_ros2_' in filename:
         return 'application/ros2'
+    # Must precede the plain-JSON fallback: an OMS-JSON plugin's filename
+    # also contains "_json_", but it speaks the UCI global-element envelope
+    # on application/oms-json, not the generic JSON projection.
+    if '_oms_json_' in filename:
+        return 'application/oms-json'
     return 'application/json'
 
 
@@ -711,8 +740,10 @@ def main():
     print(f'Languages: {", ".join(sorted(langs))}')
     print()
 
+    binding_metadata = _load_binding_metadata(proto_dir)
     manifest = BindingArtifactManifest(
-        args.contract_layout, proto_dir, output_dir, proto_files)
+        args.contract_layout, proto_dir, output_dir, proto_files,
+        metadata=binding_metadata)
     manifest.add_selected_backend_protos(backend_names, proto_files)
     manifest.add_contract_topics(contract)
     manifest.add_endpoint_requirements(contract)
@@ -767,6 +798,7 @@ def main():
             naming_policy=contract.naming_policy,
             proto_import_root=manifest.proto_import_root,
             contract=contract,
+            metadata=binding_metadata,
         )
         for backend_name, files in results.items():
             print(f'  {backend_name}: {len(files)} files generated')

@@ -552,7 +552,7 @@ TEST(PclStreaming, TransportInvokeStream) {
   EXPECT_TRUE(cctx.got_msg);
 
   // Clean up - free context manually since it's transport-managed
-  free(stream_ctx);
+  pcl_free(stream_ctx);
 
   pcl_executor_set_transport(e, nullptr);
   pcl_executor_destroy(e);

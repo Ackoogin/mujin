@@ -4,6 +4,25 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 ## Coding standards 
 See `doc/CODING_STYLE.md` for coding standards.
 
+## Writing style (docs, comments, summaries)
+
+Documentation here is read by software engineers of varying experience
+levels, often new to the project, and some readers are not native English
+speakers. Write for them:
+
+- Use plain language and complete sentences; avoid fragment/arrow/
+  abbreviation chains.
+- Do not coin compressed jargon when a plain phrase says the same thing
+  (write "how much smaller the generated set gets if this root is
+  dropped", not "per-root marginal").
+- Watch for field-specific terms that mean something different to a
+  typical software reader or nothing at all ("closure", "drop",
+  "pinned", "vendored"). Recurring repository terms are defined in
+  [`doc/GLOSSARY.md`](doc/GLOSSARY.md) — link there or give the
+  plain-words meaning in one sentence at first use.
+- Assume the reader has not been following the work session that
+  produced the document.
+
 
 ## Project Overview
 

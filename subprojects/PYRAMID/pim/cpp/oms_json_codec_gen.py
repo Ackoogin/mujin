@@ -19,11 +19,17 @@ independently-authored ``la-cal-harness`` XSD-derived generator:
 * ``xs:choice`` (proto oneof): the active member's element key appears
   directly in the parent object -- no wrapper, no discriminator;
 * repeated choice *members* (synthesized ``*_List`` wrappers from
-  xsd2proto) render as an array under the member's element key;
+  xsd2proto) render as an array under the member's element key.  Pinned
+  against la-cal-harness over A-GRA 5.0a: ``PolygonPointChoiceType`` emits
+  ``{"Point2D":[...]}`` and ``LinePointChoiceType`` emits
+  ``{"Point":[...]}``; the synthesized wrapper is not a wire object;
 * enums: the XSD enumeration literal verbatim (sidecar-authoritative;
   enum-prefix-strip heuristic otherwise); ``*_UNSPECIFIED`` never appears
   on the wire -- encoding it is an error;
-* NaN/Infinity as strings; UUID-named fields RFC-4122 validated.
+* NaN/Infinity as strings; UUID-named fields validated in the lexical form
+  their converted type implies -- ``string`` (an ``xs:string`` carrying the
+  RFC-4122 pattern, as in UCI 2.5) hyphenated, ``bytes`` (``xs:hexBinary``
+  length 16, as in A-GRA 5.0a) as 32 hex digits.
 
 Known unimplemented shape (loud, not silent): repeated ``xs:choice``
 itself (synthesized ``*_Choice`` wrapper as a message field) -- absent
@@ -112,12 +118,22 @@ class _WireNames:
 
 
 class CppOmsJsonCodecGenerator:
-    """Generate one PCL codec plugin per UCI-shaped data-model package."""
+    """Generate one PCL codec plugin per UCI-shaped data-model package.
 
-    def __init__(self, index: ProtoTypeIndex, naming_policy=None):
+    ``metadata`` is the contract's ``binding_metadata.json`` object, when the
+    input tree carries one.  Its string entries become the plugin's schema
+    identity, which the PCL entry point checks against the loader's
+    configuration so a codec built for one drop refuses to serve another.
+    A tree without metadata emits no identity and no check, which is what
+    keeps the frozen seam golden byte-identical.
+    """
+
+    def __init__(self, index: ProtoTypeIndex, naming_policy=None,
+                 metadata=None):
         self.index = index
         self.naming = naming_policy or _DEFAULT_NAMING_POLICY
         self.aliases = find_scalar_wrappers(index)
+        self.identity = _string_identity(metadata)
 
     def generate(self, out: Path) -> List[Path]:
         out.mkdir(parents=True, exist_ok=True)
@@ -126,7 +142,7 @@ class CppOmsJsonCodecGenerator:
             if not pf.messages or pf.services:
                 continue
             emitter = _PackageEmitter(self.index, pf, self.naming,
-                                      self.aliases)
+                                      self.aliases, self.identity)
             if not emitter.roots:
                 continue  # no wire entry points -- not a UCI payload package
             prefix = pf.package.replace('.', '_')
@@ -136,12 +152,29 @@ class CppOmsJsonCodecGenerator:
         return paths
 
 
+def _string_identity(metadata):
+    """The string entries of a contract's binding metadata, sorted.
+
+    Only strings take part: the identity is compared against the loader's
+    JSON configuration by string equality, and a non-string entry has no
+    meaningful comparison there.  Sorting keeps generation deterministic
+    regardless of the order the metadata file happens to list its keys in.
+    """
+    if not isinstance(metadata, dict):
+        return []
+    return sorted(
+        (key, value) for key, value in metadata.items()
+        if isinstance(key, str) and isinstance(value, str)
+    )
+
+
 class _PackageEmitter:
     def __init__(self, index: ProtoTypeIndex, pf: ProtoFile, naming,
-                 aliases: Dict[str, str]):
+                 aliases: Dict[str, str], identity=None):
         self.index = index
         self.pf = pf
         self.naming = naming
+        self.identity = identity or []
         self.aliases = aliases
         self.wire = _WireNames(pf)
         self.prefix = pf.package.replace('.', '_')
@@ -227,6 +260,19 @@ class _PackageEmitter:
         return [m for m in self.pf.messages
                 if not self.wire.is_synthesized(m.name)]
 
+    def _uuid_forms(self) -> set:
+        """The UUID validators this package's fields actually call.
+
+        Scans every message, not just the emittable ones, because a
+        synthesized wrapper's field is emitted inline at its use site and
+        still calls a validator."""
+        forms = set()
+        for msg in self.pf.messages:
+            for fld in msg.all_fields():
+                if fld.name == 'uuid':
+                    forms.add(self._uuid_validator(fld))
+        return forms
+
     def _is_list_wrapper(self, type_name: str) -> Optional[ProtoField]:
         """If type is a synthesized single-repeated-'items' wrapper, return
         its items field (repeated choice member rule)."""
@@ -303,13 +349,25 @@ class _PackageEmitter:
         f.write(f'#include "{self.prefix}_cabi_marshal.hpp"\n')
         f.write('#include <pcl/pcl_alloc.h>\n#include <pcl/pcl_codec.h>\n')
         f.write('#include <nlohmann/json.hpp>\n')
-        f.write('#include <cmath>\n#include <cstdint>\n#include <cstring>\n#include <limits>\n#include <string>\n\n')
+        f.write('#include <cmath>\n#include <cstdint>\n#include <cstring>\n#include <limits>\n#include <string>\n')
+        if self.identity:
+            f.write('#include <utility>\n')  # std::pair, for the identity table
+        f.write('\n')
         f.write('namespace {\nusing json = nlohmann::json;\n')
         f.write(f'namespace uci = {ns};\n')
         f.write('constexpr const char* kContentType = "application/oms-json";\n')
-        f.write('bool uuid(const std::string& s) { if (s.size() != 36) return false; '
-                'for (size_t i=0;i<s.size();++i) { if (i==8||i==13||i==18||i==23) { if(s[i]!=\'-\') return false; } '
-                'else if (!((s[i]>=\'0\'&&s[i]<=\'9\')||(s[i]>=\'a\'&&s[i]<=\'f\')||(s[i]>=\'A\'&&s[i]<=\'F\'))) return false; } return true; }\n')
+        # A UUID validator is emitted only for the lexical forms this tree
+        # actually uses, so a drop that never carries a hexBinary UUID keeps
+        # byte-identical output (the seam contract is frozen: plan D4(b)).
+        forms = self._uuid_forms()
+        if 'uuid' in forms:
+            f.write('bool uuid(const std::string& s) { if (s.size() != 36) return false; '
+                    'for (size_t i=0;i<s.size();++i) { if (i==8||i==13||i==18||i==23) { if(s[i]!=\'-\') return false; } '
+                    'else if (!((s[i]>=\'0\'&&s[i]<=\'9\')||(s[i]>=\'a\'&&s[i]<=\'f\')||(s[i]>=\'A\'&&s[i]<=\'F\'))) return false; } return true; }\n')
+        if 'uuid_hex' in forms:
+            f.write('bool uuid_hex(const std::string& s) { if (s.size() != 32) return false; '
+                    'for (size_t i=0;i<s.size();++i) { '
+                    'if (!((s[i]>=\'0\'&&s[i]<=\'9\')||(s[i]>=\'a\'&&s[i]<=\'f\')||(s[i]>=\'A\'&&s[i]<=\'F\'))) return false; } return true; }\n')
         f.write('json number(double v) { if (std::isnan(v)) return "NaN"; if (std::isinf(v)) return v > 0 ? "Infinity" : "-Infinity"; return v; }\n')
         f.write('double number_in(const json& v) { if (v.is_number()) return v.get<double>(); '
                 'auto s=v.get<std::string>(); if(s=="NaN") return std::numeric_limits<double>::quiet_NaN(); '
@@ -331,8 +389,53 @@ class _PackageEmitter:
         self._write_encode_dispatch(f)
         self._write_decode_dispatch(f)
         f.write('void free_msg(void*, pcl_msg_t* m) { if(!m)return; pcl_free(const_cast<void*>(m->data)); m->data=nullptr;m->size=0;m->type_name=nullptr; }\n'
-                'pcl_codec_t codec={PCL_CODEC_ABI_VERSION,kContentType,encode,decode,free_msg,nullptr};\n} // namespace\n\n'
-                'extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }\n')
+                'pcl_codec_t codec={PCL_CODEC_ABI_VERSION,kContentType,encode,decode,free_msg,nullptr};\n')
+        self._write_identity_check(f)
+        f.write('} // namespace\n\n')
+        if self.identity:
+            f.write('extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char* config_json) {\n'
+                    '  return identity_admits(config_json) ? &codec : nullptr;\n}\n')
+        else:
+            f.write('extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }\n')
+
+    def _write_identity_check(self, f) -> None:
+        """Emit the plugin's schema identity and the loader's admission check.
+
+        The PCL entry contract makes config_json opaque and plugin-specific,
+        so this is where a profile-specific codec can refuse to serve a drop
+        it was not generated from.  The rules, in the order the code applies
+        them:
+
+          * no configuration (NULL) means the loader asserts nothing, which
+            the ABI documents as "no configuration" -- serve it;
+          * configuration that names an identity key this codec also carries
+            must agree with it, or the plugin refuses to load;
+          * configuration this codec cannot parse, or that is not an object,
+            is refused rather than ignored -- a loader that meant to pin the
+            drop and typed the config wrong must not silently get an
+            unchecked codec;
+          * keys the codec has no identity for are left to other layers.
+
+        Emitted only for a contract that carries binding metadata, which is
+        what keeps the seam golden byte-identical.
+        """
+        if not self.identity:
+            return
+        entries = ' '.join(
+            f'{{"{key}","{value}"}},' for key, value in self.identity)
+        f.write('// Schema identity, from the contract\'s binding_metadata.json.\n')
+        f.write(f'const std::pair<const char*, const char*> kIdentity[] = {{ {entries} }};\n')
+        f.write('bool identity_admits(const char* config_json) {\n'
+                '  if (!config_json) return true;\n'
+                '  json cfg;\n'
+                '  try { cfg = json::parse(config_json); } catch (...) { return false; }\n'
+                '  if (!cfg.is_object()) return false;\n'
+                '  for (const auto& id : kIdentity) {\n'
+                '    if (!cfg.contains(id.first)) continue;\n'
+                '    const auto& v = cfg.at(id.first);\n'
+                '    if (!v.is_string() || v.get<std::string>() != id.second) return false;\n'
+                '  }\n'
+                '  return true;\n}\n')
 
     def _write_enum_helpers(self, f) -> None:
         if not self.pf.enums:
@@ -342,7 +445,7 @@ class _PackageEmitter:
             parses = []
             for v in enum.values:
                 suf = enum.suffix_of(v.name)
-                if (suf or v.name).upper().endswith('UNSPECIFIED'):
+                if (suf or v.name).upper() == 'UNSPECIFIED':
                     continue  # never on the UCI wire
                 cpp = screaming_to_pascal(suf) if suf else v.name
                 lit = self.wire.enum_literal(enum.name, v.name, suf)
@@ -358,12 +461,27 @@ class _PackageEmitter:
 
     # -- per-message encode/decode -------------------------------------------
 
+    @staticmethod
+    def _uuid_validator(fld) -> str:
+        """The validator for a UUID field, chosen by its converted type.
+
+        The XSD facets already survive conversion as the field type, so the
+        drop's UUID lexical form is readable here without consulting the
+        schema again: `xs:hexBinary` (A-GRA 5.0a) converts to `bytes` and is
+        written as 32 hex digits, while `xs:string` carrying the RFC-4122
+        pattern (UCI 2.5) converts to `string` and keeps its hyphens.
+        Validating a hexBinary UUID against the hyphenated form rejects
+        every schema-valid instance of the drop, so this must follow the
+        type rather than the field name alone."""
+        return 'uuid_hex' if fld.type == 'bytes' else 'uuid'
+
     def _encode(self, f, msg: ProtoMessage) -> None:
         # UCI's IdentifierType is represented as a string in an enclosing
         # UUID element, not as an extra JSON object level.
         if msg.name == 'Uuid' and len(msg.fields) == 1 \
                 and msg.fields[0].name == 'uuid' and not msg.oneofs:
-            f.write('json encode_Uuid(const uci::Uuid& m) { if (!uuid(m.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return m.uuid; }\n\n')
+            check = self._uuid_validator(msg.fields[0])
+            f.write(f'json encode_Uuid(const uci::Uuid& m) {{ if (!{check}(m.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return m.uuid; }}\n\n')
             return
         f.write(f'json encode_{msg.name}(const uci::{msg.name}& m) {{ json o=json::object();\n')
         for item in self._walk(msg):
@@ -433,7 +551,8 @@ class _PackageEmitter:
             return f'number({access})'
         if fld.type in _SCALARS:
             if fld.name == 'uuid':
-                return f'([&]{{ if(!uuid({access})) throw json::type_error::create(302,"invalid UUID",nullptr); return json({access}); }})()'
+                check = self._uuid_validator(fld)
+                return f'([&]{{ if(!{check}({access})) throw json::type_error::create(302,"invalid UUID",nullptr); return json({access}); }})()'
             return access
         kind = self._field_kind(fld)
         short = self._short(fld.type)
@@ -444,7 +563,8 @@ class _PackageEmitter:
     def _decode(self, f, msg: ProtoMessage) -> None:
         if msg.name == 'Uuid' and len(msg.fields) == 1 \
                 and msg.fields[0].name == 'uuid' and not msg.oneofs:
-            f.write('uci::Uuid decode_Uuid(const json& j) { uci::Uuid r{}; r.uuid=j.get<std::string>(); if (!uuid(r.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return r; }\n\n')
+            check = self._uuid_validator(msg.fields[0])
+            f.write(f'uci::Uuid decode_Uuid(const json& j) {{ uci::Uuid r{{}}; r.uuid=j.get<std::string>(); if (!{check}(r.uuid)) throw json::type_error::create(302,"invalid UUID",nullptr); return r; }}\n\n')
             return
         f.write(f'uci::{msg.name} decode_{msg.name}(const json& j) {{ uci::{msg.name} r{{}};\n')
         for item in self._walk(msg):
@@ -507,7 +627,8 @@ class _PackageEmitter:
                 cpp = {'int32':'int32_t','int64':'int64_t','uint32':'uint32_t','uint64':'uint64_t','sint32':'int32_t','sint64':'int64_t','fixed32':'uint32_t','fixed64':'uint64_t','sfixed32':'int32_t','sfixed64':'int64_t'}[fld.type]
                 out = f'{value}.get<{cpp}>()'
             if fld.name == 'uuid':
-                return f'([&]{{ auto s={out}; if(!uuid(s)) throw json::type_error::create(302,"invalid UUID",nullptr); return s; }})()'
+                check = self._uuid_validator(fld)
+                return f'([&]{{ auto s={out}; if(!{check}(s)) throw json::type_error::create(302,"invalid UUID",nullptr); return s; }})()'
             return out
         kind = self._field_kind(fld)
         short = self._short(fld.type)

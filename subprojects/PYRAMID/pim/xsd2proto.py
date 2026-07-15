@@ -150,11 +150,29 @@ class EnumSpec:
     literals: List[str] = field(default_factory=list)
     comment: List[str] = field(default_factory=list)
 
-    def value_name(self, literal: str) -> str:
+    def _base_value_name(self, literal: str) -> str:
         cleaned = re.sub(r"[^0-9a-zA-Z]+", "_", literal).strip("_").upper()
         if cleaned and cleaned[0].isdigit():
             cleaned = "N" + cleaned
         return f"{upper_snake(self.proto_name)}_{cleaned}"
+
+    def value_name(self, literal: str) -> str:
+        name = self._base_value_name(literal)
+        sentinel = f"{upper_snake(self.proto_name)}_UNSPECIFIED"
+        if name != sentinel:
+            return name
+
+        # The zero-valued sentinel is native presence state and has no XSD
+        # wire form.  Preserve a real XSD "UNSPECIFIED" literal under a
+        # distinct name, avoiding every identifier the enum would otherwise
+        # emit so the suffix itself cannot introduce a second collision.
+        occupied = {self._base_value_name(item) for item in self.literals}
+        candidate = name + "_XSD_LITERAL"
+        number = 2
+        while candidate in occupied:
+            candidate = name + f"_XSD_LITERAL_{number}"
+            number += 1
+        return candidate
 
 
 def _doc_text(node: ET.Element) -> List[str]:

@@ -89,6 +89,12 @@ endif()
 if(PYRAMID_ENABLE_ROS2)
     list(APPEND PYRAMID_CPP_GENERATOR_BACKENDS ros2)
 endif()
+if(PYRAMID_ENABLE_OWP)
+    # The OMS-JSON codec is generated only for a UCI-shaped data model, so
+    # this is a no-op for a contract tree without one (the port-grammar
+    # fixtures, for instance) rather than an error.
+    list(APPEND PYRAMID_CPP_GENERATOR_BACKENDS oms_json)
+endif()
 list(JOIN PYRAMID_CPP_GENERATOR_BACKENDS "," PYRAMID_CPP_GENERATOR_BACKENDS_ARG)
 
 file(GLOB_RECURSE PYRAMID_PROTO_INPUTS CONFIGURE_DEPENDS
@@ -397,6 +403,13 @@ endif()
 if(NOT _pyramid_generated_json_codec_plugin_srcs)
     pyramid_glob_generated(_pyramid_generated_json_codec_plugin_srcs
         "${PYRAMID_CPP_BINDINGS_DIR}/*_json_codec_plugin.cpp")
+    # The glob is recursive and an OMS-JSON plugin's filename also ends in
+    # "_json_codec_plugin.cpp", so without this the OMS codec under
+    # oms_json/cpp/ would be built a second time here -- as an
+    # application/json codec, under a target name derived from a regex that
+    # does not match it. It gets its own target below, next to the starter.
+    list(FILTER _pyramid_generated_json_codec_plugin_srcs
+        EXCLUDE REGEX "_oms_json_codec_plugin\\.cpp$")
 endif()
 set(PYRAMID_CODEC_PLUGIN_TARGETS)
 foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_json_codec_plugin_srcs)
@@ -473,15 +486,63 @@ unset(PYRAMID_CODEC_PLUGIN_STEM)
 unset(PYRAMID_CODEC_PLUGIN_TARGET)
 
 if(PYRAMID_ENABLE_OWP)
-    add_library(pyramid_codec_oms_json_uci MODULE
+    # The hand-written UCI 2.5 starter subset: a frozen byte-equivalence
+    # baseline for the generated UCI OMS-JSON codec, not a contract codec.
+    # The "_starter" suffix keeps the plain pyramid_codec_oms_json_<module>
+    # name free for the codecs generated below from an actual contract tree,
+    # including the UCI one this fixture is the baseline for.
+    add_library(pyramid_codec_oms_json_uci_starter MODULE
         "${PYRAMID_ROOT_DIR}/plugins/pyramid_oms_json_codec_uci.cpp")
-    target_link_libraries(pyramid_codec_oms_json_uci
+    target_link_libraries(pyramid_codec_oms_json_uci_starter
         PRIVATE pcl_core nlohmann_json::nlohmann_json)
-    target_include_directories(pyramid_codec_oms_json_uci
+    target_include_directories(pyramid_codec_oms_json_uci_starter
         PRIVATE
             "${PCL_ROOT_DIR}/include"
             "${PYRAMID_ROOT_DIR}/include")
-    list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS pyramid_codec_oms_json_uci)
+    list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS pyramid_codec_oms_json_uci_starter)
+
+    # Codecs generated from the selected contract tree, one per data-model
+    # package that has OMS wire roots. These are the profile-specific
+    # artifacts: each carries the schema identity of the contract it was
+    # generated from and refuses a loader configuration naming another drop.
+    pyramid_binding_manifest_active(_pyramid_manifest_active)
+    set(_pyramid_generated_oms_json_codec_plugin_srcs "")
+    if(_pyramid_manifest_active)
+        pyramid_manifest_plugins(_pyramid_oms_plugin_tgts
+            _pyramid_generated_oms_json_codec_plugin_srcs _pyramid_oms_plugin_ctypes
+            "${_PYRAMID_MANIFEST_JSON}" "${PYRAMID_CPP_BINDINGS_DIR}"
+            CONTENT_TYPE application/oms-json)
+    endif()
+    if(NOT _pyramid_generated_oms_json_codec_plugin_srcs)
+        pyramid_glob_generated(_pyramid_generated_oms_json_codec_plugin_srcs
+            "${PYRAMID_CPP_BINDINGS_DIR}/oms_json/cpp/*_oms_json_codec_plugin.cpp")
+    endif()
+    foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_oms_json_codec_plugin_srcs)
+        get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
+            "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
+        string(REGEX REPLACE
+            "^pyramid_data_model_(.+)_oms_json_codec_plugin$"
+            "pyramid_codec_oms_json_\\1"
+            PYRAMID_CODEC_PLUGIN_TARGET
+            "${PYRAMID_CODEC_PLUGIN_STEM}")
+        add_library(${PYRAMID_CODEC_PLUGIN_TARGET} MODULE
+            "${PYRAMID_CODEC_PLUGIN_SRC}")
+        add_dependencies(${PYRAMID_CODEC_PLUGIN_TARGET}
+            pyramid_cpp_bindings_codegen)
+        target_link_libraries(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                pcl_core
+                pyramid_generated_codecs
+                nlohmann_json::nlohmann_json
+        )
+        target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                "${PYRAMID_CPP_BINDINGS_DIR}"
+        )
+        list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
+            ${PYRAMID_CODEC_PLUGIN_TARGET})
+    endforeach()
+    unset(_pyramid_generated_oms_json_codec_plugin_srcs)
 endif()
 
 if(PYRAMID_ENABLE_PROTOBUF)

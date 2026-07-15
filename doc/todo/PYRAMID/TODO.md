@@ -131,7 +131,222 @@ pattern) are done — see Delivered. Remaining:
 
 ### G1. Generate and validate the A-GRA P2 OMS/CAL profile
 
-**Status:** planned, not scheduled. This workstream closes the gap between the
+**Status: in progress (2026-07-14).** Checkpoint log for session handover:
+
+- **Prerequisites 1–3 discharged.** Decision record:
+  [`pim/uci_profiles/README.md`](../../../subprojects/PYRAMID/pim/uci_profiles/README.md)
+  ("P2 conversion-scope decision"). Root list approved and then grown to 20
+  (the two `*CommandStatus` messages the Command-2 pattern needs); size
+  budget 1,169 messages + 297 enums; validator designated: Sleet
+  v2026.06.01 loaded with the pinned A-GRA 5.0a schema.
+- **Validator leg de-risked live** (WSL podman, container
+  `sleet-agra-probe`, host port 21412, config under git-ignored
+  `external/ams-gra/sleet-agra/`): Sleet loads the A-GRA schema (841
+  elements / 4,845 types), accepts OWP `INIT` with schema literal
+  `005.0a.ASK`, routes PUB/SUB/MSG, schema-validates payloads (rejected a
+  harness-generated instance on a UUID facet), and fails closed on wrong
+  schema, unknown service, and unauthorized topic. Evidence to be folded
+  into `pim/test_harness/FINDINGS.md` at step 7.
+- **Drop-delta finding:** A-GRA 5.0a UUIDs are `xs:hexBinary` length-16
+  (32 hex chars, no hyphens), unlike UCI 2.5's hyphenated form; the
+  la-cal-harness generator hardcodes hyphenated UUIDs, so P2 instance
+  generation must set UUIDs itself.
+- **Step 1 (materialize the contract): landed in the working tree.** The
+  20-root P2 tree is generated and checked in under
+  `pim/uci_generated/agra_5_0a/` with byte-stability and wire-name-coverage
+  guards in `pim/test_xsd2proto.py`. A converter defect the drop exposed
+  (XSD enums carrying their own `UNSPECIFIED` literal colliding with the
+  synthetic zero sentinel) is fixed with `_XSD_LITERAL` disambiguation.
+- **Step 3 (generator shapes): probed complete, with one correction from
+  step 4 (see below).** A P2-wide probe found zero missing shapes in the
+  C++/Ada OMS-JSON emitters; the repeated-choice wire form is pinned from
+  the la-cal-harness against the A-GRA XSD (member element name keyed to a
+  JSON array in the parent; fixtures under
+  `pim/test_oms_json_gen_fixtures/repeated_choice_member/`). Note the
+  probe's limit: it only checks that emission does not raise, so it cannot
+  see an emitted rule that is wrong for the drop. Step 4 found exactly one
+  such case (the UUID validator).
+- **Step 2 (interaction overlay): landed in the working tree.** The overlay
+  lives at `pim/agra_p2_seam/` and adds 16 services over the generated P2
+  data model: four Request/Requirement command services (mission plan,
+  mission plan activation, planning function settings, approval request)
+  and twelve single-variant Information services. Topic names are the A-GRA
+  global element names; every operation is reliable/volatile with queue
+  depth 10. Notes for whoever picks this up:
+  - Correlation identifiers for each command/status pair are documented in
+    `pim/agra_p2_seam/README.md`. All of them bottom out in `ID_Type.uuid`,
+    which is 16 bytes and 32 unhyphenated hex characters on the wire.
+  - The overlay keeps byte-for-byte copies of the generated data-model
+    proto, `wire_names.json`, and the shared options proto rather than the
+    P1 overlay's symlinks, because a native Windows checkout may
+    materialize a symlink as a text file. `pim/test_agra_p2_seam.py`
+    compares each copy against its source, which guards a wire-name lookup
+    that would otherwise fail silently.
+  - Schema and drop identity travel through a new generic mechanism: an
+    input tree may contain `binding_metadata.json`, and
+    `generate_bindings.py` copies that object verbatim into the generated
+    manifest's `metadata` field. This keeps contract-specific identity out
+    of the generator's command-line options.
+  - `binding_contract.py` previously located a service's request,
+    requirement, or information topic only by matching derived wire-name
+    suffixes. Explicit contract topics (like A-GRA's element names) do not
+    carry those suffixes, so it now falls back to the RPC role that owns
+    the topic.
+- **Step 4 (offline fidelity): complete.** The round-trip loop is closed
+  for all 20 roots, and the deterministic golden, C++/Ada wire parity, and
+  schema-drop mismatch negatives all landed on 2026-07-15 (see the two
+  sub-entries at the end of this step). The P1 pattern now has a P2
+  twin in `pim/test_oms_json_gen.py`
+  (`AgraHarnessRoundTripTest`, one test per profile root plus unknown-root
+  and malformed-input negatives), driven by
+  `pim/test_oms_json_gen_fixtures/p2_smoke_driver.cpp`. Demonstrated green
+  2026-07-15 in WSL (Ubuntu, g++ 13.3): the P2 codec builds and all 20
+  roots decode and re-encode to a semantically identical document, with P1
+  re-run alongside to confirm no regression.
+  - **Defect this found (now fixed): the generated codec validated every
+    UUID against the UCI 2.5 hyphenated form.** The emitter picked the
+    validator by field *name*, so the A-GRA codec rejected every
+    schema-valid A-GRA UUID on both encode and decode, and all 20 roots
+    failed. The fix keys the validator on the converted field *type*,
+    which already carries the facet difference: UCI 2.5 types UUID as
+    `xs:string` with the RFC-4122 pattern and converts to `string` (36
+    characters, hyphenated), while A-GRA 5.0a types it as `xs:hexBinary`
+    length 16 and converts to `bytes` (32 hex digits, no hyphens). Each
+    validator is emitted only when the tree uses it, which keeps the
+    frozen seam golden byte-identical. Pinned by `AgraUuidFormTest` and
+    `P1SidecarGenerationTest.test_uci_uuids_keep_the_hyphenated_rfc_4122_form`,
+    both of which run without a toolchain.
+  - **Harness gap handled in our tests, not in the harness.** The
+    la-cal-harness emits hyphenated UUIDs whatever the schema says, so
+    `_normalize_agra_uuids` rewrites them to the A-GRA wire form before
+    they reach the codec. Patching the harness instead would have weakened
+    the evidence, since the round trip is only meaningful while the
+    harness stays an independent implementation of the same XSD.
+    `AgraUuidNormalizationTest` checks both halves against the schema type
+    itself (53 UUID fields across the 20 roots: every raw value invalid,
+    every rewritten value valid), so if the harness ever gains facet
+    awareness this fails loudly rather than silently rewriting nothing.
+  - The Ada emitter needs no matching change: it is encode-only and does
+    not validate UUIDs, so it has no hardcoded lexical form. The Ada
+    hits for `uuid` are all inside the frozen seam template.
+  - **Deterministic golden and C++/Ada wire parity (`P2AdaCompileParityTest`).**
+    `p2_smoke_driver.cpp` gained a self-test mode, and
+    `p2_ada_parity_driver.adb` builds the same
+    `MA_MissionPlanCommandStatusMT` value; both print wire JSON
+    byte-identical to `test_oms_json_gen_fixtures/p2_parity_golden.json`.
+    Demonstrated green 2026-07-15 in WSL: the Ada encoder object-compiles
+    over the full 1,192-message A-GRA closure and its output matches the
+    C++ codec's exactly, so the profile's Ada support is not waived. The
+    golden sits beside the P1 one, where the drop difference is visible at
+    a glance: the same field carries `123E4567E89B42D3A456426614174001` in
+    A-GRA and `123e4567-e89b-42d3-a456-426614174001` in UCI 2.5. What the
+    golden proves is byte-stability and agreement between the two
+    emitters, not schema validity; schema fidelity remains the harness
+    round trip's job, because only there does the input come from a
+    foreign implementation of the XSD.
+  - **Schema-drop mismatch negatives (`SchemaDropMismatchTest`).** Both
+    codecs must fail closed on the other drop's traffic, and both
+    directions are tested, since a codec that refuses foreign traffic but
+    emits it is equally broken. This matters because the two drops share
+    element names down to the message envelope (`MessageData`,
+    `MessageHeader`, `SecurityInformation`), so wrong-drop content on the
+    right topic looks plausible until something checks it. Two independent
+    things do: the UUID lexical form (the runtime inverse of the defect
+    above -- before the fix, the wrong-drop document was the one the A-GRA
+    codec would have accepted) and the required elements of the message
+    body. Each test asserts the codec refused on decode rather than merely
+    that the driver exited nonzero, so a crash or an unknown root id
+    cannot pass vacuously.
+  - Note for reproduction: the harness lives at
+    `external/ams-gra/la-cal-harness/`, not the upstream long name the
+    tests previously defaulted to, so the P1 round trip had been skipping
+    silently in this checkout. `_harness_src` now accepts both names, and
+    `LACAL_HARNESS_SRC` still overrides. Its generator needs `lxml`,
+    `xmlschema`, and `exrex`, which are not in the repo's Python
+    environment; the WSL run used a venv with those installed.
+- **Step 5 (distinct runtime profile): in progress.**
+  - **Schema identity landed.** The generated OMS-JSON codec now carries the
+    contract's `binding_metadata.json` as a schema identity and checks it in
+    `pcl_codec_plugin_entry`, whose `config_json` the PCL ABI leaves opaque
+    and plugin-specific for exactly this purpose. An identity key the loader
+    names must agree; an unparseable or non-object config is refused rather
+    than ignored; a NULL config still means "no configuration". Trees without
+    metadata emit neither identity nor check, which keeps the frozen seam
+    golden byte-identical.
+  - **The build now creates the codec target.** Two gaps had kept the build
+    from seeing the generated OMS codec at all: `oms_json` was not in the
+    backend list even with `PYRAMID_ENABLE_OWP` on, and the OMS-JSON plugin
+    was neither recorded in the binding manifest nor given the right content
+    type (an OMS-JSON filename also contains `_json_`, so it was classified
+    as `application/json`). Fixed; the target is
+    `pyramid_codec_oms_json_agra`, built from the manifest role.
+  - **Naming decision (approved 2026-07-15):** the hand-written UCI 2.5
+    starter is now `pyramid_codec_oms_json_uci_starter`, freeing the plain
+    `pyramid_codec_oms_json_<module>` name for codecs generated from a real
+    contract — including the UCI one, which previously would have collided
+    with the fixture outright. `--gra` never packages the starter.
+  - **`--gra` packages the contract's codec.** `package_sdk` selects the
+    codecs generated from the selected contract and asks the binding manifest
+    whether one is expected, so a contract that declares a codec but failed to
+    build it fails the package, while a port-grammar contract that declares
+    none (`agra_example`) packages with a warning rather than a spurious
+    error. `create_sdk --gra` warns when pointed at `agra_example`.
+    Demonstrated 2026-07-15 in WSL: `--gra --proto-dir pim/agra_p2_seam`
+    produces a package whose `plugins/` holds exactly
+    `libpyramid_codec_oms_json_agra.so` and
+    `libpyramid_lacal_transport_plugin.so`, with the contract,
+    `wire_names.json`, and `binding_metadata.json` under `proto/`.
+  - **Three FlatBuffers defects found and fixed on the way to `--verify`.**
+    `create_sdk --gra --verify` failed inside the packaged build, in the
+    FlatBuffers backend rather than the OMS codec. All three are pre-existing
+    and reached by any XSD-derived tree, so the P1/UCI projection had them
+    too; none affects the OMS codec, the LA-CAL transport, or any wire
+    evidence recorded above.
+    1. **A union arm may not be an enum.** A FlatBuffers union member must be
+       a table. String arms already got a wrapper table; enum arms did not, so
+       `flatc` rejected the schema outright ("type referenced but not
+       defined": `OwnerProducerChoiceType.GovernmentIdentifier`). Enum arms
+       are now wrapped the same way.
+    2. **One union was shared by every choice type in the contract.** Unions
+       were named from the oneof name alone, and `xsd2proto` names every
+       `xs:choice` oneof `choice`, so all 183 tables carrying a choice pointed
+       at a single `ChoiceUnion` holding the arms of whichever message was
+       emitted first. This is the serious one: a build failure is loud, but
+       this is a silently wrong projection. Unions are now named per
+       (message, oneof).
+    3. **Two arms of one choice may share a type.** An unnamed union arm
+       contributes its *type* name to the union's implicit enum, so a choice
+       with two elements of the same type (`CapabilityTaxonomyType`, twice)
+       produced a duplicate. Arms are now named after their proto field, which
+       proto guarantees unique within the oneof.
+    Verified with real `flatc`: all six A-GRA schemas compile, including the
+    1,192-message data model. Note for whoever picks this up: the FlatBuffers
+    C++ codec flattens oneof arms and never reads the union, so these schema
+    changes have no C++ codec counterpart.
+  - **A fourth FlatBuffers defect, in the C++ codec rather than the schema:
+    `bytes` was projected as `[ubyte]`.** That made the FlatBuffers side a
+    `std::vector<uint8_t>` while the generated struct's field is
+    `std::string`, so the codec's `out.uuid = msg.uuid` did not compile in
+    either direction. `bytes` now maps to a FlatBuffers `string`, which is
+    what the rest of the backend already assumed (`_is_generated_string_like`
+    has always treated it as string-like). This is faithful rather than a
+    workaround: in this repository a proto `bytes` field holds *text*, not
+    raw binary — `xsd2proto` emits it only for `xs:hexBinary` and
+    `xs:base64Binary`, whose values are the lexical form (A-GRA's UUID is 32
+    hex characters), the generated C++ type is `std::string`, and the
+    OMS-JSON codec writes it as a JSON string. No existing wire format moved:
+    `bytes` appears exactly once in the repository's contracts (A-GRA's
+    `ID_Type.uuid`), so the `[ubyte]` projection had never been exercised.
+    This defect is A-GRA-specific, which is why P1 never surfaced it: UCI 2.5
+    types its UUID as `xs:string`.
+  - Remaining in step 5: the packaged-SDK `MA_*` smoke through the codec and
+    the LA-CAL plugin (the acceptance bullet), and the dynamic-load evidence
+    the SDK's `sdk_gra_plugin_load_smoke` provides.
+- Remaining: step 6 (bidirectional Sleet interop + fail-closed negatives),
+  step 7 (evidence publication; the compatibility matrix and user guide still
+  describe P2 as offline-only until then).
+
+This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,
 interoperable OMS JSON codec. The current `pim/agra_example/` remains a
 non-wire port-grammar fixture and is not an input to this workstream.
