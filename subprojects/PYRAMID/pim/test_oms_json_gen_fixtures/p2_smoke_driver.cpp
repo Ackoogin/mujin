@@ -1,5 +1,14 @@
 // Test driver for the generated P2 (A-GRA 5.0a) OMS-JSON codec plugin
-// (pim/test_oms_json_gen.py).  One mode:
+// (pim/test_oms_json_gen.py).  Two modes:
+//
+//   (no args)             self-test: build an MA_MissionPlanCommandStatusMT
+//                         natively, encode -> decode -> re-encode, assert
+//                         byte-stable, print the wire JSON + RT_OK.  The
+//                         printed document is the parity golden that
+//                         p2_ada_parity_driver.adb must reproduce byte for
+//                         byte.  Exercises the A-GRA hexBinary UUID form,
+//                         dual-id dispatch, sidecar wire names, enum
+//                         literals, oneof choice, and omit-empty arrays.
 //
 //   --roundtrip <RootId>  Read one OMS JSON document (as produced by the
 //                         la-cal-harness XSD-derived generator, with UUIDs
@@ -8,10 +17,8 @@
 //                         and print the wire JSON.  The Python side asserts
 //                         semantic equality with the schema-derived input.
 //
-// This mirrors p1_smoke_driver.cpp's --roundtrip mode over the 20 roots of
-// the p2_agra_planning_core profile.  There is no native self-test here: the
-// P1 driver already pins the hand-built encode path, and the shapes this
-// profile adds are covered by the fixture tests in pim/test_oms_json_gen.py.
+// This mirrors p1_smoke_driver.cpp over the 20 roots of the
+// p2_agra_planning_core profile.
 #include "pyramid_data_model_agra_types.hpp"
 #include "pyramid_data_model_agra_cabi_marshal.hpp"
 #include <pcl/pcl_codec.h>
@@ -25,6 +32,9 @@
 extern "C" const pcl_codec_t* pcl_codec_plugin_entry(const char*);
 extern "C" void* pcl_alloc(size_t n) { return std::malloc(n); }
 extern "C" void pcl_free(void* p) { std::free(p); }
+
+namespace agra = pyramid::domain_model::agra;
+namespace cabi = pyramid::cabi;
 
 // The P2 profile roots (element name -> C ABI struct type), in the order
 // pim/uci_profiles/p2_agra_planning_core.json lists them.
@@ -93,10 +103,75 @@ static int roundtrip(const char* root_id) {
   return 1;
 }
 
+// The value the cross-language parity golden pins.  Keep this in step with
+// p2_ada_parity_driver.adb: the two must build the same value, and the
+// Python side compares both against test_oms_json_gen_fixtures/
+// p2_parity_golden.json.  Every UUID here is in the A-GRA 5.0a wire form
+// (xs:hexBinary length 16 -- 32 hex digits, no hyphens), which is what
+// distinguishes this golden from the P1/UCI 2.5 one.
+static int selftest() {
+  agra::MA_MissionPlanCommandStatusMT m{};
+  m.security_information.classification = agra::ClassificationEnum::U;
+  agra::OwnerProducerChoiceType op{};
+  op.government_identifier = agra::OwnerProducerEnum::Usa;
+  m.security_information.owner_producer.push_back(op);
+  m.message_header.system_id.uuid = "123E4567E89B42D3A456426614174000";
+  m.message_header.timestamp = "2026-01-01T00:00:00Z";
+  m.message_header.schema_version = "005.0a.ASK";
+  m.message_header.mode = agra::MessageModeEnum::Simulation;
+  m.message_data.command_id.uuid = "123E4567E89B42D3A456426614174001";
+  m.message_data.planning_status.command_processing_state =
+      agra::CommandProcessingStateEnum::Received;
+  m.message_data.planning_status.command_status =
+      agra::ProcessingStatusEnum::Queued;
+
+  pyramid_data_model_agra_MA_MissionPlanCommandStatusMT_c c{};
+  cabi::to_c(m, &c);
+
+  const pcl_codec_t* codec = pcl_codec_plugin_entry(nullptr);
+  if (!codec) { std::puts("FAIL: no codec"); return 1; }
+
+  pcl_msg_t wire{};
+  // Root dual-id: both the element name and the message name must resolve.
+  if (codec->encode(nullptr, "MA_MissionPlanCommandStatus", &c, &wire)
+      != PCL_OK) {
+    std::puts("FAIL: encode by element id"); return 1;
+  }
+  std::string json1(static_cast<const char*>(wire.data), wire.size);
+  pcl_msg_t wire2{};
+  if (codec->encode(nullptr, "MA_MissionPlanCommandStatusMT", &c, &wire2)
+      != PCL_OK) {
+    std::puts("FAIL: encode by message id"); return 1;
+  }
+  std::string json_msgid(static_cast<const char*>(wire2.data), wire2.size);
+  if (json1 != json_msgid) {
+    std::puts("FAIL: dual-id outputs differ"); return 1;
+  }
+
+  pyramid_data_model_agra_MA_MissionPlanCommandStatusMT_c back{};
+  if (codec->decode(nullptr, "MA_MissionPlanCommandStatus", &wire, &back)
+      != PCL_OK) {
+    std::puts("FAIL: decode"); return 1;
+  }
+  pcl_msg_t wire3{};
+  if (codec->encode(nullptr, "MA_MissionPlanCommandStatus", &back, &wire3)
+      != PCL_OK) {
+    std::puts("FAIL: re-encode"); return 1;
+  }
+  std::string json2(static_cast<const char*>(wire3.data), wire3.size);
+  if (json1 != json2) {
+    std::printf("FAIL: round-trip drift\n%s\n%s\n",
+                json1.c_str(), json2.c_str());
+    return 1;
+  }
+  std::printf("%s\n", json1.c_str());
+  std::puts("RT_OK");
+  return 0;
+}
+
 int main(int argc, char** argv) {
   if (argc == 3 && std::strcmp(argv[1], "--roundtrip") == 0) {
     return roundtrip(argv[2]);
   }
-  std::fputs("usage: p2_smoke_driver --roundtrip <RootId>\n", stderr);
-  return 2;
+  return selftest();
 }

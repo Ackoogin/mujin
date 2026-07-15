@@ -192,8 +192,10 @@ pattern) are done — see Delivered. Remaining:
     suffixes. Explicit contract topics (like A-GRA's element names) do not
     carry those suffixes, so it now falls back to the RPC role that owns
     the topic.
-- **Step 4 (offline fidelity): the round-trip loop is closed for all 20
-  roots; goldens and Ada parity still to do.** The P1 pattern now has a P2
+- **Step 4 (offline fidelity): complete.** The round-trip loop is closed
+  for all 20 roots, and the deterministic golden, C++/Ada wire parity, and
+  schema-drop mismatch negatives all landed on 2026-07-15 (see the two
+  sub-entries at the end of this step). The P1 pattern now has a P2
   twin in `pim/test_oms_json_gen.py`
   (`AgraHarnessRoundTripTest`, one test per profile root plus unknown-root
   and malformed-input negatives), driven by
@@ -227,8 +229,34 @@ pattern) are done — see Delivered. Remaining:
   - The Ada emitter needs no matching change: it is encode-only and does
     not validate UUIDs, so it has no hardcoded lexical form. The Ada
     hits for `uuid` are all inside the frozen seam template.
-  - Remaining in step 4: deterministic goldens, schema-drop mismatch
-    negatives, and C++/Ada wire-parity coverage for P2.
+  - **Deterministic golden and C++/Ada wire parity (`P2AdaCompileParityTest`).**
+    `p2_smoke_driver.cpp` gained a self-test mode, and
+    `p2_ada_parity_driver.adb` builds the same
+    `MA_MissionPlanCommandStatusMT` value; both print wire JSON
+    byte-identical to `test_oms_json_gen_fixtures/p2_parity_golden.json`.
+    Demonstrated green 2026-07-15 in WSL: the Ada encoder object-compiles
+    over the full 1,192-message A-GRA closure and its output matches the
+    C++ codec's exactly, so the profile's Ada support is not waived. The
+    golden sits beside the P1 one, where the drop difference is visible at
+    a glance: the same field carries `123E4567E89B42D3A456426614174001` in
+    A-GRA and `123e4567-e89b-42d3-a456-426614174001` in UCI 2.5. What the
+    golden proves is byte-stability and agreement between the two
+    emitters, not schema validity; schema fidelity remains the harness
+    round trip's job, because only there does the input come from a
+    foreign implementation of the XSD.
+  - **Schema-drop mismatch negatives (`SchemaDropMismatchTest`).** Both
+    codecs must fail closed on the other drop's traffic, and both
+    directions are tested, since a codec that refuses foreign traffic but
+    emits it is equally broken. This matters because the two drops share
+    element names down to the message envelope (`MessageData`,
+    `MessageHeader`, `SecurityInformation`), so wrong-drop content on the
+    right topic looks plausible until something checks it. Two independent
+    things do: the UUID lexical form (the runtime inverse of the defect
+    above -- before the fix, the wrong-drop document was the one the A-GRA
+    codec would have accepted) and the required elements of the message
+    body. Each test asserts the codec refused on decode rather than merely
+    that the driver exited nonzero, so a crash or an unknown root id
+    cannot pass vacuously.
   - Note for reproduction: the harness lives at
     `external/ams-gra/la-cal-harness/`, not the upstream long name the
     tests previously defaulted to, so the P1 round trip had been skipping
@@ -239,7 +267,9 @@ pattern) are done — see Delivered. Remaining:
 - Remaining: step 5 (distinct codec plugin + `--gra` SDK packaging), step
   6 (bidirectional Sleet interop + fail-closed negatives), step 7
   (evidence publication; the compatibility matrix and user guide still
-  describe P2 as offline-only until then).
+  describe P2 as offline-only until then). Steps 1-4 are done, so the
+  offline half of the acceptance list is met and the next session can
+  start at step 5.
 
 This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,

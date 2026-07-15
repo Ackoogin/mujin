@@ -716,9 +716,7 @@ class HarnessRoundTripTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.exe = _build_driver()
-        cls.generator = _load_harness_generator(
-            PIM_DIR / "schemas" / "dl" / "uci_2_5_0" /
-            "UCI_MessageDefinitions_v2_5_0.xsd")
+        cls.generator = _load_harness_generator(_UCI_XSD)
 
     def _roundtrip(self, root: str):
         doc = _strip_type_annotations(self.generator.generate_minimal(root))
@@ -755,6 +753,9 @@ _P2_ROOTS = json.loads(
 
 _AGRA_XSD = (PIM_DIR / "schemas" / "dl" / "agra_5_0a" /
              "A-GRA_MessageDefinitions_v5_0_a.xsd")
+
+_UCI_XSD = (PIM_DIR / "schemas" / "dl" / "uci_2_5_0" /
+            "UCI_MessageDefinitions_v2_5_0.xsd")
 
 
 class AgraUuidNormalizationTest(unittest.TestCase):
@@ -912,6 +913,99 @@ def _add_p2_roundtrip_cases():
 _add_p2_roundtrip_cases()
 
 
+class SchemaDropMismatchTest(unittest.TestCase):
+    """Plan step 4's schema-drop mismatch negatives: each generated codec
+    must fail closed when handed the other drop's traffic.
+
+    The two drops overlap enough for this to be a real deployment risk
+    rather than a theoretical one.  A-GRA 5.0a and UCI 2.5 share element
+    names down to the message envelope (``MessageData``, ``MessageHeader``,
+    ``SecurityInformation``), so a peer that publishes the wrong drop's
+    content on the right topic produces a document that looks plausible
+    until something checks it.  Two independent things must catch it:
+
+    1. the UUID lexical form, which differs between the drops (hexBinary in
+       A-GRA, RFC-4122 hyphenated in UCI).  These two cases are the runtime
+       inverse of the defect the P2 round trip found -- before the fix the
+       A-GRA codec enforced the UCI form, so the wrong-drop document was
+       the one it would have accepted;
+    2. the message body, whose required elements differ, so ``j.at`` fails
+       on the first element the other drop does not carry.
+
+    Both directions are covered, because a codec that refuses foreign
+    traffic but emits it is just as broken.
+
+    Opt-in: same gates as the round-trip tests (OMS_JSON_COMPILE_SMOKE=1,
+    a C++17 toolchain, nlohmann, and an importable harness)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.uci_generator = _load_harness_generator(_UCI_XSD)
+        cls.agra_generator = _load_harness_generator(_AGRA_XSD)
+        cls.p1_exe = _build_driver()
+        cls.p2_exe = _build_p2_driver()
+
+    def _uci_doc(self):
+        return _strip_type_annotations(
+            self.uci_generator.generate_minimal("ActionCommand"))
+
+    def _agra_doc(self):
+        return _strip_type_annotations(
+            self.agra_generator.generate_minimal("MA_Task"))
+
+    def _assert_carries_uuids(self, doc, label):
+        """Guard against a vacuous pass: a document with no UUID in it
+        cannot demonstrate anything about UUID forms."""
+        seen = []
+        _normalize_agra_uuids(doc, seen)
+        self.assertTrue(seen, f"{label} carries no UUID -- test is vacuous")
+
+    def _assert_refused(self, exe, root, doc, why):
+        run = subprocess.run(
+            [str(exe), "--roundtrip", root],
+            input=json.dumps(doc), capture_output=True, text=True)
+        self.assertNotEqual(
+            run.returncode, 0,
+            f"{why}: the codec accepted it\ninput: {json.dumps(doc)[:2000]}")
+        # The refusal must come from the codec's decode of a root it knows,
+        # not from the driver failing to find the root or from a crash --
+        # either of those would pass the returncode check while proving
+        # nothing about drop mismatch.
+        self.assertIn(
+            f"FAIL: decode {root}", run.stderr,
+            f"{why}: expected the codec to refuse it on decode, but the "
+            f"driver exited {run.returncode} saying: {run.stderr!r}")
+
+    def test_a_uci_form_uuid_is_refused_by_the_agra_codec(self):
+        # The harness emits hyphenated UUIDs whatever the schema says, so
+        # its raw A-GRA output *is* an otherwise well-shaped A-GRA document
+        # carrying UCI-form UUIDs.  Skipping _normalize_agra_uuids is the
+        # whole fixture.
+        doc = self._agra_doc()
+        self._assert_carries_uuids(doc, "the MA_Task instance")
+        self._assert_refused(self.p2_exe, "MA_Task", doc,
+                             "A-GRA document with UCI-form UUIDs")
+
+    def test_an_agra_form_uuid_is_refused_by_the_uci_codec(self):
+        raw = self._uci_doc()
+        self._assert_carries_uuids(raw, "the ActionCommand instance")
+        doc = _normalize_agra_uuids(raw)
+        self._assert_refused(self.p1_exe, "ActionCommand", doc,
+                             "UCI document with A-GRA-form UUIDs")
+
+    def test_uci_content_is_refused_on_an_agra_root(self):
+        # UUIDs normalized to the A-GRA form on purpose, so the refusal
+        # comes from the message body rather than the UUID check.
+        doc = _normalize_agra_uuids(self._uci_doc())
+        self._assert_refused(self.p2_exe, "MA_Task", doc,
+                             "UCI ActionCommand body on the MA_Task root")
+
+    def test_agra_content_is_refused_on_a_uci_root(self):
+        doc = self._agra_doc()  # left in the harness's UCI-form UUIDs
+        self._assert_refused(self.p1_exe, "ActionCommand", doc,
+                             "A-GRA MA_Task body on the ActionCommand root")
+
+
 class AdaCompileParityTest(unittest.TestCase):
     """Opt-in Ada parity gates (same OMS_JSON_COMPILE_SMOKE=1 switch):
 
@@ -967,6 +1061,98 @@ class AdaCompileParityTest(unittest.TestCase):
         run = subprocess.run([str(exe)], capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(run.stdout.splitlines()[0], golden)
+
+
+class P2AdaCompileParityTest(unittest.TestCase):
+    """Plan step 4, the P2 twin of AdaCompileParityTest: the deterministic
+    golden and the C++/Ada wire-parity gate for the A-GRA profile.
+
+    Both drivers build the same MA_MissionPlanCommandStatusMT value and must
+    print wire JSON byte-identical to ``p2_parity_golden.json``.  What this
+    adds over the P1 golden is the drop difference: every UUID in the A-GRA
+    value is hexBinary (32 hex digits, no hyphens), so the golden would move
+    if either emitter ever reverted to the UCI 2.5 hyphenated form.
+
+    What the golden does and does not prove: it pins the bytes and the
+    agreement between the two emitters, not that the document is
+    schema-valid.  Schema fidelity is AgraHarnessRoundTripTest's job, where
+    the instances come from a foreign implementation of the same XSD.
+
+    Opt-in: OMS_JSON_COMPILE_SMOKE=1, plus gnatmake for the Ada half and a
+    C++17 toolchain with nlohmann for the C++ half."""
+
+    GOLDEN = PIM_DIR / "test_oms_json_gen_fixtures" / "p2_parity_golden.json"
+
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("OMS_JSON_COMPILE_SMOKE") != "1":
+            raise unittest.SkipTest("set OMS_JSON_COMPILE_SMOKE=1 to run")
+        if not P2_TREE.is_dir():
+            raise unittest.SkipTest("P2 generated tree is absent")
+
+    def test_p2_ada_encoder_compiles_and_matches_the_parity_golden(self):
+        if shutil.which("gnatmake") is None:
+            self.skipTest("gnatmake not available")
+        golden = self.GOLDEN.read_text(encoding="utf-8").strip()
+        driver = (PIM_DIR / "test_oms_json_gen_fixtures" /
+                  "p2_ada_parity_driver.adb")
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = Path(tmp) / "gen"
+            subprocess.run(
+                [sys.executable, str(PIM_DIR / "generate_bindings.py"),
+                 str(P2_TREE), str(gen), "--languages", "ada",
+                 "--backends", "oms_json"],
+                check=True, capture_output=True)
+            shutil.copy(driver, gen / driver.name)
+            started = time.perf_counter()
+            build = subprocess.run(
+                ["gnatmake", "-q", "-gnat2020", "-I.", "-Ioms_json/ada",
+                 driver.name],
+                cwd=gen, capture_output=True, text=True)
+            self.assertEqual(build.returncode, 0,
+                             f"P2 Ada build failed after "
+                             f"{time.perf_counter() - started:.1f}s:\n"
+                             + build.stdout + build.stderr)
+            run = subprocess.run([str(gen / "p2_ada_parity_driver")],
+                                 capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(run.stdout.strip(), golden,
+                             "A-GRA Ada wire output drifted from the parity "
+                             "golden (C++ and Ada must stay byte-identical)")
+
+    def test_p2_cpp_driver_matches_the_same_golden(self):
+        golden = self.GOLDEN.read_text(encoding="utf-8").strip()
+        try:
+            exe = _build_p2_driver()
+        except unittest.SkipTest:
+            self.skipTest("C++ toolchain gates not met")
+        run = subprocess.run([str(exe)], capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("RT_OK", run.stdout)
+        self.assertEqual(run.stdout.splitlines()[0], golden)
+
+    def test_the_golden_carries_the_agra_uuid_form(self):
+        """A cheap, toolchain-free guard on the fixture itself, so a golden
+        recaptured from a regressed emitter cannot pass unnoticed."""
+        doc = json.loads(self.GOLDEN.read_text(encoding="utf-8"))
+        uuids = []
+
+        def collect(node):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key == "UUID" and isinstance(value, str):
+                        uuids.append(value)
+                    else:
+                        collect(value)
+            elif isinstance(node, list):
+                for value in node:
+                    collect(value)
+
+        collect(doc)
+        self.assertTrue(uuids, "golden carries no UUID to check")
+        for value in uuids:
+            self.assertRegex(value, r"^[0-9A-Fa-f]{32}$",
+                             "A-GRA UUIDs are hexBinary length 16")
 
 
 if __name__ == "__main__":
