@@ -591,6 +591,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
     )
     target_link_libraries(test_binding_performance PRIVATE
         pcl_core pcl_transport_socket pcl_transport_shared_memory
+        pcl_transport_udp
         tactical_objects
         pyramid_generated_codecs
         pyramid_flatbuffers_support
@@ -614,6 +615,16 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
             ${PYRAMID_PROTOBUF_GEN_DIR}
         )
         target_compile_definitions(test_binding_performance PRIVATE PYRAMID_HAS_GRPC)
+    endif()
+    if(TARGET pyramid_codec_oms_json_uci_starter)
+        add_dependencies(test_binding_performance
+            pyramid_codec_oms_json_uci_starter)
+        target_compile_definitions(test_binding_performance PRIVATE
+            PYRAMID_HAS_OMS_JSON
+            PYRAMID_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_uci_starter>")
+        target_include_directories(test_binding_performance PRIVATE
+            ${PYRAMID_ROOT_DIR}/include)
+        target_link_libraries(test_binding_performance PRIVATE ${CMAKE_DL_LIBS})
     endif()
     if(NOT WIN32)
         target_link_libraries(test_binding_performance PRIVATE pthread rt)

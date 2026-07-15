@@ -17,6 +17,7 @@
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>pyramid_msgs</test_depend>
+  <test_depend>rmw_fastrtps_cpp</test_depend>
 
   <member_of_group>rosidl_interface_packages</member_of_group>
 

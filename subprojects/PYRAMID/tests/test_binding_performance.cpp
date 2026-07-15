@@ -1,11 +1,17 @@
 /// \file test_binding_performance.cpp
 /// \brief Codec/transport performance benchmark via generated PYRAMID bindings.
 ///
-/// For each transport (local in-process, shared-memory bus, TCP socket) and each
-/// enabled codec (JSON, FlatBuffers, Protobuf), N unary create-requirement
-/// service calls are transferred sequentially and the per-call latency is
-/// recorded. When gRPC support is enabled, the same unary protobuf round-trip
-/// is benchmarked through the generated gRPC transport host.
+/// Local in-process, shared-memory, and TCP transports run sequential unary
+/// calls for every enabled general-purpose codec. UDP runs matched one-way
+/// pub/sub delivery. Completion is timestamped in the response or subscriber
+/// callback while client and server executors run on independent threads. The
+/// measured interval therefore does not include a benchmark-side executor
+/// polling loop.
+///
+/// Every transport has a raw-PCL row, which moves pre-encoded bytes through the
+/// PCL transport, and a PYRAMID row, which uses the generated typed facade and
+/// codec plugins. When gRPC support is enabled, a raw generated-protobuf gRPC
+/// service is compared with the same gRPC service backed by a PYRAMID port.
 /// A formatted report is printed at the end of the test suite.
 
 #include <gtest/gtest.h>
@@ -13,11 +19,17 @@
 extern "C" {
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
+#include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport.h>
 #include <pcl/pcl_transport_socket.h>
 #include <pcl/pcl_transport_shared_memory.h>
+#include <pcl/pcl_transport_udp.h>
 #include <pcl/pcl_types.h>
 }
+
+#if defined(PYRAMID_HAS_OMS_JSON)
+#include <pyramid/oms_json_types.h>
+#endif
 
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
@@ -38,6 +50,8 @@ extern "C" {
 #include <ctime>
 #include <cstdio>
 #include <cstring>
+#include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -62,8 +76,9 @@ namespace svc = pyramid::components::tactical_objects::services::provided;
 // Constants
 // ---------------------------------------------------------------------------
 
-static constexpr int kNMsgs     = 500;   ///< messages per PCL combo
-static constexpr int kNMsgsGrpc = 200;   ///< unary gRPC calls
+static constexpr int kNMsgs     = 500;   ///< measured messages per PCL combo
+static constexpr int kNMsgsGrpc = 200;   ///< measured unary gRPC calls
+static constexpr int kNWarmupMsgs = 50;  ///< untimed warm-up messages
 static constexpr int kNCodecIters = 20000;   ///< iterations per codec microbench
 static constexpr int kMsgTimeoutMs = 2000;
 
@@ -92,7 +107,7 @@ static svc::ObjectInterestRequirement makePayload() {
 // Timing helpers
 // ---------------------------------------------------------------------------
 
-using Clock = std::chrono::high_resolution_clock;
+using Clock = std::chrono::steady_clock;
 
 static double toUs(Clock::time_point t0, Clock::time_point t1) {
   return std::chrono::duration<double, std::micro>(t1 - t0).count();
@@ -142,10 +157,6 @@ static double threadNowCycles() {
 #endif
 }
 
-static double threadCpuElapsedUs(double start_ns) {
-  return (threadCpuNowNs() - start_ns) / 1000.0;
-}
-
 // ---------------------------------------------------------------------------
 // PerfResult and report
 // ---------------------------------------------------------------------------
@@ -165,7 +176,6 @@ struct PerfResult {
   int         timed_out_msgs = 0;
   size_t      payload_bytes = 0;
   PerfStats   wall;
-  PerfStats   cpu;
   bool        skipped     = false;
 };
 
@@ -208,8 +218,7 @@ static PerfResult computeResult(const std::string& label,
                                 int completed,
                                 int timed_out,
                                 size_t payload_bytes,
-                                std::vector<double>& wall_samples,
-                                std::vector<double>& cpu_samples) {
+                                std::vector<double>& wall_samples) {
   PerfResult r;
   r.label = label;
   r.attempted_msgs = attempted;
@@ -222,37 +231,37 @@ static PerfResult computeResult(const std::string& label,
   }
 
   r.wall = computeStats(wall_samples);
-  r.cpu = computeStats(cpu_samples);
   return r;
 }
 
-static void printReport(const std::vector<PerfResult>& results) {
+static void printReport(const std::vector<PerfResult>& results,
+                        const char* title,
+                        const char* payload,
+                        const char* metric) {
   // separator widths
   printf("\n");
   printf("============================================================"
          "==============================\n");
-  printf(" PYRAMID Binding Performance Report\n");
-  printf(" Payload: ObjectInterestRequirement -> Identifier"
-         "  |  Iterations per combo: %d\n", kNMsgs);
+  printf(" %s (callback-timestamped)\n", title);
+  printf(" Payload: %s  |  Iterations per combo: %d\n", payload, kNMsgs);
   printf("============================================================"
          "==============================\n");
-  printf("%-24s | %7s | %9s | %10s | %10s | %10s | %10s | %10s\n",
-         "Transport/Codec", "Bytes", "Done", "AvgWall(us)",
-         "MinWall(us)", "P99Wall(us)", "AvgThr(us)", "MinThr(us)");
-  printf("%-24s-+-%7s-+-%9s-+-%10s-+-%10s-+-%10s-+-%10s-+-%10s\n",
-         "------------------------", "-------", "---------", "----------",
-         "----------", "----------", "----------", "----------");
+  printf("%-32s | %7s | %9s | %10s | %10s | %10s | %10s\n",
+         "Layer / transport / codec", "Bytes", "Done", metric,
+         "Minimum(us)", "P50(us)", "P99(us)");
+  printf("%-32s-+-%7s-+-%9s-+-%10s-+-%10s-+-%10s-+-%10s\n",
+         "--------------------------------", "-------", "---------", "----------",
+         "----------", "----------", "----------");
 
   for (const auto& r : results) {
     if (r.skipped) {
-      printf("%-28s | %9s   (skipped)\n", r.label.c_str(), "");
+      printf("%-36s | %9s   (skipped)\n", r.label.c_str(), "");
       continue;
     }
-    printf("%-24s | %7zu | %3d/%-5d | %10.1f | %10.1f | %10.1f | %10.1f | %10.1f\n",
+    printf("%-32s | %7zu | %3d/%-5d | %10.1f | %10.1f | %10.1f | %10.1f\n",
            r.label.c_str(), r.payload_bytes,
            r.completed_msgs, r.attempted_msgs,
-           r.wall.avg_us, r.wall.min_us, r.wall.p99_us,
-           r.cpu.avg_us, r.cpu.min_us);
+           r.wall.avg_us, r.wall.min_us, r.wall.p50_us, r.wall.p99_us);
   }
   printf("============================================================"
          "==============================\n\n");
@@ -263,7 +272,7 @@ static void printCodecReport(const std::vector<CodecPerfResult>& results) {
   printf("============================================================"
          "==============================\n");
   printf(" PYRAMID Codec Cost Report\n");
-  printf(" Payload: ObjectInterestRequirement"
+  printf(" Payload varies by row; Bytes is the encoded size"
          "  |  Iterations per combo: %d\n", kNCodecIters);
   printf("============================================================"
          "==============================\n");
@@ -321,33 +330,113 @@ static CodecPerfResult runCodecLoop(const char* label,
 }
 
 // ---------------------------------------------------------------------------
-// Shared unary response state (used across transport benchmarks)
+// Callback-timestamped unary response state
 // ---------------------------------------------------------------------------
 
 struct UnaryResponseState {
-  std::atomic<int> count{0};
   std::mutex       mutex;
   std::condition_variable cv;
+  bool             complete = false;
   bool             decoded = false;
+  Clock::time_point started_at{};
+  Clock::time_point completed_at{};
   svc::Identifier  response_id;
 };
 
 static void createRequirementResponse(const pcl_msg_t* msg, void* ud) {
   auto* s = static_cast<UnaryResponseState*>(ud);
-  s->decoded =
+  const bool decoded =
       svc::decodeObjectOfInterestCreateRequirementResponse(msg, &s->response_id);
-  s->count.fetch_add(1, std::memory_order_release);
+  const auto completed_at = Clock::now();
+  {
+    std::lock_guard<std::mutex> lock(s->mutex);
+    s->decoded = decoded;
+    s->completed_at = completed_at;
+    s->complete = true;
+  }
   s->cv.notify_all();
 }
 
-static bool waitForResponse(UnaryResponseState& state,
-                            int prev_count,
-                            std::chrono::steady_clock::time_point deadline) {
-  std::unique_lock<std::mutex> lock(state.mutex);
-  return state.cv.wait_until(lock, deadline, [&] {
-    return state.count.load(std::memory_order_acquire) > prev_count;
-  });
+static void rawResponse(const pcl_msg_t* msg, void* ud) {
+  auto* s = static_cast<UnaryResponseState*>(ud);
+  const bool decoded = msg != nullptr && msg->data != nullptr && msg->size > 0u;
+  const auto completed_at = Clock::now();
+  {
+    std::lock_guard<std::mutex> lock(s->mutex);
+    s->decoded = decoded;
+    s->completed_at = completed_at;
+    s->complete = true;
+  }
+  s->cv.notify_all();
 }
+
+static void prepareResponse(UnaryResponseState& state) {
+  std::lock_guard<std::mutex> lock(state.mutex);
+  state.complete = false;
+  state.decoded = false;
+  state.started_at = Clock::time_point{};
+  state.completed_at = Clock::time_point{};
+}
+
+static bool waitForResponse(UnaryResponseState& state,
+                            Clock::time_point deadline,
+                            Clock::time_point* started_at,
+                            Clock::time_point* completed_at) {
+  std::unique_lock<std::mutex> lock(state.mutex);
+  if (!state.cv.wait_until(lock, deadline, [&] { return state.complete; })) {
+    return false;
+  }
+  *started_at = state.started_at;
+  *completed_at = state.completed_at;
+  return state.decoded;
+}
+
+class ExecutorRunner {
+public:
+  explicit ExecutorRunner(pcl_executor_t* executor) : executor_(executor) {
+    thread_ = std::thread([this] {
+      while (!stop_.load(std::memory_order_acquire)) {
+        std::function<void()> command;
+        {
+          std::lock_guard<std::mutex> lock(command_mutex_);
+          if (!commands_.empty()) {
+            command = std::move(commands_.front());
+            commands_.pop_front();
+          }
+        }
+        if (command) {
+          command();
+        }
+        pcl_executor_spin_once(executor_, 0);
+        std::this_thread::yield();
+      }
+    });
+  }
+
+  ~ExecutorRunner() {
+    stop();
+  }
+
+  void stop() {
+    if (!thread_.joinable()) {
+      return;
+    }
+    stop_.store(true, std::memory_order_release);
+    thread_.join();
+  }
+
+  void post(std::function<void()> command) {
+    std::lock_guard<std::mutex> lock(command_mutex_);
+    commands_.push_back(std::move(command));
+  }
+
+private:
+  pcl_executor_t* executor_ = nullptr;
+  std::atomic<bool> stop_{false};
+  std::mutex command_mutex_;
+  std::deque<std::function<void()>> commands_;
+  std::thread thread_;
+};
 
 // ---------------------------------------------------------------------------
 // Unary service helpers
@@ -355,6 +444,8 @@ static bool waitForResponse(UnaryResponseState& state,
 
 struct UnaryServiceSetup {
   const char* content_type = nullptr;
+  bool use_typed_binding = true;
+  std::string raw_response;
   std::string response_buffer;
 };
 
@@ -376,20 +467,25 @@ static pcl_status_t handleCreateRequirement(pcl_container_t*,
   }
 
   auto* setup = static_cast<UnaryServiceSetup*>(user_data);
-  UnaryServiceHandler handler;
-  void* response_buf = nullptr;
-  size_t response_size = 0;
-  svc::dispatch(handler, svc::ServiceChannel::ObjectOfInterestCreateRequirement,
-                request ? request->data : nullptr,
-                request ? request->size : 0u,
-                request ? request->type_name : setup->content_type,
-                &response_buf, &response_size);
+  if (setup->use_typed_binding) {
+    UnaryServiceHandler handler;
+    void* response_buf = nullptr;
+    size_t response_size = 0;
+    svc::dispatch(handler,
+                  svc::ServiceChannel::ObjectOfInterestCreateRequirement,
+                  request ? request->data : nullptr,
+                  request ? request->size : 0u,
+                  request ? request->type_name : setup->content_type,
+                  &response_buf, &response_size);
 
-  setup->response_buffer.clear();
-  if (response_buf != nullptr && response_size > 0) {
-    setup->response_buffer.assign(static_cast<const char*>(response_buf),
-                                  response_size);
-    std::free(response_buf);
+    setup->response_buffer.clear();
+    if (response_buf != nullptr && response_size > 0) {
+      setup->response_buffer.assign(static_cast<const char*>(response_buf),
+                                    response_size);
+      std::free(response_buf);
+    }
+  } else {
+    setup->response_buffer = setup->raw_response;
   }
 
   response->data = setup->response_buffer.empty()
@@ -457,6 +553,103 @@ static size_t encodedPayloadSize(const svc::ObjectInterestRequirement& request,
   return 0u;
 }
 
+static std::string encodedPayload(
+    const svc::ObjectInterestRequirement& request,
+    const char* content_type) {
+  if (std::strcmp(content_type, "application/json") == 0) {
+    return pyramid::domain_model::tactical::toJson(request);
+  }
+  if (std::strcmp(content_type, "application/flatbuffers") == 0) {
+    return pyramid::services::tactical_objects::flatbuffers_codec::toBinary(
+        request);
+  }
+#if defined(PYRAMID_HAS_PROTOBUF)
+  if (std::strcmp(content_type, "application/protobuf") == 0) {
+    return pyramid::services::tactical_objects::protobuf_codec::toBinary(
+        request);
+  }
+#endif
+  return {};
+}
+
+static std::string rawResponseWithMatchingSize(const char* content_type) {
+  const svc::Identifier response =
+      "binding-perf-interest-000000000001-abcdef";
+  size_t size = response.size();
+  if (std::strcmp(content_type, "application/json") == 0) {
+    // Identifier is a string alias, so its JSON representation adds quotes.
+    size += 2u;
+  }
+  if (std::strcmp(content_type, "application/flatbuffers") == 0) {
+    size = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(
+        response).size();
+  }
+#if defined(PYRAMID_HAS_PROTOBUF)
+  if (std::strcmp(content_type, "application/protobuf") == 0) {
+    size = pyramid::services::tactical_objects::protobuf_codec::toBinary(
+        response).size();
+  }
+#endif
+  return std::string(size, 'r');
+}
+
+static pcl_status_t invokeRaw(pcl_executor_t* executor,
+                              const std::string& request,
+                              const char* content_type,
+                              UnaryResponseState* state) {
+  pcl_msg_t msg{};
+  msg.data = request.data();
+  msg.size = static_cast<uint32_t>(request.size());
+  msg.type_name = content_type;
+  return pcl_executor_invoke_async(
+      executor, svc::kSvcObjectOfInterestCreateRequirement, &msg,
+      rawResponse, state);
+}
+
+template <typename Invoke>
+static void runUnarySamples(int measured_messages,
+                            ExecutorRunner* executor_runner,
+                            Invoke&& invoke,
+                            UnaryResponseState& state,
+                            std::vector<double>* wall_latencies,
+                            int* timed_out) {
+  for (int i = -kNWarmupMsgs; i < measured_messages; ++i) {
+    prepareResponse(state);
+    const auto submit = [&] {
+      {
+        std::lock_guard<std::mutex> lock(state.mutex);
+        state.started_at = Clock::now();
+      }
+      const auto rc = invoke();
+      if (rc != PCL_OK) {
+        std::lock_guard<std::mutex> lock(state.mutex);
+        state.decoded = false;
+        state.completed_at = Clock::now();
+        state.complete = true;
+        state.cv.notify_all();
+      }
+    };
+    if (executor_runner != nullptr) {
+      executor_runner->post(submit);
+    } else {
+      submit();
+    }
+    Clock::time_point started_at;
+    Clock::time_point completed_at;
+    const bool delivered = waitForResponse(
+        state, Clock::now() + std::chrono::milliseconds(kMsgTimeoutMs),
+        &started_at, &completed_at);
+    if (i < 0) {
+      continue;
+    }
+    if (delivered) {
+      wall_latencies->push_back(toUs(started_at, completed_at));
+    } else {
+      ++*timed_out;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Unique ID helpers for transport names
 // ---------------------------------------------------------------------------
@@ -472,9 +665,13 @@ static std::string uniqueId(const char* prefix) {
 // ---------------------------------------------------------------------------
 
 static PerfResult runLocal(const char* label, const char* ct,
-                           const svc::ObjectInterestRequirement& request) {
+                           const svc::ObjectInterestRequirement& request,
+                           bool use_typed_binding = true) {
   pcl_executor_t* exec = pcl_executor_create();
-  UnaryServiceSetup service_setup{ct};
+  UnaryServiceSetup service_setup;
+  service_setup.content_type = ct;
+  service_setup.use_typed_binding = use_typed_binding;
+  service_setup.raw_response = rawResponseWithMatchingSize(ct);
   pcl_callbacks_t service_cbs{};
   service_cbs.on_configure = onConfigureUnaryService;
   auto* service_c =
@@ -486,44 +683,24 @@ static PerfResult runLocal(const char* label, const char* ct,
   const size_t payload_bytes = encodedPayloadSize(request, ct);
 
   std::vector<double> wall_latencies;
-  std::vector<double> cpu_times;
   wall_latencies.reserve(kNMsgs);
-  cpu_times.reserve(kNMsgs);
   int timed_out = 0;
   UnaryResponseState response_state{};
-
-  for (int i = 0; i < kNMsgs; ++i) {
-    int prev = response_state.count.load(std::memory_order_acquire);
-    auto t0 = Clock::now();
-    double cpu_t0 = threadCpuNowNs();
-    response_state.decoded = false;
-    const auto rc = svc::invokeObjectOfInterestCreateRequirement(
-        exec, request, createRequirementResponse, &response_state, nullptr, ct);
-
-    bool delivered = false;
-    auto deadline = std::chrono::steady_clock::now() +
-                    std::chrono::milliseconds(kMsgTimeoutMs);
-    while (rc == PCL_OK && std::chrono::steady_clock::now() < deadline) {
-      pcl_executor_spin_once(exec, 0);
-      if (response_state.count.load(std::memory_order_acquire) > prev) {
-        delivered = true;
-        break;
-      }
+  const auto raw_request = encodedPayload(request, ct);
+  runUnarySamples(kNMsgs, nullptr, [&] {
+    if (use_typed_binding) {
+      return svc::invokeObjectOfInterestCreateRequirement(
+          exec, request, createRequirementResponse, &response_state, nullptr,
+          ct);
     }
-
-    if (delivered && response_state.decoded) {
-      wall_latencies.push_back(toUs(t0, Clock::now()));
-      cpu_times.push_back(threadCpuElapsedUs(cpu_t0));
-    } else {
-      ++timed_out;
-    }
-  }
+    return invokeRaw(exec, raw_request, ct, &response_state);
+  }, response_state, &wall_latencies, &timed_out);
 
   pcl_executor_destroy(exec);
   pcl_container_destroy(service_c);
 
   return computeResult(label, kNMsgs, static_cast<int>(wall_latencies.size()),
-                       timed_out, payload_bytes, wall_latencies, cpu_times);
+                       timed_out, payload_bytes, wall_latencies);
 }
 
 // ---------------------------------------------------------------------------
@@ -531,7 +708,8 @@ static PerfResult runLocal(const char* label, const char* ct,
 // ---------------------------------------------------------------------------
 
 static PerfResult runShmem(const char* label, const char* ct,
-                           const svc::ObjectInterestRequirement& request) {
+                           const svc::ObjectInterestRequirement& request,
+                           bool use_typed_binding = true) {
   std::string bus = uniqueId("perfbus");
   std::string client_id = uniqueId("client");
   std::string server_id = uniqueId("server");
@@ -554,7 +732,10 @@ static PerfResult runShmem(const char* label, const char* ct,
     PerfResult r; r.label = label; r.skipped = true; return r;
   }
 
-  UnaryServiceSetup service_setup{ct};
+  UnaryServiceSetup service_setup;
+  service_setup.content_type = ct;
+  service_setup.use_typed_binding = use_typed_binding;
+  service_setup.raw_response = rawResponseWithMatchingSize(ct);
   pcl_callbacks_t service_cbs{};
   service_cbs.on_configure = onConfigureUnaryService;
   auto* service_c =
@@ -566,7 +747,7 @@ static PerfResult runShmem(const char* label, const char* ct,
   std::atomic<bool> server_stop{false};
   std::thread server_thread([&] {
     while (!server_stop.load(std::memory_order_relaxed)) {
-      pcl_executor_spin_once(server_exec, 1);
+      pcl_executor_spin_once(server_exec, 0);
       std::this_thread::yield();
     }
   });
@@ -590,41 +771,24 @@ static PerfResult runShmem(const char* label, const char* ct,
   const size_t payload_bytes = encodedPayloadSize(request, ct);
 
   std::vector<double> wall_latencies;
-  std::vector<double> cpu_times;
   wall_latencies.reserve(kNMsgs);
-  cpu_times.reserve(kNMsgs);
   int timed_out = 0;
   UnaryResponseState response_state{};
-
-  for (int i = 0; i < kNMsgs; ++i) {
-    int prev = response_state.count.load(std::memory_order_acquire);
-    auto t0 = Clock::now();
-    double cpu_t0 = threadCpuNowNs();
-    response_state.decoded = false;
-    const auto rc = svc::invokeObjectOfInterestCreateRequirement(
-        client_exec, request, createRequirementResponse, &response_state,
-        nullptr, ct);
-
-    auto deadline = std::chrono::steady_clock::now() +
-                    std::chrono::milliseconds(kMsgTimeoutMs);
-    while (rc == PCL_OK &&
-           response_state.count.load(std::memory_order_acquire) <= prev &&
-           std::chrono::steady_clock::now() < deadline) {
-      pcl_executor_spin_once(client_exec, 0);
-      std::this_thread::yield();
+  const auto raw_request = encodedPayload(request, ct);
+  ExecutorRunner client_runner(client_exec);
+  runUnarySamples(kNMsgs, &client_runner, [&] {
+    if (use_typed_binding) {
+      return svc::invokeObjectOfInterestCreateRequirement(
+          client_exec, request, createRequirementResponse, &response_state,
+          nullptr, ct);
     }
-    if (response_state.count.load(std::memory_order_acquire) > prev &&
-        response_state.decoded) {
-      wall_latencies.push_back(toUs(t0, Clock::now()));
-      cpu_times.push_back(threadCpuElapsedUs(cpu_t0));
-    } else {
-      ++timed_out;
-    }
-  }
+    return invokeRaw(client_exec, raw_request, ct, &response_state);
+  }, response_state, &wall_latencies, &timed_out);
 
   // Teardown
   server_stop.store(true);
   server_thread.join();
+  client_runner.stop();
 
   pcl_shared_memory_transport_destroy(pub_t);
   pcl_executor_destroy(client_exec);
@@ -634,7 +798,7 @@ static PerfResult runShmem(const char* label, const char* ct,
   pcl_container_destroy(service_c);
 
   return computeResult(label, kNMsgs, static_cast<int>(wall_latencies.size()),
-                       timed_out, payload_bytes, wall_latencies, cpu_times);
+                       timed_out, payload_bytes, wall_latencies);
 }
 
 // ---------------------------------------------------------------------------
@@ -704,6 +868,56 @@ static uint16_t pickSocketPort() {
   return port;
 }
 
+static uint16_t pickUdpPort() {
+#if defined(_WIN32)
+  WSADATA wsa{};
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+    return 0;
+  }
+  SOCKET tmp = socket(AF_INET, SOCK_DGRAM, 0);
+  if (tmp == INVALID_SOCKET) {
+    return 0;
+  }
+#else
+  int tmp = socket(AF_INET, SOCK_DGRAM, 0);
+  if (tmp < 0) {
+    return 0;
+  }
+#endif
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = 0;
+  if (bind(tmp, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+#if defined(_WIN32)
+    closesocket(tmp);
+#else
+    close(tmp);
+#endif
+    return 0;
+  }
+#if defined(_WIN32)
+  int len = static_cast<int>(sizeof(addr));
+#else
+  socklen_t len = sizeof(addr);
+#endif
+  if (getsockname(tmp, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
+#if defined(_WIN32)
+    closesocket(tmp);
+#else
+    close(tmp);
+#endif
+    return 0;
+  }
+  const uint16_t port = ntohs(addr.sin_port);
+#if defined(_WIN32)
+  closesocket(tmp);
+#else
+  close(tmp);
+#endif
+  return port;
+}
+
 static void socketServerThread(SocketServerCtx* ctx) {
   pcl_executor_t* exec = pcl_executor_create();
   if (!exec) { ctx->failed.store(true, std::memory_order_relaxed); return; }
@@ -740,7 +954,7 @@ static void socketServerThread(SocketServerCtx* ctx) {
   ctx->ready_for_msgs.store(true, std::memory_order_release);
 
   while (!ctx->stop.load(std::memory_order_relaxed)) {
-    pcl_executor_spin_once(exec, 1);
+    pcl_executor_spin_once(exec, 0);
     std::this_thread::yield();
   }
 
@@ -750,8 +964,12 @@ static void socketServerThread(SocketServerCtx* ctx) {
 }
 
 static PerfResult runSocket(const char* label, const char* ct,
-                            const svc::ObjectInterestRequirement& request) {
-  UnaryServiceSetup service_setup{ct};
+                            const svc::ObjectInterestRequirement& request,
+                            bool use_typed_binding = true) {
+  UnaryServiceSetup service_setup;
+  service_setup.content_type = ct;
+  service_setup.use_typed_binding = use_typed_binding;
+  service_setup.raw_response = rawResponseWithMatchingSize(ct);
 
   SocketServerCtx ctx{};
   ctx.service = &service_setup;
@@ -819,45 +1037,205 @@ static PerfResult runSocket(const char* label, const char* ct,
   const size_t payload_bytes = encodedPayloadSize(request, ct);
 
   std::vector<double> wall_latencies;
-  std::vector<double> cpu_times;
   wall_latencies.reserve(kNMsgs);
-  cpu_times.reserve(kNMsgs);
   int timed_out = 0;
   UnaryResponseState response_state{};
-
-  for (int i = 0; i < kNMsgs; ++i) {
-    int prev = response_state.count.load(std::memory_order_acquire);
-    auto t0 = Clock::now();
-    double cpu_t0 = threadCpuNowNs();
-    response_state.decoded = false;
-    const auto rc = svc::invokeObjectOfInterestCreateRequirement(
-        client_exec, request, createRequirementResponse, &response_state,
-        nullptr, ct);
-
-    auto deadline = std::chrono::steady_clock::now() +
-                    std::chrono::milliseconds(kMsgTimeoutMs);
-    while (rc == PCL_OK &&
-           response_state.count.load(std::memory_order_acquire) <= prev &&
-           std::chrono::steady_clock::now() < deadline) {
-      pcl_executor_spin_once(client_exec, 0);
-      std::this_thread::yield();
+  const auto raw_request = encodedPayload(request, ct);
+  ExecutorRunner client_runner(client_exec);
+  runUnarySamples(kNMsgs, &client_runner, [&] {
+    if (use_typed_binding) {
+      return svc::invokeObjectOfInterestCreateRequirement(
+          client_exec, request, createRequirementResponse, &response_state,
+          nullptr, ct);
     }
-    if (response_state.count.load(std::memory_order_acquire) > prev &&
-        response_state.decoded) {
-      wall_latencies.push_back(toUs(t0, Clock::now()));
-      cpu_times.push_back(threadCpuElapsedUs(cpu_t0));
-    } else {
-      ++timed_out;
-    }
-  }
+    return invokeRaw(client_exec, raw_request, ct, &response_state);
+  }, response_state, &wall_latencies, &timed_out);
 
   ctx.stop.store(true);
+  client_runner.stop();
   pcl_socket_transport_destroy(client_t);
   pcl_executor_destroy(client_exec);
   server.join();
 
   return computeResult(label, kNMsgs, static_cast<int>(wall_latencies.size()),
-                       timed_out, payload_bytes, wall_latencies, cpu_times);
+                       timed_out, payload_bytes, wall_latencies);
+}
+
+// ---------------------------------------------------------------------------
+// 4. UDP pub/sub transport (one-way application delivery)
+// ---------------------------------------------------------------------------
+
+struct PubsubResponseState {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool complete = false;
+  bool decoded = false;
+  Clock::time_point started_at{};
+  Clock::time_point completed_at{};
+  bool use_typed_binding = true;
+};
+
+static void entityMatchesResponse(pcl_container_t*, const pcl_msg_t* msg,
+                                  void* user_data) {
+  auto* state = static_cast<PubsubResponseState*>(user_data);
+  bool decoded = msg != nullptr && msg->data != nullptr && msg->size > 0u;
+  if (decoded && state->use_typed_binding) {
+    std::vector<svc::ObjectMatch> value;
+    decoded = svc::decodeEntityMatches(msg, &value) && !value.empty();
+  }
+  const auto completed_at = Clock::now();
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->decoded = decoded;
+    state->completed_at = completed_at;
+    state->complete = true;
+  }
+  state->cv.notify_all();
+}
+
+static PerfResult runUdp(const char* label, const char* content_type,
+                         bool use_typed_binding) {
+  const uint16_t receive_port = pickUdpPort();
+  const uint16_t send_port = pickUdpPort();
+  if (receive_port == 0 || send_port == 0 || receive_port == send_port) {
+    PerfResult result;
+    result.label = label;
+    result.skipped = true;
+    return result;
+  }
+
+  auto* receive_executor = pcl_executor_create();
+  auto* send_executor = pcl_executor_create();
+  auto* receiver = pcl_udp_transport_create(
+      receive_port, "127.0.0.1", send_port, receive_executor);
+  auto* sender = pcl_udp_transport_create(
+      send_port, "127.0.0.1", receive_port, send_executor);
+  if (receiver == nullptr || sender == nullptr) {
+    pcl_udp_transport_destroy(sender);
+    pcl_udp_transport_destroy(receiver);
+    pcl_executor_destroy(send_executor);
+    pcl_executor_destroy(receive_executor);
+    PerfResult result;
+    result.label = label;
+    result.skipped = true;
+    return result;
+  }
+
+  pcl_udp_transport_set_peer_id(receiver, "sender");
+  pcl_udp_transport_set_peer_id(sender, "receiver");
+  pcl_executor_register_transport(
+      receive_executor, "sender", pcl_udp_transport_get_transport(receiver));
+  pcl_executor_register_transport(
+      send_executor, "receiver", pcl_udp_transport_get_transport(sender));
+
+  PubsubResponseState state;
+  state.use_typed_binding = use_typed_binding;
+  pcl_callbacks_t subscriber_callbacks{};
+  struct SubscriberSetup {
+    PubsubResponseState* state;
+    const char* content_type;
+  } subscriber_setup{&state, content_type};
+  subscriber_callbacks.on_configure = [](pcl_container_t* container,
+                                         void* user_data) -> pcl_status_t {
+    auto* setup = static_cast<SubscriberSetup*>(user_data);
+    auto* port = svc::subscribeEntityMatches(
+        container, entityMatchesResponse, setup->state, setup->content_type);
+    if (port == nullptr) {
+      return PCL_ERR_NOMEM;
+    }
+    const char* peers[] = {"sender"};
+    return pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1u);
+  };
+  auto* subscriber = pcl_container_create(
+      "udp_perf_subscriber", &subscriber_callbacks, &subscriber_setup);
+  pcl_container_configure(subscriber);
+  pcl_container_activate(subscriber);
+  pcl_executor_add(receive_executor, subscriber);
+
+  pcl_port_t* publisher_port = nullptr;
+  pcl_callbacks_t publisher_callbacks{};
+  publisher_callbacks.on_configure = [](pcl_container_t* container,
+                                        void* user_data) -> pcl_status_t {
+    auto** port = static_cast<pcl_port_t**>(user_data);
+    *port = pcl_container_add_publisher(
+        container, svc::kTopicEntityMatches, "application/octet-stream");
+    if (*port == nullptr) {
+      return PCL_ERR_NOMEM;
+    }
+    const char* peers[] = {"receiver"};
+    return pcl_port_set_route(*port, PCL_ROUTE_REMOTE, peers, 1u);
+  };
+  auto* publisher = pcl_container_create(
+      "udp_perf_publisher", &publisher_callbacks, &publisher_port);
+  pcl_container_configure(publisher);
+  pcl_container_activate(publisher);
+  pcl_executor_add(send_executor, publisher);
+
+  std::vector<svc::ObjectMatch> typed_payload(1);
+  typed_payload[0].id = "binding-perf-object-1";
+  typed_payload[0].source = "perf-client";
+  typed_payload[0].matching_object_id = "binding-perf-match-1";
+  std::string encoded_payload;
+  if (!svc::encodeEntityMatches(typed_payload, content_type, &encoded_payload)) {
+    encoded_payload.clear();
+  }
+
+  ExecutorRunner receive_runner(receive_executor);
+  std::vector<double> latencies;
+  latencies.reserve(kNMsgs);
+  int timed_out = 0;
+  for (int i = -kNWarmupMsgs; i < kNMsgs; ++i) {
+    {
+      std::lock_guard<std::mutex> lock(state.mutex);
+      state.complete = false;
+      state.decoded = false;
+      state.started_at = Clock::now();
+    }
+    pcl_status_t rc = PCL_ERR_INVALID;
+    if (use_typed_binding) {
+      rc = svc::publishEntityMatches(
+          publisher_port, typed_payload, content_type);
+    } else {
+      pcl_msg_t msg{};
+      msg.data = encoded_payload.data();
+      msg.size = static_cast<uint32_t>(encoded_payload.size());
+      msg.type_name = content_type;
+      rc = pcl_port_publish(publisher_port, &msg);
+    }
+
+    Clock::time_point started_at;
+    Clock::time_point completed_at;
+    bool delivered = false;
+    {
+      std::unique_lock<std::mutex> lock(state.mutex);
+      delivered = rc == PCL_OK && state.cv.wait_until(
+          lock, Clock::now() + std::chrono::milliseconds(kMsgTimeoutMs),
+          [&] { return state.complete; });
+      delivered = delivered && state.decoded;
+      started_at = state.started_at;
+      completed_at = state.completed_at;
+    }
+    if (i < 0) {
+      continue;
+    }
+    if (delivered) {
+      latencies.push_back(toUs(started_at, completed_at));
+    } else {
+      ++timed_out;
+    }
+  }
+
+  receive_runner.stop();
+  pcl_executor_remove(send_executor, publisher);
+  pcl_executor_remove(receive_executor, subscriber);
+  pcl_container_destroy(publisher);
+  pcl_container_destroy(subscriber);
+  pcl_udp_transport_destroy(sender);
+  pcl_udp_transport_destroy(receiver);
+  pcl_executor_destroy(send_executor);
+  pcl_executor_destroy(receive_executor);
+  return computeResult(label, kNMsgs, static_cast<int>(latencies.size()),
+                       timed_out, encoded_payload.size(), latencies);
 }
 
 #if defined(PYRAMID_HAS_GRPC)
@@ -931,6 +1309,66 @@ static pcl_status_t onConfigureGrpcPerf(pcl_container_t* container, void*) {
   return port ? PCL_OK : PCL_ERR_NOMEM;
 }
 
+static PerfResult runGrpcCalls(const char* label,
+                               const std::string& address) {
+  auto channel = grpc::CreateChannel(address, grpc::InsecureChannelCredentials());
+  auto stub = proto_services::Object_Of_Interest_Service::NewStub(channel);
+  const auto request = makeGrpcRequest();
+  const size_t payload_bytes = static_cast<size_t>(request.ByteSizeLong());
+
+  std::vector<double> wall_latencies;
+  wall_latencies.reserve(kNMsgsGrpc);
+  int timed_out = 0;
+  for (int i = -kNWarmupMsgs; i < kNMsgsGrpc; ++i) {
+    proto_base::Identifier response;
+    grpc::ClientContext context;
+    const auto started_at = Clock::now();
+    const auto status = stub->CreateRequirement(&context, request, &response);
+    const auto completed_at = Clock::now();
+    if (i < 0) {
+      continue;
+    }
+    if (status.ok()) {
+      wall_latencies.push_back(toUs(started_at, completed_at));
+    } else {
+      ++timed_out;
+    }
+  }
+  return computeResult(label, kNMsgsGrpc,
+                       static_cast<int>(wall_latencies.size()), timed_out,
+                       payload_bytes, wall_latencies);
+}
+
+class RawGrpcService final
+    : public proto_services::Object_Of_Interest_Service::Service {
+public:
+  grpc::Status CreateRequirement(
+      grpc::ServerContext*,
+      const proto_tactical::ObjectInterestRequirement*,
+      proto_base::Identifier* response) override {
+    response->set_value("grpc-interest-42");
+    return grpc::Status::OK;
+  }
+};
+
+static PerfResult runRawGrpc(const char* label, const std::string& address) {
+  RawGrpcService service;
+  grpc::ServerBuilder builder;
+  builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+  builder.RegisterService(&service);
+  auto server = builder.BuildAndStart();
+  if (!server) {
+    PerfResult result;
+    result.label = label;
+    result.skipped = true;
+    return result;
+  }
+  auto result = runGrpcCalls(label, address);
+  server->Shutdown();
+  server->Wait();
+  return result;
+}
+
 static PerfResult runGrpc(const char* label, const std::string& address) {
   pcl_callbacks_t callbacks{};
   callbacks.on_configure = onConfigureGrpcPerf;
@@ -961,31 +1399,7 @@ static PerfResult runGrpc(const char* label, const std::string& address) {
     return r;
   }
 
-  auto channel = grpc::CreateChannel(address, grpc::InsecureChannelCredentials());
-  auto stub = proto_services::Object_Of_Interest_Service::NewStub(channel);
-
-  const auto request = makeGrpcRequest();
-  size_t payload_bytes = static_cast<size_t>(request.ByteSizeLong());
-
-  std::vector<double> wall_latencies;
-  std::vector<double> cpu_times;
-  wall_latencies.reserve(kNMsgsGrpc);
-  cpu_times.reserve(kNMsgsGrpc);
-  int timed_out = 0;
-
-  for (int i = 0; i < kNMsgsGrpc; ++i) {
-    proto_base::Identifier response;
-    grpc::ClientContext context;
-    auto t0 = Clock::now();
-    double cpu_t0 = threadCpuNowNs();
-    const auto status = stub->CreateRequirement(&context, request, &response);
-    if (status.ok()) {
-      wall_latencies.push_back(toUs(t0, Clock::now()));
-      cpu_times.push_back(threadCpuElapsedUs(cpu_t0));
-    } else {
-      ++timed_out;
-    }
-  }
+  auto result = runGrpcCalls(label, address);
 
   host.shutdown();
   spin_stop.store(true);
@@ -993,9 +1407,7 @@ static PerfResult runGrpc(const char* label, const std::string& address) {
   pcl_container_destroy(container);
   pcl_executor_destroy(executor);
 
-  return computeResult(label, kNMsgsGrpc,
-                       static_cast<int>(wall_latencies.size()),
-                       timed_out, payload_bytes, wall_latencies, cpu_times);
+  return result;
 }
 
 #endif
@@ -1013,10 +1425,14 @@ namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
 class BindingPerformanceTest : public ::testing::Test {
 protected:
   static std::vector<PerfResult> results_;
+  static std::vector<PerfResult> pubsub_results_;
   static std::vector<CodecPerfResult> codec_results_;
 
   static void TearDownTestSuite() {
-    printReport(results_);
+    printReport(results_, "Unary request/response performance",
+                "ObjectInterestRequirement -> Identifier", "AverageRTT(us)");
+    printReport(pubsub_results_, "One-way pub/sub performance",
+                "ObjectMatch[1]", "Average(us)");
     printCodecReport(codec_results_);
   }
 
@@ -1027,7 +1443,17 @@ protected:
 };
 
 std::vector<PerfResult> BindingPerformanceTest::results_;
+std::vector<PerfResult> BindingPerformanceTest::pubsub_results_;
 std::vector<CodecPerfResult> BindingPerformanceTest::codec_results_;
+
+static void printResult(const PerfResult& result) {
+  std::printf(
+      "[PERF] %-32s done=%3d/%d avg=%7.1f us p50=%7.1f us "
+      "p99=%7.1f us payload=%zu B\n",
+      result.label.c_str(), result.completed_msgs, result.attempted_msgs,
+      result.wall.avg_us, result.wall.p50_us, result.wall.p99_us,
+      result.payload_bytes);
+}
 
 TEST_F(BindingPerformanceTest, Codec_Json) {
   const auto& request = payload();
@@ -1095,28 +1521,121 @@ TEST_F(BindingPerformanceTest, Codec_Protobuf) {
 }
 #endif
 
+#if defined(PYRAMID_HAS_OMS_JSON)
+static void fillOmsPositionReport(pyramid_uci_position_report_c* report) {
+  std::memset(report, 0, sizeof(*report));
+  std::snprintf(report->header.classification,
+                sizeof(report->header.classification), "U");
+  std::snprintf(report->header.owner_producer,
+                sizeof(report->header.owner_producer), "USA");
+  std::snprintf(report->header.system_uuid,
+                sizeof(report->header.system_uuid),
+                "550e8400-e29b-41d4-a716-446655440000");
+  std::snprintf(report->header.timestamp,
+                sizeof(report->header.timestamp),
+                "2026-07-15T12:00:00Z");
+  std::snprintf(report->header.schema_version,
+                sizeof(report->header.schema_version), "002.5.0");
+  std::snprintf(report->header.mode, sizeof(report->header.mode), "LIVE");
+  std::snprintf(report->report_system_uuid,
+                sizeof(report->report_system_uuid),
+                "550e8400-e29b-41d4-a716-446655440000");
+  std::snprintf(report->source, sizeof(report->source), "ACTUAL");
+  std::snprintf(report->current_operating_domain,
+                sizeof(report->current_operating_domain), "AIR");
+  report->latitude_rad = 0.898973719;
+  report->longitude_rad = -0.000025744;
+  report->altitude_m = 1200.0;
+  std::snprintf(report->position_timestamp,
+                sizeof(report->position_timestamp),
+                "2026-07-15T12:00:00Z");
+  report->has_altitude_reference = true;
+  std::snprintf(report->altitude_reference,
+                sizeof(report->altitude_reference), "WGS84");
+}
+
+TEST_F(BindingPerformanceTest, Codec_OmsJson_Plugin) {
+  auto* handle = pcl_plugin_open(PYRAMID_OMS_JSON_CODEC_PATH);
+  ASSERT_NE(handle, nullptr);
+  using CodecEntry = const pcl_codec_t* (*)(const char*);
+  auto entry = reinterpret_cast<CodecEntry>(
+      pcl_plugin_symbol(handle, PCL_CODEC_PLUGIN_ENTRY_SYMBOL));
+  ASSERT_NE(entry, nullptr);
+  const auto* codec = entry(nullptr);
+  ASSERT_NE(codec, nullptr);
+
+  pyramid_uci_position_report_c request;
+  fillOmsPositionReport(&request);
+  pcl_msg_t sample{};
+  ASSERT_EQ(codec->encode(codec->codec_ctx, "PositionReport", &request,
+                          &sample), PCL_OK);
+  const size_t payload_bytes = sample.size;
+  std::string sample_bytes(static_cast<const char*>(sample.data), sample.size);
+  codec->free_msg(codec->codec_ctx, &sample);
+
+  auto encode = runCodecLoop(
+      "codec / oms-json plugin enc", payload_bytes, kNCodecIters, [&] {
+        pcl_msg_t encoded{};
+        if (codec->encode(codec->codec_ctx, "PositionReport", &request,
+                          &encoded) == PCL_OK) {
+          s_codec_sink.fetch_add(encoded.size, std::memory_order_relaxed);
+          codec->free_msg(codec->codec_ctx, &encoded);
+        }
+      });
+  auto decode = runCodecLoop(
+      "codec / oms-json plugin dec", payload_bytes, kNCodecIters, [&] {
+        pcl_msg_t encoded{sample_bytes.data(),
+                          static_cast<uint32_t>(sample_bytes.size()),
+                          "application/oms-json"};
+        pyramid_uci_position_report_c decoded{};
+        if (codec->decode(codec->codec_ctx, "PositionReport", &encoded,
+                          &decoded) == PCL_OK) {
+          s_codec_sink.fetch_add(
+              static_cast<uint64_t>(decoded.altitude_m),
+              std::memory_order_relaxed);
+        }
+      });
+  codec_results_.push_back(encode);
+  codec_results_.push_back(decode);
+  EXPECT_GT(encode.wall_ns_per_op, 0.0);
+  EXPECT_GT(decode.wall_ns_per_op, 0.0);
+  pcl_plugin_unload(handle);
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Local (in-process) benchmarks
 // ---------------------------------------------------------------------------
 
 TEST_F(BindingPerformanceTest, Local_Json) {
-  auto r = runLocal("local / json", "application/json", payload());
+  auto r = runLocal("pyramid / local / json", "application/json", payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Local_Json) {
+  auto r = runLocal("raw-pcl / local / json", "application/json", payload(),
+                    false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 
 TEST_F(BindingPerformanceTest, Local_FlatBuffers) {
-  auto r = runLocal("local / flatbuffers", "application/flatbuffers", payload());
+  auto r = runLocal("pyramid / local / flatbuffers",
+                    "application/flatbuffers", payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Local_FlatBuffers) {
+  auto r = runLocal("raw-pcl / local / flatbuffers",
+                    "application/flatbuffers", payload(), false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 
 #if defined(PYRAMID_HAS_PROTOBUF)
@@ -1140,76 +1659,163 @@ static bool skipIfNoProtobufCodec(
 }
 
 TEST_F(BindingPerformanceTest, Local_Protobuf) {
-  if (skipIfNoProtobufCodec(results_, "local / protobuf")) {
+  if (skipIfNoProtobufCodec(results_, "pyramid / local / protobuf")) {
     GTEST_SKIP() << "no application/protobuf codec plugin registered";
   }
-  auto r = runLocal("local / protobuf", "application/protobuf", payload());
+  auto r = runLocal("pyramid / local / protobuf", "application/protobuf",
+                    payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Local_Protobuf) {
+  auto r = runLocal("raw-pcl / local / protobuf", "application/protobuf",
+                    payload(), false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
+}
+#endif
+
+// ---------------------------------------------------------------------------
+// UDP one-way pub/sub benchmarks
+// ---------------------------------------------------------------------------
+
+TEST_F(BindingPerformanceTest, Udp_Json) {
+  auto r = runUdp("pyramid / udp / json", "application/json", true);
+  pubsub_results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Udp_Json) {
+  auto r = runUdp("raw-pcl / udp / json", "application/json", false);
+  pubsub_results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, Udp_FlatBuffers) {
+  auto r = runUdp("pyramid / udp / flatbuffers", "application/flatbuffers",
+                  true);
+  pubsub_results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Udp_FlatBuffers) {
+  auto r = runUdp("raw-pcl / udp / flatbuffers",
+                  "application/flatbuffers", false);
+  pubsub_results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
+}
+
+#if defined(PYRAMID_HAS_PROTOBUF)
+TEST_F(BindingPerformanceTest, Udp_Protobuf) {
+  if (!svc::supportsContentType("application/protobuf")) {
+    GTEST_SKIP() << "no application/protobuf codec plugin registered";
+  }
+  auto r = runUdp("pyramid / udp / protobuf", "application/protobuf", true);
+  pubsub_results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Udp_Protobuf) {
+  auto r = runUdp("raw-pcl / udp / protobuf", "application/protobuf", false);
+  pubsub_results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 #endif
 
 TEST_F(BindingPerformanceTest, Shmem_Json) {
-  auto r = runShmem("shmem / json", "application/json", payload());
+  auto r = runShmem("pyramid / shmem / json", "application/json", payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Shmem_Json) {
+  auto r = runShmem("raw-pcl / shmem / json", "application/json", payload(),
+                    false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 
 TEST_F(BindingPerformanceTest, Shmem_FlatBuffers) {
-  auto r = runShmem("shmem / flatbuffers", "application/flatbuffers", payload());
+  auto r = runShmem("pyramid / shmem / flatbuffers",
+                    "application/flatbuffers", payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Shmem_FlatBuffers) {
+  auto r = runShmem("raw-pcl / shmem / flatbuffers",
+                    "application/flatbuffers", payload(), false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 
 #if defined(PYRAMID_HAS_PROTOBUF)
 TEST_F(BindingPerformanceTest, Shmem_Protobuf) {
-  if (skipIfNoProtobufCodec(results_, "shmem / protobuf")) {
+  if (skipIfNoProtobufCodec(results_, "pyramid / shmem / protobuf")) {
     GTEST_SKIP() << "no application/protobuf codec plugin registered";
   }
-  auto r = runShmem("shmem / protobuf", "application/protobuf", payload());
+  auto r = runShmem("pyramid / shmem / protobuf", "application/protobuf",
+                    payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Shmem_Protobuf) {
+  auto r = runShmem("raw-pcl / shmem / protobuf", "application/protobuf",
+                    payload(), false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 #endif
 
 TEST_F(BindingPerformanceTest, Socket_Json) {
-  auto r = runSocket("socket / json", "application/json", payload());
+  auto r = runSocket("pyramid / socket / json", "application/json", payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Socket_Json) {
+  auto r = runSocket("raw-pcl / socket / json", "application/json", payload(),
+                     false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 
 #if defined(PYRAMID_HAS_PROTOBUF)
 TEST_F(BindingPerformanceTest, Socket_Protobuf) {
-  if (skipIfNoProtobufCodec(results_, "socket / protobuf")) {
+  if (skipIfNoProtobufCodec(results_, "pyramid / socket / protobuf")) {
     GTEST_SKIP() << "no application/protobuf codec plugin registered";
   }
-  auto r = runSocket("socket / protobuf", "application/protobuf", payload());
+  auto r = runSocket("pyramid / socket / protobuf", "application/protobuf",
+                     payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Socket_Protobuf) {
+  auto r = runSocket("raw-pcl / socket / protobuf", "application/protobuf",
+                     payload(), false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }
 #endif
 
@@ -1217,22 +1823,36 @@ TEST_F(BindingPerformanceTest, Socket_Protobuf) {
 TEST_F(BindingPerformanceTest, Grpc_Tcp) {
   const auto port = pickSocketPort();
   ASSERT_NE(port, 0);
-  auto r = runGrpc("grpc / tcp", "127.0.0.1:" + std::to_string(port));
+  auto r = runGrpc("pyramid-port / grpc / protobuf",
+                   "127.0.0.1:" + std::to_string(port));
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgsGrpc);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawGrpc_Tcp) {
+  const auto port = pickSocketPort();
+  ASSERT_NE(port, 0);
+  auto r = runRawGrpc("raw-grpc / grpc / protobuf",
+                      "127.0.0.1:" + std::to_string(port));
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgsGrpc);
+  printResult(r);
 }
 #endif
 
 TEST_F(BindingPerformanceTest, Socket_FlatBuffers) {
-  auto r = runSocket("socket / flatbuffers", "application/flatbuffers", payload());
+  auto r = runSocket("pyramid / socket / flatbuffers",
+                     "application/flatbuffers", payload());
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgs);
-  std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",
-              r.label.c_str(), r.completed_msgs, r.attempted_msgs,
-              r.wall.avg_us, r.wall.min_us, r.cpu.avg_us, r.payload_bytes);
-  SUCCEED();
+  printResult(r);
+}
+
+TEST_F(BindingPerformanceTest, RawPcl_Socket_FlatBuffers) {
+  auto r = runSocket("raw-pcl / socket / flatbuffers",
+                     "application/flatbuffers", payload(), false);
+  results_.push_back(r);
+  EXPECT_EQ(r.completed_msgs, kNMsgs);
+  printResult(r);
 }

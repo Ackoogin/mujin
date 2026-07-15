@@ -36,6 +36,9 @@ target_link_libraries(test_rclcpp_runtime_adapter
 )
 rosidl_get_typesupport_target(ts ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(test_rclcpp_runtime_adapter ${ts})
+set_tests_properties(test_rclcpp_runtime_adapter PROPERTIES
+    ENVIRONMENT "RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+    LABELS "performance;binding;transport;fastdds")
 
 if(WIN32)
     unset(test_env_mods)

@@ -15,9 +15,12 @@
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <cstdio>
 #include <future>
 #include <functional>
 #include <mutex>
@@ -45,6 +48,15 @@ struct TopicState {
   std::thread::id thread_id;
   std::string payload;
   std::string type_name;
+};
+
+struct TopicPerfState {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool complete = false;
+  bool valid = false;
+  std::string expected_id;
+  std::chrono::steady_clock::time_point completed_at{};
 };
 
 struct UnaryState {
@@ -112,6 +124,36 @@ void topicCallback(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
   state->payload.assign(static_cast<const char*>(msg->data), msg->size);
   state->type_name = msg->type_name ? msg->type_name : "";
   state->called.store(true);
+}
+
+void topicPerfCallback(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
+  auto* state = static_cast<TopicPerfState*>(user_data);
+  bool valid = false;
+  if (msg != nullptr && msg->data != nullptr && msg->type_name != nullptr &&
+      std::strcmp(msg->type_name, "application/ros2") == 0) {
+    const auto payload = std::vector<unsigned char>(
+        static_cast<const unsigned char*>(msg->data),
+        static_cast<const unsigned char*>(msg->data) + msg->size);
+    const auto decoded =
+        deserializeTypedMessage<typed_msg::ObjectDetail>(payload);
+    valid = decoded.id == state->expected_id;
+  }
+  const auto completed_at = std::chrono::steady_clock::now();
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->valid = valid;
+    state->completed_at = completed_at;
+    state->complete = true;
+  }
+  state->cv.notify_all();
+}
+
+pcl_status_t onConfigureTopicPerf(pcl_container_t* container,
+                                  void* user_data) {
+  auto* port = pcl_container_add_subscriber(
+      container, kTopicObjectEvidence, "application/ros2", topicPerfCallback,
+      user_data);
+  return port ? PCL_OK : PCL_ERR_NOMEM;
 }
 
 pcl_status_t onConfigureTopic(pcl_container_t* container, void* user_data) {
@@ -193,17 +235,13 @@ class RuntimeAdapterFixture : public ::testing::Test {
     ros_executor_->add_node(server_node_);
     ros_executor_->add_node(client_node_);
 
-    ros_stop_.store(false);
-    ros_thread_ = std::thread([this] {
-      while (!ros_stop_.load()) {
-        ros_executor_->spin_some();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
-    });
+    ros_thread_ = std::thread([this] { ros_executor_->spin(); });
   }
 
   void TearDown() override {
-    ros_stop_.store(true);
+    if (ros_executor_) {
+      ros_executor_->cancel();
+    }
     if (ros_thread_.joinable()) {
       ros_thread_.join();
     }
@@ -231,7 +269,7 @@ class RuntimeAdapterFixture : public ::testing::Test {
       pcl_thread_id_ = std::this_thread::get_id();
       while (!pcl_stop_.load()) {
         pcl_executor_spin_once(executor_, 0);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::yield();
       }
     });
   }
@@ -256,7 +294,6 @@ class RuntimeAdapterFixture : public ::testing::Test {
   std::shared_ptr<rclcpp::Node> client_node_;
   std::unique_ptr<ros2_support::RclcppRuntimeAdapter> adapter_;
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> ros_executor_;
-  std::atomic<bool> ros_stop_{false};
   std::thread ros_thread_;
 
   pcl_executor_t* executor_ = nullptr;
@@ -267,6 +304,116 @@ class RuntimeAdapterFixture : public ::testing::Test {
 };
 
 }  // namespace
+
+struct TopicPerfStats {
+  double average_us = 0.0;
+  double minimum_us = 0.0;
+  double p50_us = 0.0;
+  double p99_us = 0.0;
+};
+
+template <typename Publish>
+TopicPerfStats runTopicPerformance(TopicPerfState* state, Publish&& publish) {
+  constexpr int kWarmups = 50;
+  constexpr int kSamples = 500;
+  std::vector<double> samples;
+  samples.reserve(kSamples);
+  for (int i = -kWarmups; i < kSamples; ++i) {
+    typed_msg::ObjectDetail message;
+    message.id = "fastdds-perf-" + std::to_string(i);
+    message.entity_source = "perf-client";
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      state->complete = false;
+      state->valid = false;
+      state->expected_id = message.id;
+    }
+    const auto started_at = std::chrono::steady_clock::now();
+    publish(message);
+    std::chrono::steady_clock::time_point completed_at;
+    bool valid = false;
+    {
+      std::unique_lock<std::mutex> lock(state->mutex);
+      const bool complete = state->cv.wait_for(
+          lock, std::chrono::seconds(2), [&] { return state->complete; });
+      valid = complete && state->valid;
+      completed_at = state->completed_at;
+    }
+    EXPECT_TRUE(valid) << "Fast DDS sample " << i << " was not delivered";
+    if (i >= 0 && valid) {
+      samples.push_back(std::chrono::duration<double, std::micro>(
+          completed_at - started_at).count());
+    }
+  }
+  EXPECT_EQ(samples.size(), 500u);
+  std::sort(samples.begin(), samples.end());
+  TopicPerfStats stats;
+  if (samples.empty()) {
+    return stats;
+  }
+  double sum = 0.0;
+  for (double sample : samples) {
+    sum += sample;
+  }
+  stats.average_us = sum / static_cast<double>(samples.size());
+  stats.minimum_us = samples.front();
+  stats.p50_us = samples[samples.size() / 2u];
+  stats.p99_us = samples[static_cast<size_t>(samples.size() * 0.99)];
+  return stats;
+}
+
+void printTopicPerformance(const char* label, const TopicPerfStats& stats) {
+  std::printf("[PERF] %-36s avg=%7.1f us min=%7.1f us "
+              "p50=%7.1f us p99=%7.1f us\n",
+              label, stats.average_us, stats.minimum_us, stats.p50_us,
+              stats.p99_us);
+}
+
+TEST_F(RuntimeAdapterFixture, FastDds_RawRclcpp_TypedPubsub) {
+  const auto binding = ros2_support::makeTopicBinding(kTopicObjectEvidence);
+  TopicPerfState state;
+  auto subscription = server_node_->create_subscription<typed_msg::ObjectDetail>(
+      binding.ros2_topic, 10,
+      [&state](const typed_msg::ObjectDetail::SharedPtr message) {
+        const auto completed_at = std::chrono::steady_clock::now();
+        {
+          std::lock_guard<std::mutex> lock(state.mutex);
+          state.valid = message->id == state.expected_id;
+          state.completed_at = completed_at;
+          state.complete = true;
+        }
+        state.cv.notify_all();
+      });
+  auto publisher = client_node_->create_publisher<typed_msg::ObjectDetail>(
+      binding.ros2_topic, 10);
+  ASSERT_TRUE(waitUntil([&] { return publisher->get_subscription_count() > 0u; }));
+  const auto stats = runTopicPerformance(
+      &state, [&](const typed_msg::ObjectDetail& message) {
+        publisher->publish(message);
+      });
+  printTopicPerformance("raw rclcpp / Fast DDS / typed CDR", stats);
+  EXPECT_GT(stats.average_us, 0.0);
+  (void)subscription;
+}
+
+TEST_F(RuntimeAdapterFixture, FastDds_PyramidPort_TypedPubsub) {
+  TopicPerfState state;
+  pcl_callbacks_t callbacks{};
+  callbacks.on_configure = onConfigureTopicPerf;
+  startPclExecutor(callbacks, &state, "fastdds_pyramid_port_perf");
+  ros2_support::bindTopicIngress(*adapter_, executor_, kTopicObjectEvidence);
+  const auto binding = ros2_support::makeTopicBinding(kTopicObjectEvidence);
+  auto publisher = client_node_->create_publisher<typed_msg::ObjectDetail>(
+      binding.ros2_topic, 10);
+  ASSERT_TRUE(waitUntil([&] { return publisher->get_subscription_count() > 0u; }));
+  const auto stats = runTopicPerformance(
+      &state, [&](const typed_msg::ObjectDetail& message) {
+        publisher->publish(message);
+      });
+  printTopicPerformance("PYRAMID port / Fast DDS / typed CDR", stats);
+  EXPECT_GT(stats.average_us, 0.0);
+  stopPclExecutor();
+}
 
 TEST_F(RuntimeAdapterFixture, TopicIngressRunsSubscriberOnPclExecutorThread) {
   TopicState state;

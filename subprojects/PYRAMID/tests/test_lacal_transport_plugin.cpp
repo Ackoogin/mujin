@@ -28,7 +28,9 @@ extern "C" {
 #include <websocketpp/server.hpp>
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -287,13 +289,22 @@ TEST(LacalPlugin, IdentityFromInfoAndBrokerRoundTrip) {
 
   struct SubState {
     std::mutex m;
+    std::condition_variable cv;
     std::vector<std::string> bodies;
+    std::string expected_body;
+    std::chrono::steady_clock::time_point completed_at;
+    bool timing_armed = false;
   } sub_state;
   auto sub_on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
     auto cb = [](pcl_container_t*, const pcl_msg_t* msg, void* u) {
       auto* st = static_cast<SubState*>(u);
       std::lock_guard<std::mutex> lock(st->m);
       st->bodies.emplace_back(static_cast<const char*>(msg->data), msg->size);
+      if (st->timing_armed && st->bodies.back() == st->expected_body) {
+        st->completed_at = std::chrono::steady_clock::now();
+        st->timing_armed = false;
+        st->cv.notify_one();
+      }
     };
     pcl_port_t* sub =
         pcl_container_add_subscriber(c, "MA_Action", "MA_Action", cb, ud);
@@ -365,6 +376,70 @@ TEST(LacalPlugin, IdentityFromInfoAndBrokerRoundTrip) {
     }
   }
   EXPECT_TRUE(got) << "subscriber received the published body verbatim";
+
+  // Measure one-way application delivery separately from the readiness proof
+  // above. The completion timestamp is recorded in the subscriber callback;
+  // the test thread waits only after that timestamp. It never polls the
+  // executor while a timed sample is in flight.
+  std::atomic<bool> stop_subscriber{false};
+  std::thread subscriber_runner([&] {
+    while (!stop_subscriber.load(std::memory_order_relaxed)) {
+      pcl_executor_spin_once(sub_exec, 0);
+      std::this_thread::yield();
+    }
+  });
+
+  constexpr int kWarmups = 50;
+  constexpr int kSamples = 500;
+  std::vector<double> latencies_us;
+  latencies_us.reserve(kSamples);
+  const std::string padding(480, 'x');
+  bool samples_ok = true;
+  for (int i = -kWarmups; i < kSamples; ++i) {
+    const std::string timed_body =
+        "{\"PositionReport\":{\"id\":" + std::to_string(i) +
+        ",\"padding\":\"" + padding + "\"}}";
+    pcl_msg_t timed_msg{timed_body.data(),
+                        static_cast<uint32_t>(timed_body.size()),
+                        "PositionReport"};
+    std::unique_lock<std::mutex> lock(sub_state.m);
+    sub_state.expected_body = timed_body;
+    sub_state.timing_armed = true;
+    const auto started_at = std::chrono::steady_clock::now();
+    const pcl_status_t publish_status = pcl_port_publish(pub_port, &timed_msg);
+    const bool completed = publish_status == PCL_OK &&
+        sub_state.cv.wait_for(lock, 2s, [&] {
+          return !sub_state.timing_armed;
+        });
+    if (!completed) {
+      ADD_FAILURE() << "LA-CAL sample " << i << " failed: publish status "
+                    << publish_status;
+      samples_ok = false;
+      break;
+    }
+    const auto completed_at = sub_state.completed_at;
+    lock.unlock();
+    if (i >= 0) {
+      latencies_us.push_back(
+          std::chrono::duration<double, std::micro>(completed_at - started_at)
+              .count());
+    }
+  }
+
+  stop_subscriber.store(true, std::memory_order_relaxed);
+  subscriber_runner.join();
+  ASSERT_TRUE(samples_ok);
+  ASSERT_EQ(latencies_us.size(), static_cast<size_t>(kSamples));
+  std::sort(latencies_us.begin(), latencies_us.end());
+  double sum = 0.0;
+  for (const double value : latencies_us) sum += value;
+  std::printf(
+      "[PERF] raw-pcl / LA-CAL / OMS JSON      avg=%7.1f us min=%7.1f us "
+      "p50=%7.1f us p99=%7.1f us payload=%zu B\n",
+      sum / latencies_us.size(), latencies_us.front(),
+      latencies_us[latencies_us.size() / 2],
+      latencies_us[static_cast<size_t>(latencies_us.size() * 0.99)],
+      sub_state.expected_body.size());
 
   pcl_executor_remove(pub_exec, pub_c);
   pcl_container_destroy(pub_c);

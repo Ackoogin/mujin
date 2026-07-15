@@ -125,11 +125,10 @@ to these entries; the full text is in git history.
   calls in component code. E1–E4/E6 delivered; the one open item (E5,
   `StandardBridge` raw-PCL classification) is tracked in TODO WS-E.
 
-- **`binding_performance_report_2026-04-28.md`** — point-in-time
-  performance baselines (JSON/FlatBuffers/protobuf codec costs, transport
-  latencies, the shared-memory benchmark fix). The live benchmark is
-  `subprojects/PYRAMID/tests/test_binding_performance.cpp`; historical
-  numbers are in git history.
+- **[Binding performance](../../reports/PYRAMID/binding_performance.md)** —
+  maintained codec and transport baseline, including callback-timestamped
+  raw-versus-full PYRAMID comparisons for PCL transports, gRPC, and ROS2 over
+  Fast DDS. The earlier April 2026 point-in-time report remains in git history.
 
 - **`generated_bindings_status.md`** — point-in-time proof-matrix/status
   snapshot for the Tactical Objects binding paths. Live status is the CTest
