@@ -29,6 +29,7 @@ target_include_directories(pyramid_core
 # Specify dependencies (if any)
 target_link_libraries(pyramid_core
     PUBLIC
+        pcl_core
         nlohmann_json::nlohmann_json
 )
 

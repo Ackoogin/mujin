@@ -1,9 +1,31 @@
 #include <logging/Logger.h>
-#include <chrono> // Needed for system_clock
-#include <mutex>  // Needed for std::lock_guard
-#include <vector> // Needed for listener copy
-#include <cstdio> // Needed for fprintf (temporary error handling)
-#include <iomanip> // For std::put_time
+
+#include <pcl/pcl_log.h>
+
+#include <exception>
+#include <mutex>
+#include <vector>
+
+namespace {
+
+pcl_log_level_t toPclLogLevel(pyramid::core::logging::LogLevel level) {
+  using pyramid::core::logging::LogLevel;
+
+  switch (level) {
+    case LogLevel::Debug:
+      return PCL_LOG_DEBUG;
+    case LogLevel::Info:
+      return PCL_LOG_INFO;
+    case LogLevel::Warning:
+      return PCL_LOG_WARN;
+    case LogLevel::Error:
+      return PCL_LOG_ERROR;
+  }
+
+  return PCL_LOG_ERROR;
+}
+
+} // namespace
 
 namespace pyramid {
 namespace core {
@@ -24,11 +46,12 @@ namespace logging {
     entry.message = message;
     entry.timestamp = std::chrono::system_clock::now();
 
-    // 2. Add to history (under history lock)
     {
       std::lock_guard<std::mutex> lock(history_mutex_); // Lock the history mutex
-      log_history_.push_back(entry); 
+      log_history_.push_back(entry);
     } // history_mutex_ released here
+
+    pcl_log(nullptr, toPclLogLevel(level), "%s", message.c_str());
 
     // 3. Notify listeners (under listeners lock, but call outside lock)
     // Create a copy of listeners to avoid holding the lock while calling callbacks
@@ -47,10 +70,12 @@ namespace logging {
       try {
         listener(entry); // Call listener with the log entry
       } catch (const std::exception& e) {
-        // Basic error handling for listener exceptions
-        fprintf(stderr, "Exception caught in log listener: %s\n", e.what());
+        // Route listener failures through the same central logging sink.
+        pcl_log(nullptr, PCL_LOG_ERROR,
+                "Exception caught in log listener: %s", e.what());
       } catch (...) {
-        fprintf(stderr, "Unknown exception caught in log listener.\n");
+        pcl_log(nullptr, PCL_LOG_ERROR,
+                "Unknown exception caught in log listener.");
       }
     }
   }
