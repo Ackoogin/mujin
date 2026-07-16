@@ -444,6 +444,11 @@ foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_json_codec_plugin_s
         PRIVATE
             "${PYRAMID_CPP_BINDINGS_DIR}"
     )
+    if(MSVC)
+        # The formal A-GRA JSON codec contains the complete generated data
+        # model and exceeds MSVC's default object-file section limit.
+        target_compile_options(${PYRAMID_CODEC_PLUGIN_TARGET} PRIVATE /bigobj)
+    endif()
     list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
         ${PYRAMID_CODEC_PLUGIN_TARGET})
 endforeach()
