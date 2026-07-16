@@ -2,9 +2,10 @@
 /// \brief Inter-process shared-memory central bus transport for PCL.
 ///
 /// Each transport instance joins a named bus backed by an OS shared-memory
-/// region. The bus owns participant mailboxes in shared memory; a background
-/// receive thread polls the local mailbox and posts work onto the executor
-/// thread. Topic publish fans out across the bus, while async service
+/// region. The bus owns participant mailboxes in shared memory; writers signal
+/// the destination mailbox so its receive thread can post work onto the
+/// executor thread without a fixed polling delay. Topic publish fans out across
+/// the bus, while async service
 /// requests route to the unique participant advertising the requested service.
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #  define _POSIX_C_SOURCE 200809L
@@ -41,7 +42,7 @@
 #define PCL_SHM_INTERNAL_STREAM_REQ_TYPE "pcl_shared_memory_stream_request"
 
 #define PCL_SHM_MAGIC 0x50434C53u
-#define PCL_SHM_VERSION 2u
+#define PCL_SHM_VERSION 3u
 
 #define PCL_SHM_MAX_PARTICIPANTS 8u
 #define PCL_SHM_QUEUE_DEPTH 16u
@@ -54,6 +55,7 @@
 #define PCL_SHM_MAX_BACKPRESSURE_TOPICS 16u
 #define PCL_SHM_DISCOVERY_RETRIES 20u
 #define PCL_SHM_POLL_MS 1u
+#define PCL_SHM_SERVICE_SYNC_MS 1u
 
 typedef enum {
   PCL_SHM_FRAME_NONE = 0,
@@ -83,6 +85,11 @@ typedef struct {
   uint32_t write_index;
   uint32_t service_count;
   char     participant_id[PCL_SHM_MAX_ID];
+#ifdef _WIN32
+  char     notify_object_name[PCL_SHM_MAX_OBJECT_NAME];
+#else
+  sem_t    notify_sem;
+#endif
   char     services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME];
   pcl_shm_frame_t frames[PCL_SHM_QUEUE_DEPTH];
 } pcl_shm_slot_t;
@@ -200,6 +207,7 @@ typedef struct pcl_shared_memory_transport_t {
 #ifdef _WIN32
   HANDLE                     mapping_handle;
   HANDLE                     lock_handle;
+  HANDLE                     recv_event;
   HANDLE                     recv_thread;
   HANDLE                     egress_thread;
   CRITICAL_SECTION           pending_lock;
@@ -378,6 +386,20 @@ static void pcl_shm_build_object_name(const char* prefix,
 #endif
 }
 
+#ifdef _WIN32
+static void pcl_shm_build_notify_object_name(const char* bus_name,
+                                             uint32_t    generation,
+                                             char*       out,
+                                             size_t      out_size) {
+  char token[PCL_SHM_MAX_NAME];
+  pcl_shm_copy_token(bus_name, token, sizeof(token));
+  snprintf(out, out_size, "Local\\pcl_shm_notify_%s_%lu_%lu",
+           token,
+           (unsigned long)GetCurrentProcessId(),
+           (unsigned long)generation);
+}
+#endif
+
 static void pcl_shm_pending_lock_init(pcl_shared_memory_transport_t* ctx) {
 #ifdef _WIN32
   InitializeCriticalSection(&ctx->pending_lock);
@@ -433,6 +455,70 @@ static void pcl_shm_bus_unlock(pcl_shared_memory_transport_t* ctx) {
   if (ctx && ctx->lock_sem) {
     sem_post(ctx->lock_sem);
   }
+#endif
+}
+
+static void pcl_shm_notify_slot_locked(pcl_shared_memory_transport_t* ctx,
+                                       uint32_t target_slot_index) {
+  pcl_shm_slot_t* slot;
+
+  if (!ctx || !ctx->region ||
+      target_slot_index >= PCL_SHM_MAX_PARTICIPANTS) {
+    return;
+  }
+  slot = &ctx->region->slots[target_slot_index];
+  if (!slot->in_use) return;
+
+#ifdef _WIN32
+  if (slot->notify_object_name[0] != '\0') {
+    HANDLE notify_event = OpenEventA(EVENT_MODIFY_STATE,
+                                     FALSE,
+                                     slot->notify_object_name);
+    if (notify_event) {
+      SetEvent(notify_event);
+      CloseHandle(notify_event);
+    }
+  }
+#else
+  (void)sem_post(&slot->notify_sem);
+#endif
+}
+
+static void pcl_shm_notify_local_mailbox(
+    pcl_shared_memory_transport_t* ctx) {
+  if (!ctx) return;
+#ifdef _WIN32
+  if (ctx->recv_event) SetEvent(ctx->recv_event);
+#else
+  if (ctx->region && ctx->slot_index < PCL_SHM_MAX_PARTICIPANTS) {
+    (void)sem_post(&ctx->region->slots[ctx->slot_index].notify_sem);
+  }
+#endif
+}
+
+static void pcl_shm_wait_for_mailbox(pcl_shared_memory_transport_t* ctx,
+                                     uint32_t timeout_ms) {
+  if (!ctx) return;
+#ifdef _WIN32
+  if (ctx->recv_event) {
+    (void)WaitForSingleObject(ctx->recv_event, (DWORD)timeout_ms);
+  }
+#else
+  struct timespec deadline;
+  int wait_rc;
+
+  if (!ctx->region || ctx->slot_index >= PCL_SHM_MAX_PARTICIPANTS) return;
+  if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) return;
+  deadline.tv_sec += (time_t)(timeout_ms / 1000u);
+  deadline.tv_nsec += (long)((timeout_ms % 1000u) * 1000000u);
+  if (deadline.tv_nsec >= 1000000000L) {
+    deadline.tv_sec += 1;
+    deadline.tv_nsec -= 1000000000L;
+  }
+  do {
+    wait_rc = sem_timedwait(
+        &ctx->region->slots[ctx->slot_index].notify_sem, &deadline);
+  } while (wait_rc == -1 && errno == EINTR);
 #endif
 }
 
@@ -1169,6 +1255,7 @@ static pcl_status_t pcl_shm_enqueue_frame_locked(
   if (data_size > 0u) memcpy(frame->data, data, data_size);
 
   slot->write_index = next_index;
+  pcl_shm_notify_slot_locked(ctx, target_slot_index);
   return PCL_OK;
 }
 
@@ -2371,7 +2458,10 @@ static void* pcl_shm_recv_thread_main(void* arg)
     if (has_frame) {
       pcl_shm_handle_frame(ctx, &frame);
     } else {
-      pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+      /* A writer signals this participant after advancing write_index. The
+       * bounded wait also preserves periodic service-advertisement refreshes
+       * when the local executor's container set changes while the bus is idle. */
+      pcl_shm_wait_for_mailbox(ctx, PCL_SHM_SERVICE_SYNC_MS);
     }
   }
 
@@ -2451,11 +2541,31 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   for (i = 0; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
     if (!ctx->region->slots[i].in_use) {
       pcl_shm_slot_t* slot = &ctx->region->slots[i];
+      uint32_t generation = ++ctx->region->next_generation;
       memset(slot, 0, sizeof(*slot));
-      slot->in_use = 1u;
-      slot->generation = ++ctx->region->next_generation;
+      slot->generation = generation;
+#ifdef _WIN32
+      pcl_shm_build_notify_object_name(ctx->bus_name,
+                                       generation,
+                                       slot->notify_object_name,
+                                       sizeof(slot->notify_object_name));
+      ctx->recv_event = CreateEventA(NULL,
+                                     FALSE,
+                                     FALSE,
+                                     slot->notify_object_name);
+      if (!ctx->recv_event) {
+        memset(slot, 0, sizeof(*slot));
+        break;
+      }
+#else
+      if (sem_init(&slot->notify_sem, 1, 0) != 0) {
+        memset(slot, 0, sizeof(*slot));
+        break;
+      }
+#endif
       snprintf(slot->participant_id, sizeof(slot->participant_id), "%s",
                ctx->participant_id);
+      slot->in_use = 1u;
       ctx->region->participant_count++;
       ctx->slot_index = i;
       break;
@@ -2624,6 +2734,7 @@ void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {
   pcl_shm_egress_lock_release(ctx);
 
   ctx->recv_stop = 1;
+  pcl_shm_notify_local_mailbox(ctx);
 #ifdef _WIN32
   if (ctx->recv_thread) {
     WaitForSingleObject(ctx->recv_thread, 5000);
@@ -2650,6 +2761,9 @@ void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {
       pcl_shm_slot_t* slot = &ctx->region->slots[ctx->slot_index];
       if (slot->in_use &&
           strcmp(slot->participant_id, ctx->participant_id) == 0) {
+#ifndef _WIN32
+        (void)sem_destroy(&slot->notify_sem);
+#endif
         memset(slot, 0, sizeof(*slot));
         if (ctx->region->participant_count > 0u) {
           ctx->region->participant_count--;
@@ -2659,6 +2773,13 @@ void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {
     unlink_objects = (ctx->region->participant_count == 0u);
     pcl_shm_bus_unlock(ctx);
   }
+
+#ifdef _WIN32
+  if (ctx->recv_event) {
+    CloseHandle(ctx->recv_event);
+    ctx->recv_event = NULL;
+  }
+#endif
 
   pcl_shm_active_streams_abort(ctx);
   pcl_shm_pending_clear(ctx);
