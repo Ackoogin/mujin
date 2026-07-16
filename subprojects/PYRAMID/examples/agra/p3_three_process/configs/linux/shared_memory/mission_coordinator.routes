@@ -1,0 +1,12 @@
+# Run from the P3 SDK root so the relative plugin path resolves.
+# Each link has its own named bus. The peer alias matches the remote
+# participant ID so PCL's ingress allow-list remains explicit.
+transport sensor_planner plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"agra_p3_sensor_link","participant_id":"mission_coordinator"}
+transport vehicle_planner plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"agra_p3_vehicle_link","participant_id":"mission_coordinator"}
+
+exclusive ma_action_command.request_leg ma_action_command.create,ma_action_command.update,ma_action_command.cancel MA_ActionCommand
+exclusive ma_action.information_leg ma_action.read MA_Action
+
+route ma_action_command.create provided sensor_planner,vehicle_planner reliable
+route MA_Action publisher sensor_planner,vehicle_planner reliable
+route MA_Action subscriber sensor_planner,vehicle_planner reliable

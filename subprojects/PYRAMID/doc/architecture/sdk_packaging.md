@@ -232,6 +232,26 @@ The package stages `pyramid_codec_oms_json_agra_core_mms` and
 `proto/`. The package is a generated contract and SDK distribution only; it
 does not make an A-GRA compliance claim.
 
+On Linux, the equivalent commands are:
+
+```bash
+cmake --preset flatbuffers-only
+cmake --build --preset flatbuffers-only-release --parallel 4
+cmake -S . -B build-flatbuffers-only \
+  -DPYRAMID_ENABLE_AGRA_P3=ON \
+  -DPYRAMID_AGRA_P3_PROTO_DIR=subprojects/PYRAMID/pim/agra_p3_seam
+cmake --build build-flatbuffers-only --parallel 4 \
+  --target pyramid_agra_p3_data_model pyramid_codec_oms_json_agra_core_mms
+subprojects/PYRAMID/scripts/package_sdk.sh --gra --clean \
+  --build-dir build-flatbuffers-only \
+  --proto-dir subprojects/PYRAMID/pim/agra_p3_seam \
+  --out dist/pcl_pyramid_sdk_agra_p3
+```
+
+The three-process example under `examples/agra/p3_three_process` provides the
+downstream Linux build and run commands. It generates and builds against this
+packaged SDK rather than the monorepo's generated P3 files.
+
 ## Key files
 
 | Area | Files |

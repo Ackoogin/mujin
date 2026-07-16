@@ -649,6 +649,8 @@ if(PYRAMID_ENABLE_AGRA_P3)
         "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_cabi_marshal.cpp"
         PROPERTIES GENERATED TRUE)
     add_dependencies(pyramid_agra_p3_data_model pyramid_agra_p3_bindings_codegen)
+    set_target_properties(pyramid_agra_p3_data_model PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(pyramid_agra_p3_data_model
         PRIVATE
             pcl_core
