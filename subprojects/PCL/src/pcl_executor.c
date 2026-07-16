@@ -243,7 +243,13 @@ static pcl_status_t subscribe_port_with_transport(
     return PCL_OK;
   }
 
-  if (!transport->subscribe) return PCL_ERR_NOT_FOUND;
+  if (!transport->subscribe) {
+    pcl_log(port->owner, PCL_LOG_ERROR,
+            "remote subscriber configuration failed for '%s': selected transport "
+            "does not support subscriptions",
+            port->name);
+    return PCL_ERR_NOT_FOUND;
+  }
   return transport->subscribe(transport->adapter_ctx, port->name,
                               port->type_name);
 }
@@ -985,11 +991,20 @@ pcl_status_t pcl_executor_validate_endpoint_route(
     const pcl_endpoint_route_t* route,
     char*                       diag,
     size_t                      diag_size) {
+  char local_diag[256] = {0};
+  char* active_diag;
+  size_t active_diag_size;
   pcl_transport_caps_t required;
   uint32_t p;
 
   if (diag && diag_size) diag[0] = '\0';
-  if (!e || !route) return PCL_ERR_INVALID;
+  if (!e || !route) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "endpoint route validation failed: executor and route are required");
+    return PCL_ERR_INVALID;
+  }
+  active_diag = (diag && diag_size) ? diag : local_diag;
+  active_diag_size = (diag && diag_size) ? diag_size : sizeof(local_diag);
 
   required = pcl_endpoint_required_caps(route->endpoint_kind);
   /* No requirement (unknown kind) or no remote leg: nothing to validate. */
@@ -999,10 +1014,18 @@ pcl_status_t pcl_executor_validate_endpoint_route(
   if (route->peer_count == 0u) {
     /* Remote via the default transport. */
     char label[80];
+    pcl_status_t rc;
     snprintf(label, sizeof(label), "the default transport");
-    return validate_one_transport(e->transport_caps, e->has_transport, required,
-                                  e->transport_qos, route->qos_floor,
-                                  route->endpoint_name, label, diag, diag_size);
+    rc = validate_one_transport(e->transport_caps, e->has_transport, required,
+                                e->transport_qos, route->qos_floor,
+                                route->endpoint_name, label,
+                                active_diag, active_diag_size);
+    if (rc != PCL_OK) {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "endpoint route validation failed: %s (rc=%d)",
+              active_diag, (int)rc);
+    }
+    return rc;
   }
 
   for (p = 0; p < route->peer_count; ++p) {
@@ -1025,8 +1048,14 @@ pcl_status_t pcl_executor_validate_endpoint_route(
     }
     snprintf(label, sizeof(label), "peer '%s'", peer_id ? peer_id : "?");
     rc = validate_one_transport(have, found, required, offered, route->qos_floor,
-                                route->endpoint_name, label, diag, diag_size);
-    if (rc != PCL_OK) return rc;
+                                route->endpoint_name, label,
+                                active_diag, active_diag_size);
+    if (rc != PCL_OK) {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "endpoint route validation failed: %s (rc=%d)",
+              active_diag, (int)rc);
+      return rc;
+    }
   }
   return PCL_OK;
 }
@@ -1036,21 +1065,48 @@ pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
   pcl_endpoint_route_entry_t* entry;
   uint32_t i;
 
-  if (!e || !route || !route->endpoint_name) return PCL_ERR_INVALID;
-  if (route->route_mode == PCL_ROUTE_NONE) return PCL_ERR_INVALID;
-  if (route->peer_count > PCL_MAX_ENDPOINT_PEERS) return PCL_ERR_INVALID;
+  if (!e || !route || !route->endpoint_name) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "endpoint route configuration failed: executor, route, and endpoint name are required");
+    return PCL_ERR_INVALID;
+  }
+  if (route->route_mode == PCL_ROUTE_NONE) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "endpoint route configuration failed for '%s': route mode is NONE",
+            route->endpoint_name);
+    return PCL_ERR_INVALID;
+  }
+  if (route->peer_count > PCL_MAX_ENDPOINT_PEERS) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "endpoint route configuration failed for '%s': %u peers exceeds the limit of %u",
+            route->endpoint_name, (unsigned)route->peer_count,
+            (unsigned)PCL_MAX_ENDPOINT_PEERS);
+    return PCL_ERR_INVALID;
+  }
   if ((route->route_mode & PCL_ROUTE_REMOTE) == 0u && route->peer_count > 0u) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "endpoint route configuration failed for '%s': peer IDs require a remote route",
+            route->endpoint_name);
     return PCL_ERR_INVALID;
   }
   if ((route->endpoint_kind == PCL_ENDPOINT_CONSUMED ||
        route->endpoint_kind == PCL_ENDPOINT_STREAM_CONSUMED) &&
       route->route_mode == (PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE)) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "endpoint route configuration failed for '%s': consumed endpoints "
+            "cannot route both locally and remotely",
+            route->endpoint_name);
     return PCL_ERR_INVALID;
   }
 
   entry = find_endpoint_route_entry(e, route->endpoint_name, route->endpoint_kind);
   if (!entry) {
-    if (e->endpoint_route_count >= PCL_MAX_ENDPOINT_ROUTES) return PCL_ERR_NOMEM;
+    if (e->endpoint_route_count >= PCL_MAX_ENDPOINT_ROUTES) {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "endpoint route configuration failed for '%s': executor limit of %u routes was reached",
+              route->endpoint_name, (unsigned)PCL_MAX_ENDPOINT_ROUTES);
+      return PCL_ERR_NOMEM;
+    }
     entry = &e->endpoint_routes[e->endpoint_route_count++];
     memset(entry, 0, sizeof(*entry));
     entry->in_use = 1;
@@ -1065,7 +1121,12 @@ pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
     entry->peer_ids[i][0] = '\0';
   }
   for (i = 0; i < route->peer_count; ++i) {
-    if (!route->peer_ids || !route->peer_ids[i]) return PCL_ERR_INVALID;
+    if (!route->peer_ids || !route->peer_ids[i]) {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "endpoint route configuration failed for '%s': peer ID %u is missing",
+              route->endpoint_name, (unsigned)i);
+      return PCL_ERR_INVALID;
+    }
     snprintf(entry->peer_ids[i], sizeof(entry->peer_ids[i]), "%s",
              route->peer_ids[i]);
   }
@@ -1299,16 +1360,31 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
         route_forces_local = 1;
       } else if (route->route_mode == PCL_ROUTE_REMOTE) {
         const pcl_transport_t* transport = NULL;
-        if (route->peer_count > 1u) return PCL_ERR_INVALID;
+        if (route->peer_count > 1u) {
+          pcl_log(NULL, PCL_LOG_ERROR,
+                  "service invocation configuration failed for '%s': a consumed "
+                  "endpoint may route to at most one peer",
+                  service_name);
+          return PCL_ERR_INVALID;
+        }
         if (route->peer_count == 1u) {
           transport = find_named_transport(e, route->peer_ids[0]);
         } else if (e->has_transport) {
           transport = &e->transport;
         }
-        if (!transport || !transport->invoke_async) return PCL_ERR_NOT_FOUND;
+        if (!transport || !transport->invoke_async) {
+          pcl_log(NULL, PCL_LOG_ERROR,
+                  "service invocation configuration failed for '%s': the selected "
+                  "remote route has no unary RPC transport",
+                  service_name);
+          return PCL_ERR_NOT_FOUND;
+        }
         return transport->invoke_async(transport->adapter_ctx, service_name,
                                        request, callback, user_data);
       } else {
+        pcl_log(NULL, PCL_LOG_ERROR,
+                "service invocation configuration failed for '%s': route mode 0x%x is invalid",
+                service_name, (unsigned)route->route_mode);
         return PCL_ERR_INVALID;
       }
     }
@@ -1388,13 +1464,25 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
         route_forces_local = 1;
       } else if (route->route_mode == PCL_ROUTE_REMOTE) {
         const pcl_transport_t* transport = NULL;
-        if (route->peer_count > 1u) return PCL_ERR_INVALID;
+        if (route->peer_count > 1u) {
+          pcl_log(NULL, PCL_LOG_ERROR,
+                  "stream invocation configuration failed for '%s': a consumed "
+                  "endpoint may route to at most one peer",
+                  service_name);
+          return PCL_ERR_INVALID;
+        }
         if (route->peer_count == 1u) {
           transport = find_named_transport(e, route->peer_ids[0]);
         } else if (e->has_transport) {
           transport = &e->transport;
         }
-        if (!transport || !transport->invoke_stream) return PCL_ERR_NOT_FOUND;
+        if (!transport || !transport->invoke_stream) {
+          pcl_log(NULL, PCL_LOG_ERROR,
+                  "stream invocation configuration failed for '%s': the selected "
+                  "remote route has no streaming RPC transport",
+                  service_name);
+          return PCL_ERR_NOT_FOUND;
+        }
         {
           void* stream_handle = NULL;
           pcl_status_t rc = transport->invoke_stream(
@@ -1417,6 +1505,9 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
           return rc;
         }
       } else {
+        pcl_log(NULL, PCL_LOG_ERROR,
+                "stream invocation configuration failed for '%s': route mode 0x%x is invalid",
+                service_name, (unsigned)route->route_mode);
         return PCL_ERR_INVALID;
       }
     }
@@ -1544,7 +1635,12 @@ static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
 
   if (!e || !topic || !msg) return PCL_ERR_INVALID;
   if (msg->size > 0u && !msg->data) return PCL_ERR_INVALID;
-  if (!msg->type_name) return PCL_ERR_INVALID;
+  if (!msg->type_name) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "incoming message for topic '%s' was rejected: no content type was provided",
+            topic);
+    return PCL_ERR_INVALID;
+  }
 
   pending = (pcl_pending_msg_t*)pcl_calloc(1, sizeof(pcl_pending_msg_t));
   if (!pending) return PCL_ERR_NOMEM;

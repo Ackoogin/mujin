@@ -2,6 +2,7 @@
 /// \brief Runtime loader for PCL transport and codec plugins.
 #include "pcl/pcl_plugin_loader.h"
 #include "pcl/pcl_alloc.h"
+#include "pcl/pcl_log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -103,31 +104,52 @@ pcl_status_t pcl_plugin_load_codec(const char*             path,
   const pcl_codec_t* codec;
   pcl_status_t rc;
 
-  if (!path || !registry || !out_handle) return PCL_ERR_INVALID;
+  if (!path || path[0] == '\0' || !registry || !out_handle) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec plugin load failed: path, registry, and output handle are required");
+    return PCL_ERR_INVALID;
+  }
   *out_handle = NULL;
 
   handle = open_library(path);
-  if (!handle) return PCL_ERR_NOT_FOUND;
+  if (!handle) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec plugin load failed: cannot open '%s'", path);
+    return PCL_ERR_NOT_FOUND;
+  }
 
   entry = (pcl_codec_plugin_entry_fn)resolve_symbol(
       handle, PCL_CODEC_PLUGIN_ENTRY_SYMBOL);
   if (!entry) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec plugin load failed: '%s' does not export %s",
+            path, PCL_CODEC_PLUGIN_ENTRY_SYMBOL);
     close_library(handle);
     return PCL_ERR_NOT_FOUND;
   }
 
   codec = entry(config_json);
   if (!codec) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec plugin load failed: entry point in '%s' rejected its configuration",
+            path);
     close_library(handle);
     return PCL_ERR_STATE;
   }
   if (codec->abi_version != PCL_CODEC_ABI_VERSION) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec plugin load failed: '%s' uses ABI version %u, required version is %u",
+            path, (unsigned)codec->abi_version,
+            (unsigned)PCL_CODEC_ABI_VERSION);
     close_library(handle);
     return PCL_ERR_STATE;
   }
 
   rc = pcl_codec_registry_register(registry, codec);
   if (rc != PCL_OK) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec plugin load failed: could not register codec from '%s' (rc=%d)",
+            path, (int)rc);
     close_library(handle);
     return rc;
   }
@@ -265,21 +287,38 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
   pcl_transport_abi_version_fn abi_version;
   pcl_transport_plugin_entry_fn entry;
   const pcl_transport_t* transport;
+  uint32_t actual_abi_version;
 
-  if (!path || !out_handle || !out_vtable) return PCL_ERR_INVALID;
+  if (!path || path[0] == '\0' || !out_handle || !out_vtable) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport plugin load failed: path and output pointers are required");
+    return PCL_ERR_INVALID;
+  }
   *out_handle = NULL;
   *out_vtable = NULL;
 
   handle = open_library(path);
-  if (!handle) return PCL_ERR_NOT_FOUND;
+  if (!handle) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport plugin load failed: cannot open '%s'", path);
+    return PCL_ERR_NOT_FOUND;
+  }
 
   abi_version = (pcl_transport_abi_version_fn)resolve_symbol(
       handle, PCL_TRANSPORT_ABI_VERSION_SYMBOL);
   if (!abi_version) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport plugin load failed: '%s' does not export %s",
+            path, PCL_TRANSPORT_ABI_VERSION_SYMBOL);
     close_library(handle);
     return PCL_ERR_NOT_FOUND;
   }
-  if (abi_version() != PCL_TRANSPORT_ABI_VERSION) {
+  actual_abi_version = abi_version();
+  if (actual_abi_version != PCL_TRANSPORT_ABI_VERSION) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport plugin load failed: '%s' uses ABI version %u, required version is %u",
+            path, (unsigned)actual_abi_version,
+            (unsigned)PCL_TRANSPORT_ABI_VERSION);
     close_library(handle);
     return PCL_ERR_STATE;
   }
@@ -287,12 +326,18 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
   entry = (pcl_transport_plugin_entry_fn)resolve_symbol(
       handle, PCL_TRANSPORT_PLUGIN_ENTRY_SYMBOL);
   if (!entry) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport plugin load failed: '%s' does not export %s",
+            path, PCL_TRANSPORT_PLUGIN_ENTRY_SYMBOL);
     close_library(handle);
     return PCL_ERR_NOT_FOUND;
   }
 
   transport = entry(config_json);
   if (!transport) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport plugin load failed: entry point in '%s' rejected its configuration",
+            path);
     close_library(handle);
     return PCL_ERR_STATE;
   }

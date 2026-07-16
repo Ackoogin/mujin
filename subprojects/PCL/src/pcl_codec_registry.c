@@ -2,6 +2,7 @@
 /// \brief PCL codec registry implementation.
 #include "pcl/pcl_codec_registry.h"
 #include "pcl/pcl_alloc.h"
+#include "pcl/pcl_log.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -101,12 +102,39 @@ pcl_status_t pcl_codec_registry_register(pcl_codec_registry_t* registry,
                                          const pcl_codec_t*    codec) {
   pcl_status_t rc;
 
-  if (!registry || !codec || !codec->content_type) return PCL_ERR_INVALID;
-  if (codec->abi_version != PCL_CODEC_ABI_VERSION) return PCL_ERR_STATE;
+  if (!registry) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec registration failed: registry is null");
+    return PCL_ERR_INVALID;
+  }
+  if (!codec) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec registration failed: codec vtable is null");
+    return PCL_ERR_INVALID;
+  }
+  if (!codec->content_type || codec->content_type[0] == '\0') {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec registration failed: codec has no content type");
+    return PCL_ERR_INVALID;
+  }
+  if (codec->abi_version != PCL_CODEC_ABI_VERSION) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec registration failed for content type '%s': ABI version %u "
+            "does not match required version %u",
+            codec->content_type, (unsigned)codec->abi_version,
+            (unsigned)PCL_CODEC_ABI_VERSION);
+    return PCL_ERR_STATE;
+  }
   // Multiple codecs may share a content_type so a single process (e.g. a
   // PYRAMID bridge) can load per-component plugins side by side; dispatch then
   // selects by schema_id.  Re-registering the same vtable is still rejected.
-  if (contains_codec(registry, codec)) return PCL_ERR_STATE;
+  if (contains_codec(registry, codec)) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec registration failed for content type '%s': the same codec "
+            "vtable is already registered",
+            codec->content_type);
+    return PCL_ERR_STATE;
+  }
 
   rc = reserve_codec_slots(registry, registry->count + 1u);
   if (rc != PCL_OK) return rc;
@@ -117,12 +145,32 @@ pcl_status_t pcl_codec_registry_register(pcl_codec_registry_t* registry,
 
 const pcl_codec_t* pcl_codec_registry_get(const pcl_codec_registry_t* registry,
                                           const char*                 content_type) {
+  if (!registry) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec lookup failed: registry is null");
+    return NULL;
+  }
+  if (!content_type || content_type[0] == '\0') {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec lookup failed: no content type was provided");
+    return NULL;
+  }
   return find_codec(registry, content_type);
 }
 
 const pcl_codec_t* pcl_codec_registry_get_at(const pcl_codec_registry_t* registry,
                                              const char*                 content_type,
                                              uint32_t                    index) {
+  if (!registry) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec lookup failed: registry is null");
+    return NULL;
+  }
+  if (!content_type || content_type[0] == '\0') {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "codec lookup failed: no content type was provided");
+    return NULL;
+  }
   return find_codec_at(registry, content_type, index);
 }
 

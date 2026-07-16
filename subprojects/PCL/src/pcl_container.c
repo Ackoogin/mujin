@@ -32,17 +32,75 @@ static pcl_param_t* find_or_add_param(pcl_container_t* c, const char* key) {
   return p;
 }
 
+static int validate_port_definition(pcl_container_t* c,
+                                    const char*      endpoint_name,
+                                    const char*      content_type,
+                                    const char*      port_kind) {
+  if (!c) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "cannot add %s port: container is null", port_kind);
+    return 0;
+  }
+  if (!endpoint_name) {
+    pcl_log(c, PCL_LOG_ERROR,
+            "cannot add %s port: endpoint name is null", port_kind);
+    return 0;
+  }
+  if (!content_type) {
+    pcl_log(c, PCL_LOG_ERROR,
+            "cannot add %s port '%s': content type is missing",
+            port_kind, endpoint_name);
+    return 0;
+  }
+  if (!c->configuring) {
+    pcl_log(c, PCL_LOG_ERROR,
+            "cannot add %s port '%s': ports may only be added during configuration",
+            port_kind, endpoint_name);
+    return 0;
+  }
+  if (c->port_count >= PCL_MAX_PORTS) {
+    pcl_log(c, PCL_LOG_ERROR,
+            "cannot add %s port '%s': container limit of %u ports was reached",
+            port_kind, endpoint_name, (unsigned)PCL_MAX_PORTS);
+    return 0;
+  }
+  return 1;
+}
+
 static pcl_status_t copy_route_config(pcl_port_t*              port,
                                       uint32_t                 route_mode,
                                       const char* const*       peer_ids,
                                       uint32_t                 peer_count) {
   uint32_t i;
 
-  if (!port) return PCL_ERR_INVALID;
-  if (route_mode == PCL_ROUTE_NONE) return PCL_ERR_INVALID;
-  if (peer_count > PCL_MAX_ENDPOINT_PEERS) return PCL_ERR_INVALID;
-  if (peer_count > 0u && !peer_ids) return PCL_ERR_INVALID;
+  if (!port) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "port route configuration failed: port is null");
+    return PCL_ERR_INVALID;
+  }
+  if (route_mode == PCL_ROUTE_NONE) {
+    pcl_log(port->owner, PCL_LOG_ERROR,
+            "port route configuration failed for '%s': route mode is NONE",
+            port->name);
+    return PCL_ERR_INVALID;
+  }
+  if (peer_count > PCL_MAX_ENDPOINT_PEERS) {
+    pcl_log(port->owner, PCL_LOG_ERROR,
+            "port route configuration failed for '%s': %u peers exceeds the limit of %u",
+            port->name, (unsigned)peer_count,
+            (unsigned)PCL_MAX_ENDPOINT_PEERS);
+    return PCL_ERR_INVALID;
+  }
+  if (peer_count > 0u && !peer_ids) {
+    pcl_log(port->owner, PCL_LOG_ERROR,
+            "port route configuration failed for '%s': peer count is %u but the peer list is null",
+            port->name, (unsigned)peer_count);
+    return PCL_ERR_INVALID;
+  }
   if ((route_mode & PCL_ROUTE_REMOTE) == 0u && peer_count > 0u) {
+    pcl_log(port->owner, PCL_LOG_ERROR,
+            "port route configuration failed for '%s': peer IDs require a remote route",
+            port->name);
     return PCL_ERR_INVALID;
   }
 
@@ -53,7 +111,12 @@ static pcl_status_t copy_route_config(pcl_port_t*              port,
     port->peer_ids[i][0] = '\0';
   }
   for (i = 0; i < peer_count; ++i) {
-    if (!peer_ids[i]) return PCL_ERR_INVALID;
+    if (!peer_ids[i]) {
+      pcl_log(port->owner, PCL_LOG_ERROR,
+              "port route configuration failed for '%s': peer ID %u is null",
+              port->name, (unsigned)i);
+      return PCL_ERR_INVALID;
+    }
     snprintf(port->peer_ids[i], sizeof(port->peer_ids[i]), "%s", peer_ids[i]);
   }
   return PCL_OK;
@@ -311,9 +374,7 @@ pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
                                         const char*      topic,
                                         const char*      type_name) {
   pcl_port_t* p;
-  if (!c || !topic || !type_name) return NULL;
-  if (!c->configuring) return NULL;
-  if (c->port_count >= PCL_MAX_PORTS) return NULL;
+  if (!validate_port_definition(c, topic, type_name, "publisher")) return NULL;
 
   p = &c->ports[c->port_count++];
   memset(p, 0, sizeof(*p));
@@ -331,9 +392,12 @@ pcl_port_t* pcl_container_add_subscriber(pcl_container_t* c,
                                          pcl_sub_callback_t  cb,
                                          void*               user_data) {
   pcl_port_t* p;
-  if (!c || !topic || !type_name || !cb) return NULL;
-  if (!c->configuring) return NULL;
-  if (c->port_count >= PCL_MAX_PORTS) return NULL;
+  if (!validate_port_definition(c, topic, type_name, "subscriber")) return NULL;
+  if (!cb) {
+    pcl_log(c, PCL_LOG_ERROR,
+            "cannot add subscriber port '%s': callback is null", topic);
+    return NULL;
+  }
 
   p = &c->ports[c->port_count++];
   memset(p, 0, sizeof(*p));
@@ -353,9 +417,12 @@ pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
                                       pcl_service_handler_t handler,
                                       void*                 user_data) {
   pcl_port_t* p;
-  if (!c || !service_name || !type_name || !handler) return NULL;
-  if (!c->configuring) return NULL;
-  if (c->port_count >= PCL_MAX_PORTS) return NULL;
+  if (!validate_port_definition(c, service_name, type_name, "service")) return NULL;
+  if (!handler) {
+    pcl_log(c, PCL_LOG_ERROR,
+            "cannot add service port '%s': handler is null", service_name);
+    return NULL;
+  }
 
   p = &c->ports[c->port_count++];
   memset(p, 0, sizeof(*p));
@@ -434,9 +501,14 @@ pcl_port_t* pcl_container_add_stream_service(pcl_container_t*     c,
                                              pcl_stream_handler_t handler,
                                              void*                user_data) {
   pcl_port_t* p;
-  if (!c || !service_name || !type_name || !handler) return NULL;
-  if (!c->configuring) return NULL;
-  if (c->port_count >= PCL_MAX_PORTS) return NULL;
+  if (!validate_port_definition(c, service_name, type_name,
+                                "stream service")) return NULL;
+  if (!handler) {
+    pcl_log(c, PCL_LOG_ERROR,
+            "cannot add stream service port '%s': handler is null",
+            service_name);
+    return NULL;
+  }
 
   p = &c->ports[c->port_count++];
   memset(p, 0, sizeof(*p));

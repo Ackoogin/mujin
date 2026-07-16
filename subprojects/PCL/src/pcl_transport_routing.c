@@ -3,6 +3,7 @@
 #include "pcl/pcl_transport_routing.h"
 
 #include "pcl/pcl_capabilities.h"
+#include "pcl/pcl_log.h"
 #include "pcl/pcl_plugin_loader.h"
 #include "pcl/pcl_transport.h"
 
@@ -461,16 +462,29 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
                                         size_t                    diag_size) {
   FILE* file;
   char  line[2048];
+  char  local_diag[512] = {0};
+  char* active_diag;
+  size_t active_diag_size;
   pcl_transport_routing_t* r;
   pcl_status_t rc = PCL_OK;
 
   if (diag && diag_size) diag[0] = '\0';
-  if (!e || !manifest_path || !out_routing) return PCL_ERR_INVALID;
+  if (!e || !manifest_path || manifest_path[0] == '\0' || !out_routing) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport routing configuration failed: executor, manifest path, "
+            "and output pointer are required");
+    return PCL_ERR_INVALID;
+  }
+  active_diag = (diag && diag_size) ? diag : local_diag;
+  active_diag_size = (diag && diag_size) ? diag_size : sizeof(local_diag);
   *out_routing = NULL;
 
   file = fopen(manifest_path, "r");
   if (!file) {
-    set_diag(diag, diag_size, "manifest not found: %s", manifest_path);
+    set_diag(active_diag, active_diag_size,
+             "manifest not found: %s", manifest_path);
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport routing configuration failed: %s", active_diag);
     return PCL_ERR_NOT_FOUND;
   }
 
@@ -490,13 +504,14 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
     if (!directive) continue;
 
     if (strcmp(directive, "transport") == 0) {
-      rc = handle_transport_line(e, r, cursor, diag, diag_size);
+      rc = handle_transport_line(e, r, cursor, active_diag, active_diag_size);
     } else if (strcmp(directive, "exclusive") == 0) {
-      rc = handle_exclusive_line(r, cursor, diag, diag_size);
+      rc = handle_exclusive_line(r, cursor, active_diag, active_diag_size);
     } else if (strcmp(directive, "route") == 0) {
-      rc = handle_route_line(e, r, cursor, diag, diag_size);
+      rc = handle_route_line(e, r, cursor, active_diag, active_diag_size);
     } else {
-      set_diag(diag, diag_size, "unknown manifest directive '%s'", directive);
+      set_diag(active_diag, active_diag_size,
+               "unknown manifest directive '%s'", directive);
       rc = PCL_ERR_INVALID;
     }
     if (rc != PCL_OK) break;
@@ -505,10 +520,15 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
   fclose(file);
 
   if (rc == PCL_OK) {
-    rc = validate_exclusivity(r, diag, diag_size);
+    rc = validate_exclusivity(r, active_diag, active_diag_size);
   }
 
   if (rc != PCL_OK) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "transport routing configuration failed for manifest '%s': %s (rc=%d)",
+            manifest_path,
+            active_diag[0] ? active_diag : "no diagnostic was provided",
+            (int)rc);
     pcl_transport_routing_destroy(r);
     return rc;
   }
