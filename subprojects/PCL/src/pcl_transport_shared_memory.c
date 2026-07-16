@@ -243,6 +243,19 @@ static void pcl_shm_sleep_ms(uint32_t ms) {
 #endif
 }
 
+/* Provider discovery can begin while a newly created peer is still waiting
+ * for its receive thread to publish the local service table. On Windows a
+ * one-millisecond generic sleep is deliberately only a scheduler yield, while
+ * an idle event wait can last one scheduler tick. Use a real short delay here
+ * so the bounded discovery window includes time for that peer to run. */
+static void pcl_shm_sleep_for_discovery_retry(void) {
+#ifdef _WIN32
+  Sleep(PCL_SHM_POLL_MS);
+#else
+  pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+#endif
+}
+
 static uint64_t pcl_shm_now_ms(void) {
 #ifdef _WIN32
   typedef ULONGLONG (WINAPI *pcl_get_tick_count64_fn)(void);
@@ -1527,7 +1540,7 @@ static int pcl_shm_worker_discover(pcl_shared_memory_transport_t* ctx,
     found = pcl_shm_find_provider_slot_locked(ctx, service_name, provider_slot);
     pcl_shm_bus_unlock(ctx);
     if (found != 0) break;
-    pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+    pcl_shm_sleep_for_discovery_retry();
   }
   return found;
 }
