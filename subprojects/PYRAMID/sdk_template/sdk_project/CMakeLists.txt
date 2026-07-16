@@ -162,6 +162,11 @@ if(NOT _sdk_codec_srcs)
 endif()
 
 add_library(pyramid_generated_codecs STATIC ${_sdk_codec_srcs})
+if(MSVC)
+    # Full contracts such as the formal A-GRA P3 profile also exceed MSVC's
+    # default object-file section limit in the generated codec sources.
+    target_compile_options(pyramid_generated_codecs PRIVATE /bigobj)
+endif()
 target_link_libraries(pyramid_generated_codecs PUBLIC pyramid_generated_marshal nlohmann_json)
 target_include_directories(pyramid_generated_codecs PUBLIC "${SDK_GENERATED_DIR}")
 if(PYRAMID_SDK_ENABLE_FLATBUFFERS)
@@ -182,6 +187,9 @@ foreach(_src IN LISTS _sdk_json_plugin_srcs)
     string(REGEX REPLACE "^pyramid_services_(.+)_json_codec_plugin$"
         "pyramid_codec_json_\\1" _target "${_stem}")
     add_library(${_target} MODULE "${_src}")
+    if(MSVC)
+        target_compile_options(${_target} PRIVATE /bigobj)
+    endif()
     target_link_libraries(${_target} PRIVATE pcl_core pyramid_generated_codecs nlohmann_json)
     target_include_directories(${_target} PRIVATE "${SDK_GENERATED_DIR}")
     list(APPEND PYRAMID_SDK_PLUGIN_TARGETS ${_target})
@@ -195,6 +203,9 @@ if(PYRAMID_SDK_ENABLE_FLATBUFFERS)
         string(REGEX REPLACE "^pyramid_services_(.+)_flatbuffers_codec_plugin$"
             "pyramid_codec_flatbuffers_\\1" _target "${_stem}")
         add_library(${_target} MODULE "${_src}")
+        if(MSVC)
+            target_compile_options(${_target} PRIVATE /bigobj)
+        endif()
         add_dependencies(${_target} pyramid_sdk_flatbuffers_codegen)
         target_link_libraries(${_target} PRIVATE
             pcl_core pyramid_generated_codecs flatbuffers_runtime nlohmann_json)

@@ -1,0 +1,9 @@
+# Run from the P3 SDK root so the relative plugin path resolves.
+transport mission_coordinator plugins/pcl_transport_shared_memory_plugin.dll {"bus_name":"agra_p3_sensor_link","participant_id":"sensor_planner"}
+
+exclusive ma_action_command.request_leg ma_action_command.create,ma_action_command.update,ma_action_command.cancel MA_ActionCommand
+exclusive ma_action.information_leg ma_action.read MA_Action
+
+route ma_action_command.create consumed mission_coordinator reliable
+route MA_Action publisher mission_coordinator reliable
+route MA_Action subscriber mission_coordinator reliable

@@ -1,0 +1,9 @@
+# Run from the P3 SDK root so the relative plugin path resolves.
+transport default plugins/pcl_transport_socket_plugin.dll {"role":"consumed","host":"127.0.0.1","port":19401}
+
+exclusive ma_action_command.request_leg ma_action_command.create,ma_action_command.update,ma_action_command.cancel MA_ActionCommand
+exclusive ma_action.information_leg ma_action.read MA_Action
+
+route ma_action_command.create consumed default reliable
+route MA_Action publisher default reliable
+route MA_Action subscriber default reliable
