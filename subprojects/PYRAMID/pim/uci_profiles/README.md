@@ -17,6 +17,7 @@ Commentary lives in `_comment` arrays.
 |---------|------|-------------|-----------------|------------------------|
 | `p1_kitty_hawk.json` | `uci_2_5_0` | P1 — working set, provable live vs Sleet | (a)+(b)+(c) | strict-clean: 515 messages + 188 enums from 6 roots; tree checked in |
 | `p2_agra_planning_core.json` | `agra_5_0a` | P2 — A-GRA `MA_*` planning core | (a) offline, plus A-GRA-schema Sleet interop per WS-G/G1 | strict-clean: 1,169 messages + 297 enums from 20 roots; tree checked in (scope decision below) |
+| `p3_agra_core_mms.json` | `agra_5_0a` | P3 — full Core MMS | none — no fidelity ladder run, no compliance claim (scope decision below) | strict-clean: 2,856 messages + 501 enums from 343 roots; tree checked in under `pim/uci_generated_p3/` (separate output root, not `pim/uci_generated/`); interaction seam generated into `pim/agra_p3_seam/` (722 services across the four Table 3-1 interfaces) |
 
 Rules of the road (plan D1/D2):
 
@@ -148,3 +149,129 @@ A-GRA 5.0a schema through an independently implemented CAL server. It is
 *not* a formal A-GRA platform peer; no A-GRA platform-compliance claim
 follows from it, and none is made. UCI 2.5 Sleet evidence remains
 inapplicable to this drop.
+
+## P3 conversion-scope decision (2026-07-16)
+
+`p3_agra_core_mms.json` targets the ladder rung
+[`uci_mms_conversion_plan.md`](../../../../doc/plans/PYRAMID/uci_mms_conversion_plan.md)
+§5 calls **P3 — full Core MMS**, marked there as *"Not scheduled; only under
+a real compliance tasking"* (Phase 5). This profile and the CMake option
+gating its build (`PYRAMID_ENABLE_AGRA_P3`, OFF by default; see
+`subprojects/PYRAMID/CMakeLists.txt`) exist so the proto tree and a generic
+JSON codec for it can be produced and built on demand, without that tasking
+having happened. **No A-GRA MA L1 compliance claim is made, and none should
+be inferred from this profile's existence.**
+
+### Root list — mechanically derived from Table 3-1, not hand-curated
+
+Unlike P1 and P2, whose root lists were read and approved message-by-message
+against the a-gra standard review, P3's 343 roots were parsed directly out of
+Table 3-1 ("MMS for MA L1 Interfaces") of
+`ref/a-gra-main/Documentation/ASK 5.0a MA L1 Compliance Document.pdf` — every
+row across all four interfaces (C2, MS, P2P, VI) and all MUC tags (Core and
+optional alike), deduplicated by message name. `ref/a-gra-main/` is a local,
+git-ignored (`ref/*`) reference checkout of the upstream `open-arsenal/a-gra`
+repository; its `Schema/*.xsd` files were hash-verified against the
+`agra_5_0a` pin in `pim/schemas/schema_manifest.json` before use (sha256
+match, both files) — see `pim/schemas/README.md`'s `AGRA_XSD_DIR` env-source
+for the fetch-not-vendor mechanism this satisfies.
+
+The compliance document's table uses each message's complex*type* name
+(the `MT` suffix), not the XSD global *element* name `xsd2proto.py` roots
+need. Names were resolved via the schema's own
+`<xs:element name="X" type="Y">` mapping, not by stripping the suffix
+textually — two roots (`DLZ`, `MA_WEZ`) have a type suffix of literal `_MT`
+rather than `MT` appended to the element name, which a blind strip gets
+wrong. All 343 resolved elements exist in the pinned XSD; the closure
+converts strict-clean with zero skipped constructs. All 20 profile P2 roots
+are a subset of these 343, as expected (P2 is P3's planning-core slice, both
+against the same drop).
+
+The a-gra standard review's own volumetric estimate (§6.2) is "~327" —
+close to, but not exactly, this profile's 343. That estimate is explicitly
+approximate and was derived by a different method (interface-count
+arithmetic on the compliance document's summary numbers, not a row-by-row
+parse); this profile's count comes from parsing every table row directly
+against the schema, so the two are not expected to match exactly and this
+list is authoritative for what actually got converted.
+
+### Depth: contract and codecs — not the fidelity ladder
+
+Per the ladder table, this profile has validation tier **none**: no offline
+fidelity ladder (goldens, round-trips, malformed-input negatives) and no
+live interop evidence has been run against it, unlike P1/P2's (a)/(a)+(b)+(c)
+tiers. `PYRAMID_ENABLE_AGRA_P3` builds a real, compiling C++ data model,
+`application/json` codec, and `application/oms-json` codec plugin for the
+full closure — proof the proto/codegen pipeline scales to Core MMS size —
+but that is build scope, not a compliance or wire-fidelity claim.
+
+### The interaction seam: `pim/agra_p3_seam/`
+
+A data model alone is not a usable contract: the P1/P2 pattern pairs the
+converted tree with component service protos carrying the PYRAMID
+pubsub/rpc port-grammar annotations (`pyramid_op`: PUBLISH/SUBSCRIBE
+topics with QoS). P1's and P2's seams (`pim/uci_p1_seam/`,
+`pim/agra_p2_seam/`) are hand-authored; at 343 roots that is not viable,
+so P3's seam is **generated** by `pim/gen_interaction_seam.py` from three
+checked-in inputs: this profile's manifest, the converted tree, and
+`p3_agra_core_mms_interfaces.json` — the full Table 3-1
+interface/direction data (668 rows: which message travels on which of the
+four compliance-document interfaces, C2/MS/P2P/VI, and in which
+direction), parsed from the same PDF as the root list and resolved to
+element names the same way. The union of the interface table's messages
+equals the root list exactly (test-guarded).
+
+The derivation rules mirror the P1/P2 grammar and are documented in the
+generator's docstring; in brief: `X`/`XStatus` pairs where `X` ends in
+"Command" or "Request" become correlated Request/Requirement services
+(the A-GRA Command-2 pattern), everything else becomes a single-variant
+Information service; the provided/consumed split and PUBLISH/SUBSCRIBE
+polarity follow the table's direction column (the MA system executes what
+C2 commands, and itself commands the mission systems and vehicle); topics
+are the bare element names (the LA-CAL/Sleet routing key, as in P2); all
+operations are RELIABLE/VOLATILE depth 10 (P2's approved floor). Result:
+eight component protos (four interfaces × provided/consumed), 722
+services. The seam regenerates byte-identically — `test_agra_p3_seam.py`
+reruns the generator and compares, so hand-edits to the seam fail loudly;
+the same file pins the per-component service counts, polarity, QoS, and
+copy integrity, and (gated behind `AGRA_P3_BINDINGS_SMOKE=1`, since it
+takes over a minute) runs the full binding generation over the seam.
+
+### Generator fixes this profile's scale forced (both landed 2026-07-16)
+
+1. **Reserved-word field names.** `COMINT_ChangeDwellType` has a boolean
+   field literally named `Delete`; `xsd2proto.py`'s `snake_case()`
+   produced the bare C++ keyword `delete`, which MSVC rejected at every
+   use site in the generated code. `snake_case()` now suffixes an
+   underscore when the result is a C++ reserved word (`delete` →
+   `delete_`); the wire name (the sidecar's `element` entry, still
+   `Delete`) is untouched. The escape list is deliberately C++ only —
+   adding Ada reserved words would rename `begin`, `end`, `range`,
+   `task`, and `type` fields throughout P1/P2's frozen, evidence-carrying
+   trees (confirmed as `--check` drift both ways). Neither P1 nor P2
+   reaches a C++ reserved word, so both trees are byte-identical under
+   the fix (`--check` clean). The seam generator imports the same
+   function rather than carrying its own copy — the root element
+   `Operator` produces the field `operator_`, and an unescaped local
+   variant demonstrably emitted the bare keyword into the OMS codec
+   plugin's service-wire structs.
+
+2. **Extension bases that collapse to a scalar.** The OMS-JSON emitter
+   refused the tree with a misleading `repeated xs:choice carriers are
+   not yet supported` error on `MissionEnvironmentObjectEntityType.base`.
+   The actual shape: an XSD `complexContent` extension whose base type
+   has a single scalar field (`Value`), which the types emitter collapses
+   to a plain `std::string base;` member instead of inlining it away —
+   so the field had no wire key of its own. The emitter now (sidecar path
+   only) emits such a member under the collapsed field's element name.
+   The heuristic/no-sidecar path is byte-frozen against the
+   Sleet-verified seam golden and is deliberately unchanged.
+
+Note for whoever runs the pim suite:
+`test_oms_json_gen.py::SeamRegressionTest` fails on this checkout **before
+and after** these changes (pre-existing golden drift, reproduced on a
+clean stash of the working tree); it is not a regression from either fix.
+
+Do not grow or shrink this profile's root list or interface table without
+re-parsing Table 3-1, re-running `xsd2proto.py --check`, and regenerating
+the seam.

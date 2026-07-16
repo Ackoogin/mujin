@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package pyramid.options;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MethodOptions {
+  Interaction pyramid_op = 50001;
+}
+
+message Interaction {
+  Pattern pattern = 1;
+  string topic = 2;
+  Qos qos = 3;
+}
+
+enum Pattern {
+  INFER = 0;
+  UNARY = 1;
+  SERVER_STREAM = 2;
+  CLIENT_STREAM = 3;
+  BIDI = 4;
+  PUBLISH = 5;
+  SUBSCRIBE = 6;
+  ACTION = 7;
+}
+
+message Qos {
+  Reliability reliability = 1;
+  Durability durability = 2;
+  uint32 depth = 3;
+
+  enum Reliability {
+    RELIABILITY_DEFAULT = 0;
+    RELIABLE = 1;
+    BEST_EFFORT = 2;
+  }
+
+  enum Durability {
+    DURABILITY_DEFAULT = 0;
+    VOLATILE = 1;
+    TRANSIENT_LOCAL = 2;
+  }
+}

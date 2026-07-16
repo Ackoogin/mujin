@@ -205,7 +205,7 @@ generalizations in §3.
 |---------|------|----------|----------------------|
 | **P1 — Kitty Hawk working set** | UCI 2.5 | `PositionReport`, `SignalReport`, `ActionCommand`, `ActionCommandStatus`, `ObservationMeasurementReport`, `ServiceStatus` (+ closure) | (a)+(b)+(c) — live vs Sleet and the full stack |
 | **P2 — A-GRA planning core** | A-GRA 5.0a | The `MA_*` planning/approval substance: `MA_MissionPlan*`, `MA_PlanningFunction*`, `MA_ApprovalPolicy/Request*`, `MA_Action*`/`MA_Task*`, `MA_Response*`, `MissionContingencyAlert` + referenced UCI plan/approval/status types (per review §6.2; a deliberate subset of the ~123 `MA_*` messages, pruned by closure report) | (a) offline only |
-| **P3 — full Core MMS** | A-GRA 5.0a | The ~327-message Table 3-1 surface incl. capability-family quintets | Not scheduled; only under a real compliance tasking (needs EXI/DMS besides — review §7 Phase 4) |
+| **P3 — full Core MMS** | A-GRA 5.0a | The Table 3-1 surface incl. capability-family quintets (343 messages by direct row parse; the review's "~327" was summary arithmetic) | Validation not scheduled; only under a real compliance tasking (needs EXI/DMS besides — review §7 Phase 4). The *contract itself* exists as of 2026-07-16: converted tree, generated interaction seam (`pim/agra_p3_seam/`), and an OFF-by-default build gate (`PYRAMID_ENABLE_AGRA_P3`) — see `pim/uci_profiles/README.md` §"P3 conversion-scope decision"; no fidelity or interop evidence, no compliance claim |
 
 P1 is deliberately the same message set the LA-CAL and Kitty Hawk plans
 already touch: converting it replaces hand work with generated work under

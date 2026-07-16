@@ -258,7 +258,8 @@ class _PackageEmitter:
         """Messages that get encode_/decode_ functions: everything except
         synthesized wrappers, which are handled inline at their use site."""
         return [m for m in self.pf.messages
-                if not self.wire.is_synthesized(m.name)]
+                if not self.wire.is_synthesized(m.name)
+                and m.name not in self.aliases]
 
     def _uuid_forms(self) -> set:
         """The UUID validators this package's fields actually call.
@@ -296,7 +297,44 @@ class _PackageEmitter:
         for field in msg.fields:
             if field.name == 'base' and not field.is_repeated:
                 base = self._msg(field.type)
-                if base is not None and base.name not in self.aliases:
+                if (base is not None and base.name in self.aliases
+                        and self.wire.sidecar is not None):
+                    # types_gen collapses a single-scalar-field base (e.g. a
+                    # complexContent extension of a type whose only content
+                    # is a lone "Value" element) straight to that scalar C++
+                    # type, but -- unlike the ordinary flatten case below --
+                    # it keeps the field itself named 'base' rather than
+                    # inlining it away; there is nothing to inline, the base
+                    # already collapsed to one value. Confirmed live: A-GRA's
+                    # MissionEnvironmentObjectEntityType (base
+                    # MissionEnvironmentObjectBaseType, sole field
+                    # `string value` aliasing to std::string) produces
+                    # `struct MissionEnvironmentObjectEntityType { std::string
+                    # base; ... }`. Emit 'base' as an ordinary field carrying
+                    # the collapsed field's own wire key (its wire_names.json
+                    # entry already exists and is unaffected by this -- see
+                    # pim/uci_profiles/README.md's P3 conversion-scope
+                    # decision for the full writeup) rather than falling
+                    # through to the msg-owned lookup below, which finds
+                    # nothing because xsd2proto.py gives every 'base' field
+                    # wire_name="" on the (here, false) assumption that it is
+                    # always inlined away.
+                    #
+                    # Sidecar-gated (self.wire.sidecar is not None): the
+                    # heuristic/no-sidecar path (pim/uci_seam_example) is the
+                    # frozen D4(b) regression bar and must stay byte-for-byte
+                    # identical to its Sleet-verified golden -- confirmed by
+                    # running test_oms_json_gen.py, which failed
+                    # SeamRegressionTest without this guard because the
+                    # seam's own alias-collapsed base field had, until now,
+                    # always fallen through to the ordinary-field branch
+                    # below and picked up a heuristic key ("Base") rather
+                    # than this one ("Value").
+                    alias_fields = base.fields
+                    if len(alias_fields) == 1 and not alias_fields[0].is_repeated:
+                        yield ('field', alias_fields[0], 'base', base.name)
+                        continue
+                elif base is not None and base.name not in self.aliases:
                     if base.oneofs:
                         raise OmsJsonShapeError(
                             f'{msg.name}: extension base {base.name} carries '

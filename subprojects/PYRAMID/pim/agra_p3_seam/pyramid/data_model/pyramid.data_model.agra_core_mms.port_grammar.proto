@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package pyramid.data_model.agra_core_mms_port_grammar;
+
+// Small local port-grammar support types -- not XSD content, so they are
+// not part of the xsd2proto-converted tree this seam copies in. They live
+// in a distinct package (rather than reopening the data-model package)
+// because the C++ type-header emitter maps one generated header per
+// package name: a second file declaring the data-model package would
+// silently clobber that tree's generated header instead of merging with
+// it. Mirrors pim/uci_p1_seam's identical definitions.
+message Identifier { string id = 1; }
+message Ack { bool success = 1; }
+message Query {}

@@ -566,6 +566,124 @@ if(PYRAMID_ENABLE_OWP)
     unset(_pyramid_generated_oms_json_codec_plugin_srcs)
 endif()
 
+# ---------------------------------------------------------------------------
+# A-GRA P3 (Core MMS) contract -- OFF by default, opt-in only
+# ---------------------------------------------------------------------------
+# Profile P3 (doc/plans/PYRAMID/uci_mms_conversion_plan.md §5, "P3 -- full
+# Core MMS") is the checked-in seam at pim/agra_p3_seam: the converted data
+# model (every unique message in Table 3-1 of the MA L1 Compliance Document,
+# 343 roots -> 2,856 messages, 501 enums) plus per-interface component
+# service protos (C2, MS, P2P, VI; 722 services) carrying the PYRAMID
+# pubsub/rpc port-grammar annotations. The seam is produced by
+# pim/gen_interaction_seam.py from the profile manifest, the Table 3-1
+# interface/direction data, and the xsd2proto output tree -- see
+# pim/uci_profiles/README.md's "P3 conversion-scope decision" for how the
+# inputs were derived and what evidence does and does not exist. Unlike
+# P1/P2, P3 has not been through the offline fidelity ladder or live
+# interop, and the conversion plan marks it "Not scheduled; only under a
+# real compliance tasking". This option exists so the contract can be
+# generated and built on demand without that tasking having happened, not
+# to claim compliance.
+#
+# Codegen produces ~50 MB of generated C++ (the data model plus eight
+# component binding sets) and takes over a minute before compilation even
+# starts; the data-model translation units need MSVC /bigobj for the same
+# reason the P2 OMS codec above does. Hence OFF by default. What gets
+# compiled here is deliberately narrow -- the data-model library and the
+# OMS-JSON codec plugin. The component service bindings are generated (for
+# packaging and downstream consumers) but not compiled: 722 services'
+# worth of service/facade translation units is SDK-consumer surface, not
+# something every P3 build needs to pay for.
+option(PYRAMID_ENABLE_AGRA_P3
+    "Generate and build the A-GRA P3 (Core MMS) contract -- large, opt-in only"
+    OFF)
+if(PYRAMID_ENABLE_AGRA_P3)
+    set(PYRAMID_AGRA_P3_PROTO_DIR
+        "${PYRAMID_ROOT_DIR}/pim/agra_p3_seam"
+        CACHE PATH "A-GRA P3 (Core MMS) seam contract directory")
+    if(NOT EXISTS "${PYRAMID_AGRA_P3_PROTO_DIR}")
+        message(FATAL_ERROR
+            "PYRAMID_ENABLE_AGRA_P3 is ON, but ${PYRAMID_AGRA_P3_PROTO_DIR} "
+            "does not exist. Regenerate it: python pim/xsd2proto.py "
+            "pim/uci_profiles/p3_agra_core_mms.json --out pim/uci_generated_p3 "
+            "(AGRA_XSD_DIR must point at a local A-GRA 5.0a schema checkout; "
+            "see pim/schemas/README.md), then python "
+            "pim/gen_interaction_seam.py.")
+    endif()
+
+    set(PYRAMID_AGRA_P3_BINDINGS_DIR
+        "${CMAKE_BINARY_DIR}/generated/pyramid_agra_p3_bindings"
+        CACHE PATH "Directory receiving generated A-GRA P3 C++ bindings")
+
+    file(GLOB_RECURSE PYRAMID_AGRA_P3_PROTO_INPUTS CONFIGURE_DEPENDS
+        "${PYRAMID_AGRA_P3_PROTO_DIR}/*.proto"
+        "${PYRAMID_AGRA_P3_PROTO_DIR}/wire_names.json"
+        "${PYRAMID_AGRA_P3_PROTO_DIR}/binding_metadata.json")
+
+    set(PYRAMID_AGRA_P3_BINDINGS_STAMP
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/.pyramid_agra_p3_bindings.stamp")
+    add_custom_command(
+        OUTPUT "${PYRAMID_AGRA_P3_BINDINGS_STAMP}"
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${PYRAMID_AGRA_P3_BINDINGS_DIR}"
+        COMMAND "${Python3_EXECUTABLE}"
+                "${PYRAMID_ROOT_DIR}/pim/generate_bindings.py"
+                "${PYRAMID_AGRA_P3_PROTO_DIR}"
+                "${PYRAMID_AGRA_P3_BINDINGS_DIR}"
+                --languages cpp
+                --backends json,oms_json
+        COMMAND "${CMAKE_COMMAND}" -E touch "${PYRAMID_AGRA_P3_BINDINGS_STAMP}"
+        DEPENDS
+            ${PYRAMID_BINDING_GENERATOR_INPUTS}
+            ${PYRAMID_AGRA_P3_PROTO_INPUTS}
+        COMMENT "Generating A-GRA P3 (Core MMS) C++ bindings (large: 2,856 messages, 722 services)"
+        VERBATIM)
+    add_custom_target(pyramid_agra_p3_bindings_codegen
+        DEPENDS "${PYRAMID_AGRA_P3_BINDINGS_STAMP}")
+
+    add_library(pyramid_agra_p3_data_model STATIC
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_codec.cpp"
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_cabi_marshal.cpp")
+    set_source_files_properties(
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_codec.cpp"
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_cabi_marshal.cpp"
+        PROPERTIES GENERATED TRUE)
+    add_dependencies(pyramid_agra_p3_data_model pyramid_agra_p3_bindings_codegen)
+    target_link_libraries(pyramid_agra_p3_data_model
+        PRIVATE
+            pcl_core
+            nlohmann_json::nlohmann_json)
+    target_include_directories(pyramid_agra_p3_data_model
+        PUBLIC
+            "${PYRAMID_AGRA_P3_BINDINGS_DIR}")
+    if(MSVC)
+        target_compile_options(pyramid_agra_p3_data_model PRIVATE /bigobj)
+    endif()
+
+    # The profile-specific application/oms-json codec plugin, mirroring the
+    # P2 pyramid_codec_oms_json_agra target. It carries the seam's
+    # binding_metadata.json drop identity and refuses a loader
+    # configuration naming another drop.
+    add_library(pyramid_codec_oms_json_agra_core_mms MODULE
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/oms_json/cpp/pyramid_data_model_agra_core_mms_oms_json_codec_plugin.cpp")
+    set_source_files_properties(
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/oms_json/cpp/pyramid_data_model_agra_core_mms_oms_json_codec_plugin.cpp"
+        PROPERTIES GENERATED TRUE)
+    add_dependencies(pyramid_codec_oms_json_agra_core_mms
+        pyramid_agra_p3_bindings_codegen)
+    target_link_libraries(pyramid_codec_oms_json_agra_core_mms
+        PRIVATE
+            pcl_core
+            pyramid_agra_p3_data_model
+            nlohmann_json::nlohmann_json)
+    target_include_directories(pyramid_codec_oms_json_agra_core_mms
+        PRIVATE
+            "${PYRAMID_AGRA_P3_BINDINGS_DIR}")
+    if(MSVC)
+        target_compile_options(pyramid_codec_oms_json_agra_core_mms
+            PRIVATE /bigobj)
+    endif()
+endif()
+
 if(PYRAMID_ENABLE_PROTOBUF)
     if(NOT TARGET protobuf::libprotobuf)
         find_package(Protobuf CONFIG QUIET)

@@ -89,12 +89,57 @@ XSD_BUILTINS: Dict[str, str] = {
 }
 
 
+# snake_case() feeds FieldSpec.proto_name, which every backend emits
+# verbatim as a struct-member identifier -- so a result that happens to be
+# a reserved word breaks the generated language. Confirmed live: A-GRA's
+# COMINT_ChangeDwellType.Delete converts to the bare word "delete", which
+# MSVC rejects wherever the generated C++ accesses it (msg.delete,
+# out->delete, ...). FieldSpec.wire_name (the raw XSD name, unmodified by
+# this escaping) is what backends look up for the actual wire key, so
+# suffixing proto_name here does not change wire behaviour -- see
+# pim/uci_profiles/README.md's P3 conversion-scope decision for the full
+# writeup of the failure this fixes.
+#
+# Deliberately C++ only, not the union of C++ and Ada reserved words: this
+# repository's checked-in P1/P2 proto trees already carry ordinary English
+# field names -- "begin", "end", "range", "task", "type" among them -- that
+# are reserved in Ada but not C++. Ada is not a C++ keyword collision here,
+# and escaping them would silently perturb bytes in trees whose fidelity
+# evidence (goldens, wire parity, Sleet interop) is already recorded against
+# the current names (confirmed: adding the Ada reserved-word set caused
+# `xsd2proto.py --check` drift in both P1 and P2). Revisit only if a profile
+# actually generates Ada bindings from a field that collides with an
+# Ada-only reserved word -- none does today.
+_CPP_RESERVED_WORDS = frozenset({
+    "alignas", "alignof", "and", "and_eq", "asm", "atomic_cancel",
+    "atomic_commit", "atomic_noexcept", "auto", "bitand", "bitor", "bool",
+    "break", "case", "catch", "char", "char8_t", "char16_t", "char32_t",
+    "class", "compl", "concept", "const", "consteval", "constexpr",
+    "constinit", "const_cast", "continue", "co_await", "co_return",
+    "co_yield", "decltype", "default", "delete", "do", "double",
+    "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false",
+    "float", "for", "friend", "goto", "if", "inline", "int", "long",
+    "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr",
+    "operator", "or", "or_eq", "private", "protected", "public", "reflexpr",
+    "register", "reinterpret_cast", "requires", "return", "short",
+    "signed", "sizeof", "static", "static_assert", "static_cast", "struct",
+    "switch", "synchronized", "template", "this", "thread_local", "throw",
+    "true", "try", "typedef", "typeid", "typename", "union", "unsigned",
+    "using", "virtual", "void", "volatile", "wchar_t", "while", "xor",
+    "xor_eq",
+})
+_RESERVED_IDENTIFIERS = _CPP_RESERVED_WORDS
+
+
 def snake_case(name: str) -> str:
     """PascalCase / acronym-run XSD name -> proto snake_case field name."""
     s = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
     s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s)
     s = re.sub(r"[^0-9a-zA-Z]+", "_", s)
-    return re.sub(r"_+", "_", s).strip("_").lower()
+    s = re.sub(r"_+", "_", s).strip("_").lower()
+    if s in _RESERVED_IDENTIFIERS:
+        s = f"{s}_"
+    return s
 
 
 def upper_snake(name: str) -> str:
