@@ -75,6 +75,33 @@ if errorlevel 1 (
   exit /b 1
 )
 
+REM This script never passes -G to cmake, so the configure step below relies
+REM entirely on CMake's default generator detection finding an MSVC C/C++
+REM compiler. When that fails, cmake's own error ("No CMAKE_C_COMPILER could
+REM be found") gives no hint as to why. Check for a usable MSVC toolchain up
+REM front so the failure points at the actual cause: either the "Desktop
+REM development with C++" workload isn't installed, or this script is running
+REM outside a Developer Command Prompt without CMake being able to locate VS
+REM on its own.
+set "HAVE_MSVC=0"
+where cl.exe >nul 2>&1
+if not errorlevel 1 set "HAVE_MSVC=1"
+if "%HAVE_MSVC%"=="0" (
+  set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+  if exist "!VSWHERE!" (
+    for /f "usebackq delims=" %%I in (`"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+      if not "%%I"=="" set "HAVE_MSVC=1"
+    )
+  )
+)
+if "%HAVE_MSVC%"=="0" (
+  echo [build_ada] FAIL: no MSVC C/C++ toolchain found.>&2
+  echo [build_ada]   Install the "Desktop development with C++" workload via the>&2
+  echo [build_ada]   Visual Studio Installer, or run this script from an "x64 Native>&2
+  echo [build_ada]   Tools Command Prompt for VS 2022".>&2
+  exit /b 1
+)
+
 set "REGEN=off"
 if "%DO_REGEN%"=="1" set "REGEN=on (%BACKENDS%)"
 

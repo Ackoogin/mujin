@@ -1130,10 +1130,33 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         ${ADA_PCL_LIB_DIR}/lib${ADA_PCL_UDP_LIB_NAME}.a
         ${ADA_PCL_LIB_DIR}/lib${ADA_PCL_SHMEM_LIB_NAME}.a)
     if(WIN32)
+        # build_gnat_pcl_static_libs.bat compiles these PCL sources directly
+        # with GNAT's own gcc, independent of the MSVC pcl_core build. Without
+        # this GLOB as an explicit dependency, CMake has no way to know the
+        # archives are stale once they exist on disk, so a PCL source change
+        # would silently leave the GNAT-compiled archives (and everything
+        # linked against them, including pyramid_bridge_main) out of sync with
+        # the MSVC-built C++ binaries the Ada E2E tests run against.
+        file(GLOB ADA_PCL_GNAT_SOURCE_INPUTS CONFIGURE_DEPENDS
+            "${PCL_ROOT_DIR}/src/pcl_alloc.c"
+            "${PCL_ROOT_DIR}/src/pcl_capabilities.c"
+            "${PCL_ROOT_DIR}/src/pcl_codec_registry.c"
+            "${PCL_ROOT_DIR}/src/pcl_container.c"
+            "${PCL_ROOT_DIR}/src/pcl_executor.c"
+            "${PCL_ROOT_DIR}/src/pcl_plugin_loader.c"
+            "${PCL_ROOT_DIR}/src/pcl_transport_routing.c"
+            "${PCL_ROOT_DIR}/src/pcl_log.c"
+            "${PCL_ROOT_DIR}/src/pcl_bridge.c"
+            "${PCL_ROOT_DIR}/src/pcl_transport_socket.c"
+            "${PCL_ROOT_DIR}/src/pcl_transport_udp.c"
+            "${PCL_ROOT_DIR}/src/pcl_transport_shared_memory.c"
+            "${PCL_ROOT_DIR}/src/*.h"
+            "${PCL_ROOT_DIR}/include/pcl/*.h")
         add_custom_command(
             OUTPUT ${ADA_PCL_ARCHIVES}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
             COMMAND cmd /c "${ADA_PCL_BUILD_SCRIPT}" "${ADA_PCL_LIB_DIR}"
+            DEPENDS ${ADA_PCL_GNAT_SOURCE_INPUTS} ${ADA_PCL_BUILD_SCRIPT}
             COMMENT "Preparing GNAT-compatible PCL static archives for Ada builds"
             VERBATIM)
         add_custom_target(ada_pcl_gnat_archives
