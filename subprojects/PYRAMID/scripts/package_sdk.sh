@@ -114,6 +114,20 @@ while IFS= read -r _so; do
 done < <(find "${BUILD_DIR}" -name 'libpyramid_codec_oms_json_*.so' \
               ! -name 'libpyramid_codec_oms_json_uci_starter.so' \
               2>/dev/null | sort)
+case "${PROTO_DIR}" in
+  *agra_p3_seam)
+    OMS_CODEC_SOS=()
+    while IFS= read -r _so; do
+      [[ -n "${_so}" ]] && OMS_CODEC_SOS+=("${_so}")
+    done < <(find "${BUILD_DIR}" -name 'libpyramid_codec_oms_json_agra_core_mms.so' 2>/dev/null | sort)
+    ;;
+  *agra_p2_seam)
+    OMS_CODEC_SOS=()
+    while IFS= read -r _so; do
+      [[ -n "${_so}" ]] && OMS_CODEC_SOS+=("${_so}")
+    done < <(find "${BUILD_DIR}" -name 'libpyramid_codec_oms_json_agra.so' 2>/dev/null | sort)
+    ;;
+esac
 LACAL_TRANSPORT_SO="$(find "${BUILD_DIR}" -name 'libpyramid_lacal_transport_plugin.so' 2>/dev/null | head -1 || true)"
 # Whether an OMS codec is *expected* is the contract's answer, not a fixed
 # rule: the generator emits one only for a UCI-shaped data model. Ask the

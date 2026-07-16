@@ -205,6 +205,32 @@ transport claim for the tested P2 profile, not an A-GRA platform compliance
 claim; the interoperability evidence boundary is recorded in
 [`oms_agra_compatibility.md`](oms_agra_compatibility.md).
 
+### Packaging the A-GRA 5.0a P3 Core MMS profile
+
+The P3 Core MMS seam is opt-in because it contains the full converted Core MMS
+data model and 722 generated interaction services. First build the normal
+FlatBuffers-capable SDK prerequisites, then enable and build the narrow P3
+data-model and OMS codec targets before packaging the selected seam:
+
+```bat
+cmake --preset flatbuffers-only
+cmake --build --preset flatbuffers-only-release
+cmake -S . -B build-flatbuffers-only ^
+  -DPYRAMID_ENABLE_AGRA_P3=ON ^
+  -DPYRAMID_AGRA_P3_PROTO_DIR=subprojects/PYRAMID/pim/agra_p3_seam
+cmake --build build-flatbuffers-only --config Release --parallel 4 ^
+  --target pyramid_agra_p3_data_model pyramid_codec_oms_json_agra_core_mms
+subprojects\PYRAMID\scripts\package_sdk.bat --gra --clean ^
+  --build-dir build-flatbuffers-only ^
+  --proto-dir subprojects\PYRAMID\pim\agra_p3_seam ^
+  --out dist\pcl_pyramid_sdk_agra_p3
+```
+
+The package stages `pyramid_codec_oms_json_agra_core_mms` and
+`pyramid_lacal_transport_plugin` under `plugins/`, plus the full P3 seam under
+`proto/`. The package is a generated contract and SDK distribution only; it
+does not make an A-GRA compliance claim.
+
 ## Key files
 
 | Area | Files |
