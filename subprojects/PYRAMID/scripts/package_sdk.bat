@@ -161,6 +161,10 @@ for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pyramid_codec_oms_json_*.dll" 2
     echo %%F | findstr /i /l /c:"\Release\" >nul && set "OMS_CODEC_DLL=%%F"
   )
 )
+REM The formal A-GRA P2 contract generates the agra-named OMS plugin. Prefer
+REM that Release artifact over any older UCI codec left in the shared build
+REM directory, which is otherwise found first by the recursive scan above.
+if "%GRA%"=="1" if exist "%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_codec_oms_json_agra.dll" set "OMS_CODEC_DLL=%BUILD_DIR%\subprojects\PYRAMID\Release\pyramid_codec_oms_json_agra.dll"
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pyramid_lacal_transport_plugin.dll" 2^>nul') do (
   if not defined LACAL_TRANSPORT_DLL set "LACAL_TRANSPORT_DLL=%%F"
   echo %%F | findstr /i /l /c:"\Release\" >nul && set "LACAL_TRANSPORT_DLL=%%F"

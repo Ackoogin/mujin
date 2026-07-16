@@ -332,6 +332,11 @@ foreach(_i RANGE ${_pyramid_marshal_last})
     add_dependencies(${_marshal_obj} pyramid_cpp_bindings_codegen)
     set_target_properties(${_marshal_obj} PROPERTIES
         POSITION_INDEPENDENT_CODE ON)
+    # The formal A-GRA data model generates enough C-ABI marshal functions to
+    # exceed MSVC's default object-file section limit.
+    if(MSVC)
+        target_compile_options(${_marshal_obj} PRIVATE /bigobj)
+    endif()
     target_include_directories(${_marshal_obj}
         PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
     # pcl_alloc/pcl_free (pcl/pcl_alloc.h): the marshal layer's to_c()/_c_free()
@@ -376,6 +381,11 @@ pyramid_require_generated(_pyramid_generated_codecs_srcs
     "generated PYRAMID codec sources")
 
 add_library(pyramid_generated_codecs STATIC ${_pyramid_generated_codecs_srcs})
+if(MSVC)
+    # The formal A-GRA codec translation unit also exceeds the default section
+    # limit because it contains the complete generated data model.
+    target_compile_options(pyramid_generated_codecs PRIVATE /bigobj)
+endif()
 unset(_pyramid_generated_codecs_srcs)
 add_dependencies(pyramid_generated_codecs pyramid_cpp_bindings_codegen)
 set_target_properties(pyramid_generated_codecs PROPERTIES
@@ -476,6 +486,9 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
             PRIVATE
                 "${PYRAMID_CPP_BINDINGS_DIR}"
         )
+        if(MSVC)
+            target_compile_options(${PYRAMID_CODEC_PLUGIN_TARGET} PRIVATE /bigobj)
+        endif()
         list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
             ${PYRAMID_CODEC_PLUGIN_TARGET})
     endforeach()
@@ -539,6 +552,9 @@ if(PYRAMID_ENABLE_OWP)
             PRIVATE
                 "${PYRAMID_CPP_BINDINGS_DIR}"
         )
+        if(MSVC)
+            target_compile_options(${PYRAMID_CODEC_PLUGIN_TARGET} PRIVATE /bigobj)
+        endif()
         list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
             ${PYRAMID_CODEC_PLUGIN_TARGET})
     endforeach()

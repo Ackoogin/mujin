@@ -83,6 +83,11 @@ if(NOT _sdk_marshal_srcs)
 endif()
 
 add_library(pyramid_generated_marshal STATIC ${_sdk_marshal_srcs})
+if(MSVC)
+    # Large contracts such as the formal A-GRA profile exceed MSVC's default
+    # object-file section limit in the generated C-ABI marshal sources.
+    target_compile_options(pyramid_generated_marshal PRIVATE /bigobj)
+endif()
 target_include_directories(pyramid_generated_marshal PUBLIC
     "${SDK_GENERATED_DIR}"
     "${SDK_ROOT_DIR}/include/external")

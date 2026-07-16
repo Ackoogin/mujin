@@ -348,6 +348,10 @@ class _PackageEmitter:
         f.write(f'#include "{self.prefix}_types.hpp"\n')
         f.write(f'#include "{self.prefix}_cabi_marshal.hpp"\n')
         f.write('#include <pcl/pcl_alloc.h>\n#include <pcl/pcl_codec.h>\n')
+        f.write('#if defined(_WIN32)\n#  define PCL_CODEC_PLUGIN_EXPORT __declspec(dllexport)\n'
+                '#elif defined(__GNUC__) || defined(__clang__)\n'
+                '#  define PCL_CODEC_PLUGIN_EXPORT __attribute__((visibility("default")))\n'
+                '#else\n#  define PCL_CODEC_PLUGIN_EXPORT\n#endif\n')
         f.write('#include <nlohmann/json.hpp>\n')
         f.write('#include <cmath>\n#include <cstdint>\n#include <cstring>\n#include <limits>\n#include <string>\n')
         if self.identity:
@@ -393,10 +397,10 @@ class _PackageEmitter:
         self._write_identity_check(f)
         f.write('} // namespace\n\n')
         if self.identity:
-            f.write('extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char* config_json) {\n'
+            f.write('extern "C" PCL_CODEC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(const char* config_json) {\n'
                     '  return identity_admits(config_json) ? &codec : nullptr;\n}\n')
         else:
-            f.write('extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }\n')
+            f.write('extern "C" PCL_CODEC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }\n')
 
     def _write_identity_check(self, f) -> None:
         """Emit the plugin's schema identity and the loader's admission check.
