@@ -30,7 +30,9 @@ MANIFEST = PIM_DIR / "uci_profiles" / "p3_agra_core_mms.json"
 INTERFACES = PIM_DIR / "uci_profiles" / "p3_agra_core_mms_interfaces.json"
 
 DATA_MODEL_REL = Path(
-    "pyramid/data_model/pyramid.data_model.agra_core_mms.proto")
+    "pyramid/data_model/pyramid.data_model.agra.proto")
+P2_SEAM = PIM_DIR / "agra_p2_seam"
+P2_DATA_MODEL_REL = Path("pyramid/data_model/pyramid.data_model.agra.proto")
 
 QOS = {"reliability": "RELIABLE", "durability": "VOLATILE", "depth": 10}
 
@@ -82,7 +84,7 @@ class AgraP3SeamInputTest(unittest.TestCase):
 
     def _component(self, iface: str, role: str):
         return self.files[
-            f"pyramid.components.agra_core_mms.{iface}.services.{role}.proto"]
+            f"pyramid.components.agra.{iface}.services.{role}.proto"]
 
     def test_copied_generated_inputs_are_byte_identical(self):
         self.assertEqual(
@@ -104,6 +106,48 @@ class AgraP3SeamInputTest(unittest.TestCase):
         metadata = json.loads(
             (SEAM / "binding_metadata.json").read_text(encoding="utf-8"))
         self.assertEqual(metadata, IDENTITY)
+
+    def test_p2_client_surface_is_retained_byte_for_byte(self):
+        """P3 is an extension build: every P2 import remains available."""
+        self.assertEqual(
+            (SEAM / "pyramid/data_model/pyramid.data_model.agra.port_grammar.proto"
+             ).read_bytes(),
+            (P2_SEAM / "pyramid/data_model/pyramid.data_model.agra.port_grammar.proto"
+             ).read_bytes())
+        p2_components = P2_SEAM / "pyramid/components"
+        for source in p2_components.glob("*.proto"):
+            with self.subTest(source=source.name):
+                self.assertEqual(
+                    (SEAM / "pyramid/components" / source.name).read_bytes(),
+                    source.read_bytes())
+
+    def test_p3_data_model_contains_every_p2_message_and_enum(self):
+        p2_file = next(
+            pf for pf in parse_proto_tree(P2_SEAM)
+            if pf.path.name == P2_DATA_MODEL_REL.name)
+        p3_file = next(
+            pf for pf in parse_proto_tree(SEAM)
+            if pf.path.name == DATA_MODEL_REL.name)
+        self.assertEqual(p3_file.package, p2_file.package)
+        p3_messages = {message.name: message for message in p3_file.messages}
+        p3_enums = {enum.name: enum for enum in p3_file.enums}
+        for message in p2_file.messages:
+            with self.subTest(message=message.name):
+                self.assertEqual(p3_messages.get(message.name), message)
+        for enum in p2_file.enums:
+            with self.subTest(enum=enum.name):
+                self.assertEqual(p3_enums.get(enum.name), enum)
+
+    def test_p3_preserves_p2_wire_names(self):
+        p2_wire = json.loads(
+            (P2_SEAM / "wire_names.json").read_text(encoding="utf-8"))
+        p3_wire = json.loads(
+            (SEAM / "wire_names.json").read_text(encoding="utf-8"))
+        self.assertEqual(p3_wire["package"], p2_wire["package"])
+        for section in ("roots", "messages", "enums"):
+            for name, mapping in p2_wire[section].items():
+                with self.subTest(section=section, name=name):
+                    self.assertEqual(p3_wire[section].get(name), mapping)
 
     def test_all_eight_components_exist_with_pinned_service_counts(self):
         counts = {
@@ -209,12 +253,12 @@ class AgraP3SeamGenerationSmokeTest(unittest.TestCase):
 
     def test_generation_smoke_and_identity(self):
         self.assertIn(
-            "Found 10 proto files: 3204 messages, 501 enums, 722 services",
+            "Found 12 proto files: 3204 messages, 501 enums, 738 services",
             self.result.stdout)
         self.assertEqual(self.manifest["metadata"], IDENTITY)
         self.assertTrue(
             (self.out / "oms_json" / "cpp" /
-             "pyramid_data_model_agra_core_mms_oms_json_codec_plugin.cpp"
+             "pyramid_data_model_agra_oms_json_codec_plugin.cpp"
              ).is_file())
 
 

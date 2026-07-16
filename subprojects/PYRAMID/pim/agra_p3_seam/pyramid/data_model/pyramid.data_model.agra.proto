@@ -7,7 +7,7 @@
 
 syntax = "proto3";
 
-package pyramid.data_model.agra_core_mms;
+package pyramid.data_model.agra;
 
 // See annotations in child elements and messages/elements that use this type
 // for details.

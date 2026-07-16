@@ -573,7 +573,8 @@ endif()
 # Core MMS") is the checked-in seam at pim/agra_p3_seam: the converted data
 # model (every unique message in Table 3-1 of the MA L1 Compliance Document,
 # 343 roots -> 2,856 messages, 501 enums) plus per-interface component
-# service protos (C2, MS, P2P, VI; 722 services) carrying the PYRAMID
+# service protos (C2, MS, P2P, VI; 722 Table 3-1 services plus 16 retained
+# P2 compatibility services) carrying the PYRAMID
 # pubsub/rpc port-grammar annotations. The seam is produced by
 # pim/gen_interaction_seam.py from the profile manifest, the Table 3-1
 # interface/direction data, and the xsd2proto output tree -- see
@@ -591,7 +592,7 @@ endif()
 # reason the P2 OMS codec above does. Hence OFF by default. What gets
 # compiled here is deliberately narrow -- the data-model library and the
 # OMS-JSON codec plugin. The component service bindings are generated (for
-# packaging and downstream consumers) but not compiled: 722 services'
+# packaging and downstream consumers) but not compiled: 738 services'
 # worth of service/facade translation units is SDK-consumer surface, not
 # something every P3 build needs to pay for.
 option(PYRAMID_ENABLE_AGRA_P3
@@ -635,17 +636,17 @@ if(PYRAMID_ENABLE_AGRA_P3)
         DEPENDS
             ${PYRAMID_BINDING_GENERATOR_INPUTS}
             ${PYRAMID_AGRA_P3_PROTO_INPUTS}
-        COMMENT "Generating A-GRA P3 (Core MMS) C++ bindings (large: 2,856 messages, 722 services)"
+        COMMENT "Generating A-GRA P3 (Core MMS) C++ bindings (large: 2,856 messages, 738 services)"
         VERBATIM)
     add_custom_target(pyramid_agra_p3_bindings_codegen
         DEPENDS "${PYRAMID_AGRA_P3_BINDINGS_STAMP}")
 
     add_library(pyramid_agra_p3_data_model STATIC
-        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_codec.cpp"
-        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_cabi_marshal.cpp")
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_codec.cpp"
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_cabi_marshal.cpp")
     set_source_files_properties(
-        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_codec.cpp"
-        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_core_mms_cabi_marshal.cpp"
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_codec.cpp"
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/pyramid_data_model_agra_cabi_marshal.cpp"
         PROPERTIES GENERATED TRUE)
     add_dependencies(pyramid_agra_p3_data_model pyramid_agra_p3_bindings_codegen)
     target_link_libraries(pyramid_agra_p3_data_model
@@ -664,9 +665,9 @@ if(PYRAMID_ENABLE_AGRA_P3)
     # binding_metadata.json drop identity and refuses a loader
     # configuration naming another drop.
     add_library(pyramid_codec_oms_json_agra_core_mms MODULE
-        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/oms_json/cpp/pyramid_data_model_agra_core_mms_oms_json_codec_plugin.cpp")
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/oms_json/cpp/pyramid_data_model_agra_oms_json_codec_plugin.cpp")
     set_source_files_properties(
-        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/oms_json/cpp/pyramid_data_model_agra_core_mms_oms_json_codec_plugin.cpp"
+        "${PYRAMID_AGRA_P3_BINDINGS_DIR}/oms_json/cpp/pyramid_data_model_agra_oms_json_codec_plugin.cpp"
         PROPERTIES GENERATED TRUE)
     add_dependencies(pyramid_codec_oms_json_agra_core_mms
         pyramid_agra_p3_bindings_codegen)

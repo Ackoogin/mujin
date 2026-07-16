@@ -25,6 +25,8 @@ Inputs:
 * the converted tree (``pim/uci_generated_p3/<drop>/``) -- the data-model
   proto and its ``wire_names.json`` sidecar (whose ``roots`` map provides
   element -> message-type names).
+* the P2 seam (``pim/agra_p2_seam/``) -- compatibility service and
+  port-grammar definitions that P3 copies byte for byte.
 
 Output layout (all deterministic; re-running produces identical bytes):
 
@@ -35,6 +37,7 @@ Output layout (all deterministic; re-running produces identical bytes):
   package so it cannot clobber the data-model types header;
 * ``binding_metadata.json`` carrying the drop identity;
 * per-interface component service protos, provided and consumed.
+* byte-for-byte P2 compatibility service and port-grammar protos.
 
 Service derivation rules (mirroring the P1/P2 seam grammar):
 
@@ -223,7 +226,9 @@ This directory pairs the converted A-GRA 5.0a Core MMS data model
 ({message_count} messages from {root_count} roots; byte-for-byte copy of
 `pim/uci_generated_p3/`) with per-interface component service protos
 (C2, MS, P2P, VI -- provided and consumed sides, {service_count} services
-total) carrying the PYRAMID pubsub/rpc port-grammar annotations. Topics
+derived from Table 3-1) carrying the PYRAMID pubsub/rpc port-grammar annotations. It also
+contains P2's service API byte for byte, so unchanged P2 client source can
+use P3 as its larger contract. Topics
 are the bare XSD global element names; correlated Command/Status pairs
 follow the Request/Requirement pattern; everything else is a
 single-variant Information service. All operations are RELIABLE/VOLATILE
@@ -251,7 +256,7 @@ message Query {{}}
 
 
 def generate(manifest_path: Path, interfaces_path: Path, tree_dir: Path,
-             options_path: Path, out_dir: Path) -> list:
+             options_path: Path, p2_compat_dir: Path, out_dir: Path) -> list:
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     table = json.loads(interfaces_path.read_text(encoding='utf-8'))
     if table.get('profile') != manifest.get('profile'):
@@ -293,13 +298,27 @@ def generate(manifest_path: Path, interfaces_path: Path, tree_dir: Path,
     copy(f'pyramid/data_model/{dm_file}', src_proto)
     copy('wire_names.json', src_wire)
     copy('pyramid/options/pyramid.options.proto', options_path)
-    emit(f'pyramid/data_model/{pg_file}',
-         PORT_GRAMMAR_TEMPLATE.format(pg_pkg=pg_pkg))
     emit('binding_metadata.json', json.dumps({
         'drop': manifest['drop'],
         'owp_init_schema': manifest['schema_version'].split('-')[0],
         'schema_version': manifest['schema_version'],
     }, indent=2, sort_keys=True) + '\n')
+
+    # P3 is a source-level extension of P2, not a parallel client contract.
+    # Its data model retains P2's package and contains every P2 type. Copy the
+    # P2 port grammar and services so P2 imports and facade names remain valid.
+    p2_port_grammar = p2_compat_dir / 'pyramid' / 'data_model' / pg_file
+    if not p2_port_grammar.is_file():
+        sys.exit(f'gen_interaction_seam: missing P2 compatibility port '
+                 f'grammar {p2_port_grammar}')
+    copy(f'pyramid/data_model/{pg_file}', p2_port_grammar)
+    p2_component_dir = p2_compat_dir / 'pyramid' / 'components'
+    p2_services = sorted(p2_component_dir.glob('*.proto'))
+    if not p2_services:
+        sys.exit(f'gen_interaction_seam: no P2 compatibility services under '
+                 f'{p2_component_dir}')
+    for source in p2_services:
+        copy(f'pyramid/components/{source.name}', source)
 
     service_count = 0
     for iface, iface_pkg in INTERFACE_PACKAGES:
@@ -349,11 +368,15 @@ def main() -> None:
                     default=PIM_DIR.parent / 'proto' / 'pyramid' / 'options'
                     / 'pyramid.options.proto',
                     type=Path)
+    ap.add_argument('--p2-compat-seam',
+                    default=PIM_DIR / 'agra_p2_seam', type=Path,
+                    help='P2 seam whose data-model package and service API '
+                    'P3 preserves')
     ap.add_argument('--out', default=PIM_DIR / 'agra_p3_seam', type=Path)
     args = ap.parse_args()
 
     written = generate(args.manifest, args.interfaces, args.tree,
-                       args.options, args.out)
+                       args.options, args.p2_compat_seam, args.out)
     for rel in written:
         print(f'wrote {args.out / rel}')
 

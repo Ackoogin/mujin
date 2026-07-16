@@ -11,7 +11,9 @@ This directory pairs the converted A-GRA 5.0a Core MMS data model
 (2856 messages from 343 roots; byte-for-byte copy of
 `pim/uci_generated_p3/`) with per-interface component service protos
 (C2, MS, P2P, VI -- provided and consumed sides, 722 services
-total) carrying the PYRAMID pubsub/rpc port-grammar annotations. Topics
+derived from Table 3-1) carrying the PYRAMID pubsub/rpc port-grammar annotations. It also
+contains P2's service API byte for byte, so unchanged P2 client source can
+use P3 as its larger contract. Topics
 are the bare XSD global element names; correlated Command/Status pairs
 follow the Request/Requirement pattern; everything else is a
 single-variant Information service. All operations are RELIABLE/VOLATILE

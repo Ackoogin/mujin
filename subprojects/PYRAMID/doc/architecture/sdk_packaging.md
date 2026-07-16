@@ -208,7 +208,8 @@ claim; the interoperability evidence boundary is recorded in
 ### Packaging the A-GRA 5.0a P3 Core MMS profile
 
 The P3 Core MMS seam is opt-in because it contains the full converted Core MMS
-data model and 722 generated interaction services. First build the normal
+data model, 722 Table 3-1 interaction services, and the retained P2 client
+surface. First build the normal
 FlatBuffers-capable SDK prerequisites, then enable and build the narrow P3
 data-model and OMS codec targets before packaging the selected seam:
 

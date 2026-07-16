@@ -2,7 +2,7 @@
   "profile": "p3_agra_core_mms",
   "drop": "agra_5_0a",
   "schema_version": "005.0a.ASK-20260423-f1380e7",
-  "package": "pyramid.data_model.agra_core_mms",
+  "package": "pyramid.data_model.agra",
   "roots": {
     "AMTI_Activity": "AMTI_ActivityMT",
     "AMTI_CapabilityStatus": "AMTI_CapabilityStatusMT",

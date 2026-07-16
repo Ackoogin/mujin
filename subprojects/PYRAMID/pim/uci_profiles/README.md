@@ -17,7 +17,7 @@ Commentary lives in `_comment` arrays.
 |---------|------|-------------|-----------------|------------------------|
 | `p1_kitty_hawk.json` | `uci_2_5_0` | P1 — working set, provable live vs Sleet | (a)+(b)+(c) | strict-clean: 515 messages + 188 enums from 6 roots; tree checked in |
 | `p2_agra_planning_core.json` | `agra_5_0a` | P2 — A-GRA `MA_*` planning core | (a) offline, plus A-GRA-schema Sleet interop per WS-G/G1 | strict-clean: 1,169 messages + 297 enums from 20 roots; tree checked in (scope decision below) |
-| `p3_agra_core_mms.json` | `agra_5_0a` | P3 — full Core MMS | none — no fidelity ladder run, no compliance claim (scope decision below) | strict-clean: 2,856 messages + 501 enums from 343 roots; tree checked in under `pim/uci_generated_p3/` (separate output root, not `pim/uci_generated/`); interaction seam generated into `pim/agra_p3_seam/` (722 services across the four Table 3-1 interfaces) |
+| `p3_agra_core_mms.json` | `agra_5_0a` | P3 — full Core MMS | none — no fidelity ladder run, no compliance claim (scope decision below) | strict-clean: 2,856 messages + 501 enums from 343 roots; tree checked in under `pim/uci_generated_p3/` (separate output root, not `pim/uci_generated/`); interaction seam generated into `pim/agra_p3_seam/` (722 services across the four Table 3-1 interfaces, plus 16 retained P2 compatibility services) |
 
 Rules of the road (plan D1/D2):
 
@@ -212,14 +212,14 @@ converted tree with component service protos carrying the PYRAMID
 pubsub/rpc port-grammar annotations (`pyramid_op`: PUBLISH/SUBSCRIBE
 topics with QoS). P1's and P2's seams (`pim/uci_p1_seam/`,
 `pim/agra_p2_seam/`) are hand-authored; at 343 roots that is not viable,
-so P3's seam is **generated** by `pim/gen_interaction_seam.py` from three
-checked-in inputs: this profile's manifest, the converted tree, and
+so P3's seam is **generated** by `pim/gen_interaction_seam.py` from four
+checked-in inputs: this profile's manifest, the converted tree,
 `p3_agra_core_mms_interfaces.json` — the full Table 3-1
 interface/direction data (668 rows: which message travels on which of the
 four compliance-document interfaces, C2/MS/P2P/VI, and in which
 direction), parsed from the same PDF as the root list and resolved to
 element names the same way. The union of the interface table's messages
-equals the root list exactly (test-guarded).
+equals the root list exactly (test-guarded) — and the checked-in P2 seam.
 
 The derivation rules mirror the P1/P2 grammar and are documented in the
 generator's docstring; in brief: `X`/`XStatus` pairs where `X` ends in
@@ -230,8 +230,12 @@ polarity follow the table's direction column (the MA system executes what
 C2 commands, and itself commands the mission systems and vehicle); topics
 are the bare element names (the LA-CAL/Sleet routing key, as in P2); all
 operations are RELIABLE/VOLATILE depth 10 (P2's approved floor). Result:
-eight component protos (four interfaces × provided/consumed), 722
-services. The seam regenerates byte-identically — `test_agra_p3_seam.py`
+eight P3 component protos (four interfaces × provided/consumed), 722
+P3-derived services, and P2's two component protos with their 16 existing
+services. P3 retains P2's `pyramid.data_model.agra` package, port grammar,
+and component protos byte for byte, so unchanged P2 client code can use the
+P3 seam. P2 and P3 are alternative selected contracts and must not be linked
+together. The seam regenerates byte-identically — `test_agra_p3_seam.py`
 reruns the generator and compares, so hand-edits to the seam fail loudly;
 the same file pins the per-component service counts, polarity, QoS, and
 copy integrity, and (gated behind `AGRA_P3_BINDINGS_SMOKE=1`, since it
