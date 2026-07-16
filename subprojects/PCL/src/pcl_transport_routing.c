@@ -157,12 +157,13 @@ static char* next_token(char** cursor) {
   return tok;
 }
 
-/* Inject the live executor pointer into a transport's JSON config, so a static
-   manifest can wire transports that bind to the executor (the convention used by
-   the socket/udp/shm/gRPC/ROS2 plugins, which read "executor":<ptr>). Preserves
-   any author-supplied keys. */
-static const char* inject_executor(const pcl_executor_t* e, const char* config,
-                                   char* buf, size_t buf_size) {
+/* Inject routing-owned context into a transport's JSON config, so a static
+   manifest can wire transports that bind to the executor and identify inbound
+   traffic by its declared peer. Preserves any author-supplied keys. */
+static const char* inject_routing_context(const pcl_executor_t* e,
+                                          const char* peer_id,
+                                          const char* config,
+                                          char* buf, size_t buf_size) {
   const char* body = NULL;  /* everything after the opening '{', incl. '}' */
   unsigned long long ptr = (unsigned long long)(uintptr_t)e;
 
@@ -175,9 +176,11 @@ static const char* inject_executor(const pcl_executor_t* e, const char* config,
     }
   }
   if (body) {
-    snprintf(buf, buf_size, "{\"executor\":%llu,%s", ptr, body);
+    snprintf(buf, buf_size, "{\"executor\":%llu,\"peer_id\":\"%s\",%s",
+             ptr, peer_id, body);
   } else {
-    snprintf(buf, buf_size, "{\"executor\":%llu}", ptr);
+    snprintf(buf, buf_size, "{\"executor\":%llu,\"peer_id\":\"%s\"}",
+             ptr, peer_id);
   }
   return buf;
 }
@@ -211,8 +214,8 @@ static pcl_status_t handle_transport_line(pcl_executor_t*          e,
     return PCL_ERR_INVALID;
   }
   raw_config = trim(cursor);          /* remainder of line = opaque plugin config */
-  config = inject_executor(e, raw_config[0] ? raw_config : NULL,
-                           config_buf, sizeof(config_buf));
+  config = inject_routing_context(e, peer, raw_config[0] ? raw_config : NULL,
+                                  config_buf, sizeof(config_buf));
 
   rc = pcl_plugin_load_transport(plugin, config, &handle, &vtable);
   if (rc != PCL_OK) {

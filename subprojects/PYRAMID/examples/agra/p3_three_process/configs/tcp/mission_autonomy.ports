@@ -1,0 +1,5 @@
+# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
+port c2_action_command_request rpc c2 plugins/pcl_transport_socket_plugin.dll {"role":"provided","port":19401}
+port c2_action_information pubsub c2 plugins/pcl_transport_socket_plugin.dll {"role":"provided","port":19401}
+port ms_task_command_request rpc mission_system plugins/pcl_transport_socket_plugin.dll {"role":"consumed","host":"127.0.0.1","port":19402}
+port ms_task_information pubsub mission_system plugins/pcl_transport_socket_plugin.dll {"role":"consumed","host":"127.0.0.1","port":19402}

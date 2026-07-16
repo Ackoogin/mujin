@@ -1,0 +1,4 @@
+# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
+# Generated descriptors supply endpoint names and direction.
+port action_command_request rpc mission_autonomy plugins/pcl_transport_shared_memory_plugin.dll {"bus_name":"agra_p3_c2_ma_link","participant_id":"c2"}
+port action_information pubsub mission_autonomy plugins/pcl_transport_shared_memory_plugin.dll {"bus_name":"agra_p3_c2_ma_link","participant_id":"c2"}

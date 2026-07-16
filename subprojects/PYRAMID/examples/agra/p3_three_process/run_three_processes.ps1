@@ -17,28 +17,31 @@ $SdkRoot = (Resolve-Path -LiteralPath $SdkRoot).Path
 $BuildDir = (Resolve-Path -LiteralPath $BuildDir).Path
 $ConfigDir = Join-Path $PSScriptRoot "configs\$Profile"
 
-$Coordinator = Join-Path $BuildDir "Release\agra_p3_mission_coordinator.exe"
-$Sensor = Join-Path $BuildDir "Release\agra_p3_sensor_planner.exe"
-$Vehicle = Join-Path $BuildDir "Release\agra_p3_vehicle_planner.exe"
-foreach ($Executable in @($Coordinator, $Sensor, $Vehicle)) {
+$C2 = Join-Path $BuildDir "Release\agra_p3_c2.exe"
+$MissionAutonomy = Join-Path $BuildDir "Release\agra_p3_mission_autonomy.exe"
+$MissionSystem = Join-Path $BuildDir "Release\agra_p3_mission_system.exe"
+foreach ($Executable in @($C2, $MissionAutonomy, $MissionSystem)) {
   if (-not (Test-Path -LiteralPath $Executable)) {
     throw "Missing example executable: $Executable"
   }
 }
 
-$DurationArgument = "--duration-seconds=$DurationSeconds"
+$SystemDurationArgument = "--duration-seconds=$($DurationSeconds + 2)"
+$AutonomyDurationArgument = "--duration-seconds=$($DurationSeconds + 1)"
+$C2DurationArgument = "--duration-seconds=$DurationSeconds"
 $Processes = @()
 try {
   Write-Host "Starting $Profile profile from $SdkRoot"
-  $Processes += Start-Process -FilePath $Coordinator -WorkingDirectory $SdkRoot `
-      -ArgumentList @((Join-Path $ConfigDir "mission_coordinator.routes"), $DurationArgument) `
+  $Processes += Start-Process -FilePath $MissionSystem -WorkingDirectory $SdkRoot `
+      -ArgumentList @((Join-Path $ConfigDir "mission_system.ports"), $SystemDurationArgument) `
       -NoNewWindow -PassThru
   Start-Sleep -Seconds 1
-  $Processes += Start-Process -FilePath $Sensor -WorkingDirectory $SdkRoot `
-      -ArgumentList @((Join-Path $ConfigDir "sensor_planner.routes"), $DurationArgument) `
+  $Processes += Start-Process -FilePath $MissionAutonomy -WorkingDirectory $SdkRoot `
+      -ArgumentList @((Join-Path $ConfigDir "mission_autonomy.ports"), $AutonomyDurationArgument) `
       -NoNewWindow -PassThru
-  $Processes += Start-Process -FilePath $Vehicle -WorkingDirectory $SdkRoot `
-      -ArgumentList @((Join-Path $ConfigDir "vehicle_planner.routes"), $DurationArgument) `
+  Start-Sleep -Seconds 1
+  $Processes += Start-Process -FilePath $C2 -WorkingDirectory $SdkRoot `
+      -ArgumentList @((Join-Path $ConfigDir "c2.ports"), $C2DurationArgument) `
       -NoNewWindow -PassThru
 
   $Processes | Wait-Process

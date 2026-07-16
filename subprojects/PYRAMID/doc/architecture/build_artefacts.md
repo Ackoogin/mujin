@@ -231,8 +231,9 @@ identical in every deployment.
 | **`transport_manifest.txt`** (staged per component) | operator / launch script | Transport plugin paths to pass via `--transport-plugin` (transports need runtime config, so they are not auto-loaded). |
 | **`MANIFEST.txt`** (staged per component) | review/audit | Full listing of every staged plugin path. |
 | **Env vars** | plugin loading | `PCL_CODEC_MANIFEST` (manifest file path, C++ apps); `PYRAMID_CODEC_PLUGINS` (path-separated codec plugin list, Ada apps via `load_plugins_from_env`); `PCL_TRANSPORT_PLUGIN` (transport `.so` path, used by the Ada/e2e harnesses). |
-| **Endpoint route config** (opaque JSON) | generated facades (`configureTransport`, `configurePubSubTransport`) | `{"transport":"local"}` / `{"transport":"remote"[,"peer":"id"]}` — selects local executor dispatch vs an installed transport per endpoint group. |
-| **Interaction binding config** (opaque JSON) | interaction facade (`configureInteractionBinding`) | `{"binding":"rpc"}` / `{"binding":"pubsub"}` or per-leg `{"request_leg":...,"requirement_leg":...}` — selects the RPC vs pub/sub realization of a port leg. |
+| **Per-port deployment config** | deployment runtime plus generated `deploymentDescriptor()` | One logical-port record containing `mode` (`rpc` or `pubsub`), peer, transport plugin, and opaque plugin configuration. The descriptor supplies generated endpoints and directions. The P3 three-process example is the reference composition. |
+| **Endpoint route config** (low-level escape hatch) | generated facades (`configureTransport`, `configurePubSubTransport`) | `{"transport":"local"}` / `{"transport":"remote"[,"peer":"id"]}` — selects local executor dispatch vs an installed transport per endpoint group. |
+| **Interaction binding override** (tests/embedded use) | interaction facade (`configureInteractionBinding`) | `{"binding":"rpc"}` / `{"binding":"pubsub"}` or per-leg `{"request_leg":...,"requirement_leg":...}`. Routed deployments infer this choice and should not duplicate it here. |
 | **ROS2 runtime environment** | coupled ROS2 plugin | `AMENT_PREFIX_PATH`/`LD_LIBRARY_PATH` (ROS2 + `pyramid_ros2_transport` install), `RMW_IMPLEMENTATION` — see [`ros2_transport_semantics.md`](ros2_transport_semantics.md). |
 
 ### Generation/build-time configuration

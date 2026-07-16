@@ -72,6 +72,7 @@ class ComponentsFacadeEmitterMixin:
             f.write('#include <cstdint>\n')
             f.write('#include <functional>\n')
             f.write('#include <future>\n')
+            f.write('#include <initializer_list>\n')
             f.write('#include <list>\n')
             f.write('#include <memory>\n')
             f.write('#include <stdexcept>\n')
@@ -906,4 +907,3 @@ class ComponentsFacadeEmitterMixin:
                 f, full_ns, parsed, all_topics, is_provided, duplicate_rpc_names)
 
             f.write(f'}} // namespace {full_ns}\n')
-

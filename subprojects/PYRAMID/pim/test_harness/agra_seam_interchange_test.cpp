@@ -6,8 +6,7 @@
 //        (C2) consumer component code, cross-process over a real shared-
 //        memory bus, carries the MAAction_Service request/requirement legs
 //        under four independently-selectable realizations -- purely by
-//        changing the PCL routing manifest and one configureInteractionBinding()
-//        JSON string, never the component logic.
+//        changing the PCL routing manifest, never the component logic.
 //
 // Unlike agra_shm_comms_test.cpp (Phase C of the prior proving plan) and
 // agra_mixed_route_test.cpp (its Phase E), which both hand-roll
@@ -387,17 +386,10 @@ int run_role(const std::string& role,
         }
     }
 
-    const std::string requirement_binding_json =
-        std::string(R"({"requirement_leg":")") + requirement_leg + "\"}";
-
     if (is_ma) {
         SeamHandler handler;
         MaComponent component(executor, handler, content_type);
         handler.bindWriter(component.provider().transitionWriter());
-        if (component.provider().configureInteractionBinding(requirement_binding_json) !=
-            PCL_OK) {
-            return unload_and_return(false);
-        }
         if (component.configure() != PCL_OK || component.activate() != PCL_OK ||
             executor.add(component) != PCL_OK) {
             return unload_and_return(false);
@@ -421,12 +413,6 @@ int run_role(const std::string& role,
     // ready-file (server/subscriber must be up before we act) before driving
     // the create + cancel sequence through the facade.
     C2Component component(executor, content_type);
-    const std::string request_binding_json =
-        std::string(R"({"request_leg":")") + request_leg +
-        R"(","requirement_leg":")" + requirement_leg + "\"}";
-    if (component.client().configureInteractionBinding(request_binding_json) != PCL_OK) {
-        return unload_and_return(false);
-    }
     if (component.configure() != PCL_OK || component.activate() != PCL_OK ||
         executor.add(component) != PCL_OK) {
         return unload_and_return(false);

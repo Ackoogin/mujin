@@ -40,10 +40,10 @@ SDK_ROOT="$(cd "${SDK_ROOT}" && pwd)"
 BUILD_DIR="$(cd "${BUILD_DIR}" && pwd)"
 CONFIG_DIR="${SCRIPT_DIR}/configs/linux/${PROFILE}"
 
-COORDINATOR="${BUILD_DIR}/agra_p3_mission_coordinator"
-SENSOR="${BUILD_DIR}/agra_p3_sensor_planner"
-VEHICLE="${BUILD_DIR}/agra_p3_vehicle_planner"
-for executable in "${COORDINATOR}" "${SENSOR}" "${VEHICLE}"; do
+C2="${BUILD_DIR}/agra_p3_c2"
+MISSION_AUTONOMY="${BUILD_DIR}/agra_p3_mission_autonomy"
+MISSION_SYSTEM="${BUILD_DIR}/agra_p3_mission_system"
+for executable in "${C2}" "${MISSION_AUTONOMY}" "${MISSION_SYSTEM}"; do
   if [[ ! -x "${executable}" ]]; then
     echo "Missing example executable: ${executable}" >&2
     exit 1
@@ -60,22 +60,25 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-DURATION_ARGUMENT="--duration-seconds=${DURATION_SECONDS}"
+SYSTEM_DURATION_ARGUMENT="--duration-seconds=$((DURATION_SECONDS + 2))"
+AUTONOMY_DURATION_ARGUMENT="--duration-seconds=$((DURATION_SECONDS + 1))"
+C2_DURATION_ARGUMENT="--duration-seconds=${DURATION_SECONDS}"
 echo "Starting ${PROFILE} profile from ${SDK_ROOT}"
 (
   cd "${SDK_ROOT}"
-  exec "${COORDINATOR}" "${CONFIG_DIR}/mission_coordinator.routes" "${DURATION_ARGUMENT}"
+  exec "${MISSION_SYSTEM}" "${CONFIG_DIR}/mission_system.ports" "${SYSTEM_DURATION_ARGUMENT}"
 ) &
 PIDS+=("$!")
 sleep 1
 (
   cd "${SDK_ROOT}"
-  exec "${SENSOR}" "${CONFIG_DIR}/sensor_planner.routes" "${DURATION_ARGUMENT}"
+  exec "${MISSION_AUTONOMY}" "${CONFIG_DIR}/mission_autonomy.ports" "${AUTONOMY_DURATION_ARGUMENT}"
 ) &
 PIDS+=("$!")
+sleep 1
 (
   cd "${SDK_ROOT}"
-  exec "${VEHICLE}" "${CONFIG_DIR}/vehicle_planner.routes" "${DURATION_ARGUMENT}"
+  exec "${C2}" "${CONFIG_DIR}/c2.ports" "${C2_DURATION_ARGUMENT}"
 ) &
 PIDS+=("$!")
 

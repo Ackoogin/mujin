@@ -1,0 +1,5 @@
+# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
+port c2_action_command_request rpc c2 plugins/pcl_transport_shared_memory_plugin.dll {"bus_name":"agra_p3_c2_ma_link","participant_id":"mission_autonomy"}
+port c2_action_information pubsub c2 plugins/pcl_transport_shared_memory_plugin.dll {"bus_name":"agra_p3_c2_ma_link","participant_id":"mission_autonomy"}
+port ms_task_command_request rpc mission_system plugins/pcl_transport_shared_memory_plugin.dll {"bus_name":"agra_p3_ma_ms_link","participant_id":"mission_autonomy"}
+port ms_task_information pubsub mission_system plugins/pcl_transport_shared_memory_plugin.dll {"bus_name":"agra_p3_ma_ms_link","participant_id":"mission_autonomy"}

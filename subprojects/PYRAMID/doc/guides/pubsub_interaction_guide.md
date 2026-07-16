@@ -118,8 +118,8 @@ layers, not alternatives at the same level:
   `<op>Async()` is an RPC, calling `publish*` is a topic publish.
 - `RequestPortClient` is the **facade composed from those primitives**. Its
   `submit()`/`transitions()` API is realization-independent: whether a call
-  runs as RPC or pub/sub is chosen by `configureInteractionBinding()` +
-  the routing manifest, not by which method you called.
+  runs as RPC or pub/sub is inferred from the loaded routing manifest, not by
+  which method you called.
 
 ```mermaid
 flowchart TB
@@ -169,19 +169,31 @@ class C2Component final : public pcl::Component {
 
 ### Selecting the realization
 
-`configureInteractionBinding(config_json)` selects the realization, in the
-same opaque-JSON style as `configureTransport()`:
+For a routed deployment, use one configuration record per logical port. It
+contains the interaction mode, transport plugin, plugin-specific configuration,
+and peer identity. The A-GRA P3 example uses this compact text form:
 
-```cpp
-client.configureInteractionBinding(R"({"binding":"rpc"})");      // both legs RPC
-client.configureInteractionBinding(R"({"binding":"pubsub"})");   // both legs pub/sub
-client.configureInteractionBinding(                              // mixed, per leg
-    R"({"request_leg":"rpc","requirement_leg":"pubsub"})");
+```text
+port action_command_request rpc    mission_autonomy plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"c2_ma","participant_id":"c2"}
+port action_information     pubsub mission_autonomy plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"c2_ma","participant_id":"c2"}
 ```
 
-The default is `rpc` for both legs. This is an application-level switch over
-which generated primitives the facade uses; the deployment's routing
-manifest must route the matching side (§5).
+Each facade class exposes `deploymentDescriptor()`. It supplies the generated
+RPC and topic endpoint names and whether each endpoint is consumed, provided,
+published, or subscribed. The deployment layer combines that descriptor with
+the port record and installs PCL's validated endpoint routes before the
+component enters `on_configure()`. `bind()` then selects the routed realization.
+The component sees none of the plugin, endpoint, or routing data.
+
+The P3 example's `ProcessRuntime` is the reference implementation of this
+composition. It compiles the compact record to PCL's low-level routing model in
+an internal temporary manifest, preserving the complete plugin configuration,
+peer, reliable QoS floor, endpoint direction, and mutual-exclusion checks.
+
+`configureInteractionBinding()` remains available as an explicit override
+for an in-process test or an embedded setup that does not load endpoint
+routes. Its default is RPC. Do not combine it with a routed deployment; the
+loaded endpoint route is authoritative.
 
 Transport routing for the underlying primitives is unchanged: the facade
 exposes its composed binding via `client.consumedService()`, so in-process
@@ -354,11 +366,12 @@ provider.transitionWriter().send(t);
   arrives**, which is the documented late-join mitigation (idempotent
   re-publication, the cost A-GRA accepts).
 
-On the provider, `configureInteractionBinding()` selects only the
-**requirement leg's** realization. The request leg has nothing to configure:
-both the RPC service ports and the request-topic subscriber are always
-bound and listening, and which one actually delivers is the routing
-manifest's decision.
+On the provider, the loaded route selects the **requirement leg's**
+realization. The request leg has nothing to configure: both the RPC service
+ports and the request-topic subscriber are always bound and listening, and
+which one actually delivers is the routing manifest's decision. An
+in-process test without endpoint routes can use
+`configureInteractionBinding()` as an explicit requirement-leg override.
 
 ---
 
@@ -368,27 +381,34 @@ The one-leg analogue, same pattern:
 
 ```cpp
 // Provider side
-source.configureInteractionBinding(R"({"binding":"pubsub"})");
 source.publish(info);          // topic publish, or fan-out to open Read streams
 
 // Consumer side
-sink.configureInteractionBinding(R"({"binding":"pubsub"})");
 auto handle = sink.subscribe(
     [&](const c2::MAActionPlan_Service_Information& msg) { ... });
 ```
 
 Under RPC, `publish()` fans out to open `Read` streams and `subscribe()` is
 a streaming `Read` invoke; under pub/sub both map to the `.information`
-topic. No correlation filtering is involved — it is a plain publication
-stream.
+topic. `bind()` infers the choice from the loaded `stream_provided` /
+`stream_consumed` or `publisher` / `subscriber` route. No correlation
+filtering is involved — it is a plain publication stream.
 
 ---
 
 ## 5. Choosing the realization at deployment
 
-### Routing manifests
+### Per-port deployment configuration
 
-Transports and per-endpoint routes are composed from a
+Prefer a per-port record as shown in §2. The logical port's generated
+`deploymentDescriptor()` is the authoritative endpoint list, so a deployer does
+not repeat `Create`, `Update`, `Cancel`, `Read`, topic names, or endpoint
+directions. This also prevents a mode string in component code from drifting
+away from its routes.
+
+### PCL's compiled routing form
+
+PCL ultimately composes transports and per-endpoint routes from a
 `pcl_transport_routing` manifest
 (grammar in `subprojects/PCL/include/pcl/pcl_transport_routing.h`; system
 overview in
@@ -410,7 +430,8 @@ route ma_action.read    stream_consumed ma  reliable
 exclusive ma_action.request_leg ma_action.create,ma_action.update,ma_action.cancel agra.ma_action.request
 ```
 
-The `exclusive` stanza is the enforcement of "one realization per leg":
+This is the lower-level form produced from a logical port configuration. The
+`exclusive` stanza is the enforcement of "one realization per leg":
 routing at least one endpoint from **each** side of a group fails closed at
 `pcl_transport_routing_load()` (`PCL_ERR_STATE`, diagnostic naming the group
 and one endpoint from each side). Any number of same-side endpoints route
@@ -435,9 +456,10 @@ This helper is currently scoped to the routing validation harness: it emits
 `{"mode":"rpc"}` / `{"mode":"pubsub"}` for the harness's stub transport.
 It is useful for checking endpoint selection and exclusivity, but it does not
 emit production SHM, UDP, socket, gRPC, or ROS2 configuration. For those
-plugins, retain the generated `exclusive` and `route` lines and author the
-`transport` lines with the plugin-specific fields described in the
-[user guide](pyramid_user_guide.md#load-and-configure-transports).
+plugins, prefer a deployment layer that combines the generated interaction
+descriptor with per-port plugin configuration, as the P3 three-process example
+does. Directly authored `transport`, `exclusive`, and `route` lines remain the
+low-level escape hatch.
 
 ### Transport notes worth knowing
 
@@ -477,9 +499,9 @@ papers over the difference:
 
 | Example | What it shows | Where |
 |---|---|---|
-| `agra_interaction_facade_example` | **The copied example for new components**: a runnable, documented two-component facade showcase (`RequestPortProvider`/`RequestPortClient`) against the A-GRA-vocabulary fixture, realization picked at the command line (`--binding=rpc`\|`pubsub`) via the same `configureInteractionBinding()` manifest string both sides consume | `subprojects/PYRAMID/examples/cpp/agra_interaction_facade_example.cpp` |
+| `agra_interaction_facade_example` | A runnable in-process facade showcase (`RequestPortProvider`/`RequestPortClient`) against the A-GRA-vocabulary fixture. Because it does not load endpoint routes, its command-line `--binding=rpc`\|`pubsub` option demonstrates the explicit test/embedded override. | `subprojects/PYRAMID/examples/cpp/agra_interaction_facade_example.cpp` |
 | `test_pcl_generated_interaction_facade` | The facade API in-process: submit/transitions/TransitionWriter under both bindings, remoteAck honesty, D2 fail-closed, query filtering, snapshot re-publication | `subprojects/PYRAMID/tests/` |
-| `agra_seam_interchange_test` | **The terminal proof**: one compiled component pair, cross-process over real SHM, run as rpc/rpc, pubsub/pubsub, and mixed rpc/pubsub purely by manifest + config; dual-routing negative gate | `subprojects/PYRAMID/pim/test_harness/build_agra_seam_interchange_test.sh` |
+| `agra_seam_interchange_test` | **The terminal proof**: one compiled component pair, cross-process over real SHM, run as rpc/rpc, pubsub/pubsub, and mixed rpc/pubsub purely by the loaded manifests; dual-routing negative gate | `subprojects/PYRAMID/pim/test_harness/build_agra_seam_interchange_test.sh` |
 | `agra_shm_comms_test` | The correlated pair over cross-process SHM via raw `publish*`/`subscribe*` primitives (pre-facade; shows what the facade owns for you) | `pim/test_harness/build_agra_shm_comms_test.sh` |
 | `agra_udp_proof_test` | BEST_EFFORT information topic over real UDP + the RELIABLE-over-UDP fail-closed negative | `pim/test_harness/build_agra_udp_proof_test.sh` |
 | `agra_mixed_route_test` | One deployment, two transports: reliable pair over SHM, best-effort data over UDP, all contract-derived | `pim/test_harness/build_agra_mixed_route_test.sh` |

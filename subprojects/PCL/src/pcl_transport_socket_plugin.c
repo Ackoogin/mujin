@@ -107,6 +107,7 @@ PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                    role[16];
   char                    host[256];
+  char                    peer_id[64];
   uint64_t                port_raw = 0u;
   pcl_executor_t*         executor;
   pcl_socket_transport_t* socket_transport;
@@ -138,6 +139,11 @@ PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
         host, (uint16_t)port_raw, executor, &opts);
   } else {
     return NULL;
+  }
+
+  if (socket_transport &&
+      read_json_string(config_json, "peer_id", peer_id, sizeof(peer_id))) {
+    pcl_socket_transport_set_peer_id(socket_transport, peer_id);
   }
 
   return pcl_socket_transport_get_transport(socket_transport);

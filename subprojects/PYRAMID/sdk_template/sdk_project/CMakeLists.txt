@@ -175,6 +175,32 @@ if(PYRAMID_SDK_ENABLE_FLATBUFFERS)
 endif()
 
 # ---------------------------------------------------------------------------
+# Generated typed service bindings (invoke/dispatch/topic helpers)
+# ---------------------------------------------------------------------------
+set(PYRAMID_SDK_SERVICE_BINDINGS "" CACHE STRING
+    "Semicolon-separated generated service bindings to compile, for example agra_c2_provided;agra_ms_consumed")
+if(PYRAMID_SDK_SERVICE_BINDINGS)
+    set(_sdk_service_srcs)
+    foreach(_binding IN LISTS PYRAMID_SDK_SERVICE_BINDINGS)
+        set(_src "${SDK_GENERATED_DIR}/pyramid_services_${_binding}.cpp")
+        if(NOT EXISTS "${_src}")
+            message(FATAL_ERROR
+                "Requested service binding does not exist: ${_src}")
+        endif()
+        list(APPEND _sdk_service_srcs "${_src}")
+    endforeach()
+
+    add_library(pyramid_generated_services STATIC ${_sdk_service_srcs})
+    if(MSVC)
+        target_compile_options(pyramid_generated_services PRIVATE /bigobj)
+    endif()
+    target_include_directories(pyramid_generated_services PUBLIC
+        "${SDK_GENERATED_DIR}")
+    target_link_libraries(pyramid_generated_services PUBLIC
+        pyramid_generated_codecs pcl_core)
+endif()
+
+# ---------------------------------------------------------------------------
 # Codec plugins: one MODULE (.dll) per component, per enabled codec
 # ---------------------------------------------------------------------------
 set(PYRAMID_SDK_PLUGIN_TARGETS)

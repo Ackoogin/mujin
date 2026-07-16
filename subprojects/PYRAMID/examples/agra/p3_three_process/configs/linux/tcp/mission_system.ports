@@ -1,0 +1,4 @@
+# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
+# The Request port and Information port share one server connection.
+port task_command_request rpc mission_autonomy plugins/libpcl_transport_socket_plugin.so {"role":"provided","port":19402}
+port task_information pubsub mission_autonomy plugins/libpcl_transport_socket_plugin.so {"role":"provided","port":19402}

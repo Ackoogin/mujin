@@ -107,6 +107,20 @@ def _requirement_correlation_field(
     return None
 
 
+def _query_fields(
+    index: ProtoTypeIndex,
+    pf: ProtoFile,
+    read_rpc: ProtoRpc,
+) -> Tuple[bool, bool]:
+    """Report whether a Request port's Read query exposes id/one_shot."""
+    query_fqn = _fqn(index, read_rpc.request_type, pf.package)
+    query_msg = index.resolve_message(query_fqn) if query_fqn else None
+    if query_msg is None:
+        return False, False
+    field_names = {field.name for field in query_msg.fields}
+    return 'id' in field_names, 'one_shot' in field_names
+
+
 def _direct_id_accessor(index: ProtoTypeIndex, type_fqn: str) -> Optional[str]:
     """The C++ accessor -- `''` (the value itself) or `'.id'` -- for a
     correlation id directly available on a non-optional value of `type_fqn`,
@@ -264,8 +278,10 @@ class InteractionFacadeEmitterMixin:
         f.write('//\n')
         f.write('// RequestPortClient / InformationPortSink below let component code call\n')
         f.write('// submit()/transitions()/subscribe() without knowing whether the leg is\n')
-        f.write('// realized as RPC or pub/sub -- that choice is\n')
-        f.write('// configureInteractionBinding()\'s job (plan D1). Composed from the\n')
+        f.write('// realized as RPC or pub/sub -- bind() infers that choice from the\n')
+        f.write('// loaded endpoint routes. configureInteractionBinding() remains an\n')
+        f.write('// override for tests or embedded setups without endpoint routes.\n')
+        f.write('// Composed from the\n')
         f.write('// ConsumedService primitives above, not a reimplementation of them.\n')
         f.write(_SEP + '\n\n')
 
@@ -274,11 +290,46 @@ class InteractionFacadeEmitterMixin:
         f.write('    kPubsub,\n')
         f.write('};\n\n')
 
+        f.write('struct InteractionEndpointDescriptor {\n')
+        f.write('    const char* endpoint_name = nullptr;\n')
+        f.write('    pcl_endpoint_kind_t endpoint_kind = PCL_ENDPOINT_CONSUMED;\n')
+        f.write('};\n\n')
+
+        f.write('struct InteractionPortDescriptor {\n')
+        f.write('    std::vector<InteractionEndpointDescriptor> rpc_endpoints;\n')
+        f.write('    std::vector<InteractionEndpointDescriptor> pubsub_endpoints;\n')
+        f.write('};\n\n')
+
         f.write('inline tl::optional<InteractionBinding> parseInteractionBindingValue(\n')
         f.write('        std::string_view value) {\n')
         f.write('    if (value.empty() || value == "rpc") return InteractionBinding::kRpc;\n')
         f.write('    if (value == "pubsub") return InteractionBinding::kPubsub;\n')
         f.write('    return tl::nullopt;\n')
+        f.write('}\n\n')
+
+        f.write('/// \\brief Select the interaction realization named by the loaded routes.\n')
+        f.write('///        When neither alternative is routed, preserve the caller\'s\n')
+        f.write('///        current selection. Routing both alternatives is invalid.\n')
+        f.write('inline pcl_status_t inferInteractionBindingFromRoutes(\n')
+        f.write('        const pcl::Executor& executor,\n')
+        f.write('        std::initializer_list<const char*> rpc_endpoints,\n')
+        f.write('        pcl_endpoint_kind_t rpc_kind,\n')
+        f.write('        const char* pubsub_endpoint,\n')
+        f.write('        pcl_endpoint_kind_t pubsub_kind,\n')
+        f.write('        InteractionBinding& binding) {\n')
+        f.write('    bool rpc_routed = false;\n')
+        f.write('    for (const char* endpoint : rpc_endpoints) {\n')
+        f.write('        rpc_routed = rpc_routed ||\n')
+        f.write('            pcl_executor_endpoint_route_exists(\n')
+        f.write('                executor.handle(), endpoint, rpc_kind) != 0;\n')
+        f.write('    }\n')
+        f.write('    const bool pubsub_routed =\n')
+        f.write('        pcl_executor_endpoint_route_exists(\n')
+        f.write('            executor.handle(), pubsub_endpoint, pubsub_kind) != 0;\n')
+        f.write('    if (rpc_routed && pubsub_routed) return PCL_ERR_INVALID;\n')
+        f.write('    if (rpc_routed) binding = InteractionBinding::kRpc;\n')
+        f.write('    if (pubsub_routed) binding = InteractionBinding::kPubsub;\n')
+        f.write('    return PCL_OK;\n')
         f.write('}\n\n')
 
         f.write('/// \\brief Move-only cancel handle unifying an RPC StreamHandle and a\n')
@@ -375,14 +426,16 @@ class InteractionFacadeEmitterMixin:
         read_streaming_name = _lc_first(read_async_base) + 'Streaming'
 
         correlation_field = _requirement_correlation_field(index, parsed, read_rpc)
+        query_has_id, query_has_one_shot = _query_fields(
+            index, parsed, read_rpc)
 
         ack_t = _cpp_rsp_type(command_rpcs[0]) if command_rpcs else 'Ack'
 
         f.write(_SEP + '\n')
         f.write(f'// {class_name} -- consumer facade for the \'{service.name}\' request port.\n')
         f.write('// One submit() overload per command; the leg realization (rpc/pubsub) is\n')
-        f.write('// selected at runtime by configureInteractionBinding(), independently for\n')
-        f.write('// the request leg (submit) and the requirement leg (transitions).\n')
+        f.write('// selected from loaded routes, independently for the request leg\n')
+        f.write('// (submit) and the requirement leg (transitions).\n')
         f.write(_SEP + '\n\n')
 
         f.write(f'class {class_name} {{\n')
@@ -390,7 +443,8 @@ class InteractionFacadeEmitterMixin:
         f.write(f'    {class_name}(pcl::Component& host,\n')
         f.write('                    pcl::Executor& executor,\n')
         f.write('                    std::string content_type = kJsonContentType)\n')
-        f.write('        : consumed_(host, executor, std::move(content_type)) {}\n\n')
+        f.write('        : executor_(&executor),\n')
+        f.write('          consumed_(host, executor, std::move(content_type)) {}\n\n')
 
         f.write(f'    {class_name}(const {class_name}&) = delete;\n')
         f.write(f'    {class_name}& operator=(const {class_name}&) = delete;\n')
@@ -403,15 +457,45 @@ class InteractionFacadeEmitterMixin:
         f.write('    ///        below only selects the *mechanism*, not the peer).\n')
         f.write('    ConsumedService& consumedService() { return consumed_; }\n\n')
 
+        command_service_consts = [
+            _rpc_service_const(service.name, rpc, duplicate_rpc_names)
+            for rpc in command_rpcs
+        ]
+        f.write('    /// \\brief Describe the request leg for deployment configuration.\n')
+        f.write('    static InteractionPortDescriptor deploymentDescriptor() {\n')
+        f.write('        return {\n')
+        f.write('            {')
+        f.write(', '.join(
+            f'{{{svc}, PCL_ENDPOINT_CONSUMED}}'
+            for svc in command_service_consts))
+        f.write('},\n')
+        f.write(f'            {{{{"{request_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_PUBLISHER}}}}\n')
+        f.write('        };\n')
+        f.write('    }\n\n')
+
         f.write('    /// \\brief Bind the pub/sub-realization ports. Call once from the\n')
         f.write('    ///        owning component\'s on_configure() -- PCL only allows adding\n')
         f.write('    ///        publisher/subscriber ports while a container is configuring\n')
         f.write('    ///        (pcl_container_add_publisher()/add_subscriber()), so this\n')
         f.write('    ///        cannot happen lazily inside submit()/transitions() the way\n')
         f.write('    ///        the RPC realization\'s executor-level invoke can. Harmless to\n')
-        f.write('    ///        call even if configureInteractionBinding() later selects\n')
-        f.write('    ///        "rpc" for both legs -- the bound ports then simply sit idle.\n')
+        f.write('    ///        call for RPC routes too -- unused topic ports sit idle.\n')
         f.write('    pcl_status_t bind() {\n')
+        f.write('        if (auto rc = inferInteractionBindingFromRoutes(\n')
+        f.write('                *executor_, {')
+        f.write(', '.join(command_service_consts))
+        f.write('}, PCL_ENDPOINT_CONSUMED,\n')
+        f.write(f'                "{request_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_PUBLISHER,\n')
+        f.write('                request_binding_); rc != PCL_OK) {\n')
+        f.write('            return rc;\n')
+        f.write('        }\n')
+        f.write('        if (auto rc = inferInteractionBindingFromRoutes(\n')
+        f.write(f'                *executor_, {{{_rpc_service_const(service.name, read_rpc, duplicate_rpc_names)}}},\n')
+        f.write('                PCL_ENDPOINT_STREAM_CONSUMED,\n')
+        f.write(f'                "{requirement_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_SUBSCRIBER,\n')
+        f.write('                requirement_binding_); rc != PCL_OK) {\n')
+        f.write('            return rc;\n')
+        f.write('        }\n')
         f.write(f'        if (auto rc = consumed_.add{request_pascal}Publisher(); rc != PCL_OK) {{\n')
         f.write('            return rc;\n')
         f.write('        }\n')
@@ -420,12 +504,25 @@ class InteractionFacadeEmitterMixin:
         f.write('        return port ? PCL_OK : PCL_ERR_NOMEM;\n')
         f.write('    }\n\n')
 
-        f.write('    /// \\brief Select the realization per leg (plan D1). Config shapes:\n')
+        f.write('    /// \\brief Override the realization when no endpoint routes are loaded.\n')
+        f.write('    ///        Routed deployments are inferred by bind(). Config shapes:\n')
         f.write('    ///        {"binding":"rpc"}, {"binding":"pubsub"}, or the per-leg\n')
         f.write('    ///        override {"request_leg":"rpc","requirement_leg":"pubsub"}.\n')
         f.write('    ///        An unset leg falls back to "binding"; an unset "binding" too\n')
         f.write('    ///        defaults to "rpc" for both legs (the conservative default\n')
         f.write('    ///        this plan\'s Phase 1 manifest tooling also uses -- see §7).\n')
+        f.write('    pcl_status_t configureInteractionBinding(\n')
+        f.write('            InteractionBinding request_binding,\n')
+        f.write('            InteractionBinding requirement_binding) {\n')
+        f.write('        request_binding_ = request_binding;\n')
+        f.write('        requirement_binding_ = requirement_binding;\n')
+        f.write('        return PCL_OK;\n')
+        f.write('    }\n\n')
+
+        f.write('    pcl_status_t configureInteractionBinding(InteractionBinding binding) {\n')
+        f.write('        return configureInteractionBinding(binding, binding);\n')
+        f.write('    }\n\n')
+
         f.write('    pcl_status_t configureInteractionBinding(std::string_view config_json) {\n')
         f.write('        const auto binding_value = configValue(config_json, "binding");\n')
         f.write('        auto request_value = configValue(config_json, "request_leg");\n')
@@ -436,9 +533,8 @@ class InteractionFacadeEmitterMixin:
         f.write('        const auto parsed_requirement =\n')
         f.write('            parseInteractionBindingValue(requirement_value);\n')
         f.write('        if (!parsed_request || !parsed_requirement) return PCL_ERR_INVALID;\n')
-        f.write('        request_binding_ = *parsed_request;\n')
-        f.write('        requirement_binding_ = *parsed_requirement;\n')
-        f.write('        return PCL_OK;\n')
+        f.write('        return configureInteractionBinding(\n')
+        f.write('            *parsed_request, *parsed_requirement);\n')
         f.write('    }\n\n')
 
         f.write('    /// \\brief D3: transfer-accepted result. accepted is true when the\n')
@@ -467,12 +563,19 @@ class InteractionFacadeEmitterMixin:
 
         f.write('    /// \\brief D4: RPC realization is a server-streaming Read; pub/sub\n')
         f.write(f'    ///        realization subscribes {requirement_leg.side_b[0].endpoint_name}\n')
-        f.write('    ///        and filters client-side by query.id (empty = accept all).\n')
-        f.write('    ///        one_shot is honoured best-effort under pub/sub (ends after\n')
-        f.write('    ///        the first matching frame and fires on_end(PCL_OK), same as a\n')
-        f.write('    ///        one_shot RPC Read stream the provider ends after its first\n')
-        f.write('    ///        match -- "what is observable now", not a guaranteed single\n')
-        f.write('    ///        delivery). Late-join is out of scope for\n')
+        if query_has_id:
+            f.write('    ///        and filters client-side by query.id (empty = accept all).\n')
+        else:
+            f.write('    ///        and accepts all frames because Query has no id field.\n')
+        if query_has_one_shot:
+            f.write('    ///        one_shot is honoured best-effort under pub/sub (ends after\n')
+            f.write('    ///        the first matching frame and fires on_end(PCL_OK), same as a\n')
+            f.write('    ///        one_shot RPC Read stream the provider ends after its first\n')
+            f.write('    ///        match -- "what is observable now", not a guaranteed single\n')
+            f.write('    ///        delivery). Late-join is out of scope for\n')
+        else:
+            f.write('    ///        This contract has no one_shot query field. Late-join is out\n')
+            f.write('    ///        of scope for\n')
         f.write('    ///        Phase 2 (plan D4): this only observes transitions published\n')
         f.write('    ///        after the subscription starts, it does not replay current\n')
         f.write('    ///        state for ids already in flight -- that needs the Phase 3\n')
@@ -489,9 +592,16 @@ class InteractionFacadeEmitterMixin:
         f.write('        // populated a single shared subscription for -- see bind()\'s\n')
         f.write('        // doc comment for why this cannot subscribe a fresh port here.\n')
         f.write('        auto active = std::make_shared<bool>(true);\n')
-        f.write('        auto want_ids = std::make_shared<std::vector<std::string>>(\n')
-        f.write('            query.id.begin(), query.id.end());\n')
-        f.write('        const bool one_shot = query.one_shot.has_value() && *query.one_shot;\n')
+        if query_has_id:
+            f.write('        auto want_ids = std::make_shared<std::vector<std::string>>(\n')
+            f.write('            query.id.begin(), query.id.end());\n')
+        else:
+            f.write('        auto want_ids = std::make_shared<std::vector<std::string>>();\n')
+            f.write('        (void)query;\n')
+        if query_has_one_shot:
+            f.write('        const bool one_shot = query.one_shot.has_value() && *query.one_shot;\n')
+        else:
+            f.write('        const bool one_shot = false;\n')
         f.write(f'        auto on_frame = std::make_shared<std::function<void(const {read_frame_t}&)>>(\n')
         f.write('            std::move(on_transition));\n')
         f.write('        auto on_end_shared = std::make_shared<std::function<void(pcl_status_t)>>(\n')
@@ -523,7 +633,7 @@ class InteractionFacadeEmitterMixin:
             f.write(f'                    if (wanted == frame.{correlation_field}->id) {{ matched = true; break; }}\n')
             f.write('                }\n')
             f.write('            }\n')
-        else:
+        elif query_has_id:
             f.write('            // This port\'s requirement frame type does not expose a\n')
             f.write('            // structurally-resolvable correlation id at generation time\n')
             f.write('            // (D4): query.id is accepted but not applied as a filter\n')
@@ -531,6 +641,8 @@ class InteractionFacadeEmitterMixin:
             f.write('            // "accept all"). Use the RPC realization (Read) if per-id\n')
             f.write('            // filtering is required for this port.\n')
             f.write('            matched = true;\n')
+        else:
+            f.write('            // Query has no id field, so every frame matches.\n')
         f.write('            if (matched) {\n')
         f.write('                if (*it->on_frame) (*it->on_frame)(frame);\n')
         f.write('                // D4: mirror what the RPC realization\'s fanOutRpc() does for\n')
@@ -548,6 +660,7 @@ class InteractionFacadeEmitterMixin:
         f.write('        }\n')
         f.write('    }\n\n')
 
+        f.write('    pcl::Executor*               executor_ = nullptr;\n')
         f.write('    ConsumedService              consumed_;\n')
         f.write('    InteractionBinding            request_binding_ = InteractionBinding::kRpc;\n')
         f.write('    InteractionBinding            requirement_binding_ = InteractionBinding::kRpc;\n')
@@ -651,6 +764,10 @@ class InteractionFacadeEmitterMixin:
         frame_t = _cpp_rsp_type(read_rpc)[len('std::vector<'):-1]  # Requirement type
         ack_t = _cpp_rsp_type(command_rpcs[0]) if command_rpcs else 'Ack'
         correlation_field = _requirement_correlation_field(index, parsed, read_rpc)
+        query_has_id, query_has_one_shot = _query_fields(
+            index, parsed, read_rpc)
+        read_svc_const = _rpc_service_const(
+            service.name, read_rpc, duplicate_rpc_names)
 
         f.write(_SEP + '\n')
         f.write(f'// {handler_class} / {class_name} -- provider facade for the\n')
@@ -707,6 +824,22 @@ class InteractionFacadeEmitterMixin:
         f.write('    ///        routing (routeAllLocal()/configurePubSubTransport() etc.).\n')
         f.write('    ConsumedService& consumedService() { return probe_; }\n\n')
 
+        provider_command_consts = [
+            _rpc_service_const(service.name, rpc, duplicate_rpc_names)
+            for rpc in command_rpcs
+        ]
+        f.write('    /// \\brief Describe the request leg for deployment configuration.\n')
+        f.write('    static InteractionPortDescriptor deploymentDescriptor() {\n')
+        f.write('        return {\n')
+        f.write('            {')
+        f.write(', '.join(
+            f'{{{svc}, PCL_ENDPOINT_PROVIDED}}'
+            for svc in provider_command_consts))
+        f.write('},\n')
+        f.write(f'            {{{{"{request_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_SUBSCRIBER}}}}\n')
+        f.write('        };\n')
+        f.write('    }\n\n')
+
         f.write('    /// \\brief Bind the RPC service ports (this service\'s Create/Update/\n')
         f.write('    ///        Cancel/Read only -- independent of any file-wide\n')
         f.write('    ///        ProvidedService the component may separately construct for\n')
@@ -718,6 +851,12 @@ class InteractionFacadeEmitterMixin:
         f.write('    ///        "request_leg" binding to configure on the provider side.\n')
         f.write('    ///        Call once from the owning component\'s on_configure().\n')
         f.write('    pcl_status_t bind() {\n')
+        f.write('        if (auto rc = inferInteractionBindingFromRoutes(\n')
+        f.write(f'                *executor_, {{{read_svc_const}}}, PCL_ENDPOINT_STREAM_PROVIDED,\n')
+        f.write(f'                "{requirement_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_PUBLISHER,\n')
+        f.write('                requirement_binding_); rc != PCL_OK) {\n')
+        f.write('            return rc;\n')
+        f.write('        }\n')
         f.write('        if (!supportsContentType(content_type_.c_str())) {\n')
         f.write('            return PCL_ERR_INVALID;\n')
         f.write('        }\n')
@@ -725,7 +864,6 @@ class InteractionFacadeEmitterMixin:
             svc_const = _rpc_service_const(service.name, rpc, duplicate_rpc_names)
             enum_val = _rpc_enum_value(service.name, rpc, duplicate_rpc_names)
             f.write(f'        if (!addUnaryBinding({svc_const}, ServiceChannel::{enum_val})) return PCL_ERR_NOMEM;\n')
-        read_svc_const = _rpc_service_const(service.name, read_rpc, duplicate_rpc_names)
         read_enum_val = _rpc_enum_value(service.name, read_rpc, duplicate_rpc_names)
         f.write(f'        if (!addStreamBinding({read_svc_const}, ServiceChannel::{read_enum_val})) return PCL_ERR_NOMEM;\n')
         f.write(f'        if (auto rc = probe_.add{requirement_pascal}Publisher(); rc != PCL_OK) {{\n')
@@ -736,25 +874,31 @@ class InteractionFacadeEmitterMixin:
         f.write('        return port ? PCL_OK : PCL_ERR_NOMEM;\n')
         f.write('    }\n\n')
 
-        f.write('    /// \\brief Select the requirement leg\'s emission realization (D1).\n')
+        f.write('    /// \\brief Override the requirement leg when no routes are loaded.\n')
+        f.write('    ///        Routed deployments are inferred by bind().\n')
         f.write('    ///        Config shape: {"requirement_leg":"rpc"|"pubsub"} or\n')
         f.write('    ///        {"binding":"rpc"|"pubsub"} (both keys accepted, "binding" as\n')
         f.write('    ///        a fallback). Defaults to "rpc". "request_leg" is accepted and\n')
         f.write('    ///        ignored -- see bind()\'s doc comment for why.\n')
+        f.write('    pcl_status_t configureInteractionBinding(\n')
+        f.write('            InteractionBinding requirement_binding) {\n')
+        f.write('        requirement_binding_ = requirement_binding;\n')
+        f.write('        return PCL_OK;\n')
+        f.write('    }\n\n')
+
         f.write('    pcl_status_t configureInteractionBinding(std::string_view config_json) {\n')
         f.write('        auto value = configValue(config_json, "requirement_leg");\n')
         f.write('        if (value.empty()) value = configValue(config_json, "binding");\n')
         f.write('        const auto parsed_value = parseInteractionBindingValue(value);\n')
         f.write('        if (!parsed_value) return PCL_ERR_INVALID;\n')
-        f.write('        requirement_binding_ = *parsed_value;\n')
-        f.write('        return PCL_OK;\n')
+        f.write('        return configureInteractionBinding(*parsed_value);\n')
         f.write('    }\n\n')
 
         f.write('    /// \\brief D6: the provider\'s single way to emit a transition. Fans\n')
         f.write('    ///        out to every open Read stream matching the transition\'s\n')
         f.write('    ///        correlation id (RPC realization) or publishes on the\n')
-        f.write('    ///        requirement topic (pub/sub realization), per\n')
-        f.write('    ///        configureInteractionBinding(). Either way, updates the\n')
+        f.write('    ///        requirement topic (pub/sub realization), per the loaded route.\n')
+        f.write('    ///        Either way, updates the\n')
         f.write('    ///        bounded per-id snapshot this transition\'s id maps to\n')
         f.write('    ///        (serves RPC Read initial-state callers indirectly via\n')
         f.write('    ///        late re-publication -- see dispatchPubsubCommand()).\n')
@@ -914,28 +1058,34 @@ class InteractionFacadeEmitterMixin:
         f.write('                it = open_streams_.erase(it);\n')
         f.write('                continue;\n')
         f.write('            }\n')
-        f.write('            bool matched = it->query.id.empty();\n')
-        if correlation_field is not None:
+        if query_has_id:
+            f.write('            bool matched = it->query.id.empty();\n')
+        else:
+            f.write('            bool matched = true;\n')
+        if query_has_id and correlation_field is not None:
             f.write('            if (!matched')
             f.write(f' && transition.{correlation_field}.has_value()) {{\n')
             f.write('                for (const auto& wanted : it->query.id) {\n')
             f.write(f'                    if (wanted == transition.{correlation_field}->id) {{ matched = true; break; }}\n')
             f.write('                }\n')
             f.write('            }\n')
-        else:
+        elif query_has_id:
             f.write('            // No structurally-resolvable correlation id (see the client\n')
             f.write('            // facade\'s matching comment) -- every open stream matches.\n')
             f.write('            matched = true;\n')
+        else:
+            f.write('            // Query has no id field, so every open stream matches.\n')
         f.write('            if (matched) last_rc = it->writer.send(transition);\n')
         f.write('            // D4: RPC realization must honour Query.one_shot the same way\n')
         f.write('            // the pub/sub realization\'s dispatchPubsubTransition() does --\n')
         f.write('            // end the stream after its first matching delivery rather than\n')
         f.write('            // continuing to fan out future transitions to it.\n')
-        f.write('            if (matched && it->query.one_shot.has_value() && *it->query.one_shot) {\n')
-        f.write('                it->writer.end(last_rc);\n')
-        f.write('                it = open_streams_.erase(it);\n')
-        f.write('                continue;\n')
-        f.write('            }\n')
+        if query_has_one_shot:
+            f.write('            if (matched && it->query.one_shot.has_value() && *it->query.one_shot) {\n')
+            f.write('                it->writer.end(last_rc);\n')
+            f.write('                it = open_streams_.erase(it);\n')
+            f.write('                continue;\n')
+            f.write('            }\n')
         f.write('            ++it;\n')
         f.write('        }\n')
         f.write('        return last_rc;\n')
@@ -989,18 +1139,25 @@ class InteractionFacadeEmitterMixin:
         f.write('    // already be terminal (e.g. COMPLETED/CANCELLED) with no further\n')
         f.write('    // transition ever coming, so a late reader must not wait forever.\n')
         f.write('    void replayStoredSnapshots(OpenStream& stream) {\n')
-        f.write('        if (stream.query.id.empty()) {\n')
-        f.write('            for (const auto& entry : snapshot_order_) {\n')
-        f.write('                if (!stream.writer.live()) return;\n')
-        f.write('                stream.writer.send(entry.second);\n')
-        f.write('            }\n')
-        f.write('            return;\n')
-        f.write('        }\n')
-        f.write('        for (const auto& wanted : stream.query.id) {\n')
-        f.write('            if (!stream.writer.live()) return;\n')
-        f.write('            auto it = snapshot_index_.find(wanted);\n')
-        f.write('            if (it != snapshot_index_.end()) stream.writer.send(it->second->second);\n')
-        f.write('        }\n')
+        if query_has_id:
+            f.write('        if (stream.query.id.empty()) {\n')
+            f.write('            for (const auto& entry : snapshot_order_) {\n')
+            f.write('                if (!stream.writer.live()) return;\n')
+            f.write('                stream.writer.send(entry.second);\n')
+            f.write('            }\n')
+            f.write('            return;\n')
+            f.write('        }\n')
+            f.write('        for (const auto& wanted : stream.query.id) {\n')
+            f.write('            if (!stream.writer.live()) return;\n')
+            f.write('            auto it = snapshot_index_.find(wanted);\n')
+            f.write('            if (it != snapshot_index_.end()) stream.writer.send(it->second->second);\n')
+            f.write('        }\n')
+        else:
+            f.write('        (void)stream.query;\n')
+            f.write('        for (const auto& entry : snapshot_order_) {\n')
+            f.write('            if (!stream.writer.live()) return;\n')
+            f.write('            stream.writer.send(entry.second);\n')
+            f.write('        }\n')
         f.write('    }\n\n')
 
         f.write(f'    pcl_status_t sendTransition(const {frame_t}& transition) {{\n')
@@ -1165,7 +1322,7 @@ class InteractionFacadeEmitterMixin:
         f.write(_SEP + '\n')
         f.write(f'// {class_name} -- consumer facade for the \'{service.name}\' information\n')
         f.write('// port: reads the Data-1 publication via whichever realization\n')
-        f.write('// configureInteractionBinding() selects.\n')
+        f.write('// the loaded route selects.\n')
         f.write(_SEP + '\n\n')
 
         f.write(f'class {class_name} {{\n')
@@ -1173,7 +1330,8 @@ class InteractionFacadeEmitterMixin:
         f.write(f'    {class_name}(pcl::Component& host,\n')
         f.write('                    pcl::Executor& executor,\n')
         f.write('                    std::string content_type = kJsonContentType)\n')
-        f.write('        : consumed_(host, executor, std::move(content_type)) {}\n\n')
+        f.write('        : executor_(&executor),\n')
+        f.write('          consumed_(host, executor, std::move(content_type)) {}\n\n')
 
         f.write(f'    {class_name}(const {class_name}&) = delete;\n')
         f.write(f'    {class_name}& operator=(const {class_name}&) = delete;\n')
@@ -1182,24 +1340,44 @@ class InteractionFacadeEmitterMixin:
 
         f.write('    ConsumedService& consumedService() { return consumed_; }\n\n')
 
+        f.write('    /// \\brief Describe this information port for deployment configuration.\n')
+        f.write('    static InteractionPortDescriptor deploymentDescriptor() {\n')
+        f.write('        return {\n')
+        f.write(f'            {{{{{_rpc_service_const(service.name, read_rpc, duplicate_rpc_names)}, PCL_ENDPOINT_STREAM_CONSUMED}}}},\n')
+        f.write(f'            {{{{"{info_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_SUBSCRIBER}}}}\n')
+        f.write('        };\n')
+        f.write('    }\n\n')
+
         f.write('    /// \\brief Bind the pub/sub-realization subscriber port. Call once\n')
         f.write('    ///        from the owning component\'s on_configure() -- see\n')
         f.write('    ///        RequestPortClient::bind()\'s doc comment; the same PCL\n')
         f.write('    ///        configuring-phase-only constraint applies here.\n')
         f.write('    pcl_status_t bind() {\n')
+        f.write('        if (auto rc = inferInteractionBindingFromRoutes(\n')
+        f.write(f'                *executor_, {{{_rpc_service_const(service.name, read_rpc, duplicate_rpc_names)}}},\n')
+        f.write('                PCL_ENDPOINT_STREAM_CONSUMED,\n')
+        f.write(f'                "{info_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_SUBSCRIBER,\n')
+        f.write('                binding_); rc != PCL_OK) {\n')
+        f.write('            return rc;\n')
+        f.write('        }\n')
         f.write(f'        auto* port = consumed_.subscribe{info_pascal}(\n')
         f.write(f'            [this](const {frame_t}& msg) {{ dispatchPubsubInformation(msg); }});\n')
         f.write('        return port ? PCL_OK : PCL_ERR_NOMEM;\n')
         f.write('    }\n\n')
 
-        f.write('    /// \\brief Select the realization (plan D1): {"binding":"rpc"} or\n')
+        f.write('    /// \\brief Override the realization when no routes are loaded:\n')
+        f.write('    ///        {"binding":"rpc"} or\n')
         f.write('    ///        {"binding":"pubsub"}. Defaults to "rpc" when unset.\n')
+        f.write('    pcl_status_t configureInteractionBinding(InteractionBinding binding) {\n')
+        f.write('        binding_ = binding;\n')
+        f.write('        return PCL_OK;\n')
+        f.write('    }\n\n')
+
         f.write('    pcl_status_t configureInteractionBinding(std::string_view config_json) {\n')
         f.write('        const auto value = configValue(config_json, "binding");\n')
         f.write('        const auto parsed_value = parseInteractionBindingValue(value);\n')
         f.write('        if (!parsed_value) return PCL_ERR_INVALID;\n')
-        f.write('        binding_ = *parsed_value;\n')
-        f.write('        return PCL_OK;\n')
+        f.write('        return configureInteractionBinding(*parsed_value);\n')
         f.write('    }\n\n')
 
         f.write('    SubscriptionHandle\n')
@@ -1233,6 +1411,7 @@ class InteractionFacadeEmitterMixin:
         f.write('        }\n')
         f.write('    }\n\n')
 
+        f.write('    pcl::Executor*                  executor_ = nullptr;\n')
         f.write('    ConsumedService                 consumed_;\n')
         f.write('    InteractionBinding               binding_ = InteractionBinding::kRpc;\n')
         f.write('    std::list<PubsubSubscriber>      pubsub_subscribers_;\n')
@@ -1265,7 +1444,7 @@ class InteractionFacadeEmitterMixin:
         f.write(f'// {class_name} -- provider facade for the \'{service.name}\'\n')
         f.write('// information port: publish() fans out to every open Read stream\n')
         f.write('// (RPC realization) or publishes the information topic (pub/sub\n')
-        f.write('// realization), per configureInteractionBinding(). No per-message\n')
+        f.write('// realization), per the loaded route. No per-message\n')
         f.write('// correlation/snapshot store -- Data-1 publications are a one-way\n')
         f.write('// broadcast, not a correlated request/requirement pair (D6 is scoped\n')
         f.write('// to Request-shape ports only).\n')
@@ -1289,11 +1468,25 @@ class InteractionFacadeEmitterMixin:
 
         f.write('    ConsumedService& consumedService() { return probe_; }\n\n')
 
+        f.write('    /// \\brief Describe this information port for deployment configuration.\n')
+        f.write('    static InteractionPortDescriptor deploymentDescriptor() {\n')
+        f.write('        return {\n')
+        f.write(f'            {{{{{svc_const}, PCL_ENDPOINT_STREAM_PROVIDED}}}},\n')
+        f.write(f'            {{{{"{info_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_PUBLISHER}}}}\n')
+        f.write('        };\n')
+        f.write('    }\n\n')
+
         f.write('    /// \\brief Bind the RPC stream port (this service\'s Read only) and\n')
         f.write('    ///        the pub/sub probe\'s publisher port. Both realizations are\n')
         f.write('    ///        always bound; see the sibling RequestPortProvider::bind()\'s\n')
         f.write('    ///        doc comment for why. Call once from on_configure().\n')
         f.write('    pcl_status_t bind() {\n')
+        f.write('        if (auto rc = inferInteractionBindingFromRoutes(\n')
+        f.write(f'                *executor_, {{{svc_const}}}, PCL_ENDPOINT_STREAM_PROVIDED,\n')
+        f.write(f'                "{info_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_PUBLISHER,\n')
+        f.write('                binding_); rc != PCL_OK) {\n')
+        f.write('            return rc;\n')
+        f.write('        }\n')
         f.write('        if (!supportsContentType(content_type_.c_str())) {\n')
         f.write('            return PCL_ERR_INVALID;\n')
         f.write('        }\n')
@@ -1303,14 +1496,19 @@ class InteractionFacadeEmitterMixin:
         f.write(f'        return probe_.add{info_pascal}Publisher();\n')
         f.write('    }\n\n')
 
-        f.write('    /// \\brief Select the emission realization (D1): {"binding":"rpc"}\n')
+        f.write('    /// \\brief Override the realization when no routes are loaded:\n')
+        f.write('    ///        {"binding":"rpc"}\n')
         f.write('    ///        or {"binding":"pubsub"}. Defaults to "rpc".\n')
+        f.write('    pcl_status_t configureInteractionBinding(InteractionBinding binding) {\n')
+        f.write('        binding_ = binding;\n')
+        f.write('        return PCL_OK;\n')
+        f.write('    }\n\n')
+
         f.write('    pcl_status_t configureInteractionBinding(std::string_view config_json) {\n')
         f.write('        const auto value = configValue(config_json, "binding");\n')
         f.write('        const auto parsed_value = parseInteractionBindingValue(value);\n')
         f.write('        if (!parsed_value) return PCL_ERR_INVALID;\n')
-        f.write('        binding_ = *parsed_value;\n')
-        f.write('        return PCL_OK;\n')
+        f.write('        return configureInteractionBinding(*parsed_value);\n')
         f.write('    }\n\n')
 
         f.write(f'    pcl_status_t publish(const {frame_t}& msg) {{\n')

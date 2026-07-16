@@ -254,21 +254,23 @@ flowchart LR
 Each is a binding you compose into your `pcl::Component` and `bind()` from
 `on_configure()`, exactly like `ProvidedService`/`ConsumedService`. The
 point of the facade is that **whether the interaction runs as RPC or as
-pub/sub is configuration, not code**:
+pub/sub is per-port deployment configuration, not component code**. Generated
+facades expose `deploymentDescriptor()`, which gives the deployment layer the
+RPC and topic alternatives without making the application repeat endpoint
+names or directions:
 
-```cpp
-client_.configureInteractionBinding(R"({"binding":"rpc"})");
-client_.configureInteractionBinding(R"({"binding":"pubsub"})");
-client_.configureInteractionBinding(
-    R"({"request_leg":"rpc","requirement_leg":"pubsub"})");   // per-leg
+```text
+port action_command_request rpc    mission_autonomy plugin.so {plugin config}
+port action_information     pubsub mission_autonomy plugin.so {plugin config}
 ```
 
 Under RPC the facade composes the `<op>Async`/`<op>Streaming`/dispatch
 primitives; under pub/sub it composes the generated topic
 publish/subscribe with client-side correlation filtering. The same
-compiled component runs unmodified under either realization (or mixed per
-leg), and the routing manifest declares the two realizations of each leg
-mutually exclusive at compose time.
+compiled component runs unmodified under either realization, and the
+deployment layer installs mutually exclusive validated endpoint routes before
+`bind()`. `configureInteractionBinding()` remains an override for an in-process
+test that does not load endpoint routes.
 
 This is the recommended surface for new components speaking a Request or
 Information port. The full developer story — semantics (ack honesty, late
@@ -361,10 +363,11 @@ application-level one. See
 [`examples/cpp/agra_interaction_facade_example.cpp`](../../examples/cpp/agra_interaction_facade_example.cpp):
 one provider (`MaactionRequestPortProvider`) and one client
 (`MaactionRequestPortClient`) built entirely from generated facade types
-against the `pim/agra_example/` contract, run with `--binding=rpc` or
-`--binding=pubsub` to show the same component code driving either
-realization via `configureInteractionBinding()`. No RPC or pub/sub
-primitive is named directly in the example itself. See the
+against the `pim/agra_example/` contract. This local-only example uses the
+explicit binding override because it has no deployment file. The cross-process
+P3 example under `examples/agra/p3_three_process` demonstrates per-port plugin,
+plugin configuration, peer, and mode records. No RPC or pub/sub primitive is
+named directly in component code. See the
 [pub/sub & interaction facade guide](../guides/pubsub_interaction_guide.md)
 for the full facade API (`submit()`, `transitions()`, `TransitionWriter`,
 `InformationPort*`).

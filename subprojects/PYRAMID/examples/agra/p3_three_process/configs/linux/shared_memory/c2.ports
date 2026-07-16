@@ -1,0 +1,6 @@
+# One line configures one generated logical port:
+# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
+# The generated descriptor supplies endpoint names, direction, and the
+# RPC/topic alternatives. Request responses return on the Request port.
+port action_command_request rpc mission_autonomy plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"agra_p3_c2_ma_link","participant_id":"c2"}
+port action_information pubsub mission_autonomy plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"agra_p3_c2_ma_link","participant_id":"c2"}
