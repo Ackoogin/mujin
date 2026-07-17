@@ -111,6 +111,19 @@ pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
 // Cross-thread ingress  (safe to call from ANY thread)
 // ============================================================
 
+/// \brief Set the maximum number of queued incoming pub/sub messages.
+///
+/// A limit of zero (the default) leaves the queue unbounded. When the limit is
+/// reached, incoming post functions return PCL_ERR_NOMEM without taking the
+/// message, allowing transports to apply their own backpressure policy.
+/// \thread-safe  Safe to call from any thread.
+pcl_status_t pcl_executor_set_incoming_queue_limit(pcl_executor_t* e,
+                                                    uint32_t        limit);
+
+/// \brief Return the current number of queued incoming pub/sub messages.
+/// \thread-safe  Safe to call from any thread. Returns zero for NULL.
+uint32_t pcl_executor_get_incoming_queue_depth(pcl_executor_t* e);
+
 /// \brief Queue an incoming pub/sub message from an external thread.
 ///
 /// \thread-safe  Safe to call from any thread concurrently with spin().

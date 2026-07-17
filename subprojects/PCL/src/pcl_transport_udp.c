@@ -67,6 +67,7 @@ struct pcl_udp_transport_t {
   volatile int     recv_stop;
   volatile int     recv_running;
   volatile int     send_stop;
+  volatile uint64_t received_datagrams;
 
 #ifdef _WIN32
   HANDLE           recv_thread;
@@ -367,6 +368,8 @@ static void* udp_recv_thread_main(void* arg)
       continue;
     }
 
+    ++ctx->received_datagrams;
+
     if ((size_t)n < 1u + 2u + 2u + 4u) continue;
     if (buf[0] != PCL_UDP_MSG_PUBLISH) continue;
 
@@ -612,6 +615,13 @@ uint16_t pcl_udp_transport_get_local_port(const pcl_udp_transport_t* ctx_opaque)
   const struct pcl_udp_transport_t* ctx = (const struct pcl_udp_transport_t*)ctx_opaque;
   if (!ctx) return 0;
   return ctx->local_port;
+}
+
+uint64_t pcl_udp_transport_received_datagrams(const pcl_udp_transport_t* ctx_opaque) {
+  const struct pcl_udp_transport_t* ctx =
+      (const struct pcl_udp_transport_t*)ctx_opaque;
+  if (!ctx) return 0u;
+  return ctx->received_datagrams;
 }
 
 pcl_status_t pcl_udp_transport_set_peer_id(pcl_udp_transport_t* ctx_opaque,

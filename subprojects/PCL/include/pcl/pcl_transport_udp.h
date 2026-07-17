@@ -62,6 +62,13 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
 /// assigned by the OS.  Returns 0 for a NULL handle.
 uint16_t pcl_udp_transport_get_local_port(const pcl_udp_transport_t* ctx);
 
+/// \brief Return the number of UDP datagrams received by this transport.
+///
+/// This includes malformed or unsupported datagrams discarded by the decoder,
+/// so it distinguishes an idle socket from one receiving unusable traffic.
+/// The value is intended for lightweight best-effort transport monitoring.
+uint64_t pcl_udp_transport_received_datagrams(const pcl_udp_transport_t* ctx);
+
 /// \brief Set the logical peer identifier used for endpoint routing.
 ///
 /// Use the same identifier when registering the transport with

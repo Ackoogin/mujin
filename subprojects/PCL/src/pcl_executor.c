@@ -379,6 +379,7 @@ void pcl_executor_destroy(pcl_executor_t* e) {
   pending = e->incoming_head;
   e->incoming_head = NULL;
   e->incoming_tail = NULL;
+  e->incoming_count = 0u;
   pcl_mutex_unlock(&e->incoming_lock);
 
   while (pending) {
@@ -557,6 +558,7 @@ static pcl_status_t drain_incoming_queue(pcl_executor_t* e,
       if (!e->incoming_head) {
         e->incoming_tail = NULL;
       }
+      --e->incoming_count;
     }
     pcl_mutex_unlock(&e->incoming_lock);
 
@@ -1669,15 +1671,39 @@ static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
   pending->size = msg->size;
 
   pcl_mutex_lock(&e->incoming_lock);
+  if (e->incoming_limit != 0u && e->incoming_count >= e->incoming_limit) {
+    pcl_mutex_unlock(&e->incoming_lock);
+    free_pending_msg(pending);
+    return PCL_ERR_NOMEM;
+  }
   if (e->incoming_tail) {
     e->incoming_tail->next = pending;
   } else {
     e->incoming_head = pending;
   }
   e->incoming_tail = pending;
+  ++e->incoming_count;
   pcl_mutex_unlock(&e->incoming_lock);
 
   return PCL_OK;
+}
+
+pcl_status_t pcl_executor_set_incoming_queue_limit(pcl_executor_t* e,
+                                                    uint32_t        limit) {
+  if (!e) return PCL_ERR_INVALID;
+  pcl_mutex_lock(&e->incoming_lock);
+  e->incoming_limit = limit;
+  pcl_mutex_unlock(&e->incoming_lock);
+  return PCL_OK;
+}
+
+uint32_t pcl_executor_get_incoming_queue_depth(pcl_executor_t* e) {
+  uint32_t count;
+  if (!e) return 0u;
+  pcl_mutex_lock(&e->incoming_lock);
+  count = e->incoming_count;
+  pcl_mutex_unlock(&e->incoming_lock);
+  return count;
 }
 
 pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,

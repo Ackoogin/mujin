@@ -16,9 +16,11 @@ properties of the code.
 > 16-CPU host, and defects **D2, D3, D4, D5** (and the socket half of **D7**)
 > have since been fixed and re-tested.  See
 > [Fixes applied and retest](#fixes-applied-and-retest) at the end of this
-> document for the before/after numbers.  **D1**, **D6**, and the UDP
-> receive-side half of **D7** are larger changes that remain open; each is
-> annotated inline below.
+> document for the before/after numbers. **D1** and **D6** were subsequently
+> implemented, and a UDP receive counter was added for the remaining half of
+> **D7**; see the [D1 / D6 retest](#d1--d6-retest).  The remaining global
+> shared-memory bus lock (the rest of **D2**) is still open and is annotated
+> below.
 
 ## Headline: maximum shared-memory plugin throughput
 
@@ -121,13 +123,14 @@ mailbox is full the whole publish fails with `PCL_ERR_NOMEM`), one slow or
 uninterested participant throttles every publisher on the bus.  The
 `shm-fanout` and `shm-pairs` scenarios quantify the collapse.
 
-> **Open.** A real fix means recording each participant's topic interest in
-> the shared region and having `pcl_shm_publish_once_locked` target only
-> subscribed slots.  That is a shared-region layout change (version bump) and
-> touches subscribe/publish together, so it is deliberately left out of the
-> current fix pass.  The all-or-nothing capacity pre-check is intentionally
-> kept: it is what makes the delivered stream exact (zero gaps), so relaxing
-> it into partial delivery is not the right direction.
+> **Fixed.** Each slot now records up to 16 subscribed topic names in the
+> shared region. `pcl_shm_subscribe` registers a topic under the bus lock and
+> `pcl_shm_publish_once_locked` selects only interested slots before applying
+> its all-or-nothing capacity check. A slot with no subscriptions yet retains
+> the previous deliver-to-all behaviour while its executor is being set up.
+> The layout change increments `PCL_SHM_VERSION` to 4, so an old region is
+> re-initialised by the existing magic/version check. The atomic pre-check is
+> unchanged, preserving exact delivery for every selected subscriber.
 
 ### D2 — one global bus semaphore serialises all bus operations
 
@@ -233,13 +236,19 @@ drains the whole accumulated backlog, so it caught up in bursts).  A
 subscriber that is persistently slower than the offered rate accumulates
 that backlog without bound — an eventual OOM rather than a throttle.
 
-> **Open.** Bounding `enqueue_incoming_message` would push backpressure back
-> to publishers (the shm mailbox would fill and they would see
-> `PCL_ERR_NOMEM`), but that queue is in the core executor and is shared by
-> every transport and every local delivery path, so a hard bound risks
-> dropping messages on paths that today never lose one.  This needs a
-> configurable bound with a well-chosen default and its own tests, so it is
-> left out of the current fix pass.
+> **Fixed.** `pcl_executor_set_incoming_queue_limit` adds an opt-in cap; its
+> default is zero, preserving the previous unbounded behaviour. Once the cap
+> is reached, `pcl_executor_post_incoming` and remote ingress return
+> `PCL_ERR_NOMEM` without taking the message.  When the shared-memory receive
+> thread gets that rejection it re-delivers the same frame in a short retry
+> loop instead of moving on, so it stops draining its mailbox and the
+> mailbox's fixed capacity fills and pushes `PCL_ERR_NOMEM` backpressure back
+> to publishers.  Re-delivery is safe because a rejected pub/sub post takes
+> nothing (delivery is idempotent on `PCL_ERR_NOMEM`), and with the default
+> unbounded queue the first delivery always succeeds, so the steady-state
+> receive path still takes the bus lock only once per frame — no throughput
+> cost when the cap is off.  `pcl_executor_get_incoming_queue_depth` exposes
+> the current depth for monitoring and tests.
 
 ### D7 — UDP loss is expected, but there is no receive-side accounting
 
@@ -249,12 +258,13 @@ the transport to observe it; only the harness's sequence-gap tracking made
 it visible.  Deployments have no way to distinguish "quiet topic" from
 "drowning topic".
 
-> **Partly fixed.** The socket transport now counts its overflow drops
-> (`pcl_socket_transport_dropped_publishes()`), so the reliable-transport half
-> of this gap is covered.  The UDP transport still has no receive-side
-> accounting: because it carries no sequence numbers on the wire, it cannot
-> tell a dropped datagram from a quiet topic without a wire-format change, so
-> that half remains open.
+> **Fixed (counter).** The UDP transport now exposes
+> `pcl_udp_transport_received_datagrams()`. It counts every datagram received
+> from the socket, including malformed datagrams that the decoder rejects, so
+> a deployment can distinguish a quiet socket from inbound traffic that is
+> being discarded. UDP remains BEST_EFFORT. Per-source sequence-gap counting
+> remains a possible future wire-format extension, but is not required for
+> receive-side activity accounting.
 
 ## What held up well
 
@@ -305,18 +315,47 @@ The 144 PCL transport unit tests (`test_pcl_shared_memory_transport`,
 `pcl_socket_transport_dropped_publishes` accessor in the header); D2, D3, and
 D4 are in `src/pcl_transport_shared_memory.c`.
 
-## Still open (not implemented here)
+## Still open
 
-1. **D1** — per-topic interest filtering on the shm bus so a publish only
-   targets subscribed participants.  Needs a shared-region layout change and
-   coordinated subscribe/publish edits; the exact-delivery pre-check is kept
-   as-is.
-2. **D2 (remainder)** — the single global bus lock still serialises every
+The following work remains after the D1/D6/D7 updates above.
+
+1. **D2 (remainder)** — the single global bus lock still serialises every
    publish and service frame.  The service-table-sync contention was removed;
-   removing the lock itself is the larger structural change tracked with D1.
-3. **D6** — bound the executor incoming queue.  It is core-executor state
-   shared by every delivery path, so it needs a configurable bound with a
-   sensible default and dedicated tests before it can be turned on safely.
-4. **D7 (remainder)** — UDP receive-side loss accounting.  UDP carries no
-   sequence numbers, so distinguishing "quiet" from "drowning" needs a
-   wire-format change.
+   per-slot locks were not attempted because they would need a safe
+   multi-mailbox transaction/rollback protocol to retain exact fan-out
+   delivery. The global lock remains the correctness-preserving design in
+   this pass.
+
+## D1 / D6 retest
+
+This table compares the state after the first fix pass (D2–D5, already
+committed) with the state after adding D1 interest filtering and the D6
+opt-in ingress bound.  Both columns are from the **same 16-CPU host** and the
+three-second stress window, so they are directly comparable to each other.
+Every shared-memory scenario still delivered an exact stream (`sub rx ==
+pub ok`, zero sequence gaps).
+
+| Scenario | After D2–D5 | After D1 + D6 |
+|---|---:|---:|
+| `shm-throughput` 64 B | 231,779 msg/s | 216,821 msg/s |
+| `shm-fanout`, 7 subscribers — aggregate | 295,410 msg/s | **481,404 msg/s** |
+| `shm-pairs`, 1 pair | 206,709 msg/s | 218,518 msg/s |
+| `shm-pairs`, 2 pairs (per pair) | 47,512 | **84,847** |
+| `shm-pairs`, 4 pairs (per pair) | 10,369 | **18,444** |
+| Unary services, 3 clients — req/s | 101,993 (0 dropped) | 83,958 (0 dropped) |
+| Unary services, 6 clients — req/s | 60,242 (0 dropped) | 52,693 (0 dropped) |
+
+Interest filtering (D1) is the win: once each subscriber advertises the topics
+it wants, an unrelated pair on the same bus no longer lands in its mailbox, so
+`shm-pairs` and `shm-fanout` scale much better.  The small dips on the single
+pipeline scenarios (`shm-throughput`, single-pair, services) are measurement
+variance around the same receive path — the D6 change adds no per-frame bus
+lock in the default unbounded configuration (a first version that re-locked to
+advance the read index on every frame cut receive-bound throughput by roughly
+a third and was reworked to the retry-in-place form described under D6).
+
+All 181 PCL transport and executor unit tests pass
+(`test_pcl_shared_memory_transport` 34, `test_pcl_socket_transport` 33,
+`test_pcl_socket_faults` 7, `test_pcl_udp_transport` 12,
+`test_pcl_plugin_loader` 28, `test_pcl_transport_routing` 31,
+`test_pcl_executor` 36).
