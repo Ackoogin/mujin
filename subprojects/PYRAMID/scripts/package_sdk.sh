@@ -105,8 +105,10 @@ if [[ -z "${FLATBUFFERS_INCLUDE}" ]]; then
 fi
 
 TRANSPORT_SOCKET_SO="$(find "${BUILD_DIR}" -name 'libpcl_transport_socket_plugin.so' 2>/dev/null | head -1 || true)"
+TRANSPORT_UDP_SO="$(find "${BUILD_DIR}" -name 'libpcl_transport_udp_plugin.so' 2>/dev/null | head -1 || true)"
 TRANSPORT_SHM_SO="$(find "${BUILD_DIR}" -name 'libpcl_transport_shared_memory_plugin.so' 2>/dev/null | head -1 || true)"
 [[ -n "${TRANSPORT_SOCKET_SO}" ]] || echo "[package_sdk] WARN: libpcl_transport_socket_plugin.so not found under ${BUILD_DIR}"
+[[ -n "${TRANSPORT_UDP_SO}" ]]    || echo "[package_sdk] WARN: libpcl_transport_udp_plugin.so not found under ${BUILD_DIR}"
 [[ -n "${TRANSPORT_SHM_SO}" ]]    || echo "[package_sdk] WARN: libpcl_transport_shared_memory_plugin.so not found under ${BUILD_DIR}"
 
 # The OMS codecs generated from the selected contract. The hand-written
@@ -187,14 +189,15 @@ echo "[package_sdk] copying prebuilt libs (static, single-config toolchain) ..."
 cp -f "${PCL_LIB}" "${OUT_DIR}/lib/linux/"
 
 if [[ -f "${GNAT_PCL_DIR}/libpcl_core.a" ]]; then
-  echo "[package_sdk] copying prebuilt GNAT libs ..."
-  cp -f "${GNAT_PCL_DIR}"/lib*.a "${OUT_DIR}/lib/gnat/"
+  echo "[package_sdk] copying prebuilt GNAT PCL core lib ..."
+  cp -f "${GNAT_PCL_DIR}/libpcl_core.a" "${OUT_DIR}/lib/gnat/"
 else
-  echo "[package_sdk] copying prebuilt GNAT libs ... (none -- Ada support unavailable in this deploy)"
+  echo "[package_sdk] copying prebuilt GNAT PCL core lib ... (none -- Ada support unavailable in this deploy)"
 fi
 
 echo "[package_sdk] copying prebuilt transport plugins ..."
 [[ -n "${TRANSPORT_SOCKET_SO}" ]] && cp -f "${TRANSPORT_SOCKET_SO}" "${OUT_DIR}/plugins/"
+[[ -n "${TRANSPORT_UDP_SO}" ]]    && cp -f "${TRANSPORT_UDP_SO}"    "${OUT_DIR}/plugins/"
 [[ -n "${TRANSPORT_SHM_SO}" ]]    && cp -f "${TRANSPORT_SHM_SO}"    "${OUT_DIR}/plugins/"
 if [[ ${GRA} -eq 1 ]]; then
   for _so in "${OMS_CODEC_SOS[@]-}"; do

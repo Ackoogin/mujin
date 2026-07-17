@@ -80,6 +80,12 @@ cmake --build build --config Release
 Keep both removal calls. Windows environment lookup is case-insensitive, but
 the inherited process environment can still contain both spellings.
 
+MSBuild can also report a transient file-sharing failure when one
+`cmake --build` command requests several targets or builds generated targets
+in parallel. If that happens, build the targets in separate commands and use
+`--parallel 1`. Treat the failure as a build scheduling issue unless the same
+target also fails when built by itself with one job.
+
 `CMakePresets.json` lives at the repository root and defines:
 
 | Preset type | Names | Purpose |

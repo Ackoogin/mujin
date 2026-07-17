@@ -27,15 +27,19 @@ network access.
 ## What's prebuilt vs. what the user builds
 
 PCL (`subprojects/PCL/src`) is pure C with zero external dependencies (only
-`Threads`/`ws2_32`), so it packages cleanly as a binary: `lib/msvc/*.lib` for
-the C++ plugin build, `lib/gnat/*.a` for Ada clients (GNAT/MinGW and MSVC
-produce mutually incompatible object formats, which is why both are shipped
-separately -- see `subprojects/PCL/scripts/build_gnat_pcl_static_libs.*`).
+`Threads`/`ws2_32`), so it packages cleanly as a binary: `lib/msvc/pcl_core.lib`
+for the C++ plugin build and `lib/gnat/libpcl_core.a` for Ada clients.
+GNAT/MinGW and MSVC produce mutually incompatible object formats, which is why
+both core libraries are shipped. The GNAT helper also builds static reference
+transport libraries for direct-link examples, but the SDK does not ship or
+link them because SDK applications load transport plugins at runtime. See
+`subprojects/PCL/scripts/build_gnat_pcl_static_libs.*`.
 
-Transport plugins (`pcl_transport_socket_plugin`, `pcl_transport_shared_memory_plugin`)
-are proto-agnostic -- they never change when a user edits `.proto` -- so they
-ship prebuilt in `plugins/`, the same way `stage_plugin_deploy.bat` already
-stages them for known, already-built components.
+Transport plugins (`pcl_transport_socket_plugin`, `pcl_transport_udp_plugin`,
+and `pcl_transport_shared_memory_plugin`) are proto-agnostic. They never change
+when a user edits `.proto`, so they ship prebuilt in `plugins/`, the same way
+`stage_plugin_deploy.bat` already stages them for known, already-built
+components.
 
 Codec plugins (`pyramid_codec_json_<component>`, `pyramid_codec_flatbuffers_<component>`)
 are proto-dependent: one per component in the user's own `proto/` tree. These
@@ -85,7 +89,7 @@ consumed by every Ada `.gpr` project in this repo.
 pcl_pyramid_sdk/
   README.md                      quick start for the downstream user
   include/pcl, include/external  PCL headers + vendored nlohmann/tl/flatbuffers
-  lib/msvc, lib/gnat             prebuilt PCL static libs (both toolchains)
+  lib/msvc, lib/gnat             prebuilt PCL core libs (both toolchains)
   plugins/                       prebuilt transport plugins
   tools/flatc(.exe)              prebuilt FlatBuffers schema compiler
   generator/                     pim/*.py generator (pure Python)

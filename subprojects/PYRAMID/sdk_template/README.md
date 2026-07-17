@@ -12,7 +12,7 @@ downstream user never needs that repo again.
 include/        PCL public headers + vendored header-only deps
                 (nlohmann/json.hpp, tl/optional.hpp, flatbuffers/*.h)
 lib/msvc/       prebuilt pcl_core.lib (Debug + Release)
-lib/gnat/       prebuilt libpcl_core.a + libpcl_transport_*.a (GNAT/mingw)
+lib/gnat/       prebuilt libpcl_core.a (GNAT/MinGW)
 plugins/        prebuilt transport plugins; a --gra package also contains the
                 LA-CAL WebSocket transport and tested UCI OMS JSON codec
 tools/          flatc.exe (FlatBuffers schema compiler)
@@ -253,7 +253,9 @@ port-accessor, and `.ports` configuration reference.
 
 ## Running against the plugins
 
-Load `plugins\pcl_transport_socket_plugin.dll` (or `_shared_memory_plugin`)
+Load `plugins\pcl_transport_socket_plugin.dll`,
+`plugins\pcl_transport_udp_plugin.dll`, or
+`plugins\pcl_transport_shared_memory_plugin.dll`
 plus the codec plugin(s) your component needs via `--codec-plugin`, a codec
 manifest (`PCL_CODEC_MANIFEST` / `--codec-manifest`), or — for Ada clients —
 the path-separated `PYRAMID_CODEC_PLUGINS` environment variable, exactly as

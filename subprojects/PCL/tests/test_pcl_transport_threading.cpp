@@ -299,6 +299,12 @@ struct ShmPair {
     receiver = pcl_shared_memory_transport_create(bus.c_str(), "receiver", receiver_exec);
     attach(sender_exec, sender);
     attach(receiver_exec, receiver);
+    pcl_executor_register_transport(
+        sender_exec, "receiver",
+        pcl_shared_memory_transport_get_transport(sender));
+    pcl_executor_register_transport(
+        receiver_exec, "sender",
+        pcl_shared_memory_transport_get_transport(receiver));
   }
   static void attach(pcl_executor_t* e, pcl_shared_memory_transport_t* t) {
     pcl_executor_set_transport(e, pcl_shared_memory_transport_get_transport(t));

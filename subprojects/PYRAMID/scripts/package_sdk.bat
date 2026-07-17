@@ -132,19 +132,28 @@ if not exist "%FLATBUFFERS_INCLUDE%" (
 )
 
 set "TRANSPORT_SOCKET_DLL="
+set "TRANSPORT_UDP_DLL="
 set "TRANSPORT_SHM_DLL="
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pcl_transport_socket_plugin.dll" 2^>nul') do (
   if not defined TRANSPORT_SOCKET_DLL set "TRANSPORT_SOCKET_DLL=%%F"
   echo %%F | findstr /i /l /c:"\Release\" >nul && set "TRANSPORT_SOCKET_DLL=%%F"
+)
+for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pcl_transport_udp_plugin.dll" 2^>nul') do (
+  if not defined TRANSPORT_UDP_DLL set "TRANSPORT_UDP_DLL=%%F"
+  echo %%F | findstr /i /l /c:"\Release\" >nul && set "TRANSPORT_UDP_DLL=%%F"
 )
 for /f "delims=" %%F in ('dir /b /s "%BUILD_DIR%\pcl_transport_shared_memory_plugin.dll" 2^>nul') do (
   if not defined TRANSPORT_SHM_DLL set "TRANSPORT_SHM_DLL=%%F"
   echo %%F | findstr /i /l /c:"\Release\" >nul && set "TRANSPORT_SHM_DLL=%%F"
 )
 if exist "%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_socket_plugin.dll" set "TRANSPORT_SOCKET_DLL=%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_socket_plugin.dll"
+if exist "%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_udp_plugin.dll" set "TRANSPORT_UDP_DLL=%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_udp_plugin.dll"
 if exist "%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_shared_memory_plugin.dll" set "TRANSPORT_SHM_DLL=%BUILD_DIR%\subprojects\PCL\src\Release\pcl_transport_shared_memory_plugin.dll"
 if not defined TRANSPORT_SOCKET_DLL (
   echo [package_sdk] WARN: pcl_transport_socket_plugin.dll not found under %BUILD_DIR%
+)
+if not defined TRANSPORT_UDP_DLL (
+  echo [package_sdk] WARN: pcl_transport_udp_plugin.dll not found under %BUILD_DIR%
 )
 if not defined TRANSPORT_SHM_DLL (
   echo [package_sdk] WARN: pcl_transport_shared_memory_plugin.dll not found under %BUILD_DIR%
@@ -235,15 +244,16 @@ echo [package_sdk] copying prebuilt MSVC libs ...
 if defined PCL_LIB_DEBUG   copy /y "%PCL_LIB_DEBUG%"   "%OUT_DIR%\lib\msvc\Debug\pcl_core.lib"   >nul
 if defined PCL_LIB_RELEASE copy /y "%PCL_LIB_RELEASE%" "%OUT_DIR%\lib\msvc\Release\pcl_core.lib" >nul
 
-echo [package_sdk] copying prebuilt GNAT libs ...
+echo [package_sdk] copying prebuilt GNAT PCL core lib ...
 if exist "%GNAT_PCL_DIR%\libpcl_core.a" (
-  copy /y "%GNAT_PCL_DIR%\lib*.a" "%OUT_DIR%\lib\gnat\" >nul
+  copy /y "%GNAT_PCL_DIR%\libpcl_core.a" "%OUT_DIR%\lib\gnat\" >nul
 ) else (
   echo [package_sdk]   none -- Ada support unavailable in this deploy
 )
 
 echo [package_sdk] copying prebuilt transport plugins ...
 if defined TRANSPORT_SOCKET_DLL copy /y "%TRANSPORT_SOCKET_DLL%" "%OUT_DIR%\plugins\" >nul
+if defined TRANSPORT_UDP_DLL    copy /y "%TRANSPORT_UDP_DLL%"    "%OUT_DIR%\plugins\" >nul
 if defined TRANSPORT_SHM_DLL    copy /y "%TRANSPORT_SHM_DLL%"    "%OUT_DIR%\plugins\" >nul
 if "%GRA%"=="1" if defined OMS_CODEC_DLL echo [package_sdk]   OMS codec: %OMS_CODEC_DLL%
 if "%GRA%"=="1" if defined OMS_CODEC_DLL copy /y "%OMS_CODEC_DLL%" "%OUT_DIR%\plugins\" >nul
