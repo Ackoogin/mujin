@@ -57,6 +57,16 @@
 #define PCL_SOCKET_TOPIC_SVC_REQ "__pcl_svc_req"
 #define PCL_SOCKET_MAX_PAYLOAD  65536
 
+/* High-water mark for the outbound FIFO.  The send thread drains the queue by
+   doing blocking send()s; a publisher faster than the link would otherwise grow
+   this queue without bound (RSS growth, and every queued frame lost at
+   teardown).  Beyond this many bytes still waiting to be sent, publish fails
+   fast with PCL_ERR_NOMEM so the caller learns it must back off -- the same
+   fail-fast backpressure the shared-memory transport applies.  16 MiB is ~256
+   full-size frames; large enough to absorb normal bursts, small enough to bound
+   memory and teardown-flush time. */
+#define PCL_SOCKET_MAX_QUEUE_BYTES (16u * 1024u * 1024u)
+
 // -- Helper FIFO node types -----------------------------------------------
 
 typedef struct pcl_outbound_frame_t {
@@ -105,6 +115,8 @@ struct pcl_socket_transport_t {
   volatile int          send_stop;
   pcl_outbound_frame_t* send_head;
   pcl_outbound_frame_t* send_tail;
+  size_t                send_queue_bytes;  /* bytes queued, guarded by send_lock */
+  uint64_t              dropped_publishes; /* over-high-water drops, send_lock */
 
   volatile uint32_t     next_seq_id; /* 1-based, never wraps to 0 */
   pcl_svc_pending_t*    pending_head;
@@ -378,16 +390,37 @@ static pcl_status_t enqueue_outbound_frame(struct pcl_socket_transport_t* ctx,
   f->size = size;
   f->next = NULL;
 
+  /* Enforce the outbound high-water mark under the queue lock.  If the queue
+     is already at capacity, drop this frame fast with PCL_ERR_NOMEM rather than
+     growing memory without bound.  The caller sees backpressure and can retry
+     or shed load, which is what a RELIABLE transport must surface instead of
+     silently accepting and later discarding the frame. */
 #ifdef _WIN32
   EnterCriticalSection(&ctx->send_lock);
+  if (ctx->send_queue_bytes + (size_t)size > PCL_SOCKET_MAX_QUEUE_BYTES) {
+    ctx->dropped_publishes++;
+    LeaveCriticalSection(&ctx->send_lock);
+    pcl_free(f->data);
+    pcl_free(f);
+    return PCL_ERR_NOMEM;
+  }
   if (ctx->send_tail) { ctx->send_tail->next = f; } else { ctx->send_head = f; }
   ctx->send_tail = f;
+  ctx->send_queue_bytes += (size_t)size;
   LeaveCriticalSection(&ctx->send_lock);
   SetEvent(ctx->send_event);
 #else
   pthread_mutex_lock(&ctx->send_lock);
+  if (ctx->send_queue_bytes + (size_t)size > PCL_SOCKET_MAX_QUEUE_BYTES) {
+    ctx->dropped_publishes++;
+    pthread_mutex_unlock(&ctx->send_lock);
+    pcl_free(f->data);
+    pcl_free(f);
+    return PCL_ERR_NOMEM;
+  }
   if (ctx->send_tail) { ctx->send_tail->next = f; } else { ctx->send_head = f; }
   ctx->send_tail = f;
+  ctx->send_queue_bytes += (size_t)size;
   pthread_cond_signal(&ctx->send_cond);
   pthread_mutex_unlock(&ctx->send_lock);
 #endif
@@ -416,6 +449,7 @@ static void* send_thread_main(void* arg)
       if (f) {
         ctx->send_head = f->next;
         if (!ctx->send_head) ctx->send_tail = NULL;
+        ctx->send_queue_bytes -= (size_t)f->size;
       }
       LeaveCriticalSection(&ctx->send_lock);
 
@@ -431,6 +465,7 @@ static void* send_thread_main(void* arg)
     if (f) {
       ctx->send_head = f->next;
       if (!ctx->send_head) ctx->send_tail = NULL;
+      ctx->send_queue_bytes -= (size_t)f->size;
     }
     pthread_mutex_unlock(&ctx->send_lock);
 #endif
@@ -1194,6 +1229,15 @@ pcl_socket_state_t pcl_socket_transport_get_state(const pcl_socket_transport_t* 
   return (pcl_socket_state_t)ctx->conn_state;
 }
 
+uint64_t pcl_socket_transport_dropped_publishes(const pcl_socket_transport_t* ctx_opaque) {
+  const struct pcl_socket_transport_t* ctx =
+      (const struct pcl_socket_transport_t*)ctx_opaque;
+  if (!ctx) return 0u;
+  /* A plain read of a counter only advanced under send_lock.  A concurrent
+     writer may make this lag by one, which is fine for a diagnostic total. */
+  return ctx->dropped_publishes;
+}
+
 // -- Async service invocation (client only) -------------------------------
 
 pcl_status_t pcl_socket_transport_invoke_remote_async(
@@ -1321,12 +1365,52 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
     pcl_executor_register_transport(ctx->executor, ctx->peer_id, NULL);
   }
 
-  /* Signal threads to stop */
+  /* Flush the outbound queue before tearing the socket down.  The send thread
+     is the only writer, so stopping it first (while the socket stays open) lets
+     it drain every already-accepted frame onto the wire -- a RELIABLE publisher
+     must not lose frames it was told were accepted.  A send timeout bounds the
+     flush so a stalled or dead peer cannot hang teardown; a frame that times
+     out mid-flush is abandoned (the stream is closing regardless).
+
+     recv_stop is set here too so an auto-reconnect client cannot observe a peer
+     drop during the flush and reconnect a fresh socket mid-teardown: the recv
+     thread either stays blocked in recv() until we close the socket below, or
+     exits its loop without touching client_sock. */
   ctx->recv_stop = 1;
   ctx->send_stop = 1;
+  if (ctx->client_sock != PCL_INVALID_SOCKET) {
+#ifdef _WIN32
+    DWORD snd_to = 2000;
+    setsockopt(ctx->client_sock, SOL_SOCKET, SO_SNDTIMEO,
+               (const char*)&snd_to, sizeof(snd_to));
+#else
+    struct timeval snd_to;
+    snd_to.tv_sec  = 2;
+    snd_to.tv_usec = 0;
+    setsockopt(ctx->client_sock, SOL_SOCKET, SO_SNDTIMEO, &snd_to, sizeof(snd_to));
+#endif
+  }
 
-  /* Unblock recv_thread: shutdown() reliably interrupts a blocked recv().
-     Close socket so recv_thread exits its loop. */
+  /* Wake send_thread (may be waiting on an empty queue) and let it drain. */
+#ifdef _WIN32
+  SetEvent(ctx->send_event);
+  if (ctx->send_thread) {
+    WaitForSingleObject(ctx->send_thread, 5000);
+    CloseHandle(ctx->send_thread);
+    ctx->send_thread = NULL;
+  }
+#else
+  pthread_mutex_lock(&ctx->send_lock);
+  pthread_cond_signal(&ctx->send_cond);
+  pthread_mutex_unlock(&ctx->send_lock);
+  if (ctx->send_thread) {
+    pthread_join(ctx->send_thread, NULL);
+    ctx->send_thread = 0;
+  }
+#endif
+
+  /* Outbound frames are on the wire; now unblock recv_thread by shutting down
+     and closing the socket (recv_stop was already set above). */
   if (ctx->client_sock != PCL_INVALID_SOCKET) {
     shutdown(ctx->client_sock, SHUT_RDWR);
     pcl_close_socket(ctx->client_sock);
@@ -1337,26 +1421,11 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
     ctx->listen_sock = PCL_INVALID_SOCKET;
   }
 
-  /* Wake send_thread (may be waiting on empty queue) */
-#ifdef _WIN32
-  SetEvent(ctx->send_event);
-#else
-  pthread_mutex_lock(&ctx->send_lock);
-  pthread_cond_signal(&ctx->send_cond);
-  pthread_mutex_unlock(&ctx->send_lock);
-#endif
-
-  /* Join threads */
 #ifdef _WIN32
   if (ctx->recv_thread) {
     WaitForSingleObject(ctx->recv_thread, 5000);
     CloseHandle(ctx->recv_thread);
     ctx->recv_thread = NULL;
-  }
-  if (ctx->send_thread) {
-    WaitForSingleObject(ctx->send_thread, 5000);
-    CloseHandle(ctx->send_thread);
-    ctx->send_thread = NULL;
   }
   DeleteCriticalSection(&ctx->send_lock);
   if (ctx->send_event) {
@@ -1368,10 +1437,6 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
   if (ctx->recv_thread) {
     pthread_join(ctx->recv_thread, NULL);
     ctx->recv_thread = 0;
-  }
-  if (ctx->send_thread) {
-    pthread_join(ctx->send_thread, NULL);
-    ctx->send_thread = 0;
   }
   pthread_mutex_destroy(&ctx->send_lock);
   pthread_cond_destroy(&ctx->send_cond);

@@ -12,6 +12,14 @@ are from a 3-second load window per scenario.  Absolute rates will differ
 on other hardware; the *shapes* (collapse curves, loss modes, limits) are
 properties of the code.
 
+> **Status update (fixes applied).** The findings below were re-verified on a
+> 16-CPU host, and defects **D2, D3, D4, D5** (and the socket half of **D7**)
+> have since been fixed and re-tested.  See
+> [Fixes applied and retest](#fixes-applied-and-retest) at the end of this
+> document for the before/after numbers.  **D1**, **D6**, and the UDP
+> receive-side half of **D7** are larger changes that remain open; each is
+> annotated inline below.
+
 ## Headline: maximum shared-memory plugin throughput
 
 One publisher publishing flat-out to one subscriber through the dlopen'd
@@ -113,6 +121,14 @@ mailbox is full the whole publish fails with `PCL_ERR_NOMEM`), one slow or
 uninterested participant throttles every publisher on the bus.  The
 `shm-fanout` and `shm-pairs` scenarios quantify the collapse.
 
+> **Open.** A real fix means recording each participant's topic interest in
+> the shared region and having `pcl_shm_publish_once_locked` target only
+> subscribed slots.  That is a shared-region layout change (version bump) and
+> touches subscribe/publish together, so it is deliberately left out of the
+> current fix pass.  The all-or-nothing capacity pre-check is intentionally
+> kept: it is what makes the delivered stream exact (zero gaps), so relaxing
+> it into partial delivery is not the right direction.
+
 ### D2 — one global bus semaphore serialises all bus operations
 
 Every publish, every service frame, and every iteration of every
@@ -124,6 +140,15 @@ unconditionally).  Aggregate throughput therefore *drops* as participants
 are added (`shm-multi-pub`, `shm-fanout`), instead of scaling until CPU
 saturation.
 
+> **Fixed (service-table sync half).** `pcl_shm_sync_local_services` now
+> caches the service set it last advertised and only takes the bus lock when
+> the local service set actually changes.  In the steady state (services are
+> configured once at startup) the receive thread no longer touches the bus
+> lock at all, which lifted single-pair 64 B throughput and the fan-out
+> aggregate (see the retest table).  The *single global bus lock itself*
+> still serialises every publish and service frame; removing that is the
+> larger structural change tracked with D1.
+
 ### D3 — hard participant limit of 8, reported only as a generic attach failure
 
 `PCL_SHM_MAX_PARTICIPANTS` is 8.  The 9th attach fails (correctly —
@@ -132,6 +157,15 @@ plain `NULL` and the plugin entry returns `NULL`, so the loader reports the
 same `PCL_ERR_NOT_FOUND` as any other entry failure.  A deployment
 composing >8 components on one bus gets no diagnostic pointing at the
 capacity limit.  Duplicate participant IDs are also rejected (correctly).
+
+> **Fixed.** `pcl_shared_memory_transport_create` now emits a distinct
+> `PCL_LOG_ERROR` line for each attach-failure cause: bus at capacity (naming
+> the `PCL_SHM_MAX_PARTICIPANTS` limit and suggesting fewer participants per
+> bus or splitting across buses), a duplicate participant id, and a failed
+> receive-notification primitive.  The return value is unchanged (still
+> `NULL`, so no ABI change), but the operator now gets an actionable message.
+> Verified in the `shm-limit` retest: the 9th–12th attachers log the capacity
+> message and the duplicate-id attacher logs the uniqueness message.
 
 ### D4 — shm service requests are silently dropped when the provider mailbox is full
 
@@ -146,6 +180,18 @@ scenario reaches it within milliseconds at 3 concurrent clients
 bus degrades from lossless to mostly-dropped as soon as offered load
 exceeds the tiny provider mailbox.
 
+> **Fixed.** `pcl_shm_worker_svc_req` now retries a full provider mailbox on
+> the egress worker within a bounded window (`PCL_SHM_SVC_REQ_RETRY_MS`,
+> 50 ms), re-resolving the provider under the bus lock on each attempt,
+> before giving up and delivering the terminal empty response.  Because the
+> provider drains its 16-deep mailbox in microseconds, a burst that overflows
+> it is now delayed by a few poll intervals rather than dropped.  In the
+> `shm-services` retest the drop rate fell from 82 %/55 % (3/6 clients) to
+> **zero** — every request sent came back with a real response — and
+> successful throughput rose.  A status-carrying callback (so a genuine
+> give-up is distinguishable from a real empty response) would need a wider
+> `pcl_resp_cb_fn_t` signature and is left as a separate change.
+
 ### D5 — TCP socket transport: unbounded egress queue, silent loss at teardown, despite RELIABLE QoS
 
 `pcl_transport_socket.c` implements `publish` as a non-blocking enqueue
@@ -157,6 +203,20 @@ freed, discarding everything still in it.  The plugin declares
 `PCL_QOS_RELIABILITY_RELIABLE`, yet the `plugin-mix` scenario loses the
 large majority of successfully-"published" messages this way.  There is no
 high-water mark, no `PCL_ERR_NOMEM`, and no flush-on-shutdown.
+
+> **Fixed.** The outbound FIFO is now capped at a high-water mark
+> (`PCL_SOCKET_MAX_QUEUE_BYTES`, 16 MiB).  Beyond it, `publish` fails fast
+> with `PCL_ERR_NOMEM` — the same fail-fast backpressure the shared-memory
+> transport gives — so a publisher outrunning the link learns it must back
+> off instead of growing memory without bound.  Teardown was reordered so the
+> send thread drains the queue to the still-open socket *before* the socket is
+> closed (a send timeout bounds the flush against a dead peer), and a running
+> `dropped_publishes` counter is exposed via
+> `pcl_socket_transport_dropped_publishes()`.  In the `plugin-mix` retest the
+> socket transport went from losing **61–86 %** of "published" frames to
+> **zero loss** (`rx == pub ok`), with the over-cap drops now surfaced as
+> visible `PCL_ERR_NOMEM` backpressure instead of silent discards — so its
+> declared `RELIABLE` QoS is honoured.
 
 ### D6 — executor ingress queue is unbounded: a slow subscriber turns backpressure into RSS growth
 
@@ -173,6 +233,14 @@ drains the whole accumulated backlog, so it caught up in bursts).  A
 subscriber that is persistently slower than the offered rate accumulates
 that backlog without bound — an eventual OOM rather than a throttle.
 
+> **Open.** Bounding `enqueue_incoming_message` would push backpressure back
+> to publishers (the shm mailbox would fill and they would see
+> `PCL_ERR_NOMEM`), but that queue is in the core executor and is shared by
+> every transport and every local delivery path, so a hard bound risks
+> dropping messages on paths that today never lose one.  This needs a
+> configurable bound with a well-chosen default and its own tests, so it is
+> left out of the current fix pass.
+
 ### D7 — UDP loss is expected, but there is no receive-side accounting
 
 UDP declares `BEST_EFFORT`, so loss under overload is by design.  The
@@ -180,6 +248,13 @@ stress run confirms heavy loss at max rate with no counters anywhere in
 the transport to observe it; only the harness's sequence-gap tracking made
 it visible.  Deployments have no way to distinguish "quiet topic" from
 "drowning topic".
+
+> **Partly fixed.** The socket transport now counts its overflow drops
+> (`pcl_socket_transport_dropped_publishes()`), so the reliable-transport half
+> of this gap is covered.  The UDP transport still has no receive-side
+> accounting: because it carries no sequence numbers on the wire, it cannot
+> tell a dropped datagram from a quiet topic without a wire-format change, so
+> that half remains open.
 
 ## What held up well
 
@@ -199,21 +274,49 @@ it visible.  Deployments have no way to distinguish "quiet topic" from
   (4 cores).  The per-bus bottlenecks (D1/D2) are the scaling limit, not
   process count or OS shared-memory resources.
 
-## Suggested follow-ups (not implemented here)
+## Fixes applied and retest
 
-1. Report a distinct status (or at least a log line) for "bus full" vs
-   other attach failures (D3).
-2. Deliver an error status to the client callback instead of an empty
-   response when a SVC_REQ cannot be enqueued, and consider a bounded
-   retry window on the egress worker like the publish backpressure path
-   (D4).
-3. Add a high-water mark to the socket egress FIFO (fail `publish` with
-   `PCL_ERR_NOMEM` beyond it) and drain the queue before teardown closes
-   the socket (D5).
-4. Bound the executor incoming queue (fail the post, so the shm mailbox
-   fills and publishers see backpressure) or make the bound configurable
-   (D6).
-5. Add drop/overflow counters to the UDP and socket transports (D7).
-6. Consider per-topic interest filtering on the shm bus so fan-out only
-   targets subscribed participants (D1), and move service-table sync off
-   the receive hot loop (D2).
+Defects **D2, D3, D4, D5** and the socket half of **D7** were fixed, and the
+whole harness was re-run to confirm the improvement with no correctness
+regression.  Both the baseline and the post-fix run in the table below are
+from the **same 16-CPU host** (so they are directly comparable to each other,
+though not to the 4-CPU numbers in the sections above).  Every shared-memory
+scenario still delivered an exact stream (`sub rx == pub ok`, zero sequence
+gaps) after the fixes.
+
+| Metric (16-CPU retest) | Before fixes | After fixes |
+|---|---:|---:|
+| Socket `plugin-mix` messages lost (declared RELIABLE) | 8,263,842 (86 %) | **0** |
+| Socket over-cap drops surfaced as `PCL_ERR_NOMEM` | 0 (silent) | 22,726 (visible) |
+| Unary services, 3 clients — requests dropped | 419,908 / 661,948 (63 %) | **0 / 306,043** |
+| Unary services, 6 clients — requests dropped | 2,015,331 / 2,108,828 (95 %) | **0 / 180,856** |
+| Unary services, 6 clients — successful req/s | 23,758 | 60,242 |
+| `shm-throughput` 64 B | 165,175 msg/s | 231,779 msg/s |
+| `shm-fanout` 7 subscribers — aggregate | 215,780 msg/s | 295,410 msg/s |
+| `shm` sequence gaps / lost, all scenarios | 0 / 0 | 0 / 0 (preserved) |
+
+The 144 PCL transport unit tests (`test_pcl_shared_memory_transport`,
+`test_pcl_socket_transport`, `test_pcl_socket_faults`,
+`test_pcl_udp_transport`, `test_pcl_plugin_loader`,
+`test_pcl_transport_routing`) all still pass.
+
+**Where the fixes live.** D5 and the socket counter are in
+`src/pcl_transport_socket.c` (plus the new
+`pcl_socket_transport_dropped_publishes` accessor in the header); D2, D3, and
+D4 are in `src/pcl_transport_shared_memory.c`.
+
+## Still open (not implemented here)
+
+1. **D1** — per-topic interest filtering on the shm bus so a publish only
+   targets subscribed participants.  Needs a shared-region layout change and
+   coordinated subscribe/publish edits; the exact-delivery pre-check is kept
+   as-is.
+2. **D2 (remainder)** — the single global bus lock still serialises every
+   publish and service frame.  The service-table-sync contention was removed;
+   removing the lock itself is the larger structural change tracked with D1.
+3. **D6** — bound the executor incoming queue.  It is core-executor state
+   shared by every delivery path, so it needs a configurable bound with a
+   sensible default and dedicated tests before it can be turned on safely.
+4. **D7 (remainder)** — UDP receive-side loss accounting.  UDP carries no
+   sequence numbers, so distinguishing "quiet" from "drowning" needs a
+   wire-format change.
