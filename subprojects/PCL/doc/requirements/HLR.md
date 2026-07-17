@@ -580,6 +580,40 @@ PCL shall provide a reusable threading-model conformance suite -- distinct from 
 
 **Rationale**: A common, mechanically-checked threading bar keeps the deterministic-execution guarantee (D2, D5) from silently regressing as new transports and plugins are added.
 
+## Standalone Process Runtime
+
+### PCL.079 - Standalone Component Process Runtime
+PCL shall provide a process runtime that: (a) owns one executor and loads the codec plugins selected for the process; (b) accepts a complete per-logical-port deployment file, validates it against generated endpoint descriptors, and atomically installs exactly one transport realization for every logical port; (c) configures and activates gateway containers exposed by the selected transports; (d) runs one component through configure, activate, executor spin, deactivate, and cleanup until an explicit shutdown request, `SIGINT`, `SIGTERM`, or a configured duration ends the run; and (e) fails closed with a diagnostic when process arguments, deployment descriptors, deployment-file entries, plugin composition, or lifecycle operations are invalid. Deployment loading shall be bounded to 128 logical ports, 64 transport peers, and 32 codec plugins.
+
+**Rationale**: D3 and D8 require generated component processes to select transports and codecs from deployment data without relinking. D6 requires the process wrapper to preserve the component lifecycle during both normal shutdown and failure. D1 and D9 require explicit bounds and validation before any partial deployment is allowed to run.
+
+## Transport Flow Control and Monitoring
+
+### PCL.080 - Remote Subscription Registration
+When a remote subscriber port and its selected transport are both present in an executor, PCL shall register the topic and type with that transport. Registration shall occur whether the transport is registered before or after the container is added. PCL shall call only the default transport for a subscriber with no selected peer, and only the matching named transports for a subscriber with selected peers. A selected transport that does not support subscription registration, or that rejects registration, shall make the executor setup operation fail closed.
+
+**Rationale**: D3 requires deployment-selected transports to receive enough endpoint information to establish remote delivery. Applying the same registration when either side arrives first avoids order-dependent deployments.
+
+### PCL.081 - Bounded Executor Ingress
+PCL shall allow a deployment to set a maximum number of queued incoming publish/subscribe messages. A limit of zero shall leave the queue unbounded. At the configured limit, an incoming post shall return `PCL_ERR_NOMEM` without taking ownership of the message. PCL shall expose the current queue depth for monitoring, and a null executor shall report a depth of zero.
+
+**Rationale**: D1 requires explicit resource bounds for long-running processes. Reporting backpressure to the transport permits a deployment-specific retry or load-shedding policy instead of silent loss.
+
+### PCL.082 - Shared-Memory Interest and Service Backpressure
+The shared-memory transport shall advertise each participant's subscribed topics and shall enqueue a published topic only to interested participants. A publish with no interested remote participant shall return `PCL_ERR_NOT_FOUND`. For a unary service request whose provider mailbox is temporarily full, the transport worker shall retry for a bounded interval; it shall deliver a terminal empty response if the request still cannot be enqueued or the provider disappears.
+
+**Rationale**: D1 and D3 require bounded shared-memory mailboxes without broadcasting unrelated traffic. A bounded retry absorbs short service bursts while preserving an observable terminal outcome when congestion persists.
+
+### PCL.083 - Bounded Reliable-Socket Egress
+The reliable socket transport shall bound its outbound queue to 16 MiB. A frame that would exceed the bound shall be rejected with `PCL_ERR_NOMEM`, shall not be accepted for later transmission, and shall increment a thread-safe dropped-publish counter. Destroy shall allow the send worker to drain frames accepted before teardown and shall reclaim any frame that cannot be delivered.
+
+**Rationale**: D1 and D5 prohibit unbounded memory growth and blocking network I/O on the executor thread. Explicit rejection and monitoring preserve reliable-transport semantics under sustained congestion.
+
+### PCL.084 - UDP Receive and Loss Accounting
+The UDP transport shall expose thread-safe counters for all received datagrams and for inferred forward sequence gaps. The received count shall include malformed and unsupported datagrams. Sequence tracking shall be independent for each source address and port; forward gaps shall increase the loss count, while duplicate, reordered, and stale datagrams shall not. Null transport handles shall report zero for both counters.
+
+**Rationale**: D7 requires lightweight evidence that distinguishes an idle UDP link from malformed traffic and inferred packet loss without claiming acknowledgements or retransmission for a best-effort transport.
+
 ---
 
 ## Design Decision Traceability
@@ -675,3 +709,9 @@ PCL shall provide a reusable threading-model conformance suite -- distinct from 
 | `PCL.074` | `D1`, `D4` |
 | `PCL.075` | `D2`, `D5` |
 | `PCL.076` | `D2`, `D5` |
+| `PCL.079` | `D1`, `D3`, `D6`, `D8`, `D9` |
+| `PCL.080` | `D3` |
+| `PCL.081` | `D1` |
+| `PCL.082` | `D1`, `D3` |
+| `PCL.083` | `D1`, `D5` |
+| `PCL.084` | `D7` |

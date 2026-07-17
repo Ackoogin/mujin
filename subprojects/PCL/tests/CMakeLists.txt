@@ -94,6 +94,9 @@ target_link_libraries(pcl_transport_wrongabi_plugin PRIVATE pcl_core)
 add_library(pcl_transport_noentry_plugin MODULE pcl_transport_noentry_plugin.c)
 target_link_libraries(pcl_transport_noentry_plugin PRIVATE pcl_core)
 
+add_library(pcl_codec_sequence_plugin MODULE pcl_codec_sequence_plugin.c)
+target_link_libraries(pcl_codec_sequence_plugin PRIVATE pcl_core)
+
 add_executable(test_pcl_capabilities test_pcl_capabilities.cpp)
 target_link_libraries(test_pcl_capabilities PRIVATE pcl_core GTest::gtest_main)
 target_compile_definitions(test_pcl_capabilities PRIVATE
@@ -173,6 +176,18 @@ gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_pcl_process_runtime test_pcl_process_runtime.cpp)
 target_link_libraries(test_pcl_process_runtime PRIVATE pcl_core GTest::gtest_main)
+target_compile_definitions(test_pcl_process_runtime PRIVATE
+    CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
+    SHM_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_shared_memory_plugin>"
+    STUB_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_stub_plugin>"
+    SEQUENCE_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_sequence_plugin>"
+)
+add_dependencies(test_pcl_process_runtime
+    pcl_transport_capture_plugin
+    pcl_transport_shared_memory_plugin
+    pcl_codec_stub_plugin
+    pcl_codec_sequence_plugin
+)
 gtest_discover_tests(test_pcl_process_runtime DISCOVERY_MODE PRE_TEST)
 
 # Template transport: scaffold-specific tests + the reusable conformance

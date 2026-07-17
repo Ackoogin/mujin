@@ -3267,3 +3267,217 @@ An endpoint with an explicit `PCL_ROUTE_LOCAL` route entry shall be dispatched i
 **Traces**: PCL.078
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.GetGatewayReturnsUsableContainerForShmPeer`, `.GetGatewayReturnsNullForPluginWithoutGateway`, `.GetGatewayFailsClosedOnUnknownPeerAndBadArgs`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (the provider/MA role of every rpc-realized-request-leg scenario: run1 and run3, JSON and FlatBuffers) -- before this fix, inbound `SVC_REQ`/`STREAM_REQ` frames arriving over the shared-memory bus at a manifest-routed provider were silently dropped (nothing was registered to receive the internal gateway-subscriber topic those frames are re-posted to), so the provider process never observed the command at all and the consumer's pending RPC call hung until timeout.
+
+## 39. Standalone Process Runtime
+
+### REQ_PCL_476 - Process Runtime Creation And Null Safety
+`pcl_process_runtime_create()` shall create a runtime-owned executor and return it through `pcl_process_runtime_executor()`. Process-runtime functions shall reject required null or empty arguments with `PCL_ERR_INVALID`; null accessors shall return their documented null value; and null shutdown or destroy calls shall be no-ops.
+
+**Traces**: PCL.079, PCL.045
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.CreatesExecutorAndHandlesNullArguments`.
+
+### REQ_PCL_477 - Process Runtime Codec Loading
+`pcl_process_runtime_load_codec()` shall load a valid codec plugin into the process-wide registry and retain its plugin handle for the runtime lifetime. A missing or invalid plugin shall fail closed and record a diagnostic naming the codec-load operation.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.LoadsCodecAndReportsPluginFailure`.
+
+### REQ_PCL_478 - Complete Per-Port Deployment Load
+`pcl_process_runtime_load_ports_file()` shall accept one entry for every supplied logical-port descriptor, translate the selected RPC or publish/subscribe realization and every supported endpoint kind into a routing manifest, reuse identical peer configurations, atomically install the routes, and reject a second deployment-file load on the same runtime with `PCL_ERR_STATE`.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.LoadsCompletePortsFileAndRejectsSecondLoad`.
+
+### REQ_PCL_479 - Process Runtime Gateway Lifecycle
+After a deployment manifest loads, `pcl_process_runtime_load_ports_file()` shall discover each selected transport's optional gateway container, configure it, activate it, and add it to the runtime executor. `pcl_process_runtime_destroy()` shall remove, deactivate, and clean up every gateway before destroying its routing handle and executor.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ActivatesAndCleansUpSharedMemoryGateway`.
+
+### REQ_PCL_480 - Logical-Port Descriptor Name Validation
+`pcl_process_runtime_load_ports_file()` shall reject an empty logical-port name, duplicate logical-port names, or a non-zero endpoint count paired with a null endpoint array before it opens or installs deployment data.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsInvalidDeploymentDescriptors`.
+
+### REQ_PCL_481 - Deployment-File Entry Validation
+`pcl_process_runtime_load_ports_file()` shall reject malformed lines, unknown directives, unknown realization modes, missing plugin configuration, unknown logical-port names, duplicate logical-port entries, omitted logical ports, and conflicting plugin configurations for the same peer. Each rejection shall record a diagnostic and leave no routing handle installed.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsInvalidPortsFileEntries`.
+
+### REQ_PCL_482 - Process Runtime Peer Bound
+`pcl_process_runtime_load_ports_file()` shall accept at most 64 distinct transport peers and shall reject a deployment requiring a sixty-fifth peer with `PCL_ERR_NOMEM` before installing the generated routing manifest.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsMoreThanMaximumPeers`.
+
+### REQ_PCL_483 - Endpoint Descriptor Validation
+`pcl_process_runtime_load_ports_file()` shall validate every generated endpoint descriptor before writing it to a temporary routing manifest. A null endpoint name or an endpoint kind outside the supported publisher, subscriber, provided, consumed, stream-provided, and stream-consumed kinds shall return `PCL_ERR_INVALID` with a diagnostic instead of dereferencing or formatting the invalid value.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsUnsupportedEndpointDescriptors`.
+
+### REQ_PCL_484 - Generated Routing Failure Is Atomic
+If the generated manifest cannot load a selected transport or validate its routes, `pcl_process_runtime_load_ports_file()` shall return the routing failure, include the routing diagnostic in its process-runtime error, and leave no installed routing handle.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ReportsGeneratedRoutingFailure`.
+
+### REQ_PCL_485 - Temporary Manifest Failure
+If a temporary routing manifest cannot be created, `pcl_process_runtime_load_ports_file()` shall return `PCL_ERR_INVALID`, record a diagnostic, and leave no installed routing handle.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ReportsTemporaryManifestCreationFailure`.
+
+### REQ_PCL_486 - Normal Process Runtime Lifecycle
+`pcl_process_runtime_run()` shall configure and activate the component, add it to the runtime executor, spin until shutdown is requested, then remove, deactivate, and clean up the component. A successful run shall leave the component in `PCL_STATE_UNCONFIGURED`.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RunsComponentUntilShutdownRequest`.
+
+### REQ_PCL_487 - Signal-Requested Process Shutdown
+While `pcl_process_runtime_run()` is active, `SIGINT` or `SIGTERM` shall request graceful shutdown. The runtime shall restore the process's previous handlers before returning.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.SignalRequestsGracefulShutdown`.
+
+### REQ_PCL_488 - Process Runtime Lifecycle Failure Unwind
+If component configure, activate, deactivate, or cleanup fails, `pcl_process_runtime_run()` shall return the failing status, record a diagnostic naming the failed component operation, and execute every cleanup step made reachable by the completed lifecycle transitions.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ReportsLifecycleFailures`.
+
+### REQ_PCL_489 - Process Runtime Executor Add Failure
+If the component cannot be added because the runtime executor has reached its container bound, `pcl_process_runtime_run()` shall return `PCL_ERR_NOMEM` and shall still deactivate and clean up the component.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ReportsExecutorAddFailure`.
+
+### REQ_PCL_490 - Missing Deployment File
+If the requested per-port deployment file cannot be opened, `pcl_process_runtime_load_ports_file()` shall return `PCL_ERR_NOT_FOUND`, record a diagnostic naming the failed open operation, and install no routing handle.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsMissingPortsFile`.
+
+### REQ_PCL_491 - Duration-Limited Process Run
+When the runtime was created with a non-zero duration, `pcl_process_runtime_run()` shall stop after that many seconds without requiring a signal or explicit shutdown request, then perform the normal component cleanup sequence.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.DurationLimitStopsRun`.
+
+### REQ_PCL_492 - Process Runtime Codec Bound
+`pcl_process_runtime_load_codec()` shall retain at most 32 codec-plugin handles and shall reject a thirty-third successful-load attempt with `PCL_ERR_NOMEM` before opening the plugin.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsMoreThanMaximumCodecs`.
+
+### REQ_PCL_493 - Deployment File Read Failure
+If an opened per-port deployment file cannot be read, `pcl_process_runtime_load_ports_file()` shall return `PCL_ERR_INVALID`, record a diagnostic naming the failed read operation, and install no routing handle.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ReportsPortsFileReadFailure`.
+
+### REQ_PCL_494 - Process Runtime Allocation Failure
+`pcl_process_runtime_create()` shall return `PCL_ERR_NOMEM` without leaking when allocation of either the runtime object or its executor fails.
+
+**Traces**: PCL.079, PCL.046
+
+**Verification**: `test_pcl_oom.cpp::PclOom.ProcessRuntimeAllocationFails`, `test_pcl_oom.cpp::PclOom.ProcessRuntimeExecutorAllocationFails`.
+
+## 40. Transport Flow Control and Monitoring
+
+### REQ_PCL_495 - Remote Subscriber Registration During Container Add
+When `pcl_executor_add()` adds a remote subscriber, it shall call `subscribe` with the port's topic and type on each already-registered named transport selected by the port, or on the default transport when the port selects no named peer. It shall not register local-only ports or call transports that the port did not select.
+
+**Traces**: PCL.080
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.SubscriberPortRegistersWithNamedTransportDuringSetup`, `test_pcl_executor.cpp::PclExecutor.DefaultTransportRegistersUnboundRemoteSubscriberOnly`.
+
+### REQ_PCL_496 - Remote Subscriber Registration During Late Transport Add
+When `pcl_executor_register_transport()` registers a named transport after containers have been added, it shall call `subscribe` for every existing remote subscriber that selects that peer and shall not call it for subscribers that select another peer or the default transport. When `pcl_executor_set_transport()` installs a default transport after containers have been added, it shall register every remote subscriber that selects no named peer.
+
+**Traces**: PCL.080
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.LateNamedTransportRegistersExistingSubscriberPort`, `test_pcl_executor.cpp::PclExecutor.LateDefaultTransportRegistersUnboundRemoteSubscriber`.
+
+### REQ_PCL_497 - Unsupported Or Rejected Subscription Fails Closed
+If a selected transport has no `subscribe` operation, subscriber registration shall return `PCL_ERR_NOT_FOUND` with a diagnostic. If the transport's `subscribe` operation returns an error, the executor operation performing registration shall return that error without adding the container or retaining the named transport registration.
+
+**Traces**: PCL.080, PCL.045
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.SelectedTransportWithoutSubscribeFailsClosed`, `test_pcl_executor.cpp::PclExecutor.RejectedLateSubscriptionRollsBackTransport`.
+
+### REQ_PCL_498 - Executor Incoming Queue Limit
+`pcl_executor_set_incoming_queue_limit()` shall set the incoming publish/subscribe queue bound and shall reject a null executor with `PCL_ERR_INVALID`. A zero bound shall permit more than the formerly configured non-zero bound. When a post reaches a non-zero bound, it shall return `PCL_ERR_NOMEM` without increasing the queue depth or taking ownership of the caller's message.
+
+**Traces**: PCL.081
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.IncomingQueueLimitRejectsExcessMessages`.
+
+### REQ_PCL_499 - Executor Incoming Queue Depth
+`pcl_executor_get_incoming_queue_depth()` shall report the number of queued incoming publish/subscribe messages, shall decrease as executor spins drain messages, and shall return zero for a null executor.
+
+**Traces**: PCL.081
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.IncomingQueueLimitRejectsExcessMessages`.
+
+### REQ_PCL_500 - Shared-Memory Subscription Interest
+The shared-memory transport `subscribe` operation shall record a valid topic once per participant, return `PCL_OK` for a duplicate, reject an empty or overlong topic, and return `PCL_ERR_NOMEM` after 16 distinct topics. Publish shall target only participants that advertised the topic and shall return `PCL_ERR_NOT_FOUND` when none are interested.
+
+**Traces**: PCL.082
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.PublishTargetsOnlyInterestedParticipants`, `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.SubscriptionValidationAndCapacity`.
+
+### REQ_PCL_501 - Shared-Memory Unary Service Congestion
+When a discovered unary service provider's mailbox is full, the shared-memory egress worker shall retry enqueueing the request for no longer than its configured bounded retry interval. If retry succeeds, the normal response shall be delivered; otherwise the pending call shall complete on the executor thread with an empty terminal response.
+
+**Traces**: PCL.082, PCL.075
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.UnaryServiceCongestionRetriesThenCompletesEmpty`.
+
+### REQ_PCL_502 - Reliable-Socket Outbound Queue Bound
+The reliable socket transport shall reject an outbound frame with `PCL_ERR_NOMEM` when accepting it would make the queued byte count exceed 16 MiB. The rejected frame shall be freed and shall increment `pcl_socket_transport_dropped_publishes()` exactly once; the getter shall be thread-safe and shall return zero for a null transport.
+
+**Traces**: PCL.083
+
+**Verification**: `test_pcl_socket_transport.cpp::PclSocketTransport.OutboundQueueLimitReportsDrops`.
+
+### REQ_PCL_503 - Reliable-Socket Teardown Drains Accepted Frames
+`pcl_socket_transport_destroy()` shall signal the send worker to drain every frame accepted before teardown, join the worker, and reclaim any frame remaining after a send failure.
+
+**Traces**: PCL.083, PCL.075
+
+**Verification**: `test_pcl_socket_transport.cpp::PclSocketTransport.DestroyWithUnsentFramesNoLeak`.
+
+### REQ_PCL_504 - UDP Received-Datagram Counter
+`pcl_udp_transport_received_datagrams()` shall count every datagram returned by the receive socket, including malformed and unsupported datagrams, and shall return zero for a null transport.
+
+**Traces**: PCL.084
+
+**Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.MalformedDatagramsIncreaseReceivedCounter`.
+
+### REQ_PCL_505 - UDP Per-Source Sequence-Gap Counter
+For each source address and port, the UDP transport shall establish a sequence baseline from the first valid publish datagram and add each later forward sequence gap to `pcl_udp_transport_dropped_datagrams()`. Duplicate, reordered, or stale sequence values shall not increase the count. The getter shall return zero for a null transport.
+
+**Traces**: PCL.084
+
+**Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.SequenceGapsAreCountedPerSource`.

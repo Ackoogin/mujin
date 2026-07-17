@@ -752,7 +752,9 @@ TEST(PclSocketTransport, DestroyWithPendingAsyncCallNoLeak) {
   restore_logs();
 }
 
-///< REQ_PCL_161: Destroy with unsent frames frees resources. PCL.035.
+///< REQ_PCL_161, REQ_PCL_503: destroy lets the send worker drain accepted
+///< frames and reclaims anything left after transport failure. PCL.035,
+///< PCL.083.
 TEST(PclSocketTransport, DestroyWithUnsentFramesNoLeak) {
   silence_logs();
   LoopbackPair pair;
@@ -778,6 +780,119 @@ TEST(PclSocketTransport, DestroyWithUnsentFramesNoLeak) {
 
   // Immediately destroy -- unsent frames must be freed.
   pair.destroy();
+  restore_logs();
+}
+
+///< REQ_PCL_502: socket egress is bounded to 16 MiB, rejects overflow with
+///< NOMEM, and reports every rejected publish through its counter. PCL.083.
+TEST(PclSocketTransport, OutboundQueueLimitReportsDrops) {
+  silence_logs();
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+#ifdef _WIN32
+  WSADATA wsa;
+  ASSERT_EQ(WSAStartup(MAKEWORD(2, 2), &wsa), 0);
+  SOCKET listener = socket(AF_INET, SOCK_STREAM, 0);
+  ASSERT_NE(listener, INVALID_SOCKET);
+#else
+  int listener = socket(AF_INET, SOCK_STREAM, 0);
+  ASSERT_GE(listener, 0);
+#endif
+  sockaddr_in address{};
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  address.sin_port = 0;
+  ASSERT_EQ(bind(listener, reinterpret_cast<sockaddr*>(&address),
+                 sizeof(address)),
+            0);
+  ASSERT_EQ(listen(listener, 1), 0);
+#ifdef _WIN32
+  int address_size = static_cast<int>(sizeof(address));
+#else
+  socklen_t address_size = sizeof(address);
+#endif
+  ASSERT_EQ(getsockname(listener, reinterpret_cast<sockaddr*>(&address),
+                        &address_size),
+            0);
+  const uint16_t port = ntohs(address.sin_port);
+
+  std::atomic<bool> accepted{false};
+  std::atomic<bool> close_server{false};
+  std::thread server([&]() {
+#ifdef _WIN32
+    SOCKET peer = accept(listener, nullptr, nullptr);
+    if (peer == INVALID_SOCKET) return;
+#else
+    int peer = accept(listener, nullptr, nullptr);
+    if (peer < 0) return;
+#endif
+    int receive_buffer = 1024;
+    (void)setsockopt(peer, SOL_SOCKET, SO_RCVBUF,
+                     reinterpret_cast<const char*>(&receive_buffer),
+                     static_cast<int>(sizeof(receive_buffer)));
+    accepted = true;
+    while (!close_server.load()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+#ifdef _WIN32
+    shutdown(peer, SD_BOTH);
+    closesocket(peer);
+#else
+    shutdown(peer, SHUT_RDWR);
+    close(peer);
+#endif
+  });
+
+  pcl_socket_transport_t* transport =
+      pcl_socket_transport_create_client("127.0.0.1", port, exec);
+  if (!transport) {
+    close_server = true;
+#ifdef _WIN32
+    closesocket(listener);
+#else
+    close(listener);
+#endif
+    server.join();
+    pcl_executor_destroy(exec);
+    restore_logs();
+    FAIL() << "client could not connect to the non-reading peer";
+    return;
+  }
+  for (int i = 0; i < 100 && !accepted.load(); ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  EXPECT_TRUE(accepted.load());
+#ifdef _WIN32
+  closesocket(listener);
+#else
+  close(listener);
+#endif
+
+  const pcl_transport_t* vtable =
+      pcl_socket_transport_get_transport(transport);
+  ASSERT_NE(vtable, nullptr);
+  const std::string payload(64000u, 'q');
+  pcl_msg_t msg = {};
+  msg.data = payload.data();
+  msg.size = static_cast<uint32_t>(payload.size());
+  msg.type_name = "BulkMsg";
+  pcl_status_t overflow_status = PCL_OK;
+  for (int i = 0; i < 2000 && overflow_status == PCL_OK; ++i) {
+    overflow_status =
+        vtable->publish(vtable->adapter_ctx, "bounded/egress", &msg);
+  }
+  EXPECT_EQ(overflow_status, PCL_ERR_NOMEM);
+  EXPECT_EQ(pcl_socket_transport_dropped_publishes(transport), 1u);
+  EXPECT_EQ(pcl_socket_transport_dropped_publishes(nullptr), 0u);
+
+  close_server = true;
+  server.join();
+  pcl_socket_transport_destroy(transport);
+  pcl_executor_destroy(exec);
+#ifdef _WIN32
+  WSACleanup();
+#endif
   restore_logs();
 }
 

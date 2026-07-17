@@ -217,6 +217,9 @@ TEST(PclExecutor, IntraProcessPubSub) {
   pcl_container_destroy(sub_c);
 }
 
+///< REQ_PCL_498, REQ_PCL_499: a configured ingress bound rejects excess
+///< messages without changing the reported depth, and zero restores unbounded
+///< operation. PCL.081.
 TEST(PclExecutor, IncomingQueueLimitRejectsExcessMessages) {
   auto* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -237,6 +240,12 @@ TEST(PclExecutor, IncomingQueueLimitRejectsExcessMessages) {
   EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_ERR_NOT_FOUND);
   EXPECT_EQ(pcl_executor_get_incoming_queue_depth(e), 0u);
   EXPECT_EQ(pcl_executor_post_incoming(e, "topic_a", &msg), PCL_OK);
+  EXPECT_EQ(pcl_executor_set_incoming_queue_limit(e, 0u), PCL_OK);
+  EXPECT_EQ(pcl_executor_post_incoming(e, "topic_a", &msg), PCL_OK);
+  EXPECT_EQ(pcl_executor_get_incoming_queue_depth(e), 2u);
+  EXPECT_EQ(pcl_executor_set_incoming_queue_limit(nullptr, 1u),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_get_incoming_queue_depth(nullptr), 0u);
 
   pcl_executor_destroy(e);
 }
@@ -269,6 +278,7 @@ struct MockTransportState {
   int publish_count = 0;
   int invoke_count = 0;
   int subscribe_count = 0;
+  pcl_status_t subscribe_status = PCL_OK;
   std::string last_name;
   std::string last_type;
 };
@@ -385,9 +395,11 @@ static pcl_status_t mock_subscribe(void* ctx, const char* topic,
   state->subscribe_count++;
   state->last_name = topic ? topic : "";
   state->last_type = type_name ? type_name : "";
-  return PCL_OK;
+  return state->subscribe_status;
 }
 
+///< REQ_PCL_495: adding a remote subscriber registers its topic and type with
+///< the selected named transport. PCL.080.
 TEST(PclExecutor, SubscriberPortRegistersWithNamedTransportDuringSetup) {
   RoutedSubData data;
   MockTransportState transport_state;
@@ -425,6 +437,8 @@ TEST(PclExecutor, SubscriberPortRegistersWithNamedTransportDuringSetup) {
   pcl_container_destroy(c);
 }
 
+///< REQ_PCL_496: registering a selected named transport after container setup
+///< registers the existing remote subscriber. PCL.080.
 TEST(PclExecutor, LateNamedTransportRegistersExistingSubscriberPort) {
   RoutedSubData data;
   MockTransportState transport_state;
@@ -458,6 +472,139 @@ TEST(PclExecutor, LateNamedTransportRegistersExistingSubscriberPort) {
   EXPECT_EQ(transport_state.subscribe_count, 1);
   EXPECT_EQ(transport_state.last_name, "remote/topic");
   EXPECT_EQ(transport_state.last_type, "RemoteMsg");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+///< REQ_PCL_495: the default transport registers only remote subscribers that
+///< do not select a named peer; local and named routes are ignored. PCL.080.
+TEST(PclExecutor, DefaultTransportRegistersUnboundRemoteSubscriberOnly) {
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  transport.subscribe = mock_subscribe;
+  transport.adapter_ctx = &transport_state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    auto noop = [](pcl_container_t*, const pcl_msg_t*, void*) {};
+    pcl_port_t* unbound = pcl_container_add_subscriber(
+        c, "default/topic", "DefaultMsg", noop, nullptr);
+    pcl_port_t* local = pcl_container_add_subscriber(
+        c, "local/topic", "LocalMsg", noop, nullptr);
+    pcl_port_t* named = pcl_container_add_subscriber(
+        c, "named/topic", "NamedMsg", noop, nullptr);
+    const char* peers[] = {"peer_a"};
+    if (!unbound || !local || !named) return PCL_ERR_NOMEM;
+    if (pcl_port_set_route(unbound, PCL_ROUTE_REMOTE, nullptr, 0) != PCL_OK ||
+        pcl_port_set_route(local, PCL_ROUTE_LOCAL, nullptr, 0) != PCL_OK) {
+      return PCL_ERR_CALLBACK;
+    }
+    return pcl_port_set_route(named, PCL_ROUTE_REMOTE, peers, 1);
+  };
+
+  auto* c = pcl_container_create("default_subscribers", &cbs, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_set_transport(e, &transport), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  EXPECT_EQ(transport_state.subscribe_count, 1);
+  EXPECT_EQ(transport_state.last_name, "default/topic");
+  EXPECT_EQ(transport_state.last_type, "DefaultMsg");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+///< REQ_PCL_496: installing the default transport after container setup
+///< registers an existing unbound remote subscriber. PCL.080.
+TEST(PclExecutor, LateDefaultTransportRegistersUnboundRemoteSubscriber) {
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  transport.subscribe = mock_subscribe;
+  transport.adapter_ctx = &transport_state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "late/default", "LateDefaultMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void*) {}, nullptr);
+    return port ? pcl_port_set_route(port, PCL_ROUTE_REMOTE, nullptr, 0)
+                : PCL_ERR_NOMEM;
+  };
+  auto* c = pcl_container_create("late_default_subscriber", &cbs, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  ASSERT_EQ(pcl_executor_set_transport(e, &transport), PCL_OK);
+  EXPECT_EQ(transport_state.subscribe_count, 1);
+  EXPECT_EQ(transport_state.last_name, "late/default");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+///< REQ_PCL_497: adding a subscriber fails without retaining the container
+///< when its selected transport has no subscription operation. PCL.080.
+TEST(PclExecutor, SelectedTransportWithoutSubscribeFailsClosed) {
+  pcl_transport_t transport = {};
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    const char* peers[] = {"peer_a"};
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "unsupported/topic", "UnsupportedMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void*) {}, nullptr);
+    return port ? pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1)
+                : PCL_ERR_NOMEM;
+  };
+  auto* c = pcl_container_create("unsupported_subscriber", &cbs, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &transport), PCL_OK);
+  EXPECT_EQ(pcl_executor_add(e, c), PCL_ERR_NOT_FOUND);
+  EXPECT_EQ(pcl_executor_remove(e, c), PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+///< REQ_PCL_497: a rejected late subscription leaves the named transport
+///< unregistered. PCL.080.
+TEST(PclExecutor, RejectedLateSubscriptionRollsBackTransport) {
+  MockTransportState transport_state;
+  transport_state.subscribe_status = PCL_ERR_STATE;
+  pcl_transport_t transport = {};
+  transport.subscribe = mock_subscribe;
+  transport.adapter_ctx = &transport_state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    const char* peers[] = {"peer_a"};
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "rejected/topic", "RejectedMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void*) {}, nullptr);
+    return port ? pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1)
+                : PCL_ERR_NOMEM;
+  };
+  auto* c = pcl_container_create("rejected_subscriber", &cbs, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  EXPECT_EQ(pcl_executor_register_transport(e, "peer_a", &transport),
+            PCL_ERR_STATE);
+  EXPECT_EQ(pcl_executor_get_transport_for_peer(e, "peer_a"), nullptr);
 
   pcl_executor_destroy(e);
   pcl_container_destroy(c);

@@ -3,7 +3,7 @@
 > **Generated file.** Regenerate with `python3 subprojects/PCL/scripts/gen_hlr_coverage.py`.
 > Do not hand-edit; fix `HLR.md`/`LLR.md` or the test requirement tags and regenerate.
 
-Generated: 2026-07-09
+Generated: 2026-07-17
 
 End-to-end traceability: **Test -> LLR -> HLR** for all PCL requirements.
 
@@ -111,8 +111,8 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.045 | Null Handle Safety | 002, 018, 022, 025, 038, 046, 050, 060, 063, 111, 112, 113, 114, 116, 118, 123, 127, 129, 130, 166, 170, 184, 189, 192, 193, 198, 212, 216, 298, 302, 317, 340, 347, 353, 362, 377, 378, 381, 388, 390, 399, 401, 404, 406, 408, 429, 431, 432, 460 | test_pcl_alloc, test_pcl_apos_transport, test_pcl_capabilities, test_pcl_codec_registry, test_pcl_executor, test_pcl_integration, test_pcl_lifecycle, test_pcl_plugin_loader, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_transport, test_pcl_streaming, test_pcl_template_transport, test_pcl_transport_routing, test_pcl_udp_transport |
-| PCL.046 | Allocation Failure Handling | 016, 021, 037, 052, 061, 082, 085, 086, 087, 088, 089, 090, 185, 309, 310, 318, 319, 409, 410, 411, 413 | test_pcl_bridge, test_pcl_dining, test_pcl_oom, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_faults, test_pcl_transport_routing |
+| PCL.045 | Null Handle Safety | 002, 018, 022, 025, 038, 046, 050, 060, 063, 111, 112, 113, 114, 116, 118, 123, 127, 129, 130, 166, 170, 184, 189, 192, 193, 198, 212, 216, 298, 302, 317, 340, 347, 353, 362, 377, 378, 381, 388, 390, 399, 401, 404, 406, 408, 429, 431, 432, 460, 476, 497 | test_pcl_alloc, test_pcl_apos_transport, test_pcl_capabilities, test_pcl_codec_registry, test_pcl_executor, test_pcl_integration, test_pcl_lifecycle, test_pcl_plugin_loader, test_pcl_process_runtime, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_transport, test_pcl_streaming, test_pcl_template_transport, test_pcl_transport_routing, test_pcl_udp_transport |
+| PCL.046 | Allocation Failure Handling | 016, 021, 037, 052, 061, 082, 085, 086, 087, 088, 089, 090, 185, 309, 310, 318, 319, 409, 410, 411, 413, 494 | test_pcl_bridge, test_pcl_dining, test_pcl_oom, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_faults, test_pcl_transport_routing |
 | PCL.047 | Status Codes | 462 | test_pcl_lifecycle, test_pcl_robustness |
 ## C++ Wrappers
 
@@ -181,7 +181,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.075 | Transport Threading-Model Contract | 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458 | test_pcl_transport_threading |
+| PCL.075 | Transport Threading-Model Contract | 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458, 501, 503 | test_pcl_shared_memory_transport, test_pcl_socket_transport, test_pcl_transport_threading |
 | PCL.076 | Transport Threading-Model Conformance Suite | 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458 | test_pcl_transport_threading |
 ## Manifest-Driven Endpoint Routing
 
@@ -189,16 +189,30 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 |-----|-------------|--------|--------------|
 | PCL.077 | Manifest Exclusive Realization Groups | 463, 464, 465, 466, 467, 468, 469, 474, 475 | test_pcl_transport_routing |
 | PCL.078 | Manifest-Driven Remote Streaming Invoke and Gateway Discovery | 470, 471, 472, 473 | test_pcl_executor, test_pcl_streaming, test_pcl_transport_routing |
+## Standalone Process Runtime
+
+| HLR | Description | LLR(s) | Test File(s) |
+|-----|-------------|--------|--------------|
+| PCL.079 | Standalone Component Process Runtime | 476, 477, 478, 479, 480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494 | test_pcl_oom, test_pcl_process_runtime |
+## Transport Flow Control and Monitoring
+
+| HLR | Description | LLR(s) | Test File(s) |
+|-----|-------------|--------|--------------|
+| PCL.080 | Remote Subscription Registration | 495, 496, 497 | test_pcl_executor |
+| PCL.081 | Bounded Executor Ingress | 498, 499 | test_pcl_executor |
+| PCL.082 | Shared-Memory Interest and Service Backpressure | 500, 501 | test_pcl_shared_memory_transport |
+| PCL.083 | Bounded Reliable-Socket Egress | 502, 503 | test_pcl_socket_transport |
+| PCL.084 | UDP Receive and Loss Accounting | 504, 505 | test_pcl_udp_transport |
 
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
-| HLRs | 92 |
-| LLRs | 390 |
-| LLRs with at least one verifying test file | 390 |
-| Distinct test files carrying REQ_PCL tags | 18 |
+| HLRs | 98 |
+| LLRs | 420 |
+| LLRs with at least one verifying test file | 420 |
+| Distinct test files carrying REQ_PCL tags | 20 |
 | HLRs with no tracing LLR | 0 |
 | LLRs with no test evidence | 0 |
 | LLRs with no parent HLR | 0 |

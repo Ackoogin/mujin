@@ -15,6 +15,7 @@ extern "C" {
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_bridge.h"
 #include "pcl/pcl_log.h"
+#include "pcl/pcl_process_runtime.h"
 }
 
 // -- Malloc interposer ----------------------------------------------------
@@ -60,6 +61,26 @@ static void silence_logs() {
 static void restore_logs() {
   pcl_log_set_handler(nullptr, nullptr);
   pcl_log_set_level(PCL_LOG_INFO);
+}
+
+///< REQ_PCL_494: allocation failure for the process-runtime object returns NOMEM. PCL.079.
+TEST(PclOom, ProcessRuntimeAllocationFails) {
+  pcl_process_runtime_t* runtime = nullptr;
+  g_oom_countdown = 0;
+  const pcl_status_t rc = pcl_process_runtime_create(0u, &runtime);
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+  EXPECT_EQ(runtime, nullptr);
+}
+
+///< REQ_PCL_494: executor allocation failure releases the process-runtime object. PCL.079.
+TEST(PclOom, ProcessRuntimeExecutorAllocationFails) {
+  pcl_process_runtime_t* runtime = nullptr;
+  g_oom_countdown = 1;
+  const pcl_status_t rc = pcl_process_runtime_create(0u, &runtime);
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+  EXPECT_EQ(runtime, nullptr);
 }
 
 // -- pcl_executor_post_incoming allocation sequence ----------------------

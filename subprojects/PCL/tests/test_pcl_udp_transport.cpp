@@ -393,10 +393,9 @@ TEST(PclUdpTransport, UnresolvableRemoteHostReturnsNull) {
   pcl_executor_destroy(exec);
 }
 
-///< REQ_PCL_303: malformed datagrams (truncated header, truncated type name,
-///< truncated payload, unknown message type) are dropped without crashing and
-///< without wedging the receive thread.
-TEST(PclUdpTransport, MalformedDatagramsDropped) {
+///< REQ_PCL_303, REQ_PCL_504: malformed and unsupported datagrams are dropped
+///< without wedging the receiver, but every datagram is counted. PCL.084.
+TEST(PclUdpTransport, MalformedDatagramsIncreaseReceivedCounter) {
   silence_logs();
   pcl_executor_t* exec = pcl_executor_create();
   ASSERT_NE(exec, nullptr);
@@ -424,28 +423,43 @@ TEST(PclUdpTransport, MalformedDatagramsDropped) {
            reinterpret_cast<sockaddr*>(&to), sizeof(to));
   };
 
-  // Unknown message type byte.
-  const uint8_t unknown_type[] = {0x7F, 0x00, 0x00};
+  // Truncated fixed header.
+  const uint8_t truncated_header[] = {0x00};
+  send_raw(truncated_header, sizeof(truncated_header));
+
+  // Complete fixed header with an unknown message type byte.
+  const uint8_t unknown_type[] = {
+      0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   send_raw(unknown_type, sizeof(unknown_type));
 
   // PUBLISH with a topic length that exceeds the datagram.
-  const uint8_t truncated_topic[] = {0x00, 0x00, 0x40, 'a', 'b'};
+  const uint8_t truncated_topic[] = {
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 'a', 'b'};
   send_raw(truncated_topic, sizeof(truncated_topic));
 
   // PUBLISH with a valid topic but truncated type-name length field.
-  // [type=0][topic_len=1]['t'][type_len=0x0040 -> exceeds datagram]
-  const uint8_t truncated_type[] = {0x00, 0x00, 0x01, 't', 0x00, 0x40,
-                                    0x00, 0x00, 0x00, 0x00};
+  // [type=0][sequence=0][topic_len=1]['t'][type_len=0x0040]
+  const uint8_t truncated_type[] = {
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 't', 0x00, 0x40};
   send_raw(truncated_type, sizeof(truncated_type));
 
   // PUBLISH with valid topic and type but data_len larger than the datagram.
-  // [type=0][topic_len=1]['t'][type_len=1]['T'][data_len=0xFFFF]
-  const uint8_t truncated_data[] = {0x00, 0x00, 0x01, 't', 0x00, 0x01, 'T',
-                                    0x00, 0x00, 0xFF, 0xFF};
+  // [type=0][sequence=0][topic_len=1]['t'][type_len=1]['T'][data_len=0xFFFF]
+  const uint8_t truncated_data[] = {
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 't',
+      0x00, 0x01, 'T', 0x00, 0x00, 0xFF, 0xFF};
   send_raw(truncated_data, sizeof(truncated_data));
 
-  // Give the receive thread time to consume (and drop) all four datagrams.
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  for (int i = 0;
+       i < 100 && pcl_udp_transport_received_datagrams(udp) < 5u;
+       ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_EQ(pcl_udp_transport_received_datagrams(udp), 5u);
+  EXPECT_EQ(pcl_udp_transport_dropped_datagrams(udp), 0u);
+  EXPECT_EQ(pcl_udp_transport_received_datagrams(nullptr), 0u);
+  EXPECT_EQ(pcl_udp_transport_dropped_datagrams(nullptr), 0u);
 
   // The transport is still alive and well-formed traffic still works: the
   // destroy path below would deadlock or crash on a wedged receive thread.
@@ -453,6 +467,91 @@ TEST(PclUdpTransport, MalformedDatagramsDropped) {
   closesocket(raw);
 #else
   close(raw);
+#endif
+  pcl_udp_transport_destroy(udp);
+  pcl_executor_destroy(exec);
+  restore_logs();
+}
+
+///< REQ_PCL_505: UDP forward sequence gaps are counted per source while
+///< duplicate, reordered, and stale values do not increase the count. PCL.084.
+TEST(PclUdpTransport, SequenceGapsAreCountedPerSource) {
+  silence_logs();
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+  pcl_udp_transport_t* udp =
+      pcl_udp_transport_create(0, "127.0.0.1", 18796, exec);
+  ASSERT_NE(udp, nullptr);
+  const uint16_t port = pcl_udp_transport_get_local_port(udp);
+  ASSERT_NE(port, 0);
+
+#ifdef _WIN32
+  SOCKET raw_a = socket(AF_INET, SOCK_DGRAM, 0);
+  SOCKET raw_b = socket(AF_INET, SOCK_DGRAM, 0);
+  ASSERT_NE(raw_a, INVALID_SOCKET);
+  ASSERT_NE(raw_b, INVALID_SOCKET);
+#else
+  int raw_a = socket(AF_INET, SOCK_DGRAM, 0);
+  int raw_b = socket(AF_INET, SOCK_DGRAM, 0);
+  ASSERT_GE(raw_a, 0);
+  ASSERT_GE(raw_b, 0);
+#endif
+  sockaddr_in to{};
+  to.sin_family = AF_INET;
+  to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  to.sin_port = htons(port);
+
+  auto packet = [](uint32_t sequence) {
+    std::vector<uint8_t> bytes;
+    auto append_u16 = [&](uint16_t value) {
+      bytes.push_back(static_cast<uint8_t>(value >> 8));
+      bytes.push_back(static_cast<uint8_t>(value));
+    };
+    auto append_u32 = [&](uint32_t value) {
+      bytes.push_back(static_cast<uint8_t>(value >> 24));
+      bytes.push_back(static_cast<uint8_t>(value >> 16));
+      bytes.push_back(static_cast<uint8_t>(value >> 8));
+      bytes.push_back(static_cast<uint8_t>(value));
+    };
+    bytes.push_back(0x00);
+    append_u32(sequence);
+    append_u16(1u);
+    bytes.push_back('t');
+    append_u16(1u);
+    bytes.push_back('T');
+    append_u32(1u);
+    bytes.push_back('x');
+    return bytes;
+  };
+  auto send_sequence = [&](auto raw, uint32_t sequence) {
+    const std::vector<uint8_t> bytes = packet(sequence);
+    return sendto(raw, reinterpret_cast<const char*>(bytes.data()),
+                  static_cast<int>(bytes.size()), 0,
+                  reinterpret_cast<sockaddr*>(&to), sizeof(to));
+  };
+
+  EXPECT_GT(send_sequence(raw_a, 10u), 0);
+  EXPECT_GT(send_sequence(raw_a, 13u), 0);  // two inferred drops
+  EXPECT_GT(send_sequence(raw_a, 12u), 0);  // stale/reordered
+  EXPECT_GT(send_sequence(raw_a, 13u), 0);  // duplicate
+  EXPECT_GT(send_sequence(raw_a, 15u), 0);  // one inferred drop
+  EXPECT_GT(send_sequence(raw_b, 100u), 0); // independent baseline
+  EXPECT_GT(send_sequence(raw_b, 102u), 0); // one inferred drop
+
+  for (int i = 0;
+       i < 100 && pcl_udp_transport_received_datagrams(udp) < 7u;
+       ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_EQ(pcl_udp_transport_received_datagrams(udp), 7u);
+  EXPECT_EQ(pcl_udp_transport_dropped_datagrams(udp), 4u);
+
+#ifdef _WIN32
+  closesocket(raw_a);
+  closesocket(raw_b);
+#else
+  close(raw_a);
+  close(raw_b);
 #endif
   pcl_udp_transport_destroy(udp);
   pcl_executor_destroy(exec);

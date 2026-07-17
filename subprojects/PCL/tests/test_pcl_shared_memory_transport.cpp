@@ -364,6 +364,8 @@ TEST(PclSharedMemoryTransport, PublishFansOutAcrossBusParticipants) {
   restore_logs();
 }
 
+///< REQ_PCL_500: shared-memory publish targets only participants that
+///< advertised the topic and reports when none are interested. PCL.082.
 TEST(PclSharedMemoryTransport, PublishTargetsOnlyInterestedParticipants) {
   silence_logs();
 
@@ -400,6 +402,39 @@ TEST(PclSharedMemoryTransport, PublishTargetsOnlyInterestedParticipants) {
 
   alpha.destroy();
   bravo.destroy();
+  restore_logs();
+}
+
+///< REQ_PCL_500: shared-memory subscription registration is idempotent,
+///< validates topic names, and is bounded to 16 distinct topics. PCL.082.
+TEST(PclSharedMemoryTransport, SubscriptionValidationAndCapacity) {
+  silence_logs();
+  const std::string bus = unique_token("subscription_bounds_bus");
+  BusNode node;
+  ASSERT_TRUE(node.create(bus.c_str(), "subscriber"));
+  const pcl_transport_t* transport =
+      pcl_shared_memory_transport_get_transport(node.transport);
+  ASSERT_NE(transport, nullptr);
+  ASSERT_NE(transport->subscribe, nullptr);
+
+  EXPECT_EQ(transport->subscribe(transport->adapter_ctx, "", "Msg"),
+            PCL_ERR_INVALID);
+  std::string overlong(128u, 'x');
+  EXPECT_EQ(transport->subscribe(transport->adapter_ctx, overlong.c_str(), "Msg"),
+            PCL_ERR_NOMEM);
+  for (int i = 0; i < 16; ++i) {
+    const std::string topic = "bounded/topic/" + std::to_string(i);
+    EXPECT_EQ(transport->subscribe(transport->adapter_ctx, topic.c_str(), "Msg"),
+              PCL_OK);
+  }
+  EXPECT_EQ(transport->subscribe(transport->adapter_ctx, "bounded/topic/0",
+                                 "Msg"),
+            PCL_OK);
+  EXPECT_EQ(transport->subscribe(transport->adapter_ctx, "bounded/overflow",
+                                 "Msg"),
+            PCL_ERR_NOMEM);
+
+  node.destroy();
   restore_logs();
 }
 
@@ -1570,6 +1605,129 @@ void resp_recorder(const pcl_msg_t* resp, void* ud) {
 }
 
 }  // namespace
+
+///< REQ_PCL_501: a unary request retries a full provider mailbox for a
+///< bounded interval, then completes with an empty response. PCL.082.
+TEST(PclSharedMemoryTransport, UnaryServiceCongestionRetriesThenCompletesEmpty) {
+  silence_logs();
+  const std::string bus = unique_token("svc_congestion_bus");
+  BusNode client;
+  BusNode server;
+  ASSERT_TRUE(client.create(bus.c_str(), "client"));
+  ASSERT_TRUE(server.create(bus.c_str(), "server"));
+  ASSERT_TRUE(client.attach_transport(true));
+  ASSERT_TRUE(server.attach_transport(true));
+
+  FilteredSvcState svc_state;
+  svc_state.service_name = "congested_service";
+  svc_state.allowed_peer = "client";
+  pcl_callbacks_t svc_cbs = {};
+  svc_cbs.on_configure = filtered_svc_configure;
+  pcl_container_t* svc =
+      pcl_container_create("congested_server", &svc_cbs, &svc_state);
+  ASSERT_NE(svc, nullptr);
+  ASSERT_EQ(pcl_container_configure(svc), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(svc), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(server.exec, svc), PCL_OK);
+
+  struct FillState {
+    std::atomic<int> calls{0};
+  } fill_state;
+  pcl_callbacks_t fill_cbs = {};
+  fill_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "congestion/fill", "FillMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void* state_ud) {
+          static_cast<FillState*>(state_ud)->calls.fetch_add(1);
+        },
+        ud);
+    return port ? pcl_port_set_route(port, PCL_ROUTE_REMOTE, nullptr, 0)
+                : PCL_ERR_NOMEM;
+  };
+  pcl_container_t* filler =
+      pcl_container_create("congestion_filler", &fill_cbs, &fill_state);
+  ASSERT_NE(filler, nullptr);
+  ASSERT_EQ(pcl_container_configure(filler), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(filler), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(server.exec, filler), PCL_OK);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "congested_service";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
+
+  // Complete one probe call before inducing congestion. This proves that the
+  // provider advertisement is visible and avoids making the retry test depend
+  // on an arbitrary service-advertisement sleep.
+  pcl_msg_t req = {};
+  req.data = "x";
+  req.size = 1u;
+  req.type_name = "Req";
+  RespState probe;
+  ASSERT_EQ(pcl_executor_invoke_async(client.exec, "congested_service", &req,
+                                      resp_recorder, &probe),
+            PCL_OK);
+  for (int i = 0; i < 200 && !probe.received; ++i) {
+    pcl_executor_spin_once(server.exec, 0);
+    pcl_executor_spin_once(client.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  ASSERT_TRUE(probe.received);
+  ASSERT_EQ(probe.size, 2u);
+  ASSERT_EQ(svc_state.handler_calls.load(), 1);
+
+  ASSERT_EQ(pcl_executor_set_incoming_queue_limit(server.exec, 1u), PCL_OK);
+  const std::string payload(16384u, 'x');
+  bool mailbox_full = false;
+  for (int i = 0; i < 200 && !mailbox_full; ++i) {
+    pcl_status_t rc =
+        publish_text(client, "congestion/fill", "FillMsg", payload);
+    mailbox_full = (rc == PCL_ERR_NOMEM);
+  }
+  ASSERT_TRUE(mailbox_full);
+  for (int i = 0;
+       i < 100 && pcl_executor_get_incoming_queue_depth(server.exec) == 0u;
+       ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_EQ(pcl_executor_get_incoming_queue_depth(server.exec), 1u);
+  // The receive worker advances the mailbox before retrying the frame rejected
+  // by the full executor queue. Wait for that one-slot opening, then refill it
+  // so the provider mailbox remains stably full throughout the service retry.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  mailbox_full = false;
+  for (int i = 0; i < 200 && !mailbox_full; ++i) {
+    pcl_status_t rc =
+        publish_text(client, "congestion/fill", "FillMsg", payload);
+    mailbox_full = (rc == PCL_ERR_NOMEM);
+  }
+  ASSERT_TRUE(mailbox_full);
+
+  RespState response;
+  const auto start = std::chrono::steady_clock::now();
+  ASSERT_EQ(pcl_executor_invoke_async(client.exec, "congested_service", &req,
+                                      resp_recorder, &response),
+            PCL_OK);
+  for (int i = 0; i < 200 && !response.received; ++i) {
+    pcl_executor_spin_once(client.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_TRUE(response.received);
+  EXPECT_EQ(response.size, 0u);
+  EXPECT_GE(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+            40);
+  EXPECT_EQ(svc_state.handler_calls.load(), 1);
+
+  pcl_executor_remove(server.exec, filler);
+  pcl_executor_remove(server.exec, svc);
+  pcl_container_destroy(filler);
+  pcl_container_destroy(svc);
+  client.destroy();
+  server.destroy();
+  restore_logs();
+}
 
 ///< REQ_PCL_306: a remote service request from a peer outside the provider's
 ///< allow-list is answered with an empty response instead of dispatching the

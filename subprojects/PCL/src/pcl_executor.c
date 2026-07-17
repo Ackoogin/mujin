@@ -826,8 +826,11 @@ pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
 pcl_status_t pcl_executor_set_transport_caps(pcl_executor_t*        e,
                                              const pcl_transport_t* transport,
                                              pcl_transport_caps_t   caps) {
+  pcl_status_t rc;
   if (!e) return PCL_ERR_INVALID;
   if (transport) {
+    rc = subscribe_existing_ports(e, NULL, transport);
+    if (rc != PCL_OK) return rc;
     e->transport       = *transport;
     e->transport_caps  = caps;
     e->has_transport   = 1;

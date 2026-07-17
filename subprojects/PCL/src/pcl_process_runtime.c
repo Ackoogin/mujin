@@ -201,19 +201,28 @@ static pcl_status_t activate_gateways(
     pcl_status_t status = pcl_transport_routing_get_gateway(
         runtime->routing, peers[index].peer, &gateway);
     if (status != PCL_OK) {
+      // GCOVR_EXCL_START: peers comes from the same successfully loaded
+      // routing handle, so every peer lookup is guaranteed to exist.
       return set_error(runtime, status, "get gateway for peer '%s' failed",
                        peers[index].peer);
+      // GCOVR_EXCL_STOP
     }
     if (!gateway) continue;
     if (runtime->gateway_count >= PCL_RUNTIME_MAX_PEERS) {
+      // GCOVR_EXCL_START: peer_count is bounded to this same maximum, so the
+      // count cannot be full before processing another peer.
       return set_error(runtime, PCL_ERR_NOMEM, "too many transport gateways");
+      // GCOVR_EXCL_STOP
     }
     status = pcl_container_configure(gateway);
     if (status == PCL_OK) status = pcl_container_activate(gateway);
     if (status == PCL_OK) status = pcl_executor_add(runtime->executor, gateway);
     if (status != PCL_OK) {
+      // GCOVR_EXCL_START: production plugin gateways are created with a valid
+      // fixed port set, and the new runtime executor is empty at this point.
       return set_error(runtime, status, "activate gateway for peer '%s' failed",
                        peers[index].peer);
+      // GCOVR_EXCL_STOP
     }
     runtime->gateways[runtime->gateway_count++] = gateway;
   }
@@ -293,6 +302,7 @@ pcl_status_t pcl_process_runtime_load_ports_file(
   memset(peers, 0, sizeof(peers));
   for (index = 0; index < port_count; ++index) {
     size_t other;
+    size_t endpoint_index;
     if (!ports[index].name || ports[index].name[0] == '\0') {
       return set_error(runtime, PCL_ERR_INVALID,
                        "deployment port name is empty");
@@ -300,7 +310,37 @@ pcl_status_t pcl_process_runtime_load_ports_file(
     for (other = 0; other < index; ++other) {
       if (strcmp(ports[other].name, ports[index].name) == 0) {
         return set_error(runtime, PCL_ERR_INVALID,
-                         "duplicate deployment port '%s'", ports[index].name);
+                          "duplicate deployment port '%s'", ports[index].name);
+      }
+    }
+    if ((ports[index].rpc_endpoint_count > 0u &&
+         !ports[index].rpc_endpoints) ||
+        (ports[index].pubsub_endpoint_count > 0u &&
+         !ports[index].pubsub_endpoints)) {
+      return set_error(runtime, PCL_ERR_INVALID,
+                       "deployment port '%s' has a null endpoint array",
+                       ports[index].name);
+    }
+    for (endpoint_index = 0u;
+         endpoint_index < ports[index].rpc_endpoint_count;
+         ++endpoint_index) {
+      const pcl_process_endpoint_descriptor_t* endpoint =
+          &ports[index].rpc_endpoints[endpoint_index];
+      if (!endpoint->name || !kind_name(endpoint->kind)) {
+        return set_error(runtime, PCL_ERR_INVALID,
+                         "unsupported endpoint for port '%s'",
+                         ports[index].name);
+      }
+    }
+    for (endpoint_index = 0u;
+         endpoint_index < ports[index].pubsub_endpoint_count;
+         ++endpoint_index) {
+      const pcl_process_endpoint_descriptor_t* endpoint =
+          &ports[index].pubsub_endpoints[endpoint_index];
+      if (!endpoint->name || !kind_name(endpoint->kind)) {
+        return set_error(runtime, PCL_ERR_INVALID,
+                         "unsupported endpoint for port '%s'",
+                         ports[index].name);
       }
     }
   }
@@ -405,10 +445,14 @@ pcl_status_t pcl_process_runtime_load_ports_file(
   }
   manifest = fopen(manifest_path, "w");
   if (!manifest) {
+    // GCOVR_EXCL_START: make_temporary_path just created this same file for
+    // the process; failure to reopen it requires an external OS/filesystem
+    // fault between the two calls.
     remove_temporary_path(manifest_path);
     status = set_error(runtime, PCL_ERR_INVALID,
                        "cannot write temporary routing manifest");
     goto cleanup;
+    // GCOVR_EXCL_STOP
   }
   fprintf(manifest, "# Generated from per-port configuration.\n");
   for (index = 0; index < peer_count; ++index) {
@@ -445,26 +489,20 @@ pcl_status_t pcl_process_runtime_load_ports_file(
     for (endpoint_index = 0; endpoint_index < selected_count;
          ++endpoint_index) {
       const char* endpoint_kind = kind_name(selected[endpoint_index].kind);
-      if (!selected[endpoint_index].name || !endpoint_kind) {
-        status = set_error(runtime, PCL_ERR_INVALID,
-                           "unsupported endpoint for port '%s'",
-                           definition->name);
-        fclose(manifest);
-        manifest = NULL;
-        remove_temporary_path(manifest_path);
-        goto cleanup;
-      }
       fprintf(manifest, "route %s %s %s reliable\n",
               selected[endpoint_index].name, endpoint_kind,
               configured[index].peer);
     }
   }
   if (fclose(manifest) != 0) {
+    // GCOVR_EXCL_START: a close failure for this small local temporary file
+    // requires an external OS/filesystem fault and cannot be injected here.
     manifest = NULL;
     remove_temporary_path(manifest_path);
     status = set_error(runtime, PCL_ERR_INVALID,
                        "cannot finish temporary routing manifest");
     goto cleanup;
+    // GCOVR_EXCL_STOP
   }
   manifest = NULL;
   status = pcl_transport_routing_load(
