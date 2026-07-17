@@ -18,12 +18,17 @@ plugins/        prebuilt transport plugins; a --gra package also contains the
 tools/          flatc.exe (FlatBuffers schema compiler)
 generator/      the proto -> bindings generator (pure Python, stdlib only)
 proto/          starter .proto contracts -- edit or extend these
+examples/       examples for the packaged contract, when available
 sdk_project/    standalone CMake project: builds C++ codec plugin DLLs
                 and small smoke-test executables
 gnat/           standalone GNAT project: builds the Ada codec archive
 scripts/        generation, plugin/Ada build, and end-to-end commands
 MANIFEST.txt    full file listing written by the packaging step
 ```
+
+Formal seam packages can include an example that uses their generated
+bindings. For the A-GRA P3 package, see
+`examples/agra/p3_three_process/README.md`.
 
 The generated **codec** plugins (JSON/FlatBuffers, one per component/service)
 are proto-dependent and built by you. The **transport** plugins do not change

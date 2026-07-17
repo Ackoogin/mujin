@@ -81,17 +81,16 @@ and has no response port or second configuration line.
 
 ## Generate the P3 SDK bindings
 
-Create the P3 SDK distribution as described in the
-[PYRAMID SDK guide](../../../doc/architecture/sdk_packaging.md), then run its
-binding generator once. The example needs C++ JSON bindings only. On Linux,
-from the repository root:
+Create the P3 SDK distribution as described in the repository's PYRAMID SDK
+guide, then run its binding generator once. The package includes this example
+under `examples/agra/p3_three_process`. The example needs C++ JSON bindings
+only. On Linux, from the SDK root:
 
 ```bash
-dist/pcl_pyramid_sdk_agra_p3/scripts/generate_bindings.sh \
-  --cpp --backends json
+scripts/generate_bindings.sh --cpp --backends json
 ```
 
-From a Visual Studio 2022 x64 developer prompt:
+From a Visual Studio 2022 x64 developer prompt, start in the SDK root:
 
 ```bat
 cd /d D:\Dev\repo\mujin\dist\pcl_pyramid_sdk_agra_p3
@@ -103,22 +102,22 @@ uses that directory rather than any generated files from the monorepo build.
 
 ## Build
 
-On Linux, from the repository root:
+On Linux, from the SDK root:
 
 ```bash
-cmake -S subprojects/PYRAMID/examples/agra/p3_three_process \
+cmake -S examples/agra/p3_three_process \
   -B build-agra-p3-example \
   -DCMAKE_BUILD_TYPE=Release \
-  -DPYRAMID_P3_SDK="$PWD/dist/pcl_pyramid_sdk_agra_p3"
+  -DPYRAMID_P3_SDK="$PWD"
 cmake --build build-agra-p3-example --parallel 4
 ```
 
-On Windows, from the repository root:
+On Windows, from the SDK root:
 
 ```bat
-cmake -S subprojects\PYRAMID\examples\agra\p3_three_process ^
+cmake -S examples\agra\p3_three_process ^
   -B build-agra-p3-example ^
-  -DPYRAMID_P3_SDK=D:\Dev\repo\mujin\dist\pcl_pyramid_sdk_agra_p3
+  -DPYRAMID_P3_SDK=%CD%
 cmake --build build-agra-p3-example --config Release --parallel 4
 ```
 
@@ -131,19 +130,18 @@ owns JSON encoding and decoding.
 ## Run three separate processes
 
 The helper starts the Mission System, Mission Autonomy, and C2 as separate
-operating-system processes. Run either deployment from the repository root.
-On Linux:
+operating-system processes. Run either deployment from the SDK root. On Linux:
 
 ```bash
-subprojects/PYRAMID/examples/agra/p3_three_process/run_three_processes.sh \
-  --sdk-root dist/pcl_pyramid_sdk_agra_p3 \
+examples/agra/p3_three_process/run_three_processes.sh \
+  --sdk-root "$PWD" \
   --build-dir build-agra-p3-example \
   --profile shared_memory
 ```
 
 ```bash
-subprojects/PYRAMID/examples/agra/p3_three_process/run_three_processes.sh \
-  --sdk-root dist/pcl_pyramid_sdk_agra_p3 \
+examples/agra/p3_three_process/run_three_processes.sh \
+  --sdk-root "$PWD" \
   --build-dir build-agra-p3-example \
   --profile tcp
 ```
@@ -151,16 +149,16 @@ subprojects/PYRAMID/examples/agra/p3_three_process/run_three_processes.sh \
 On Windows:
 
 ```powershell
-subprojects\PYRAMID\examples\agra\p3_three_process\run_three_processes.ps1 `
-  -SdkRoot D:\Dev\repo\mujin\dist\pcl_pyramid_sdk_agra_p3 `
-  -BuildDir D:\Dev\repo\mujin\build-agra-p3-example `
+examples\agra\p3_three_process\run_three_processes.ps1 `
+  -SdkRoot $PWD `
+  -BuildDir "$PWD\build-agra-p3-example" `
   -Profile shared_memory
 ```
 
 ```powershell
-subprojects\PYRAMID\examples\agra\p3_three_process\run_three_processes.ps1 `
-  -SdkRoot D:\Dev\repo\mujin\dist\pcl_pyramid_sdk_agra_p3 `
-  -BuildDir D:\Dev\repo\mujin\build-agra-p3-example `
+examples\agra\p3_three_process\run_three_processes.ps1 `
+  -SdkRoot $PWD `
+  -BuildDir "$PWD\build-agra-p3-example" `
   -Profile tcp
 ```
 

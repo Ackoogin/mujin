@@ -90,6 +90,7 @@ pcl_pyramid_sdk/
   tools/flatc(.exe)              prebuilt FlatBuffers schema compiler
   generator/                     pim/*.py generator (pure Python)
   proto/                         selected starter .proto contract tree to edit/extend
+  examples/                      examples selected for the packaged contract, when available
   sdk_project/                   standalone CMake project (C++ codec plugins + smoke tests)
   gnat/                          standalone GNAT project (Ada C-ABI archive + bindings)
   scripts/                       generate_bindings, build_plugins, build_ada
@@ -228,9 +229,10 @@ subprojects\PYRAMID\scripts\package_sdk.bat --gra --clean ^
 ```
 
 The package stages `pyramid_codec_oms_json_agra_core_mms` and
-`pyramid_lacal_transport_plugin` under `plugins/`, plus the full P3 seam under
-`proto/`. The package is a generated contract and SDK distribution only; it
-does not make an A-GRA compliance claim.
+`pyramid_lacal_transport_plugin` under `plugins/`, the full P3 seam under
+`proto/`, and the three-process example under
+`examples/agra/p3_three_process/`. The package is a generated contract and SDK
+distribution only; it does not make an A-GRA compliance claim.
 
 On Linux, the equivalent commands are:
 
@@ -248,9 +250,9 @@ subprojects/PYRAMID/scripts/package_sdk.sh --gra --clean \
   --out dist/pcl_pyramid_sdk_agra_p3
 ```
 
-The three-process example under `examples/agra/p3_three_process` provides the
-downstream Linux build and run commands. It generates and builds against this
-packaged SDK rather than the monorepo's generated P3 files.
+The packaged three-process example provides the downstream Windows and Linux
+build and run commands. It generates and builds against the packaged SDK
+rather than the monorepo's generated P3 files.
 
 ## Key files
 

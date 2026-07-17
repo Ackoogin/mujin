@@ -59,6 +59,27 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 
 This project uses CMake, with MSVC/Visual Studio 2022 the primary Windows toolchain. Core dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, googletest, and optional PYRAMID transport dependencies) are fetched automatically by CMake on first configure -- no Conan or manual installs needed.
 
+### Codex Windows environment
+
+The Codex PowerShell environment can contain both `PATH` and `Path`. .NET
+APIs such as PowerShell's `Start-Process` and tools such as MSBuild reject
+that environment before they start a child process. This is a Codex process
+environment issue, not a repository, compiler, or application failure.
+
+Before Codex runs a command that uses a .NET API or tool to start another
+process on Windows, normalize the environment in the same PowerShell command:
+
+```powershell
+$saved_path = $env:PATH
+[Environment]::SetEnvironmentVariable('PATH', $null, 'Process')
+[Environment]::SetEnvironmentVariable('Path', $null, 'Process')
+[Environment]::SetEnvironmentVariable('PATH', $saved_path, 'Process')
+cmake --build build --config Release
+```
+
+Keep both removal calls. Windows environment lookup is case-insensitive, but
+the inherited process environment can still contain both spellings.
+
 `CMakePresets.json` lives at the repository root and defines:
 
 | Preset type | Names | Purpose |

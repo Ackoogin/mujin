@@ -67,8 +67,10 @@ for %%I in ("%OUT_DIR%") do set "OUT_DIR=%%~fI"
 set "PYRAMID_ROOT=%REPO_ROOT%\subprojects\PYRAMID"
 set "PCL_ROOT=%REPO_ROOT%\subprojects\PCL"
 set "SDK_TEMPLATE=%PYRAMID_ROOT%\sdk_template"
+set "P3_EXAMPLE_DIR="
 if not defined PROTO_DIR set "PROTO_DIR=%PYRAMID_ROOT%\proto"
 for %%I in ("%PROTO_DIR%") do set "PROTO_DIR=%%~fI"
+if /i not "%PROTO_DIR:agra_p3_seam=%"=="%PROTO_DIR%" set "P3_EXAMPLE_DIR=%PYRAMID_ROOT%\examples\agra\p3_three_process"
 
 if not exist "%PROTO_DIR%" (
   echo [package_sdk] ERROR: proto dir not found: %PROTO_DIR%>&2
@@ -284,6 +286,12 @@ xcopy /y /q /i "%SDK_TEMPLATE%\gnat\pyramid_sdk_ada.gpr" "%OUT_DIR%\gnat\" >nul
 xcopy /y /q /i "%SDK_TEMPLATE%\gnat\build_gnat_pyramid_cabi_marshal_libs.bat" "%OUT_DIR%\gnat\" >nul
 xcopy /y /q /i "%SDK_TEMPLATE%\gnat\build_gnat_pyramid_cabi_marshal_libs.sh"  "%OUT_DIR%\gnat\" >nul
 xcopy /y /q /s /i "%SDK_TEMPLATE%\scripts" "%OUT_DIR%\scripts" >nul
+
+if defined P3_EXAMPLE_DIR (
+  echo [package_sdk] copying A-GRA P3 three-process example ...
+  if exist "%OUT_DIR%\examples\agra\p3_three_process" rmdir /s /q "%OUT_DIR%\examples\agra\p3_three_process"
+  xcopy /y /q /s /i "%P3_EXAMPLE_DIR%" "%OUT_DIR%\examples\agra\p3_three_process" >nul
+)
 
 REM --- Manifest ------------------------------------------------------------
 > "%OUT_DIR%\MANIFEST.txt" echo # PCL/PYRAMID offline SDK -- packaged from %BUILD_DIR%

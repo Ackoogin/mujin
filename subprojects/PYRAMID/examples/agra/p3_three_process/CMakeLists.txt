@@ -53,6 +53,9 @@ function(add_agra_p3_process target component_source main_source)
       pyramid_codec_json_agra_ms)
   if(MSVC)
     target_compile_options(${target} PRIVATE /bigobj)
+    # The complete P3 value types can exceed the Windows 1 MiB default stack
+    # while generated facades encode or decode them on application threads.
+    target_link_options(${target} PRIVATE "/STACK:33554432")
   endif()
 endfunction()
 

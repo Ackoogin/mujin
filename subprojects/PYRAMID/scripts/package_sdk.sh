@@ -62,6 +62,12 @@ SDK_TEMPLATE="${PYRAMID_ROOT}/sdk_template"
 [[ -n "${PROTO_DIR}" ]] || PROTO_DIR="${PYRAMID_ROOT}/proto"
 [[ -d "${PROTO_DIR}" ]] || { echo "[package_sdk] ERROR: proto dir not found: ${PROTO_DIR}" >&2; exit 1; }
 PROTO_DIR="$(cd "${PROTO_DIR}" && pwd)"
+P3_EXAMPLE_DIR=""
+case "${PROTO_DIR}" in
+  *agra_p3_seam)
+    P3_EXAMPLE_DIR="${PYRAMID_ROOT}/examples/agra/p3_three_process"
+    ;;
+esac
 [[ -n "$(find "${PROTO_DIR}" -name '*.proto' -type f -print -quit)" ]] || {
   echo "[package_sdk] ERROR: no .proto contracts found under ${PROTO_DIR}" >&2
   exit 1
@@ -243,6 +249,13 @@ chmod +x "${OUT_DIR}/gnat/build_gnat_pyramid_cabi_marshal_libs.sh"
 mkdir -p "${OUT_DIR}/scripts"
 cp -f "${SDK_TEMPLATE}"/scripts/* "${OUT_DIR}/scripts/"
 chmod +x "${OUT_DIR}"/scripts/*.sh
+
+if [[ -n "${P3_EXAMPLE_DIR}" ]]; then
+  echo "[package_sdk] copying A-GRA P3 three-process example ..."
+  rm -rf "${OUT_DIR}/examples/agra/p3_three_process"
+  mkdir -p "${OUT_DIR}/examples/agra"
+  cp -rf "${P3_EXAMPLE_DIR}" "${OUT_DIR}/examples/agra/"
+fi
 
 # --- Manifest ---------------------------------------------------------------
 {
