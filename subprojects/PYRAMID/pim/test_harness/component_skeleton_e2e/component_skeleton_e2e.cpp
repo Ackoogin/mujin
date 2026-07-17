@@ -192,10 +192,10 @@ int main(int argc, char** argv) {
       AuthorisationHandler authorisation_handler;
       SenRequirementHandler sen_requirement_handler;
       sensors::SensorsSkeleton::Handlers handlers{
-          .authorisation_dependency_request = authorisation_handler,
-          .capability_evidence_information =
-              [](const provided::Capabilities&) {},
-          .sen_requirement_request = sen_requirement_handler,
+          /* .authorisation_dependency_request = */ authorisation_handler,
+          /* .capability_evidence_information = */
+          [](const provided::Capabilities&) {},
+          /* .sen_requirement_request = */ sen_requirement_handler,
       };
       FilledSensorsStub provider(runtime.executor(), std::move(handlers));
       sen_requirement_handler.attach(provider);

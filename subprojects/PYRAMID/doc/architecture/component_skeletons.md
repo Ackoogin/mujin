@@ -111,8 +111,11 @@ follow contract port order:
 | Consumed request port | `std::function<void(const Frame&)> <port_key>_transitions` | No; it defaults to empty and no transition subscription is created |
 | Provided information port | No handler field | Not applicable; it is an outgoing port |
 
-The main scaffold constructs the handler objects and injects them with C++20
-designated initializers:
+The main scaffold constructs the handler objects and injects them with
+positional aggregate initialization (the project builds as C++17, which does
+not have designated initializers). The generated comments name each field so
+the positional list stays readable, and the order is the contract port order
+used everywhere else by the generator:
 
 ```cpp
 // scaffolded handler classes, from <comp>_handlers.hpp
@@ -120,20 +123,18 @@ sensors::AuthorisationDependencyHandler authorisation_handler;
 sensors::SenrequirementHandler sen_requirement_handler;
 
 sensors::SensorsSkeleton::Handlers handlers{
-    .authorisation_dependency_request = authorisation_handler,
-    .capability_evidence_information =
-        [](const services::consumed::Capabilities& item) {
-          // sink business logic
-        },
-    .sen_requirement_request = sen_requirement_handler,
+    /* .authorisation_dependency_request = */ authorisation_handler,
+    /* .capability_evidence_information = */
+    [](const services::consumed::Capabilities& item) {
+      // sink business logic
+    },
+    /* .sen_requirement_request = */ sen_requirement_handler,
 };
 sensors::SensorsComponent component(runtime.executor(), std::move(handlers));
 ```
 
-C++ requires designated initializers to follow field declaration order, which
-is the contract port order used by the generator. `HandlerSlot<T>` accepts
-either `T&` for caller-owned handlers or `std::unique_ptr<T>` when the
-skeleton should own the handler.
+`HandlerSlot<T>` accepts either `T&` for caller-owned handlers or
+`std::unique_ptr<T>` when the skeleton should own the handler.
 
 Because the slots are typed by the **facade** handler interfaces, reusable
 business logic binds to a port as a unit: a class that implements
@@ -302,10 +303,12 @@ byte-identically for an unchanged contract (this is pinned by golden tests),
 and scaffolds are never rewritten.
 
 When the contract itself changes (a port is added, or a message type
-changes), the regenerated `Handlers` record picks the change up automatically;
-your designated initializer then fails to compile until you supply any new
-required handler or sink slot. This is the intended signal that new business
-logic is required.
+changes), the regenerated `Handlers` aggregate picks the change up
+automatically. A new provider port fails to compile until you supply its
+handler (`HandlerSlot` has no default state), and a new sink port that you
+leave uninitialized is caught at startup: `on_configure()` reports the empty
+slot by name and returns `PCL_ERR_STATE`. Both are the intended signal that
+new business logic is required.
 
 ## Verifying an installation
 

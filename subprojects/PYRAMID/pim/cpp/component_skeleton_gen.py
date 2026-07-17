@@ -546,19 +546,22 @@ class CppComponentSkeletonGenerator:
                 f"    {self.namespace}::{self._handler_class(port)} {port.port_key}_handler;"
             )
         lines.extend([
+            "    // Positional aggregate initialization (C++17); the comments",
+            "    // name each Handlers field in its declared (contract) order.",
             f"    {self.namespace}::{self.class_name}::Handlers handlers{{",
         ])
         for port in self._emitted_ports():
             if port.role == "provided" and port.port_kind == "request":
                 lines.append(
-                    f"        .{port.port_key} = {port.port_key}_handler,"
+                    f"        /* .{port.port_key} = */ {port.port_key}_handler,"
                 )
             elif port.role == "consumed" and port.port_kind == "information":
                 frame = self._frame_type(port)
                 if frame.startswith("services::"):
                     frame = f"{self.namespace}::{frame}"
                 lines.extend([
-                    f"        .{port.port_key} = [](const {frame}& item) {{",
+                    f"        /* .{port.port_key} = */",
+                    f"        [](const {frame}& item) {{",
                     "          (void)item;",
                     "          // TODO: handle incoming information.",
                     "        },",
@@ -568,9 +571,10 @@ class CppComponentSkeletonGenerator:
                 if frame.startswith("services::"):
                     frame = f"{self.namespace}::{frame}"
                 lines.extend([
-                    f"        .{port.port_key}_transitions = [](const {frame}& item) {{",
+                    f"        /* .{port.port_key}_transitions = */",
+                    f"        [](const {frame}& item) {{",
                     "          (void)item;",
-                    "          // TODO: handle request-port transitions, or remove this initializer.",
+                    "          // TODO: handle request-port transitions, or leave the slot empty.",
                     "        },",
                 ])
         lines.extend([
@@ -620,7 +624,7 @@ class CppComponentSkeletonGenerator:
             f"    src/{component}_component.cpp",
             f"    src/{component}_main.cpp)",
             f"target_include_directories({target} PRIVATE include src)",
-            f"target_compile_features({target} PRIVATE cxx_std_20)",
+            f"target_compile_features({target} PRIVATE cxx_std_17)",
             f"target_link_libraries({target} PRIVATE",
             "    pyramid_component_skeletons",
             "    pyramid_generated_services",

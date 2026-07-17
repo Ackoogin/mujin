@@ -15,7 +15,7 @@ add_subdirectory(${PYRAMID_SDK}/sdk_project
                  ${CMAKE_CURRENT_BINARY_DIR}/pyramid_sdk)
 
 add_executable(component_skeleton_e2e component_skeleton_e2e.cpp)
-target_compile_features(component_skeleton_e2e PRIVATE cxx_std_20)
+target_compile_features(component_skeleton_e2e PRIVATE cxx_std_17)
 target_link_libraries(component_skeleton_e2e PRIVATE
     pyramid_component_skeletons
     pyramid_generated_services
