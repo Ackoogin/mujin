@@ -31,6 +31,31 @@ class ServiceTypeClosure:
 
 
 @dataclass(frozen=True)
+class ComponentPort:
+    """One generated component port and its role-specific facade."""
+
+    service_name: str
+    package: str
+    role: str
+    port_kind: str
+    facade: str
+    port_key: str
+    has_interaction: bool
+
+
+@dataclass(frozen=True)
+class ComponentGroup:
+    """Provided and consumed service modules belonging to one component."""
+
+    key: str
+    project: str
+    component: str
+    provided_package: str
+    consumed_package: str
+    ports: Tuple[ComponentPort, ...] = ()
+
+
+@dataclass(frozen=True)
 class BindingTopic:
     """One resolved pub/sub topic from parsed contract options or port grammar."""
 
@@ -218,6 +243,9 @@ class BindingContract:
     # command_projectability (see _service_key). Additive -- nothing in this
     # contract's existing fields or behaviour depends on it.
     interactions: Dict[str, "Interaction"] = field(default_factory=dict)
+    # Component-spanning view used by the optional skeleton generators.
+    # Generic layouts do not have PYRAMID component package structure.
+    components: Tuple[ComponentGroup, ...] = ()
 
 
 class NamingPolicy(Protocol):
@@ -602,8 +630,14 @@ def _service_interface_snake(service_name: str) -> str:
     return camel_to_lower_snake(name)
 
 
-def _service_wire_prefix(service_name: str) -> str:
+def service_wire_prefix(service_name: str) -> str:
+    """Return the stable wire prefix shared by all language emitters."""
     return _service_interface_snake(service_name)
+
+
+def _service_wire_prefix(service_name: str) -> str:
+    """Compatibility alias for existing contract helpers."""
+    return service_wire_prefix(service_name)
 
 
 def _rpc_wire_suffix(rpc_name: str) -> str:
@@ -1142,6 +1176,144 @@ def _build_interactions(
     return result
 
 
+def _component_package_parts(package: str) -> Optional[Tuple[str, str, str]]:
+    """Return project, component and role for a PYRAMID service package."""
+    parts = package.split(".")
+    if (
+        len(parts) < 6
+        or parts[0:2] != ["pyramid", "components"]
+        or parts[-2] != "services"
+        or parts[-1] not in ("provided", "consumed")
+    ):
+        return None
+    project = parts[2]
+    component = ".".join(parts[3:-2])
+    if not project or not component:
+        return None
+    return project, component, parts[-1]
+
+
+def _component_facade(
+    service_name: str,
+    role: str,
+    port_kind: str,
+) -> str:
+    name = service_name
+    if name.endswith("_Service"):
+        name = name[:-len("_Service")]
+    prefix = "".join(part.capitalize() for part in name.split("_") if part)
+    suffixes = {
+        ("provided", "request"): "RequestPortProvider",
+        ("consumed", "request"): "RequestPortClient",
+        ("provided", "information"): "InformationPortSource",
+        ("consumed", "information"): "InformationPortSink",
+    }
+    return prefix + suffixes[(role, port_kind)]
+
+
+def _has_emittable_interaction(interaction: Optional[Interaction]) -> bool:
+    """Apply the same complete-leg predicate as the facade emitters."""
+    if interaction is None:
+        return False
+    leg_names = {leg.name for leg in interaction.legs}
+    if interaction.port_kind == "request":
+        return {"request", "requirement"} <= leg_names
+    return (
+        interaction.port_kind == "information"
+        and "information" in leg_names
+    )
+
+
+def build_component_groups(
+    proto_files: List[ProtoFile],
+    index: ProtoTypeIndex,
+    naming_policy: NamingPolicy,
+) -> Tuple[ComponentGroup, ...]:
+    """Build the deterministic component-spanning service view."""
+    grouped: Dict[str, Dict[str, object]] = {}
+    candidates = []
+    for pf in sorted(proto_files, key=lambda item: (item.package, str(item.path))):
+        package_parts = _component_package_parts(pf.package)
+        if package_parts is None:
+            continue
+        project, component, role = package_parts
+        key = f"{project}.{component}"
+        group = grouped.setdefault(
+            key,
+            {
+                "project": project,
+                "component": component,
+                "provided_package": "",
+                "consumed_package": "",
+                "ports": [],
+            },
+        )
+        group[f"{role}_package"] = pf.package
+        for service in sorted(pf.services, key=lambda item: item.name):
+            if service.port_kind not in ("request", "information"):
+                continue
+            interaction = interaction_for_service(index, pf, service)
+            candidates.append(
+                (
+                    key,
+                    service.name,
+                    pf.package,
+                    naming_policy.service_role(pf.package),
+                    service.port_kind,
+                    interaction,
+                )
+            )
+
+    key_counts: Dict[Tuple[str, str], int] = {}
+    for key, service_name, _package, _role, port_kind, _interaction in candidates:
+        base_key = f"{service_wire_prefix(service_name)}_{port_kind}"
+        identity = (key, base_key)
+        key_counts[identity] = key_counts.get(identity, 0) + 1
+
+    for key, service_name, package, role, port_kind, interaction in candidates:
+        base_key = f"{service_wire_prefix(service_name)}_{port_kind}"
+        port_key = (
+            f"{base_key}_{role}"
+            if key_counts[(key, base_key)] > 1
+            else base_key
+        )
+        grouped[key]["ports"].append(
+            ComponentPort(
+                service_name=service_name,
+                package=package,
+                role=role,
+                port_kind=port_kind,
+                facade=_component_facade(service_name, role, port_kind),
+                port_key=port_key,
+                has_interaction=_has_emittable_interaction(interaction),
+            )
+        )
+
+    result = []
+    for key in sorted(grouped):
+        group = grouped[key]
+        ports = tuple(sorted(
+            group["ports"],
+            key=lambda port: (
+                port.port_key,
+                port.role,
+                port.service_name,
+                port.package,
+            ),
+        ))
+        result.append(
+            ComponentGroup(
+                key=key,
+                project=group["project"],
+                component=group["component"],
+                provided_package=group["provided_package"],
+                consumed_package=group["consumed_package"],
+                ports=ports,
+            )
+        )
+    return tuple(result)
+
+
 def naming_policy_for_layout(layout: str) -> NamingPolicy:
     if layout == "pyramid":
         return PyramidCompatNamingPolicy()
@@ -1173,6 +1345,12 @@ def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract
                 key=lambda topic: (topic.wire_name, topic.direction),
             ))
             service_topics[_service_key(pf.package, service)] = topics
+    index = ProtoTypeIndex(proto_files)
+    components = (
+        build_component_groups(proto_files, index, policy)
+        if layout == "pyramid"
+        else ()
+    )
     return BindingContract(
         proto_files=list(proto_files),
         type_modules=type_modules,
@@ -1187,6 +1365,7 @@ def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract
             service_modules, list(proto_files),
         ),
         interactions=_build_interactions(service_modules, list(proto_files)),
+        components=components,
     )
 
 

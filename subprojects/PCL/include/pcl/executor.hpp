@@ -20,25 +20,33 @@ namespace pcl {
 /// \brief C++ wrapper for pcl_executor_t.
 class Executor {
 public:
-  Executor() : handle_(pcl_executor_create()) {}
+  Executor() : handle_(pcl_executor_create()), owns_handle_(true) {}
+
+  /// \brief Wrap an existing executor, optionally taking ownership.
+  explicit Executor(pcl_executor_t* handle, bool take_ownership = false)
+      : handle_(handle), owns_handle_(take_ownership) {}
 
   ~Executor() {
-    if (handle_) pcl_executor_destroy(handle_);
+    if (handle_ && owns_handle_) pcl_executor_destroy(handle_);
   }
 
   // non-copyable, movable
   Executor(const Executor&) = delete;
   Executor& operator=(const Executor&) = delete;
 
-  Executor(Executor&& other) noexcept : handle_(other.handle_) {
+  Executor(Executor&& other) noexcept
+      : handle_(other.handle_), owns_handle_(other.owns_handle_) {
     other.handle_ = nullptr;
+    other.owns_handle_ = false;
   }
 
   Executor& operator=(Executor&& other) noexcept {
     if (this != &other) {
-      if (handle_) pcl_executor_destroy(handle_);
+      if (handle_ && owns_handle_) pcl_executor_destroy(handle_);
       handle_ = other.handle_;
+      owns_handle_ = other.owns_handle_;
       other.handle_ = nullptr;
+      other.owns_handle_ = false;
     }
     return *this;
   }
@@ -197,6 +205,7 @@ public:
 
 private:
   pcl_executor_t* handle_ = nullptr;
+  bool owns_handle_ = false;
 };
 
 } // namespace pcl

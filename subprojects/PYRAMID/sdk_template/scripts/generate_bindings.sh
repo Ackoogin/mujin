@@ -7,6 +7,7 @@
 # Usage:
 #   scripts/generate_bindings.sh [--cpp] [--ada] [--backends LIST]
 #                                 [--proto-dir DIR] [--cpp-out DIR] [--ada-out DIR]
+#                                 [--skeletons] [--scaffold-dir DIR]
 #
 # If neither --cpp nor --ada is supplied, both languages are generated.
 set -euo pipefail
@@ -20,6 +21,8 @@ BACKENDS="json,flatbuffers"
 PROTO_DIR=""
 CPP_OUT=""
 ADA_OUT=""
+SKELETONS=0
+SCAFFOLD_DIR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,6 +32,8 @@ while [[ $# -gt 0 ]]; do
     --proto-dir) PROTO_DIR="$2"; shift 2 ;;
     --cpp-out) CPP_OUT="$2"; shift 2 ;;
     --ada-out) ADA_OUT="$2"; shift 2 ;;
+    --skeletons) SKELETONS=1; shift ;;
+    --scaffold-dir) SCAFFOLD_DIR="$2"; shift 2 ;;
     *) echo "[generate] Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -60,12 +65,20 @@ fi
 
 if [[ "$DO_CPP" -eq 1 ]]; then
   echo "[generate] C++ bindings -> $CPP_OUT"
-  "$PY_CMD" "$GEN_SCRIPT" "$PROTO_DIR" "$CPP_OUT" --languages cpp --backends "$BACKENDS"
+  EXTRA_ARGS=()
+  [[ "$SKELETONS" -eq 1 ]] && EXTRA_ARGS+=(--component-skeletons)
+  [[ -n "$SCAFFOLD_DIR" ]] && EXTRA_ARGS+=(--scaffold-dir "$SCAFFOLD_DIR")
+  "$PY_CMD" "$GEN_SCRIPT" "$PROTO_DIR" "$CPP_OUT" --languages cpp \
+    --backends "$BACKENDS" "${EXTRA_ARGS[@]}"
 fi
 
 if [[ "$DO_ADA" -eq 1 ]]; then
   echo "[generate] Ada bindings -> $ADA_OUT"
-  "$PY_CMD" "$GEN_SCRIPT" "$PROTO_DIR" "$ADA_OUT" --languages ada --backends "$BACKENDS"
+  EXTRA_ARGS=()
+  [[ "$SKELETONS" -eq 1 ]] && EXTRA_ARGS+=(--component-skeletons)
+  [[ -n "$SCAFFOLD_DIR" ]] && EXTRA_ARGS+=(--scaffold-dir "$SCAFFOLD_DIR")
+  "$PY_CMD" "$GEN_SCRIPT" "$PROTO_DIR" "$ADA_OUT" --languages ada \
+    --backends "$BACKENDS" "${EXTRA_ARGS[@]}"
 fi
 
 echo "[generate] PASS"

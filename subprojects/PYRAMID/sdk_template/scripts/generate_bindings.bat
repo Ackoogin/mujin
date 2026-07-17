@@ -7,6 +7,7 @@ REM
 REM Usage:
 REM   scripts\generate_bindings.bat [--cpp] [--ada] [--backends LIST]
 REM                                 [--proto-dir DIR] [--cpp-out DIR] [--ada-out DIR]
+REM                                 [--skeletons] [--scaffold-dir DIR]
 REM
 REM If neither --cpp nor --ada is supplied, both languages are generated.
 setlocal enabledelayedexpansion
@@ -17,6 +18,8 @@ set "BACKENDS=json,flatbuffers"
 set "PROTO_DIR="
 set "CPP_OUT="
 set "ADA_OUT="
+set "SKELETONS=0"
+set "SCAFFOLD_DIR="
 for %%I in ("%~f0") do set "SCRIPT_BASE=%%~dpI"
 for %%I in ("%SCRIPT_BASE%..") do set "SDK_ROOT=%%~fI"
 
@@ -28,6 +31,8 @@ if /i "%~1"=="--backends" (set "BACKENDS=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--proto-dir" (set "PROTO_DIR=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--cpp-out" (set "CPP_OUT=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--ada-out" (set "ADA_OUT=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--skeletons" (set "SKELETONS=1" & shift & goto parse_args)
+if /i "%~1"=="--scaffold-dir" (set "SCAFFOLD_DIR=%~2" & shift & shift & goto parse_args)
 echo [generate] Unknown argument: %~1
 exit /b 1
 
@@ -69,13 +74,19 @@ if not exist "%PROTO_DIR%" (
 
 if "%DO_CPP%"=="1" (
     echo [generate] C++ bindings -^> %CPP_OUT%
-    %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%CPP_OUT%" --languages cpp --backends "%BACKENDS%"
+    set "EXTRA_ARGS="
+    if "!SKELETONS!"=="1" set "EXTRA_ARGS=!EXTRA_ARGS! --component-skeletons"
+    if not "!SCAFFOLD_DIR!"=="" set EXTRA_ARGS=!EXTRA_ARGS! --scaffold-dir "!SCAFFOLD_DIR!"
+    %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%CPP_OUT%" --languages cpp --backends "%BACKENDS%" !EXTRA_ARGS!
     if errorlevel 1 exit /b 1
 )
 
 if "%DO_ADA%"=="1" (
     echo [generate] Ada bindings -^> %ADA_OUT%
-    %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%ADA_OUT%" --languages ada --backends "%BACKENDS%"
+    set "EXTRA_ARGS="
+    if "!SKELETONS!"=="1" set "EXTRA_ARGS=!EXTRA_ARGS! --component-skeletons"
+    if not "!SCAFFOLD_DIR!"=="" set EXTRA_ARGS=!EXTRA_ARGS! --scaffold-dir "!SCAFFOLD_DIR!"
+    %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%ADA_OUT%" --languages ada --backends "%BACKENDS%" !EXTRA_ARGS!
     if errorlevel 1 exit /b 1
 )
 

@@ -19,7 +19,11 @@ from proto_parser import (
     camel_to_snake as _camel_to_snake,
     camel_to_lower_snake as _camel_to_lower_snake,
 )
-from binding_contract import TopicSpecResolver, PyramidCompatNamingPolicy
+from binding_contract import (
+    TopicSpecResolver,
+    PyramidCompatNamingPolicy,
+    service_wire_prefix,
+)
 from cabi_codegen import _c_struct_name
 
 
@@ -59,11 +63,7 @@ def _proto_type_to_ada(full_type: str) -> str:
 
 def _service_wire_prefix(service_name: str) -> str:
     """Object_Of_Interest_Service -> object_of_interest."""
-    # Remove _Service suffix if present
-    name = service_name
-    if name.endswith('_Service'):
-        name = name[:-len('_Service')]
-    return _camel_to_lower_snake(name)
+    return service_wire_prefix(service_name)
 
 
 def _service_ada_prefix(service_name: str) -> str:
@@ -663,5 +663,4 @@ def _common_ada_pkg(index: ProtoTypeIndex) -> str:
         common = [a for a, b in zip(common, p) if a == b]
     ada_parts = [_ada_pkg_segment(seg) for seg in common]
     return '_'.join(ada_parts) + '_Types'
-
 

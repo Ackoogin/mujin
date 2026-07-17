@@ -33,8 +33,7 @@ if(NOT TARGET pyramid_codec_json_agra_c2 OR
 endif()
 
 add_library(agra_p3_example_support STATIC
-    src/messages.cpp
-    src/process_runtime.cpp)
+    src/messages.cpp)
 target_include_directories(agra_p3_example_support PUBLIC include)
 target_link_libraries(agra_p3_example_support PUBLIC
     pyramid_generated_services

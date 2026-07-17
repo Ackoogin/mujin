@@ -22,6 +22,7 @@ from binding_contract import (
     BindingTopic,
     PyramidCompatNamingPolicy,
     TopicSpecResolver,
+    service_wire_prefix,
 )
 
 
@@ -146,10 +147,7 @@ def _mapped_type(full_type: str) -> str:
 
 def _service_wire_prefix(service_name: str) -> str:
     """Object_Of_Interest_Service -> object_of_interest."""
-    name = service_name
-    if name.endswith('_Service'):
-        name = name[:-len('_Service')]
-    return _camel_to_lower_snake(name)
+    return service_wire_prefix(service_name)
 
 
 def _service_cpp_prefix(service_name: str) -> str:
@@ -406,5 +404,4 @@ def _find_proto_root(proto_input: Path) -> Optional[Path]:
         if parent.name.lower() == 'proto' or (parent / 'pyramid').is_dir():
             return parent
     return proto_input.parent if proto_input.parent.exists() else None
-
 

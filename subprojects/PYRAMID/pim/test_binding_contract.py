@@ -386,5 +386,95 @@ class InteractionModelTest(unittest.TestCase):
         self.assertIsNone(interaction_for_service(index, pf, service))
 
 
+class ComponentGroupTest(unittest.TestCase):
+    """Tests for the component-spanning skeleton generation contract."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.files = parse_proto_tree(PIM_TEST_ROOT / "pyramid")
+        cls.contract = build_contract(cls.files, "pyramid")
+
+    def test_component_count_and_keys_are_pinned(self):
+        self.assertEqual(len(self.contract.components), 8)
+        self.assertEqual(
+            [group.key for group in self.contract.components],
+            [
+                "pim_osprey.sensor_data_interpretation",
+                "pim_osprey.sensor_products",
+                "pim_osprey.sensors",
+                "pim_osprey.tactical_objects",
+                "pim_seaspray.hmi_dialogue",
+                "pim_seaspray.information_presentation",
+                "pim_seaspray.sensor_products",
+                "pim_seaspray.sensors",
+            ],
+        )
+
+    def test_osprey_sensors_port_mapping(self):
+        group = next(
+            item
+            for item in self.contract.components
+            if item.key == "pim_osprey.sensors"
+        )
+        self.assertEqual(
+            group.provided_package,
+            "pyramid.components.pim_osprey.sensors.services.provided",
+        )
+        self.assertEqual(
+            group.consumed_package,
+            "pyramid.components.pim_osprey.sensors.services.consumed",
+        )
+        self.assertEqual(
+            [
+                (
+                    port.port_key,
+                    port.role,
+                    port.port_kind,
+                    port.facade,
+                    port.has_interaction,
+                )
+                for port in group.ports
+            ],
+            [
+                (
+                    "authorisation_dependency_request",
+                    "provided",
+                    "request",
+                    "AuthorisationDependencyRequestPortProvider",
+                    True,
+                ),
+                (
+                    "capability_evidence_information",
+                    "consumed",
+                    "information",
+                    "CapabilityEvidenceInformationPortSink",
+                    True,
+                ),
+                (
+                    "capability_information",
+                    "provided",
+                    "information",
+                    "CapabilityInformationPortSource",
+                    True,
+                ),
+                (
+                    "sen_requirement_request",
+                    "provided",
+                    "request",
+                    "SenrequirementRequestPortProvider",
+                    True,
+                ),
+            ],
+        )
+
+    def test_component_groups_are_deterministic(self):
+        reversed_contract = build_contract(list(reversed(self.files)), "pyramid")
+        self.assertEqual(reversed_contract.components, self.contract.components)
+
+    def test_generic_layout_has_no_component_groups(self):
+        contract = build_contract(self.files, "generic")
+        self.assertEqual(contract.components, ())
+
+
 if __name__ == "__main__":
     unittest.main()

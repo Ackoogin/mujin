@@ -64,6 +64,7 @@ CFLAGS=(-std=c11 -O2 -I"$ROOT_DIR/include" -I"$ROOT_DIR/src")
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_container.c"               -o "$OBJ_DIR/pcl_container.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_executor.c"                -o "$OBJ_DIR/pcl_executor.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_plugin_loader.c"           -o "$OBJ_DIR/pcl_plugin_loader.o"
+"$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_process_runtime.c"         -o "$OBJ_DIR/pcl_process_runtime.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_transport_routing.c"       -o "$OBJ_DIR/pcl_transport_routing.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_log.c"                     -o "$OBJ_DIR/pcl_log.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_bridge.c"                  -o "$OBJ_DIR/pcl_bridge.o"
@@ -80,6 +81,7 @@ rm -f "$CORE_TMP" "$SOCKET_TMP" "$UDP_TMP" "$SHMEM_TMP"
   "$OBJ_DIR/pcl_container.o" \
   "$OBJ_DIR/pcl_executor.o" \
   "$OBJ_DIR/pcl_plugin_loader.o" \
+  "$OBJ_DIR/pcl_process_runtime.o" \
   "$OBJ_DIR/pcl_transport_routing.o" \
   "$OBJ_DIR/pcl_log.o" \
   "$OBJ_DIR/pcl_bridge.o"

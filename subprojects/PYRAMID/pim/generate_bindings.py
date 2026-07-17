@@ -41,10 +41,12 @@ import codec_backends
 import cabi_codegen
 import ada_cabi_codegen
 from ada import codec_gen as ada_codec_gen
+from ada import component_skeleton_gen as ada_component_skeleton_gen
 from ada import generic_service_gen as ada_generic_service_gen
 from ada import service_gen as ada_service_gen
 from ada import types_gen as ada_types_gen
 from cpp import json_codec_gen as cpp_json_codec_gen
+from cpp import component_skeleton_gen as cpp_component_skeleton_gen
 from cpp import service_gen as cpp_service_gen
 from cpp import types_gen as cpp_types_gen
 
@@ -107,6 +109,12 @@ class BindingArtifactManifest:
         self._seen['codec_plugins'] = set()
         for key in ('proto_import_roots', 'proto_files'):
             self._seen[key].update(self._data[key])
+
+    def enable_component_skeleton_roles(self) -> None:
+        """Add skeleton-only roles without changing default manifests."""
+        for role in ('component_skeletons', 'component_skeleton_sources'):
+            self._data[role] = []
+            self._seen[role] = set()
 
     def add_paths(self, role: str, paths) -> None:
         for path in paths:
@@ -330,6 +338,9 @@ class BindingArtifactManifest:
         self._data['ros2_transport'] = [
             rel for rel in self._scan_generated('ros2/cpp', '*.cpp')
             if not rel.endswith('_ros2_codec_plugin.cpp')]
+        if 'component_skeleton_sources' in self._data:
+            self._data['component_skeleton_sources'] = self._scan_generated(
+                '', 'pyramid_component_*_skeleton.cpp')
         # Per-module marshal identity for the churn-isolation loop, so CMake does
         # not re-parse the module name out of the filename.
         modules = []
@@ -664,6 +675,64 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path,
     return total
 
 
+def _generate_component_skeletons(
+    contract,
+    proto_files,
+    index,
+    output_dir: Path,
+    languages,
+    selected_components,
+    scaffold_dir,
+    manifest: BindingArtifactManifest,
+) -> int:
+    """Generate selected component skeletons in deterministic contract order."""
+    requested = set(selected_components or ())
+    known = {group.key for group in contract.components}
+    missing = sorted(requested - known)
+    if missing:
+        raise ValueError(
+            "unknown component selection: " + ", ".join(missing)
+        )
+    groups = [
+        group for group in contract.components
+        if not requested or group.key in requested
+    ]
+    total = 0
+    for group in groups:
+        if 'cpp' in languages:
+            generator = cpp_component_skeleton_gen.CppComponentSkeletonGenerator(
+                group, proto_files, index, contract.naming_policy)
+            manifest.record_generated(
+                'component_skeletons',
+                lambda generator=generator: generator.generate(
+                    str(output_dir)),
+            )
+            if scaffold_dir is not None:
+                generator.generate_scaffold(str(scaffold_dir))
+            total += 2
+        if 'ada' in languages:
+            generator = ada_component_skeleton_gen.AdaComponentSkeletonGenerator(
+                group, proto_files, index, contract.naming_policy)
+            manifest.record_generated(
+                'component_skeletons',
+                lambda generator=generator: generator.generate(
+                    str(output_dir)),
+            )
+            if scaffold_dir is not None:
+                generator.generate_scaffold(str(scaffold_dir))
+            total += 2
+    return total
+
+
+def _validate_scaffold_dir(output_dir: Path, scaffold_dir: Path) -> None:
+    output = output_dir.resolve()
+    scaffold = scaffold_dir.resolve()
+    if scaffold == output or output in scaffold.parents:
+        raise ValueError(
+            f'--scaffold-dir must be outside output_dir ({output})'
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Generate codec bindings from proto IDL files.',
@@ -698,6 +767,19 @@ def main():
         default='pyramid',
         help='Binding contract layout (default: pyramid)',
     )
+    parser.add_argument(
+        '--component-skeletons',
+        action='store_true',
+        help='Generate component skeletons (default: off)',
+    )
+    parser.add_argument(
+        '--scaffold-dir',
+        help='Write one-time component scaffolds below this directory',
+    )
+    parser.add_argument(
+        '--components',
+        help='Comma-separated component keys to generate (for example a.b,c.d)',
+    )
 
     args = parser.parse_args()
 
@@ -712,10 +794,22 @@ def main():
 
     proto_dir = Path(args.proto_dir)
     output_dir = Path(args.output_dir)
+    scaffold_dir = Path(args.scaffold_dir) if args.scaffold_dir else None
 
     if not proto_dir.exists():
         print(f'ERROR: {proto_dir} does not exist', file=sys.stderr)
         sys.exit(1)
+    if (args.components or scaffold_dir) and not args.component_skeletons:
+        parser.error(
+            '--components and --scaffold-dir require --component-skeletons'
+        )
+    if args.component_skeletons and args.contract_layout != 'pyramid':
+        parser.error('--component-skeletons requires --contract-layout pyramid')
+    if scaffold_dir is not None:
+        try:
+            _validate_scaffold_dir(output_dir, scaffold_dir)
+        except ValueError as error:
+            parser.error(str(error))
 
     # Parse all proto files
     print(f'Parsing proto files from {proto_dir}...')
@@ -806,6 +900,27 @@ def main():
                 print(f'    {fp}')
             manifest.record_backend_outputs(backend_name, files)
             total += len(files)
+
+    if args.component_skeletons:
+        manifest.enable_component_skeleton_roles()
+        selected_components = (
+            [value for value in args.components.split(',') if value]
+            if args.components
+            else []
+        )
+        try:
+            total += _generate_component_skeletons(
+                contract,
+                proto_files,
+                index,
+                output_dir,
+                langs,
+                selected_components,
+                scaffold_dir,
+                manifest,
+            )
+        except ValueError as error:
+            parser.error(str(error))
 
     manifest.populate_build_source_roles()
     manifest.write()

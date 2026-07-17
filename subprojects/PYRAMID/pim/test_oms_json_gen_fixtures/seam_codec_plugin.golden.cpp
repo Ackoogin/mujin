@@ -5,6 +5,13 @@
 #include "pyramid_data_model_uci_cabi_marshal.hpp"
 #include <pcl/pcl_alloc.h>
 #include <pcl/pcl_codec.h>
+#if defined(_WIN32)
+#  define PCL_CODEC_PLUGIN_EXPORT __declspec(dllexport)
+#elif defined(__GNUC__) || defined(__clang__)
+#  define PCL_CODEC_PLUGIN_EXPORT __attribute__((visibility("default")))
+#else
+#  define PCL_CODEC_PLUGIN_EXPORT
+#endif
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <cstdint>
@@ -282,4 +289,4 @@ void free_msg(void*, pcl_msg_t* m) { if(!m)return; pcl_free(const_cast<void*>(m-
 pcl_codec_t codec={PCL_CODEC_ABI_VERSION,kContentType,encode,decode,free_msg,nullptr};
 } // namespace
 
-extern "C" __attribute__((visibility("default"))) const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }
+extern "C" PCL_CODEC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(const char*) { return &codec; }

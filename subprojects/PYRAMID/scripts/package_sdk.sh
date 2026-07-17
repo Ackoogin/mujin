@@ -210,6 +210,14 @@ mkdir -p "${OUT_DIR}/generator/cpp"
 cp -f "${PYRAMID_ROOT}"/pim/cpp/*.py "${OUT_DIR}/generator/cpp/"
 mkdir -p "${OUT_DIR}/generator/ada"
 cp -f "${PYRAMID_ROOT}"/pim/ada/*.py "${OUT_DIR}/generator/ada/"
+for _skeleton_generator in \
+  "${OUT_DIR}/generator/cpp/component_skeleton_gen.py" \
+  "${OUT_DIR}/generator/ada/component_skeleton_gen.py"; do
+  if [[ ! -f "${_skeleton_generator}" ]]; then
+    echo "[package_sdk] FAIL: missing ${_skeleton_generator}" >&2
+    exit 1
+  fi
+done
 mkdir -p "${OUT_DIR}/generator/topic_metadata"
 cp -f "${PYRAMID_ROOT}"/pim/topic_metadata/*.json "${OUT_DIR}/generator/topic_metadata/"
 

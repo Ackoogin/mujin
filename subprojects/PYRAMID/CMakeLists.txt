@@ -76,6 +76,13 @@ option(PYRAMID_GENERATE_CPP_BINDINGS
 option(PYRAMID_GENERATE_ADA_BINDINGS
     "Generate PYRAMID Ada bindings from proto contracts during configure/build"
     ${PYRAMID_GENERATE_CPP_BINDINGS_DEFAULT})
+option(PYRAMID_GENERATE_COMPONENT_SKELETONS
+    "Generate component skeletons with the monorepo C++ bindings"
+    OFF)
+set(PYRAMID_COMPONENT_SKELETON_ARGS)
+if(PYRAMID_GENERATE_COMPONENT_SKELETONS)
+    list(APPEND PYRAMID_COMPONENT_SKELETON_ARGS --component-skeletons)
+endif()
 set(PYRAMID_CPP_GENERATOR_BACKENDS json)
 if(PYRAMID_ENABLE_FLATBUFFERS)
     list(APPEND PYRAMID_CPP_GENERATOR_BACKENDS flatbuffers)
@@ -102,7 +109,9 @@ file(GLOB_RECURSE PYRAMID_PROTO_INPUTS CONFIGURE_DEPENDS
 
 file(GLOB_RECURSE PYRAMID_BINDING_GENERATOR_INPUTS CONFIGURE_DEPENDS
     "${PYRAMID_ROOT_DIR}/pim/*.py"
-    "${PYRAMID_ROOT_DIR}/pim/backends/*.py")
+    "${PYRAMID_ROOT_DIR}/pim/backends/*.py"
+    "${PYRAMID_ROOT_DIR}/pim/cpp/*.py"
+    "${PYRAMID_ROOT_DIR}/pim/ada/*.py")
 
 function(pyramid_glob_generated out_var)
     file(GLOB_RECURSE _pyramid_globbed CONFIGURE_DEPENDS ${ARGN})
@@ -153,6 +162,7 @@ if(PYRAMID_GENERATE_CPP_BINDINGS)
                 "${PYRAMID_CPP_BINDINGS_DIR}"
                 --languages cpp
                 --backends "${PYRAMID_CPP_GENERATOR_BACKENDS_ARG}"
+                ${PYRAMID_COMPONENT_SKELETON_ARGS}
         COMMAND_ERROR_IS_FATAL ANY)
 endif()
 
@@ -191,6 +201,7 @@ if(PYRAMID_GENERATE_CPP_BINDINGS)
                 "${PYRAMID_CPP_BINDINGS_DIR}"
                 --languages cpp
                 --backends "${PYRAMID_CPP_GENERATOR_BACKENDS_ARG}"
+                ${PYRAMID_COMPONENT_SKELETON_ARGS}
         COMMAND "${CMAKE_COMMAND}" -E touch "${PYRAMID_CPP_BINDINGS_STAMP}"
         DEPENDS
             ${PYRAMID_BINDING_GENERATOR_INPUTS}

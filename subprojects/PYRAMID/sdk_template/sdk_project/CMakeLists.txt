@@ -179,6 +179,29 @@ endif()
 # ---------------------------------------------------------------------------
 set(PYRAMID_SDK_SERVICE_BINDINGS "" CACHE STRING
     "Semicolon-separated generated service bindings to compile, for example agra_c2_provided;agra_ms_consumed")
+set(PYRAMID_SDK_COMPONENTS "" CACHE STRING
+    "Semicolon-separated generated component skeletons, for example agra.c2")
+set(_sdk_component_skeleton_srcs)
+foreach(_component IN LISTS PYRAMID_SDK_COMPONENTS)
+    string(REPLACE "." "_" _component_stem "${_component}")
+    foreach(_role IN ITEMS provided consumed)
+        set(_binding "${_component_stem}_${_role}")
+        if(EXISTS
+                "${SDK_GENERATED_DIR}/pyramid_services_${_binding}.cpp")
+            list(APPEND PYRAMID_SDK_SERVICE_BINDINGS "${_binding}")
+        endif()
+    endforeach()
+    set(_skeleton
+        "${SDK_GENERATED_DIR}/pyramid_component_${_component_stem}_skeleton.cpp")
+    if(NOT EXISTS "${_skeleton}")
+        message(FATAL_ERROR
+            "Requested component skeleton does not exist: ${_skeleton}. "
+            "Regenerate with --component-skeletons.")
+    endif()
+    list(APPEND _sdk_component_skeleton_srcs "${_skeleton}")
+endforeach()
+list(REMOVE_DUPLICATES PYRAMID_SDK_SERVICE_BINDINGS)
+
 if(PYRAMID_SDK_SERVICE_BINDINGS)
     set(_sdk_service_srcs)
     foreach(_binding IN LISTS PYRAMID_SDK_SERVICE_BINDINGS)
@@ -198,6 +221,22 @@ if(PYRAMID_SDK_SERVICE_BINDINGS)
         "${SDK_GENERATED_DIR}")
     target_link_libraries(pyramid_generated_services PUBLIC
         pyramid_generated_codecs pcl_core)
+endif()
+
+if(_sdk_component_skeleton_srcs)
+    if(NOT TARGET pyramid_generated_services)
+        message(FATAL_ERROR
+            "Component skeletons require generated service bindings.")
+    endif()
+    add_library(pyramid_component_skeletons STATIC
+        ${_sdk_component_skeleton_srcs})
+    target_include_directories(pyramid_component_skeletons PUBLIC
+        "${SDK_GENERATED_DIR}")
+    target_link_libraries(pyramid_component_skeletons PUBLIC
+        pyramid_generated_services pcl_core)
+    if(MSVC)
+        target_compile_options(pyramid_component_skeletons PRIVATE /bigobj)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

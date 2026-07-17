@@ -12,6 +12,7 @@ add_library(pcl_core STATIC
   pcl_container.c
   pcl_executor.c
   pcl_plugin_loader.c
+  pcl_process_runtime.c
   pcl_transport_routing.c
   pcl_log.c
   pcl_bridge.c
