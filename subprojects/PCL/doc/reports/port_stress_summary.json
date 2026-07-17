@@ -1,0 +1,279 @@
+{
+  "shm-throughput": {
+    "rows": [
+      {
+        "payload_bytes": 64,
+        "published_ok": 273772,
+        "publish_nomem": 15541,
+        "received": 273772,
+        "gaps": 0,
+        "msgs_per_s": 91261.2,
+        "mbit_per_s": 46.7,
+        "lost": 0
+      },
+      {
+        "payload_bytes": 1024,
+        "published_ok": 269900,
+        "publish_nomem": 15916,
+        "received": 269900,
+        "gaps": 0,
+        "msgs_per_s": 89970.2,
+        "mbit_per_s": 737.0,
+        "lost": 0
+      },
+      {
+        "payload_bytes": 4096,
+        "published_ok": 244330,
+        "publish_nomem": 14730,
+        "received": 244330,
+        "gaps": 0,
+        "msgs_per_s": 81447.0,
+        "mbit_per_s": 2668.9,
+        "lost": 0
+      },
+      {
+        "payload_bytes": 16384,
+        "published_ok": 243116,
+        "publish_nomem": 14921,
+        "received": 243116,
+        "gaps": 0,
+        "msgs_per_s": 81042.8,
+        "mbit_per_s": 10622.4,
+        "lost": 0
+      }
+    ],
+    "peak": {
+      "payload_bytes": 64,
+      "published_ok": 273772,
+      "publish_nomem": 15541,
+      "received": 273772,
+      "gaps": 0,
+      "msgs_per_s": 91261.2,
+      "mbit_per_s": 46.7,
+      "lost": 0
+    }
+  },
+  "shm-fanout": [
+    {
+      "subscribers": 1,
+      "published_ok": 249895,
+      "per_sub_rate": [
+        83304.9
+      ],
+      "per_sub_received": [
+        249895
+      ],
+      "aggregate_msgs_per_s": 83304.9,
+      "publish_nomem": 15111
+    },
+    {
+      "subscribers": 3,
+      "published_ok": 180377,
+      "per_sub_rate": [
+        60135.0,
+        60133.4,
+        60136.9
+      ],
+      "per_sub_received": [
+        180377,
+        180377,
+        180377
+      ],
+      "aggregate_msgs_per_s": 180405.3,
+      "publish_nomem": 13266
+    },
+    {
+      "subscribers": 7,
+      "published_ok": 17433,
+      "per_sub_rate": [
+        5812.6,
+        5812.4,
+        5819.2,
+        5811.4,
+        5812.7,
+        5819.8,
+        5808.5
+      ],
+      "per_sub_received": [
+        17433,
+        17433,
+        17433,
+        17433,
+        17433,
+        17433,
+        17433
+      ],
+      "aggregate_msgs_per_s": 40696.5,
+      "publish_nomem": 7489
+    }
+  ],
+  "shm-multi-pub": [
+    {
+      "publishers": 1,
+      "published_ok": 245563,
+      "publish_nomem": 14943,
+      "received": 245563,
+      "sub_msgs_per_s": 81857.2
+    },
+    {
+      "publishers": 3,
+      "published_ok": 125714,
+      "publish_nomem": 34035,
+      "received": 125714,
+      "sub_msgs_per_s": 41903.2
+    },
+    {
+      "publishers": 7,
+      "published_ok": 46208,
+      "publish_nomem": 73519,
+      "received": 46208,
+      "sub_msgs_per_s": 15395.9
+    }
+  ],
+  "shm-pairs": [
+    {
+      "pairs": 1,
+      "published_ok": 246126,
+      "publish_nomem": 14729,
+      "aggregate_msgs_per_s": 82046.0,
+      "per_pair_msgs_per_s": 82046.0
+    },
+    {
+      "pairs": 2,
+      "published_ok": 109773,
+      "publish_nomem": 19711,
+      "aggregate_msgs_per_s": 36590.2,
+      "per_pair_msgs_per_s": 18295.1
+    },
+    {
+      "pairs": 4,
+      "published_ok": 34723,
+      "publish_nomem": 39449,
+      "aggregate_msgs_per_s": 11574.9,
+      "per_pair_msgs_per_s": 2893.7
+    }
+  ],
+  "shm-multibus": [
+    {
+      "buses": 4,
+      "processes": 8,
+      "published_ok": 553246,
+      "aggregate_msgs_per_s": 184481.7,
+      "per_bus_msgs_per_s": 46120.4,
+      "failed_workers": []
+    },
+    {
+      "buses": 8,
+      "processes": 16,
+      "published_ok": 677351,
+      "aggregate_msgs_per_s": 225762.6,
+      "per_bus_msgs_per_s": 28220.3,
+      "failed_workers": []
+    },
+    {
+      "buses": 16,
+      "processes": 32,
+      "published_ok": 844346,
+      "aggregate_msgs_per_s": 282285.7,
+      "per_bus_msgs_per_s": 17642.9,
+      "failed_workers": []
+    },
+    {
+      "buses": 24,
+      "processes": 48,
+      "published_ok": 1064210,
+      "aggregate_msgs_per_s": 354891.2,
+      "per_bus_msgs_per_s": 14787.1,
+      "failed_workers": []
+    }
+  ],
+  "shm-slow-sub": {
+    "published_ok": 149626,
+    "publish_nomem": 7694,
+    "fast_sub_received": 149626,
+    "fast_sub_rate": 49876.9,
+    "slow_sub_received": 149626,
+    "slow_sub_rate": 49903.8,
+    "slow_sub_rss_kb": 6620,
+    "fast_sub_rss_kb": 5072
+  },
+  "shm-limit": {
+    "attempted": 12,
+    "attached": 8,
+    "rejected": 4,
+    "rejected_tags": [
+      "att08",
+      "att09",
+      "att10",
+      "att11"
+    ],
+    "duplicate_id_rejected": true
+  },
+  "shm-services": [
+    {
+      "clients": 1,
+      "requests_sent": 106294,
+      "responses_ok": 106294,
+      "svc_invocations": 106294,
+      "req_per_s": 35424.2
+    },
+    {
+      "clients": 3,
+      "requests_sent": 244231,
+      "responses_ok": 44601,
+      "svc_invocations": 44601,
+      "req_per_s": 14850.9
+    },
+    {
+      "clients": 6,
+      "requests_sent": 157570,
+      "responses_ok": 71377,
+      "svc_invocations": 71377,
+      "req_per_s": 23758.2
+    }
+  ],
+  "shm-churn": {
+    "churn_attach_ok": 54,
+    "churn_attach_fail": 0,
+    "published_ok": 124569,
+    "publish_nomem": 8992,
+    "publish_other": 0,
+    "received": 124569,
+    "gaps": 0,
+    "lost": 0,
+    "sub_msgs_per_s": 41539.8
+  },
+  "plugin-mix": {
+    "shm": {
+      "published_ok": 86360,
+      "publish_errors": 7373,
+      "received": 86360,
+      "msgs_per_s": 28775.5,
+      "lost": 0
+    },
+    "sock": {
+      "published_ok": 2143095,
+      "publish_errors": 0,
+      "received": 837362,
+      "msgs_per_s": 263651.2,
+      "lost": 1305733
+    },
+    "udp": {
+      "published_ok": 2318557,
+      "publish_errors": 0,
+      "received": 1225891,
+      "msgs_per_s": 154181.6,
+      "lost": 1092666
+    }
+  },
+  "_meta": {
+    "duration_ms_per_scenario": 3000,
+    "wall_time_s": 90.8,
+    "worker": "/home/user/mujin/build-stress/subprojects/PCL/tests/stress/pcl_port_stress_worker",
+    "plugins": {
+      "shm": "/home/user/mujin/build-stress/subprojects/PCL/src/libpcl_transport_shared_memory_plugin.so",
+      "socket": "/home/user/mujin/build-stress/subprojects/PCL/src/libpcl_transport_socket_plugin.so",
+      "udp": "/home/user/mujin/build-stress/subprojects/PCL/src/libpcl_transport_udp_plugin.so"
+    }
+  }
+}
