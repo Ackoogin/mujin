@@ -59,7 +59,7 @@ def _run_generator(output_dir: Path, scaffold_dir: Path | None = None,
 
 
 class EmitterLockstepTest(unittest.TestCase):
-    """The C++ and Ada emitters must agree on ports and hooks."""
+    """The C++ and Ada emitters must agree on ports and handler slots."""
 
     def test_cpp_and_ada_emitters_agree_on_names(self):
         files = parse_proto_tree(PROTO_DIR)
@@ -73,7 +73,7 @@ class EmitterLockstepTest(unittest.TestCase):
             self.assertEqual(
                 cpp.port_names(), ada.port_names(), group.key)
             self.assertEqual(
-                cpp.hook_names(), ada.hook_names(), group.key)
+                cpp.slot_names(), ada.slot_names(), group.key)
 
 
 class ComponentSkeletonGenerationTest(unittest.TestCase):

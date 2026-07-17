@@ -8,26 +8,8 @@ with Pyramid.Data_Model.Generic_Pim.Generic_Pkg.Types; use Pyramid.Data_Model.Ge
 with System;
 
 package body Pyramid.Skeletons.Pim_Osprey.Sensor_Products is
-   Instance : access Component_Skeleton'Class := null;
-   Instance_Executor : Pcl_Bindings.Pcl_Executor_Access := null;
-
-   function Authorisation_Dependency_Cancel_Trampoline
-     (Request : Identifier) return Ack is
-   begin
-      return Instance.On_Authorisation_Dependency_Cancel(Request);
-   end Authorisation_Dependency_Cancel_Trampoline;
-
-   function Authorisation_Dependency_Create_Trampoline
-     (Request : Authorisation_Dependency_Service_Request) return Ack is
-   begin
-      return Instance.On_Authorisation_Dependency_Create(Request);
-   end Authorisation_Dependency_Create_Trampoline;
-
-   function Authorisation_Dependency_Update_Trampoline
-     (Request : Authorisation_Dependency_Service_Requirement) return Ack is
-   begin
-      return Instance.On_Authorisation_Dependency_Update(Request);
-   end Authorisation_Dependency_Update_Trampoline;
+   Bound : Boolean := False;
+   Binding_State : access Handlers := null;
 
    procedure Capability_Evidence_Information_Trampoline
      (Self      : Pcl_Bindings.Pcl_Container_Access;
@@ -42,84 +24,37 @@ package body Pyramid.Skeletons.Pim_Osprey.Sensor_Products is
       pragma Unreferenced(Self, User_Data);
       Item : constant Capabilities := Pyramid.Services.Pim_Osprey.Sensor_Products.Consumed.Decode_Pim_Osprey_Capability_Evidence_Information(Msg);
    begin
-      Instance.On_Capability_Evidence(Item);
+      Binding_State.Capability_Evidence_Information.all(Item);
    end Capability_Evidence_Information_Trampoline;
 
-   function SPR_Requirement_Cancel_Trampoline
-     (Request : Identifier) return Ack is
-   begin
-      return Instance.On_SPR_Requirement_Cancel(Request);
-   end SPR_Requirement_Cancel_Trampoline;
-
-   function SPR_Requirement_Create_Trampoline
-     (Request : SPR_Requirement_Service_Request) return Ack is
-   begin
-      return Instance.On_SPR_Requirement_Create(Request);
-   end SPR_Requirement_Create_Trampoline;
-
-   function SPR_Requirement_Update_Trampoline
-     (Request : SPR_Requirement_Service_Requirement) return Ack is
-   begin
-      return Instance.On_SPR_Requirement_Update(Request);
-   end SPR_Requirement_Update_Trampoline;
-
    procedure Bind
-     (Self      : access Component_Skeleton'Class;
-      Container : Pcl_Bindings.Pcl_Container_Access;
-      Exec      : Pcl_Bindings.Pcl_Executor_Access) is
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Exec      : Pcl_Bindings.Pcl_Executor_Access;
+      Binding   : Handlers) is
    begin
-      if Instance /= null then
+      if Bound then
          raise Program_Error with "component skeleton is already bound";
       end if;
-      Instance := Self;
-      Instance_Executor := Exec;
+      if Binding.Capability_Evidence_Information = null then
+         raise Program_Error with "required handler slot Capability_Evidence_Information is null";
+      end if;
+      if Binding.Spr_Measured_Information_Information = null then
+         raise Program_Error with "required handler slot Spr_Measured_Information_Information is null";
+      end if;
+      Binding_State := new Handlers'(Binding);
+      Bound := True;
       Pyramid.Services.Pim_Osprey.Sensor_Products.Provided.Authorisation_Dependency_Provider_Bind
-        (Container, Exec,
-         Pyramid.Services.Pim_Osprey.Sensor_Products.Provided.Authorisation_Dependency_Interaction_Handlers'(
-           On_Cancel => Authorisation_Dependency_Cancel_Trampoline'Access,
-           On_Create => Authorisation_Dependency_Create_Trampoline'Access
-         ));
+        (Container, Exec, Binding.Authorisation_Dependency_Request);
       Pyramid.Services.Pim_Osprey.Sensor_Products.Consumed.Subscribe_Pim_Osprey_Capability_Evidence_Information
         (Container, Capability_Evidence_Information_Trampoline'Access);
       --  capability_information publishes through Exec; no subscriber binding is required.
       --  spr_information_information publishes through Exec; no subscriber binding is required.
-      --  spr_measured_information_information: the current Ada facade does not expose a local-wrapper topic decoder.
+      --  spr_measured_information_information: fail closed because the current Ada
+      --  facade does not expose a local-wrapper topic decoder.
+      raise Program_Error with "spr_measured_information_information has no local-wrapper topic decoder";
       Pyramid.Services.Pim_Osprey.Sensor_Products.Provided.SPR_Requirement_Provider_Bind
-        (Container, Exec,
-         Pyramid.Services.Pim_Osprey.Sensor_Products.Provided.SPR_Requirement_Interaction_Handlers'(
-           On_Cancel => SPR_Requirement_Cancel_Trampoline'Access,
-           On_Create => SPR_Requirement_Create_Trampoline'Access
-         ));
+        (Container, Exec, Binding.Spr_Requirement_Request);
    end Bind;
-
-   procedure Send_Authorisation_Dependency_Transition
-     (Self : in out Component_Skeleton; Item : Authorisation_Dependency_Service_Requirement) is
-      pragma Unreferenced(Self);
-   begin
-      Pyramid.Services.Pim_Osprey.Sensor_Products.Provided.Authorisation_Dependency_Send_Transition(Item);
-   end Send_Authorisation_Dependency_Transition;
-
-   procedure Publish_Capability
-     (Self : in out Component_Skeleton; Item : Capabilities) is
-      pragma Unreferenced(Self);
-   begin
-      Pyramid.Services.Pim_Osprey.Sensor_Products.Provided.Publish_Pim_Osprey_Capability_Information(Instance_Executor, Item);
-   end Publish_Capability;
-
-   procedure Publish_SPR_Information
-     (Self : in out Component_Skeleton; Item : SPR_Information_Service_Information) is
-      pragma Unreferenced(Self);
-   begin
-      pragma Unreferenced(Item);
-      raise Program_Error with "the current Ada facade does not expose this local-wrapper information topic";
-   end Publish_SPR_Information;
-
-   procedure Send_SPR_Requirement_Transition
-     (Self : in out Component_Skeleton; Item : SPR_Requirement_Service_Requirement) is
-      pragma Unreferenced(Self);
-   begin
-      Pyramid.Services.Pim_Osprey.Sensor_Products.Provided.SPR_Requirement_Send_Transition(Item);
-   end Send_SPR_Requirement_Transition;
 
    function Deployment_Ports return Pcl_Process_Runtime.Port_Array is
    begin

@@ -48,9 +48,9 @@ echo "== generating the sensors skeleton =="
 # Generate into the scratch directory so the SDK's own generated
 # contract tree is left untouched.
 GENERATED_CPP="${SCRATCH}/generated"
-"${SDK_ROOT}/scripts/generate_bindings.sh" \
-  --cpp --backends json --proto-dir "${PROTO_DIR}" \
-  --cpp-out "${GENERATED_CPP}" --skeletons
+python3 "${PYRAMID_ROOT}/pim/generate_bindings.py" \
+  "${PROTO_DIR}" "${GENERATED_CPP}" --languages cpp --backends json \
+  --component-skeletons --components pim_osprey.sensors
 
 echo "== building the filled provider stub and client harness =="
 cmake -S "${HERE}/component_skeleton_e2e" \

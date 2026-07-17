@@ -85,30 +85,45 @@ class CppComponentSkeletonGenerator:
         suffix = self.group.component.replace(".", "::")
         return f"pyramid::components::{self.group.project}::{suffix}"
 
-    def generate(self, output_dir: str) -> List[Path]:
+    def generate(
+        self,
+        output_dir: str,
+        emit_support: bool = True,
+    ) -> List[Path]:
         output = Path(output_dir)
         output.mkdir(parents=True, exist_ok=True)
+        paths: List[Path] = []
+        if emit_support:
+            support = output / "pyramid_component_skeleton_support.hpp"
+            support.write_text(
+                self.render_support_header(), encoding="utf-8", newline="\n"
+            )
+            print(f"  Generated {support}")
+            paths.append(support)
         header = output / f"{self.stem}.hpp"
         source = output / f"{self.stem}.cpp"
         header.write_text(self.render_header(), encoding="utf-8", newline="\n")
         source.write_text(self.render_source(), encoding="utf-8", newline="\n")
         print(f"  Generated {header}")
         print(f"  Generated {source}")
-        return [header, source]
+        return paths + [header, source]
 
     def generate_scaffold(self, scaffold_dir: str) -> List[Path]:
         """Write the C++ process scaffold without replacing user files."""
-        root = (
-            Path(scaffold_dir)
-            / f"{self.group.project}_{self.group.component.replace('.', '_')}"
-        )
-        include_dir = (
-            root / "include"
-            / f"{self.group.project}_{self.group.component.replace('.', '_')}"
-        )
+        component = self.group.component.replace(".", "_")
+        root = Path(scaffold_dir) / f"{self.group.project}_{component}"
+        include_dir = root / "include" / f"{self.group.project}_{component}"
         source_dir = root / "src"
-        component_file = f"{self.group.component.replace('.', '_')}_component"
+        component_file = f"{component}_component"
         paths = [
+            self._write_if_absent(
+                source_dir / f"{component}_handlers.hpp",
+                self._scaffold_handlers_header(),
+            ),
+            self._write_if_absent(
+                source_dir / f"{component}_handlers.cpp",
+                self._scaffold_handlers_source(),
+            ),
             self._write_if_absent(
                 include_dir / f"{component_file}.hpp",
                 self._scaffold_header(component_file),
@@ -118,45 +133,73 @@ class CppComponentSkeletonGenerator:
                 self._scaffold_source(component_file),
             ),
             self._write_if_absent(
-                source_dir / f"{self.group.component.replace('.', '_')}_main.cpp",
+                source_dir / f"{component}_main.cpp",
                 self._scaffold_main(component_file),
             ),
             self._write_if_absent(
-                root / "CMakeLists.txt",
-                self._scaffold_cmake(component_file),
+                root / "CMakeLists.txt", self._scaffold_cmake(component_file)
             ),
         ]
-        for platform, plugin_suffix in (
-            ("linux", ".so"),
-            ("windows", ".dll"),
-        ):
+        for platform, plugin_suffix in (("linux", ".so"), ("windows", ".dll")):
             for transport in ("tcp", "shared_memory"):
-                config = (
-                    root / "configs" / platform / transport
-                    / f"{self.group.component.replace('.', '_')}.ports"
-                )
+                config = root / "configs" / platform / transport / f"{component}.ports"
                 paths.append(self._write_if_absent(
                     config,
-                    self._ports_template(
-                        platform, transport, plugin_suffix),
+                    self._ports_template(platform, transport, plugin_suffix),
                 ))
         return paths
 
-    def hook_names(self) -> Tuple[str, ...]:
-        hooks = []
+    def slot_names(self) -> Tuple[Tuple[str, str], ...]:
+        slots = []
         for port in self._emitted_ports():
-            prefix = _service_cpp_prefix(port.service_name)
             if port.role == "provided" and port.port_kind == "request":
-                for rpc in self._command_rpcs(port):
-                    hooks.append(f"on{prefix}{rpc.name}")
-            elif port.role == "consumed" and port.port_kind == "request":
-                hooks.append(f"on{prefix}Transition")
+                slots.append((port.port_key, "handler"))
             elif port.role == "consumed" and port.port_kind == "information":
-                hooks.append(f"on{prefix}")
-        return tuple(sorted(hooks))
+                slots.append((port.port_key, "sink_function"))
+            elif port.role == "consumed" and port.port_kind == "request":
+                slots.append(
+                    (f"{port.port_key}_transitions", "transitions_function")
+                )
+        return tuple(slots)
 
     def port_names(self) -> Tuple[str, ...]:
         return tuple(port.port_key for port in self._emitted_ports())
+
+    @staticmethod
+    def render_support_header() -> str:
+        return "\n".join([
+            "// Auto-generated component skeleton support. Regenerated on every run.",
+            "#pragma once",
+            "",
+            "#include <cassert>",
+            "#include <memory>",
+            "#include <utility>",
+            "",
+            "namespace pyramid::component_skeleton {",
+            "",
+            "template <typename T>",
+            "class HandlerSlot {",
+            "public:",
+            "  HandlerSlot(T& handler) : ptr_(&handler) {}",
+            "",
+            "  HandlerSlot(std::unique_ptr<T> handler)",
+            "      : ptr_(handler.get()), owned_(std::move(handler)) {",
+            "    assert(ptr_ != nullptr);",
+            "  }",
+            "",
+            "  T& get() {",
+            "    assert(ptr_ != nullptr);",
+            "    return *ptr_;",
+            "  }",
+            "",
+            "private:",
+            "  T* ptr_;",
+            "  std::unique_ptr<T> owned_;",
+            "};",
+            "",
+            "}  // namespace pyramid::component_skeleton",
+            "",
+        ])
 
     def render_header(self) -> str:
         lines = [
@@ -164,40 +207,38 @@ class CppComponentSkeletonGenerator:
             "#pragma once",
             "",
         ]
-        packages = sorted({
-            port.package for port in self._emitted_ports()
-        })
+        packages = sorted({port.package for port in self._emitted_ports()})
         for package in packages:
             prefix = self.naming_policy.service_file_prefix(package)
             lines.append(f'#include "{prefix}_components.hpp"')
         lines.extend([
+            '#include "pyramid_component_skeleton_support.hpp"',
             "",
             "#include <pcl/component.hpp>",
             "#include <pcl/executor.hpp>",
             "#include <pcl/process_runtime.hpp>",
             "",
-            "#include <future>",
+            "#include <functional>",
             "#include <string>",
+            "#include <utility>",
             "#include <vector>",
             "",
             f"namespace {self.namespace} {{",
             "",
             f"class {self.class_name} : public pcl::Component {{",
-            "private:",
-        ])
-        adapters = [
-            port for port in self._emitted_ports()
-            if port.role == "provided" and port.port_kind == "request"
-        ]
-        if not adapters:
-            lines.append("  // This component has no provided request adapters.")
-        for port in adapters:
-            lines.extend(self._adapter_declaration(port))
-        lines.extend([
-            "",
             "public:",
-            f'  explicit {self.class_name}(',
+            "  struct Handlers {",
+        ])
+        slot_lines: List[str] = []
+        for port in self._emitted_ports():
+            slot_lines.extend(self._handler_slot_declaration(port))
+        lines.extend(slot_lines or ["    // This component has no injectable handlers."])
+        lines.extend([
+            "  };",
+            "",
+            f"  explicit {self.class_name}(",
             "      pcl::Executor& executor,",
+            "      Handlers handlers,",
             f'      std::string name = "{self.group.component}");',
             f"  ~{self.class_name}() override = default;",
             "",
@@ -209,30 +250,17 @@ class CppComponentSkeletonGenerator:
             "protected:",
             "  pcl_status_t on_configure() override;",
             "  virtual pcl_status_t on_user_configure() { return PCL_OK; }",
-            "",
-            "  // Provider callbacks are deliberately pure: the generated",
-            "  // facade handlers have defaults, but a component skeleton does not.",
         ])
         for port in self._emitted_ports():
-            lines.extend(self._hook_and_helper_declarations(port))
-        lines.extend([
-            "",
-            "private:",
-        ])
+            lines.extend(self._port_accessor_declaration(port))
+        lines.extend(["", "private:", "  Handlers handlers_;"])
         for port in self._emitted_ports():
-            if port.role == "provided" and port.port_kind == "request":
-                lines.append(
-                    f"  {_adapter_name(port)} {_adapter_member(port)};"
-                )
-        for port in self._emitted_ports():
-            facade = self._facade_type(port)
-            lines.append(f"  {facade} {port.port_key}_port_;")
+            lines.append(f"  {self._facade_type(port)} {port.port_key}_port_;")
             if port.role == "consumed":
                 subscription_type = self._subscription_type(port)
                 if subscription_type:
                     lines.append(
-                        f"  {subscription_type} "
-                        f"{port.port_key}_subscription_;"
+                        f"  {subscription_type} {port.port_key}_subscription_;"
                     )
         for port in self.group.ports:
             if not port.has_interaction:
@@ -240,24 +268,16 @@ class CppComponentSkeletonGenerator:
                     f"  // {port.port_key}: no complete interaction legs; "
                     "no facade member was generated."
                 )
-        lines.extend([
-            "};",
-            "",
-            f"}}  // namespace {self.namespace}",
-            "",
-        ])
+        lines.extend(["};", "", f"}}  // namespace {self.namespace}", ""])
         return "\n".join(lines)
 
     def render_source(self) -> str:
         emitted = self._emitted_ports()
-        initializers = ["pcl::Component(name)"]
-        for port in emitted:
-            if port.role == "provided" and port.port_kind == "request":
-                initializers.append(f"{_adapter_member(port)}(*this)")
+        initializers = ["pcl::Component(name)", "handlers_(std::move(handlers))"]
         for port in emitted:
             args = "*this, executor"
             if port.role == "provided" and port.port_kind == "request":
-                args += f", {_adapter_member(port)}"
+                args += f", handlers_.{port.port_key}.get()"
             initializers.append(f"{port.port_key}_port_({args})")
         lines = [
             f'#include "{self.stem}.hpp"',
@@ -265,11 +285,19 @@ class CppComponentSkeletonGenerator:
             f"namespace {self.namespace} {{",
             "",
             f"{self.class_name}::{self.class_name}(",
-            "    pcl::Executor& executor, std::string name)",
+            "    pcl::Executor& executor, Handlers handlers, std::string name)",
             "    : " + ",\n      ".join(initializers) + " {}",
             "",
             f"pcl_status_t {self.class_name}::on_configure() {{",
         ]
+        for port in emitted:
+            if port.role == "consumed" and port.port_kind == "information":
+                lines.extend([
+                    f"  if (!handlers_.{port.port_key}) {{",
+                    f'    logError("required handler slot {port.port_key} is empty");',
+                    "    return PCL_ERR_STATE;",
+                    "  }",
+                ])
         for port in emitted:
             lines.extend([
                 f"  if (const auto status = {port.port_key}_port_.bind();",
@@ -278,37 +306,29 @@ class CppComponentSkeletonGenerator:
                 "  }",
             ])
             if port.role == "consumed" and port.port_kind == "information":
-                frame = self._frame_type(port)
-                prefix = _service_cpp_prefix(port.service_name)
                 lines.extend([
                     f"  {port.port_key}_subscription_ =",
                     f"      {port.port_key}_port_.subscribe(",
-                    f"          [this](const {frame}& item) {{ "
-                    f"on{prefix}(item); }});",
-                    f"  if (!{port.port_key}_subscription_) "
-                    "return PCL_ERR_STATE;",
+                    f"          handlers_.{port.port_key});",
+                    f"  if (!{port.port_key}_subscription_) return PCL_ERR_STATE;",
                 ])
             elif port.role == "consumed" and port.port_kind == "request":
-                service = self._service(port)
-                read = next(rpc for rpc in service.rpcs if rpc.name == "Read")
+                read = next(rpc for rpc in self._service(port).rpcs if rpc.name == "Read")
                 query = _qualified(port.role, _cpp_req_type(read))
-                frame = self._frame_type(port)
-                prefix = _service_cpp_prefix(port.service_name)
                 lines.extend([
-                    f"  {port.port_key}_subscription_ =",
-                    f"      {port.port_key}_port_.transitions(",
-                    f"          {query}{{}},",
-                    f"          [this](const {frame}& item) {{ "
-                    f"on{prefix}Transition(item); }});",
-                    f"  if (!{port.port_key}_subscription_) "
-                    "return PCL_ERR_STATE;",
+                    f"  if (handlers_.{port.port_key}_transitions) {{",
+                    f"    {port.port_key}_subscription_ =",
+                    f"        {port.port_key}_port_.transitions(",
+                    f"            {query}{{}},",
+                    f"            handlers_.{port.port_key}_transitions);",
+                    f"    if (!{port.port_key}_subscription_) return PCL_ERR_STATE;",
+                    "  }",
                 ])
         lines.extend([
             "  return on_user_configure();",
             "}",
             "",
-            f"std::vector<pcl::DeploymentPort> "
-            f"{self.class_name}::deploymentPorts() {{",
+            f"std::vector<pcl::DeploymentPort> {self.class_name}::deploymentPorts() {{",
             "  return {",
         ])
         for port in emitted:
@@ -332,84 +352,65 @@ class CppComponentSkeletonGenerator:
         return self._services[(port.package, port.service_name)]
 
     def _interaction(self, port: ComponentPort):
-        proto = self._files[port.package]
         return interaction_for_service(
-            self.index, proto, self._service(port)
+            self.index, self._files[port.package], self._service(port)
         )
 
     def _command_rpcs(self, port: ComponentPort) -> Tuple[ProtoRpc, ...]:
-        interaction = self._interaction(port)
         request_leg = next(
-            leg for leg in interaction.legs if leg.name == "request"
+            leg for leg in self._interaction(port).legs if leg.name == "request"
         )
         names = {endpoint.rpc_name for endpoint in request_leg.side_a}
         return tuple(sorted(
-            (
-                rpc for rpc in self._service(port).rpcs
-                if rpc.name in names
-            ),
+            (rpc for rpc in self._service(port).rpcs if rpc.name in names),
             key=lambda rpc: rpc.name,
         ))
 
     def _frame_type(self, port: ComponentPort) -> str:
-        read = next(
-            rpc for rpc in self._service(port).rpcs if rpc.name == "Read"
-        )
+        read = next(rpc for rpc in self._service(port).rpcs if rpc.name == "Read")
         return _qualified(port.role, _frame_type(read))
 
     def _facade_type(self, port: ComponentPort) -> str:
         return f"services::{port.role}::{port.facade}"
 
     def _subscription_type(self, port: ComponentPort) -> Optional[str]:
-        facade = self._facade_type(port)
         if port.port_kind in ("request", "information"):
             return f"services::{port.role}::SubscriptionHandle"
         return None
 
-    def _adapter_declaration(self, port: ComponentPort) -> List[str]:
-        role = port.role
+    def _handler_slot_declaration(self, port: ComponentPort) -> List[str]:
         prefix = _service_cpp_prefix(port.service_name)
-        handler = (
-            f"services::{role}::{prefix}RequestPortHandler"
-        )
-        lines = [
-            f"  struct {_adapter_name(port)} final : {handler} {{",
-            f"    explicit {_adapter_name(port)}({self.class_name}& owner)",
-            "        : owner_(owner) {}",
-        ]
-        for rpc in self._command_rpcs(port):
-            request = _qualified(role, _cpp_req_type(rpc))
-            response = _qualified(role, _cpp_rsp_type(rpc))
-            lines.extend([
-                f"    {response} on{rpc.name}("
-                f"const {request}& request) override {{",
-                f"      return owner_.on{prefix}{rpc.name}(request);",
-                "    }",
-            ])
-        lines.extend([
-            f"    {self.class_name}& owner_;",
-            "  };",
-        ])
-        return lines
+        if port.role == "provided" and port.port_kind == "request":
+            return [
+                "    pyramid::component_skeleton::HandlerSlot<",
+                f"        services::provided::{prefix}RequestPortHandler>",
+                f"        {port.port_key};",
+            ]
+        if port.role == "consumed" and port.port_kind == "information":
+            return [
+                f"    std::function<void(const {self._frame_type(port)}&)>",
+                f"        {port.port_key};",
+            ]
+        if port.role == "consumed" and port.port_kind == "request":
+            return [
+                f"    std::function<void(const {self._frame_type(port)}&)>",
+                f"        {port.port_key}_transitions{{}};",
+            ]
+        return []
 
-    def _pure_hooks(self):
-        hooks = []
-        for port in self._emitted_ports():
-            prefix = _service_cpp_prefix(port.service_name)
-            if port.role == "provided" and port.port_kind == "request":
-                for rpc in self._command_rpcs(port):
-                    hooks.append((
-                        _qualified(port.role, _cpp_rsp_type(rpc)),
-                        f"on{prefix}{rpc.name}",
-                        _qualified(port.role, _cpp_req_type(rpc)),
-                    ))
-            elif port.role == "consumed" and port.port_kind == "information":
-                hooks.append((
-                    "void",
-                    f"on{prefix}",
-                    self._frame_type(port),
-                ))
-        return tuple(hooks)
+    def _port_accessor_declaration(self, port: ComponentPort) -> List[str]:
+        accessor = _lower_camel(port.port_key) + "Port"
+        return [
+            f"  {self._facade_type(port)}& {accessor}() {{",
+            f"    return {port.port_key}_port_;",
+            "  }",
+        ]
+
+    def _provider_ports(self) -> Tuple[ComponentPort, ...]:
+        return tuple(
+            port for port in self._emitted_ports()
+            if port.role == "provided" and port.port_kind == "request"
+        )
 
     def _scaffold_namespace(self) -> str:
         return self.namespace
@@ -417,9 +418,62 @@ class CppComponentSkeletonGenerator:
     def _scaffold_class(self) -> str:
         return f"{_component_pascal(self.group.component)}Component"
 
+    def _handler_class(self, port: ComponentPort) -> str:
+        return f"{_service_cpp_prefix(port.service_name)}Handler"
+
+    def _scaffold_handlers_header(self) -> str:
+        lines = [
+            "#pragma once",
+            "",
+            f'#include "{self.stem}.hpp"',
+            "",
+            f"namespace {self._scaffold_namespace()} {{",
+            "",
+        ]
+        for port in self._provider_ports():
+            prefix = _service_cpp_prefix(port.service_name)
+            lines.extend([
+                f"class {self._handler_class(port)} final",
+                f"    : public services::provided::{prefix}RequestPortHandler {{",
+                "public:",
+            ])
+            for rpc in self._command_rpcs(port):
+                request = _qualified(port.role, _cpp_req_type(rpc))
+                response = _qualified(port.role, _cpp_rsp_type(rpc))
+                lines.append(
+                    f"  {response} on{rpc.name}(const {request}& request) override;"
+                )
+            lines.extend(["};", ""])
+        lines.extend([f"}}  // namespace {self._scaffold_namespace()}", ""])
+        return "\n".join(lines)
+
+    def _scaffold_handlers_source(self) -> str:
+        component = self.group.component.replace(".", "_")
+        lines = [
+            f'#include "{component}_handlers.hpp"',
+            "",
+            f"namespace {self._scaffold_namespace()} {{",
+            "",
+        ]
+        for port in self._provider_ports():
+            for rpc in self._command_rpcs(port):
+                request = _qualified(port.role, _cpp_req_type(rpc))
+                response = _qualified(port.role, _cpp_rsp_type(rpc))
+                lines.extend([
+                    f"{response} {self._handler_class(port)}::on{rpc.name}(",
+                    f"    const {request}& request) {{",
+                    "  (void)request;",
+                    "  // TODO: implement port business logic.",
+                    "  return {};",
+                    "}",
+                    "",
+                ])
+        lines.extend([f"}}  // namespace {self._scaffold_namespace()}", ""])
+        return "\n".join(lines)
+
     def _scaffold_header(self, component_file: str) -> str:
         del component_file
-        lines = [
+        return "\n".join([
             "#pragma once",
             "",
             f'#include "{self.stem}.hpp"',
@@ -428,48 +482,31 @@ class CppComponentSkeletonGenerator:
             "",
             f"class {self._scaffold_class()} final : public {self.class_name} {{",
             "public:",
-            f"  using {self.class_name}::{self.class_name};",
+            f"  {self._scaffold_class()}(",
+            "      pcl::Executor& executor, Handlers handlers,",
+            f'      std::string name = "{self.group.component}");',
             "",
             "protected:",
-        ]
-        for response, name, request in self._pure_hooks():
-            lines.append(
-                f"  {response} {name}(const {request}& request) override;"
-            )
-        lines.extend([
             "  pcl_status_t on_tick(double dt) override;",
             "};",
             "",
             f"}}  // namespace {self._scaffold_namespace()}",
             "",
         ])
-        return "\n".join(lines)
 
     def _scaffold_source(self, component_file: str) -> str:
-        include_root = (
-            f"{self.group.project}_"
-            f"{self.group.component.replace('.', '_')}"
-        )
-        lines = [
+        include_root = f"{self.group.project}_{self.group.component.replace('.', '_')}"
+        return "\n".join([
             f'#include "{include_root}/{component_file}.hpp"',
+            "",
+            "#include <utility>",
             "",
             f"namespace {self._scaffold_namespace()} {{",
             "",
-        ]
-        for response, name, request in self._pure_hooks():
-            lines.extend([
-                f"{response} {self._scaffold_class()}::{name}(",
-                f"    const {request}& request) {{",
-                "  (void)request;",
-                "  // TODO: implement component business logic.",
-            ])
-            if response != "void":
-                lines.append("  return {};")
-            lines.extend([
-                "}",
-                "",
-            ])
-        lines.extend([
+            f"{self._scaffold_class()}::{self._scaffold_class()}(",
+            "    pcl::Executor& executor, Handlers handlers, std::string name)",
+            f"    : {self.class_name}(executor, std::move(handlers), std::move(name)) {{}}",
+            "",
             f"pcl_status_t {self._scaffold_class()}::on_tick(double dt) {{",
             "  (void)dt;",
             "  // TODO: implement periodic component work.",
@@ -479,21 +516,20 @@ class CppComponentSkeletonGenerator:
             f"}}  // namespace {self._scaffold_namespace()}",
             "",
         ])
-        return "\n".join(lines)
 
     def _scaffold_main(self, component_file: str) -> str:
-        include_root = (
-            f"{self.group.project}_"
-            f"{self.group.component.replace('.', '_')}"
-        )
-        label = self.group.component.replace(".", "_")
-        return "\n".join([
+        include_root = f"{self.group.project}_{self.group.component.replace('.', '_')}"
+        component = self.group.component.replace(".", "_")
+        label = component
+        lines = [
             f'#include "{include_root}/{component_file}.hpp"',
+            f'#include "{component}_handlers.hpp"',
             "",
             "#include <pcl/process_runtime.hpp>",
             "",
             "#include <exception>",
             "#include <iostream>",
+            "#include <utility>",
             "",
             "#ifndef PYRAMID_COMPONENT_CODEC_PLUGIN_PATH",
             '#  define PYRAMID_COMPONENT_CODEC_PLUGIN_PATH ""',
@@ -504,8 +540,43 @@ class CppComponentSkeletonGenerator:
             "    pcl::ProcessRuntime runtime(",
             "        argc, argv, {PYRAMID_COMPONENT_CODEC_PLUGIN_PATH},",
             f"        {self.namespace}::{self.class_name}::deploymentPorts());",
+        ]
+        for port in self._provider_ports():
+            lines.append(
+                f"    {self.namespace}::{self._handler_class(port)} {port.port_key}_handler;"
+            )
+        lines.extend([
+            f"    {self.namespace}::{self.class_name}::Handlers handlers{{",
+        ])
+        for port in self._emitted_ports():
+            if port.role == "provided" and port.port_kind == "request":
+                lines.append(
+                    f"        .{port.port_key} = {port.port_key}_handler,"
+                )
+            elif port.role == "consumed" and port.port_kind == "information":
+                frame = self._frame_type(port)
+                if frame.startswith("services::"):
+                    frame = f"{self.namespace}::{frame}"
+                lines.extend([
+                    f"        .{port.port_key} = [](const {frame}& item) {{",
+                    "          (void)item;",
+                    "          // TODO: handle incoming information.",
+                    "        },",
+                ])
+            elif port.role == "consumed" and port.port_kind == "request":
+                frame = self._frame_type(port)
+                if frame.startswith("services::"):
+                    frame = f"{self.namespace}::{frame}"
+                lines.extend([
+                    f"        .{port.port_key}_transitions = [](const {frame}& item) {{",
+                    "          (void)item;",
+                    "          // TODO: handle request-port transitions, or remove this initializer.",
+                    "        },",
+                ])
+        lines.extend([
+            "    };",
             f"    {self.namespace}::{self._scaffold_class()} component(",
-            "        runtime.executor());",
+            "        runtime.executor(), std::move(handlers));",
             "    return runtime.run(component);",
             "  } catch (const std::exception& error) {",
             f'    std::cerr << "{label}: " << error.what() << std::endl;',
@@ -514,6 +585,7 @@ class CppComponentSkeletonGenerator:
             "}",
             "",
         ])
+        return "\n".join(lines)
 
     def _scaffold_cmake(self, component_file: str) -> str:
         del component_file
@@ -521,17 +593,11 @@ class CppComponentSkeletonGenerator:
         target = f"{self.group.project}_{component}"
         bindings = []
         if self.group.provided_package:
-            bindings.append(
-                self.naming_policy.service_file_prefix(
-                    self.group.provided_package
-                ).removeprefix("pyramid_services_")
-            )
+            bindings.append(self.naming_policy.service_file_prefix(
+                self.group.provided_package).removeprefix("pyramid_services_"))
         if self.group.consumed_package:
-            bindings.append(
-                self.naming_policy.service_file_prefix(
-                    self.group.consumed_package
-                ).removeprefix("pyramid_services_")
-            )
+            bindings.append(self.naming_policy.service_file_prefix(
+                self.group.consumed_package).removeprefix("pyramid_services_"))
         codec_target = f"pyramid_codec_json_{self.group.project}_{component}"
         return "\n".join([
             "cmake_minimum_required(VERSION 3.21)",
@@ -550,9 +616,11 @@ class CppComponentSkeletonGenerator:
             "                 ${CMAKE_CURRENT_BINARY_DIR}/pyramid_sdk)",
             "",
             f"add_executable({target}",
+            f"    src/{component}_handlers.cpp",
             f"    src/{component}_component.cpp",
             f"    src/{component}_main.cpp)",
-            f"target_include_directories({target} PRIVATE include)",
+            f"target_include_directories({target} PRIVATE include src)",
+            f"target_compile_features({target} PRIVATE cxx_std_20)",
             f"target_link_libraries({target} PRIVATE",
             "    pyramid_component_skeletons",
             "    pyramid_generated_services",
@@ -568,23 +636,14 @@ class CppComponentSkeletonGenerator:
         ])
 
     def _ports_template(
-        self,
-        platform: str,
-        transport: str,
-        plugin_suffix: str,
+        self, platform: str, transport: str, plugin_suffix: str
     ) -> str:
         del platform
         if transport == "tcp":
             plugin = f"plugins/pcl_transport_socket_plugin{plugin_suffix}"
-            config = (
-                '{"role":"<provided-or-consumed>",'
-                '"host":"127.0.0.1","port":<port>}'
-            )
+            config = '{"role":"<provided-or-consumed>","host":"127.0.0.1","port":<port>}'
         else:
-            plugin = (
-                "plugins/pcl_transport_shared_memory_plugin"
-                f"{plugin_suffix}"
-            )
+            plugin = f"plugins/pcl_transport_shared_memory_plugin{plugin_suffix}"
             config = (
                 '{"bus_name":"<shared-bus>",'
                 f'"participant_id":"{self.group.component}"' + "}"
@@ -597,8 +656,7 @@ class CppComponentSkeletonGenerator:
         for port in self._emitted_ports():
             mode = "rpc" if port.port_kind == "request" else "pubsub"
             lines.append(
-                f"port {port.port_key} {mode} <peer-process> "
-                f"{plugin} {config}"
+                f"port {port.port_key} {mode} <peer-process> {plugin} {config}"
             )
         lines.append("")
         return "\n".join(lines)
@@ -612,70 +670,3 @@ class CppComponentSkeletonGenerator:
         path.write_text(content, encoding="utf-8", newline="\n")
         print(f"scaffold: created {path}")
         return path
-
-    def _hook_and_helper_declarations(
-        self,
-        port: ComponentPort,
-    ) -> List[str]:
-        prefix = _service_cpp_prefix(port.service_name)
-        facade = self._facade_type(port)
-        accessor = _lower_camel(port.port_key) + "Port"
-        lines: List[str] = []
-        if port.role == "provided" and port.port_kind == "request":
-            for rpc in self._command_rpcs(port):
-                request = _qualified(port.role, _cpp_req_type(rpc))
-                response = _qualified(port.role, _cpp_rsp_type(rpc))
-                lines.append(
-                    f"  virtual {response} on{prefix}{rpc.name}("
-                    f"const {request}& request) = 0;"
-                )
-            lines.append(
-                f"  pcl_status_t send{prefix}Transition("
-                f"const {self._frame_type(port)}& item) {{"
-            )
-            lines.append(
-                f"    return {port.port_key}_port_.transitionWriter().send(item);"
-            )
-            lines.append("  }")
-        elif port.role == "consumed" and port.port_kind == "request":
-            lines.append(
-                f"  virtual void on{prefix}Transition("
-                f"const {self._frame_type(port)}& item) {{ (void)item; }}"
-            )
-            for rpc in self._command_rpcs(port):
-                request = _qualified(port.role, _cpp_req_type(rpc))
-                lines.append(
-                    f"  std::future<typename {facade}::SubmitResult> "
-                    f"submit{prefix}{rpc.name}("
-                )
-                lines.append(f"      const {request}& request) {{")
-                lines.append(
-                    f"    return {port.port_key}_port_.submit(request);"
-                )
-                lines.append("  }")
-        elif port.role == "provided" and port.port_kind == "information":
-            lines.append(
-                f"  pcl_status_t publish{prefix}("
-                f"const {self._frame_type(port)}& item) {{"
-            )
-            lines.append(
-                f"    return {port.port_key}_port_.publish(item);"
-            )
-            lines.append("  }")
-        elif port.role == "consumed" and port.port_kind == "information":
-            lines.append(
-                f"  virtual void on{prefix}("
-                f"const {self._frame_type(port)}& item) = 0;"
-            )
-        lines.append(f"  {facade}& {accessor}() {{")
-        lines.append(f"    return {port.port_key}_port_;")
-        lines.append("  }")
-        return lines
-
-
-def _adapter_name(port: ComponentPort) -> str:
-    return f"{_service_cpp_prefix(port.service_name)}HandlerAdapter"
-
-
-def _adapter_member(port: ComponentPort) -> str:
-    return f"{port.port_key}_handler_"

@@ -20,6 +20,8 @@ namespace sensors =
     pyramid::components::pim_osprey::sensors;
 namespace provided = sensors::services::provided;
 
+class FilledSensorsStub;
+
 // Request-port deploymentDescriptor() describes the command leg. The
 // role-symmetric client harness also needs to route the independent
 // requirement leg so it can observe transitions in either realization.
@@ -39,46 +41,70 @@ provided::InteractionPortDescriptor clientRequirementDescriptor() {
   };
 }
 
-class FilledSensorsStub final : public sensors::SensorsSkeleton {
+class AuthorisationHandler final
+    : public provided::AuthorisationDependencyRequestPortHandler {
 public:
-  explicit FilledSensorsStub(pcl::Executor& executor)
-      : SensorsSkeleton(executor, "sensors_provider") {}
-
-private:
-  provided::Ack onSenrequirementCancel(
-      const provided::Identifier&) override {
-    std::thread([this] {
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-      provided::SENRequirement_Service_Requirement transition{};
-      transition.senrequirement =
-          pyramid::domain_model::common_pim_components::sensors::SENRequirement{};
-      const auto status = sendSenrequirementTransition(transition);
-      std::cout << "TRANSITION_SEND_STATUS=" << status << std::endl;
-    }).detach();
+  provided::Ack onCancel(const provided::Identifier&) override {
     return pyramid::domain_model::kAckOk;
   }
-  provided::Ack onSenrequirementCreate(
-      const provided::SENRequirement_Service_Request&) override {
-    return pyramid::domain_model::kAckOk;
-  }
-  provided::Ack onSenrequirementUpdate(
-      const provided::SENRequirement_Service_Requirement&) override {
-    return pyramid::domain_model::kAckOk;
-  }
-  provided::Ack onAuthorisationDependencyCancel(
-      const provided::Identifier&) override {
-    return pyramid::domain_model::kAckOk;
-  }
-  provided::Ack onAuthorisationDependencyCreate(
+  provided::Ack onCreate(
       const provided::Authorisation_Dependency_Service_Request&) override {
     return pyramid::domain_model::kAckOk;
   }
-  provided::Ack onAuthorisationDependencyUpdate(
+  provided::Ack onUpdate(
       const provided::Authorisation_Dependency_Service_Requirement&) override {
     return pyramid::domain_model::kAckOk;
   }
-  void onCapabilityEvidence(const provided::Capabilities&) override {}
 };
+
+class SenRequirementHandler final
+    : public provided::SenrequirementRequestPortHandler {
+public:
+  void attach(FilledSensorsStub& owner) { owner_ = &owner; }
+
+  provided::Ack onCancel(const provided::Identifier&) override;
+
+  provided::Ack onCreate(
+      const provided::SENRequirement_Service_Request&) override {
+    return pyramid::domain_model::kAckOk;
+  }
+  provided::Ack onUpdate(
+      const provided::SENRequirement_Service_Requirement&) override {
+    return pyramid::domain_model::kAckOk;
+  }
+
+private:
+  FilledSensorsStub* owner_ = nullptr;
+};
+
+class FilledSensorsStub final : public sensors::SensorsSkeleton {
+public:
+  FilledSensorsStub(pcl::Executor& executor, Handlers handlers)
+      : SensorsSkeleton(
+            executor, std::move(handlers), "sensors_provider") {}
+
+  pcl_status_t sendTransition(
+      const provided::SENRequirement_Service_Requirement& transition) {
+    return senRequirementRequestPort().transitionWriter().send(transition);
+  }
+};
+
+provided::Ack SenRequirementHandler::onCancel(
+    const provided::Identifier&) {
+  if (owner_ == nullptr) {
+    throw std::runtime_error("SEN requirement handler is not attached");
+  }
+  FilledSensorsStub* owner = owner_;
+  std::thread([owner] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    provided::SENRequirement_Service_Requirement transition{};
+    transition.senrequirement =
+        pyramid::domain_model::common_pim_components::sensors::SENRequirement{};
+    const auto status = owner->sendTransition(transition);
+    std::cout << "TRANSITION_SEND_STATUS=" << status << std::endl;
+  }).detach();
+  return pyramid::domain_model::kAckOk;
+}
 
 class SensorsClient final : public pcl::Component {
 public:
@@ -163,7 +189,16 @@ int main(int argc, char** argv) {
           runtime_arguments.data(),
           {PYRAMID_COMPONENT_CODEC_PLUGIN_PATH},
           ports);
-      FilledSensorsStub provider(runtime.executor());
+      AuthorisationHandler authorisation_handler;
+      SenRequirementHandler sen_requirement_handler;
+      sensors::SensorsSkeleton::Handlers handlers{
+          .authorisation_dependency_request = authorisation_handler,
+          .capability_evidence_information =
+              [](const provided::Capabilities&) {},
+          .sen_requirement_request = sen_requirement_handler,
+      };
+      FilledSensorsStub provider(runtime.executor(), std::move(handlers));
+      sen_requirement_handler.attach(provider);
       return runtime.run(provider);
     }
     if (role == "client") {

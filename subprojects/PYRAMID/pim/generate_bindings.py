@@ -698,18 +698,21 @@ def _generate_component_skeletons(
         if not requested or group.key in requested
     ]
     total = 0
+    cpp_support_emitted = False
     for group in groups:
         if 'cpp' in languages:
             generator = cpp_component_skeleton_gen.CppComponentSkeletonGenerator(
                 group, proto_files, index, contract.naming_policy)
+            emit_support = not cpp_support_emitted
             manifest.record_generated(
                 'component_skeletons',
-                lambda generator=generator: generator.generate(
-                    str(output_dir)),
+                lambda generator=generator, emit_support=emit_support:
+                    generator.generate(str(output_dir), emit_support),
             )
+            cpp_support_emitted = True
             if scaffold_dir is not None:
                 generator.generate_scaffold(str(scaffold_dir))
-            total += 2
+            total += 2 + int(emit_support)
         if 'ada' in languages:
             generator = ada_component_skeleton_gen.AdaComponentSkeletonGenerator(
                 group, proto_files, index, contract.naming_policy)

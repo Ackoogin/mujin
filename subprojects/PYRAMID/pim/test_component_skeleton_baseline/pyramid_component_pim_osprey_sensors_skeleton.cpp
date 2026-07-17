@@ -3,16 +3,19 @@
 namespace pyramid::components::pim_osprey::sensors {
 
 SensorsSkeleton::SensorsSkeleton(
-    pcl::Executor& executor, std::string name)
+    pcl::Executor& executor, Handlers handlers, std::string name)
     : pcl::Component(name),
-      authorisation_dependency_request_handler_(*this),
-      sen_requirement_request_handler_(*this),
-      authorisation_dependency_request_port_(*this, executor, authorisation_dependency_request_handler_),
+      handlers_(std::move(handlers)),
+      authorisation_dependency_request_port_(*this, executor, handlers_.authorisation_dependency_request.get()),
       capability_evidence_information_port_(*this, executor),
       capability_information_port_(*this, executor),
-      sen_requirement_request_port_(*this, executor, sen_requirement_request_handler_) {}
+      sen_requirement_request_port_(*this, executor, handlers_.sen_requirement_request.get()) {}
 
 pcl_status_t SensorsSkeleton::on_configure() {
+  if (!handlers_.capability_evidence_information) {
+    logError("required handler slot capability_evidence_information is empty");
+    return PCL_ERR_STATE;
+  }
   if (const auto status = authorisation_dependency_request_port_.bind();
       status != PCL_OK) {
     return status;
@@ -23,7 +26,7 @@ pcl_status_t SensorsSkeleton::on_configure() {
   }
   capability_evidence_information_subscription_ =
       capability_evidence_information_port_.subscribe(
-          [this](const services::consumed::Capabilities& item) { onCapabilityEvidence(item); });
+          handlers_.capability_evidence_information);
   if (!capability_evidence_information_subscription_) return PCL_ERR_STATE;
   if (const auto status = capability_information_port_.bind();
       status != PCL_OK) {

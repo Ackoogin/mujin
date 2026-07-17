@@ -36,10 +36,12 @@ GENERATED_CPP="${SCRATCH}/generated"
 GENERATED_ADA="${SCRATCH}/generated_ada"
 
 echo "== generating C++ and Ada skeletons and scaffolds =="
-"${SDK_ROOT}/scripts/generate_bindings.sh" \
-  --cpp --ada --backends json --proto-dir "${PROTO_DIR}" \
-  --cpp-out "${GENERATED_CPP}" --ada-out "${GENERATED_ADA}" \
-  --skeletons --scaffold-dir "${SCAFFOLD}"
+python3 "${PYRAMID_ROOT}/pim/generate_bindings.py" \
+  "${PROTO_DIR}" "${GENERATED_CPP}" --languages cpp --backends json \
+  --component-skeletons --scaffold-dir "${SCAFFOLD}"
+python3 "${PYRAMID_ROOT}/pim/generate_bindings.py" \
+  "${PROTO_DIR}" "${GENERATED_ADA}" --languages ada --backends json \
+  --component-skeletons --scaffold-dir "${SCAFFOLD}"
 
 echo "== building the untouched C++ sensors process against pcl_core =="
 cmake -S "${SCAFFOLD}/pim_osprey_sensors" \

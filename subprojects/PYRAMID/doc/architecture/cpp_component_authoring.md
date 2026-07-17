@@ -10,6 +10,11 @@ If you only need the low-level invoke/dispatch/encode/decode primitives — for
 custom transports, codec dispatch tests, or framework code — read the binding
 guide instead. This page is for application authors writing components.
 
+If you would rather not compose the bindings by hand at all, the generator
+can emit a per-component skeleton that owns and binds every port and leaves
+you only the business-logic hooks — see
+[`component_skeletons.md`](component_skeletons.md).
+
 ## What the generator emits
 
 For each `pyramid.components.<name>.services.{provided,consumed}` proto, the

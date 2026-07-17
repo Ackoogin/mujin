@@ -228,6 +228,24 @@ load smoke test still runs.
 
 On Linux/macOS, use the `.sh` counterparts.
 
+### Optional: generate a component skeleton
+
+Instead of composing the generated port facades into a `pcl::Component` by
+hand, you can have the generator scaffold a complete runnable process per
+component:
+
+```bat
+scripts\generate_bindings.bat --skeletons --scaffold-dir <your-workspace>
+```
+
+This regenerates a skeleton base class (owns and binds every port, never
+edit it) and writes one-time scaffold files where your business logic goes
+(per-port handler classes, a thin lifecycle class, a `main`, CMake wiring,
+and `.ports` deployment templates). The `main` injects a generated `Handlers`
+aggregate into the skeleton. Re-running never overwrites your edited files.
+See `../doc/architecture/component_skeletons.md` upstream for the handler,
+port-accessor, and `.ports` configuration reference.
+
 ## Running against the plugins
 
 Load `plugins\pcl_transport_socket_plugin.dll` (or `_shared_memory_plugin`)

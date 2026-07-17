@@ -128,18 +128,18 @@ class AdaComponentSkeletonGenerator:
         ]
         return paths
 
-    def hook_names(self) -> Tuple[str, ...]:
-        hooks = []
+    def slot_names(self) -> Tuple[Tuple[str, str], ...]:
+        slots = []
         for port in self._emitted_ports():
-            prefix = _service_cpp_style_prefix(port.service_name)
             if port.role == "provided" and port.port_kind == "request":
-                for rpc in self._command_rpcs(port):
-                    hooks.append(f"on{prefix}{rpc.name}")
-            elif port.role == "consumed" and port.port_kind == "request":
-                hooks.append(f"on{prefix}Transition")
+                slots.append((port.port_key, "handler"))
             elif port.role == "consumed" and port.port_kind == "information":
-                hooks.append(f"on{prefix}")
-        return tuple(sorted(hooks))
+                slots.append((port.port_key, "sink_function"))
+            elif port.role == "consumed" and port.port_kind == "request":
+                slots.append(
+                    (f"{port.port_key}_transitions", "transitions_function")
+                )
+        return tuple(slots)
 
     def port_names(self) -> Tuple[str, ...]:
         return tuple(port.port_key for port in self._emitted_ports())
@@ -155,30 +155,28 @@ class AdaComponentSkeletonGenerator:
         for package in type_packages:
             lines.append(f"with {package}; use {package};")
         lines.extend([
-            "with Interfaces.C;",
             "with Pcl_Bindings;",
             "with Pcl_Process_Runtime;",
             "",
             f"package {self.package} is",
-            "   type Component_Skeleton is abstract tagged limited private;",
+            "   type Handlers is record",
+        ])
+        slot_lines: List[str] = []
+        for port in self._emitted_ports():
+            slot_lines.extend(self._handler_slot_spec(port))
+        lines.extend(slot_lines or ["      null;"])
+        lines.extend([
+            "   end record;",
             "",
             "   procedure Bind",
-            "     (Self      : access Component_Skeleton'Class;",
-            "      Container : Pcl_Bindings.Pcl_Container_Access;",
-            "      Exec      : Pcl_Bindings.Pcl_Executor_Access);",
+            "     (Container : Pcl_Bindings.Pcl_Container_Access;",
+            "      Exec      : Pcl_Bindings.Pcl_Executor_Access;",
+            "      Binding   : Handlers);",
             "",
         ])
-        for port in self._emitted_ports():
-            lines.extend(self._spec_for_port(port))
         lines.extend([
-            "   procedure On_Tick",
-            "     (Self       : in out Component_Skeleton;",
-            "      Dt_Seconds : Interfaces.C.double) is null;",
-            "",
             "   function Deployment_Ports return Pcl_Process_Runtime.Port_Array;",
             "",
-            "private",
-            "   type Component_Skeleton is abstract tagged limited null record;",
             f"end {self.package};",
             "",
         ])
@@ -196,23 +194,33 @@ class AdaComponentSkeletonGenerator:
             "with System;",
             "",
             f"package body {self.package} is",
-            "   Instance : access Component_Skeleton'Class := null;",
-            "   Instance_Executor : Pcl_Bindings.Pcl_Executor_Access := null;",
+            "   Bound : Boolean := False;",
+            "   Binding_State : access Handlers := null;",
             "",
         ])
         for port in self._emitted_ports():
             lines.extend(self._trampolines(port))
         lines.extend([
             "   procedure Bind",
-            "     (Self      : access Component_Skeleton'Class;",
-            "      Container : Pcl_Bindings.Pcl_Container_Access;",
-            "      Exec      : Pcl_Bindings.Pcl_Executor_Access) is",
+            "     (Container : Pcl_Bindings.Pcl_Container_Access;",
+            "      Exec      : Pcl_Bindings.Pcl_Executor_Access;",
+            "      Binding   : Handlers) is",
             "   begin",
-            "      if Instance /= null then",
+            "      if Bound then",
             '         raise Program_Error with "component skeleton is already bound";',
             "      end if;",
-            "      Instance := Self;",
-            "      Instance_Executor := Exec;",
+        ])
+        for port in self._emitted_ports():
+            if port.role == "consumed" and port.port_kind == "information":
+                field = self._slot_field(port)
+                lines.extend([
+                    f"      if Binding.{field} = null then",
+                    f'         raise Program_Error with "required handler slot {field} is null";',
+                    "      end if;",
+                ])
+        lines.extend([
+            "      Binding_State := new Handlers'(Binding);",
+            "      Bound := True;",
         ])
         for port in self._emitted_ports():
             lines.extend(self._bind_lines(port))
@@ -220,8 +228,6 @@ class AdaComponentSkeletonGenerator:
             "   end Bind;",
             "",
         ])
-        for port in self._emitted_ports():
-            lines.extend(self._helper_bodies(port))
         lines.extend(self._deployment_body())
         lines.extend([
             f"end {self.package};",
@@ -280,83 +286,37 @@ class AdaComponentSkeletonGenerator:
                         packages.add(local_package)
         return tuple(sorted(packages))
 
-    def _spec_for_port(self, port: ComponentPort) -> List[str]:
+    @staticmethod
+    def _slot_field(port: ComponentPort) -> str:
+        return _ada_pkg_segment(port.port_key)
+
+    def _handler_slot_spec(self, port: ComponentPort) -> List[str]:
+        package = self._service_package(port)
         prefix = _service_ada_prefix(port.service_name)
-        lines: List[str] = []
+        field = self._slot_field(port)
         if port.role == "provided" and port.port_kind == "request":
-            for rpc in self._command_rpcs(port):
-                lines.extend([
-                    f"   function On_{prefix}_{rpc.name}",
-                    "     (Self    : in out Component_Skeleton;",
-                    f"      Request : {_ada_req_type(rpc)}) return "
-                    f"{_ada_rsp_type(rpc)} is abstract;",
-                    "",
-                ])
-            frame = _frame_type(self._read_rpc(port))
-            lines.extend([
-                f"   procedure Send_{prefix}_Transition",
-                f"     (Self : in out Component_Skeleton; Item : {frame});",
-                "",
-            ])
-        elif port.role == "consumed" and port.port_kind == "request":
-            frame = _frame_type(self._read_rpc(port))
-            lines.extend([
-                f"   procedure On_{prefix}_Transition",
-                f"     (Self : in out Component_Skeleton; Item : {frame}) is null;",
-                "",
-            ])
-            for rpc in self._command_rpcs(port):
-                lines.extend([
-                    f"   procedure Submit_{prefix}_{rpc.name}",
-                    "     (Self            : in out Component_Skeleton;",
-                    f"      Request         : {_ada_req_type(rpc)};",
-                    "      Result_Accepted : out Boolean;",
-                    "      Result_Status    : out Interfaces.C.int;",
-                    "      Result_Has_Ack   : out Boolean;",
-                    f"      Result_Ack       : out {_ada_rsp_type(rpc)});",
-                    "",
-                ])
-        elif port.role == "provided" and port.port_kind == "information":
-            lines.extend([
-                f"   procedure Publish_{prefix}",
-                "     (Self : in out Component_Skeleton;",
-                f"      Item : {_frame_type(self._read_rpc(port))});",
-                "",
-            ])
-        elif port.role == "consumed" and port.port_kind == "information":
-            lines.extend([
-                f"   procedure On_{prefix}",
-                "     (Self : in out Component_Skeleton;",
-                f"      Item : {_frame_type(self._read_rpc(port))}) is abstract;",
-                "",
-            ])
-        return lines
+            return [
+                f"      {field} :",
+                f"        {package}.{prefix}_Interaction_Handlers;",
+            ]
+        if port.role == "consumed" and port.port_kind == "information":
+            return [
+                f"      {field} :",
+                "        access procedure",
+                f"          (Item : {_frame_type(self._read_rpc(port))});",
+            ]
+        if port.role == "consumed" and port.port_kind == "request":
+            return [
+                f"      {field}_Transitions :",
+                f"        {package}.{prefix}_Transition_Callback := null;",
+            ]
+        return []
 
     def _trampolines(self, port: ComponentPort) -> List[str]:
         package = self._service_package(port)
         prefix = _service_ada_prefix(port.service_name)
         lines: List[str] = []
-        if port.role == "provided" and port.port_kind == "request":
-            for rpc in self._command_rpcs(port):
-                lines.extend([
-                    f"   function {prefix}_{rpc.name}_Trampoline",
-                    f"     (Request : {_ada_req_type(rpc)}) return "
-                    f"{_ada_rsp_type(rpc)} is",
-                    "   begin",
-                    f"      return Instance.On_{prefix}_{rpc.name}(Request);",
-                    f"   end {prefix}_{rpc.name}_Trampoline;",
-                    "",
-                ])
-        elif port.role == "consumed" and port.port_kind == "request":
-            frame = _frame_type(self._read_rpc(port))
-            lines.extend([
-                f"   procedure {prefix}_Transition_Trampoline (Item : {frame}) is",
-                "   begin",
-                f"      Instance.On_{prefix}_Transition(Item);",
-                f"   end {prefix}_Transition_Trampoline;",
-                "",
-            ])
-        elif port.role == "consumed" and port.port_kind == "information":
+        if port.role == "consumed" and port.port_kind == "information":
             if not self._ada_info_topic_available(port):
                 return lines
             interaction = self._interaction(port)
@@ -378,7 +338,7 @@ class AdaComponentSkeletonGenerator:
                 f"      Item : constant {frame} := "
                 f"{package}.Decode_{suffix}(Msg);",
                 "   begin",
-                f"      Instance.On_{prefix}(Item);",
+                f"      Binding_State.{self._slot_field(port)}.all(Item);",
                 f"   end {prefix}_Information_Trampoline;",
                 "",
             ])
@@ -388,43 +348,26 @@ class AdaComponentSkeletonGenerator:
         package = self._service_package(port)
         prefix = _service_ada_prefix(port.service_name)
         if port.role == "provided" and port.port_kind == "request":
-            projectability = {
-                item.rpc_name: item
-                for item in command_projectability_for_service(
-                    self.index, self._proto(port), self._service(port)
-                )
-            }
-            supported = [
-                rpc for rpc in self._command_rpcs(port)
-                if projectability.get(rpc.name)
-                and projectability[rpc.name].projectable
-            ]
-            lines = [
+            return [
                 f"      {package}.{prefix}_Provider_Bind",
-                "        (Container, Exec,",
-                f"         {package}.{prefix}_Interaction_Handlers'(",
+                f"        (Container, Exec, Binding.{self._slot_field(port)});",
             ]
-            for index, rpc in enumerate(supported):
-                comma = "," if index < len(supported) - 1 else ""
-                lines.append(
-                    f"           On_{rpc.name} => "
-                    f"{prefix}_{rpc.name}_Trampoline'Access{comma}"
-                )
-            lines.append("         ));")
-            return lines
         if port.role == "consumed" and port.port_kind == "request":
             read = self._read_rpc(port)
             return [
                 f"      {package}.{prefix}_Client_Bind(Container, Exec);",
-                f"      {package}.{prefix}_Transitions",
-                f"        ({_ada_req_type(read)}'(others => <>),",
-                f"         {prefix}_Transition_Trampoline'Access);",
+                f"      if Binding.{self._slot_field(port)}_Transitions /= null then",
+                f"         {package}.{prefix}_Transitions",
+                f"           ({_ada_req_type(read)}'(others => <>),",
+                f"            Binding.{self._slot_field(port)}_Transitions);",
+                "      end if;",
             ]
         if port.role == "consumed" and port.port_kind == "information":
             if not self._ada_info_topic_available(port):
                 return [
-                    f"      --  {port.port_key}: the current Ada facade does "
-                    "not expose a local-wrapper topic decoder."
+                    f"      --  {port.port_key}: fail closed because the current Ada",
+                    "      --  facade does not expose a local-wrapper topic decoder.",
+                    f'      raise Program_Error with "{port.port_key} has no local-wrapper topic decoder";'
                 ]
             wire = self._interaction(port).legs[0].side_b[0].endpoint_name
             suffix = _topic_suffix(wire)
@@ -436,66 +379,6 @@ class AdaComponentSkeletonGenerator:
             f"      --  {port.port_key} publishes through Exec; "
             "no subscriber binding is required."
         ]
-
-    def _helper_bodies(self, port: ComponentPort) -> List[str]:
-        package = self._service_package(port)
-        prefix = _service_ada_prefix(port.service_name)
-        lines: List[str] = []
-        if port.role == "provided" and port.port_kind == "request":
-            frame = _frame_type(self._read_rpc(port))
-            lines.extend([
-                f"   procedure Send_{prefix}_Transition",
-                f"     (Self : in out Component_Skeleton; Item : {frame}) is",
-                "      pragma Unreferenced(Self);",
-                "   begin",
-                f"      {package}.{prefix}_Send_Transition(Item);",
-                f"   end Send_{prefix}_Transition;",
-                "",
-            ])
-        elif port.role == "consumed" and port.port_kind == "request":
-            for rpc in self._command_rpcs(port):
-                lines.extend([
-                    f"   procedure Submit_{prefix}_{rpc.name}",
-                    "     (Self            : in out Component_Skeleton;",
-                    f"      Request         : {_ada_req_type(rpc)};",
-                    "      Result_Accepted : out Boolean;",
-                    "      Result_Status    : out Interfaces.C.int;",
-                    "      Result_Has_Ack   : out Boolean;",
-                    f"      Result_Ack       : out {_ada_rsp_type(rpc)}) is",
-                    "      pragma Unreferenced(Self);",
-                    "   begin",
-                    f"      {package}.{prefix}_Submit_{rpc.name}",
-                    "        (Request, Result_Accepted, Result_Status,",
-                    "         Result_Has_Ack, Result_Ack);",
-                    f"   end Submit_{prefix}_{rpc.name};",
-                    "",
-                ])
-        elif port.role == "provided" and port.port_kind == "information":
-            frame = _frame_type(self._read_rpc(port))
-            lines.extend([
-                f"   procedure Publish_{prefix}",
-                f"     (Self : in out Component_Skeleton; Item : {frame}) is",
-                "      pragma Unreferenced(Self);",
-                "   begin",
-            ])
-            if self._ada_info_topic_available(port):
-                wire = self._interaction(port).legs[0].side_b[0].endpoint_name
-                suffix = _topic_suffix(wire)
-                lines.append(
-                    f"      {package}.Publish_{suffix}"
-                    "(Instance_Executor, Item);"
-                )
-            else:
-                lines.extend([
-                    "      pragma Unreferenced(Item);",
-                    '      raise Program_Error with "the current Ada facade '
-                    'does not expose this local-wrapper information topic";',
-                ])
-            lines.extend([
-                f"   end Publish_{prefix};",
-                "",
-            ])
-        return lines
 
     def _ada_info_topic_available(self, port: ComponentPort) -> bool:
         """Match the existing Ada service emitter's data-model topic filter."""
@@ -550,26 +433,47 @@ class AdaComponentSkeletonGenerator:
         ])
         return lines
 
-    def _pure_hooks(self):
-        hooks = []
+    def _scaffold_callbacks(self):
+        callbacks = []
         for port in self._emitted_ports():
             prefix = _service_ada_prefix(port.service_name)
             if port.role == "provided" and port.port_kind == "request":
+                projectability = {
+                    item.rpc_name: item
+                    for item in command_projectability_for_service(
+                        self.index, self._proto(port), self._service(port)
+                    )
+                }
                 for rpc in self._command_rpcs(port):
-                    hooks.append((
+                    if not (
+                        projectability.get(rpc.name)
+                        and projectability[rpc.name].projectable
+                    ):
+                        continue
+                    callbacks.append((
                         "function",
                         f"On_{prefix}_{rpc.name}",
                         _ada_req_type(rpc),
                         _ada_rsp_type(rpc),
+                        port,
                     ))
             elif port.role == "consumed" and port.port_kind == "information":
-                hooks.append((
+                callbacks.append((
                     "procedure",
                     f"On_{prefix}",
                     _frame_type(self._read_rpc(port)),
                     "",
+                    port,
                 ))
-        return tuple(hooks)
+            elif port.role == "consumed" and port.port_kind == "request":
+                callbacks.append((
+                    "procedure",
+                    f"On_{prefix}_Transition",
+                    _frame_type(self._read_rpc(port)),
+                    "",
+                    port,
+                ))
+        return tuple(callbacks)
 
     @property
     def _impl_package(self) -> str:
@@ -585,28 +489,22 @@ class AdaComponentSkeletonGenerator:
             "with Interfaces.C;",
             "",
             f"package {self._impl_package} is",
-            "   type Component is new Component_Skeleton with null record;",
             "",
         ])
-        for kind, name, request, response in self._pure_hooks():
+        for kind, name, request, response, _port in self._scaffold_callbacks():
             if kind == "function":
                 lines.extend([
-                    f"   overriding function {name}",
-                    "     (Self    : in out Component;",
-                    f"      Request : {request}) return {response};",
+                    f"   function {name}",
+                    f"     (Request : {request}) return {response};",
                     "",
                 ])
             else:
                 lines.extend([
-                    f"   overriding procedure {name}",
-                    "     (Self : in out Component;",
-                    f"      Item : {request});",
+                    f"   procedure {name} (Item : {request});",
                     "",
                 ])
         lines.extend([
-            "   overriding procedure On_Tick",
-            "     (Self       : in out Component;",
-            "      Dt_Seconds : Interfaces.C.double);",
+            "   procedure On_Tick (Dt_Seconds : Interfaces.C.double);",
             f"end {self._impl_package};",
             "",
         ])
@@ -616,13 +514,12 @@ class AdaComponentSkeletonGenerator:
         lines = [
             f"package body {self._impl_package} is",
         ]
-        for kind, name, request, response in self._pure_hooks():
+        for kind, name, request, response, _port in self._scaffold_callbacks():
             if kind == "function":
                 lines.extend([
-                    f"   overriding function {name}",
-                    "     (Self    : in out Component;",
-                    f"      Request : {request}) return {response} is",
-                    "      pragma Unreferenced(Self, Request);",
+                    f"   function {name}",
+                    f"     (Request : {request}) return {response} is",
+                    "      pragma Unreferenced(Request);",
                     "   begin",
                     "      --  TODO: implement component business logic.",
                     "      return (others => <>);",
@@ -631,10 +528,8 @@ class AdaComponentSkeletonGenerator:
                 ])
             else:
                 lines.extend([
-                    f"   overriding procedure {name}",
-                    "     (Self : in out Component;",
-                    f"      Item : {request}) is",
-                    "      pragma Unreferenced(Self, Item);",
+                    f"   procedure {name} (Item : {request}) is",
+                    "      pragma Unreferenced(Item);",
                     "   begin",
                     "      --  TODO: implement component business logic.",
                     "      null;",
@@ -642,10 +537,8 @@ class AdaComponentSkeletonGenerator:
                     "",
                 ])
         lines.extend([
-            "   overriding procedure On_Tick",
-            "     (Self       : in out Component;",
-            "      Dt_Seconds : Interfaces.C.double) is",
-            "      pragma Unreferenced(Self, Dt_Seconds);",
+            "   procedure On_Tick (Dt_Seconds : Interfaces.C.double) is",
+            "      pragma Unreferenced(Dt_Seconds);",
             "   begin",
             "      --  TODO: implement periodic component work.",
             "      null;",
@@ -661,7 +554,7 @@ class AdaComponentSkeletonGenerator:
             + "_Main"
         )
         logic_name = self.group.component.replace(".", "_")
-        return "\n".join([
+        lines = [
             "with Ada.Command_Line;",
             "with Interfaces.C;",
             f"with {self._impl_package};",
@@ -674,7 +567,49 @@ class AdaComponentSkeletonGenerator:
             "   use type Pcl_Bindings.Pcl_Status;",
             "",
             "   Runtime : Pcl_Process_Runtime.Runtime;",
-            f"   Logic : aliased {self._impl_package}.Component;",
+            f"   Binding : constant {self.package}.Handlers :=",
+            "     (",
+        ]
+        slots = [
+            port for port in self._emitted_ports()
+            if not (port.role == "provided" and port.port_kind == "information")
+        ]
+        for port_index, port in enumerate(slots):
+            field = self._slot_field(port)
+            comma = "," if port_index < len(slots) - 1 else ""
+            if port.role == "provided" and port.port_kind == "request":
+                prefix = _service_ada_prefix(port.service_name)
+                callbacks = [
+                    item for item in self._scaffold_callbacks()
+                    if item[4] == port and item[0] == "function"
+                ]
+                lines.append(f"      {field} =>")
+                lines.append("        (")
+                for callback_index, (_kind, name, _req, _rsp, _p) in enumerate(callbacks):
+                    lines.append(
+                        f"         On_{name.removeprefix(f'On_{prefix}_')} => "
+                        f"{self._impl_package}.{name}'Access,"
+                    )
+                lines.append(f"         others => <>){comma}")
+            elif port.role == "consumed" and port.port_kind == "information":
+                callback = next(
+                    item for item in self._scaffold_callbacks()
+                    if item[4] == port
+                )
+                lines.append(
+                    f"      {field} => {self._impl_package}.{callback[1]}'Access{comma}"
+                )
+            elif port.role == "consumed" and port.port_kind == "request":
+                callback = next(
+                    item for item in self._scaffold_callbacks()
+                    if item[4] == port
+                )
+                lines.append(
+                    f"      {field}_Transitions => "
+                    f"{self._impl_package}.{callback[1]}'Access{comma}"
+                )
+        lines.extend([
+            "     );",
             "",
             "   type Runtime_Container is new Pcl_Component.Component with null record;",
             "   overriding procedure On_Configure",
@@ -687,8 +622,8 @@ class AdaComponentSkeletonGenerator:
             "     (Self : in out Runtime_Container) is",
             "   begin",
             f"      {self.package}.Bind",
-            "        (Logic'Access, Pcl_Component.Handle(Self),",
-            "         Pcl_Process_Runtime.Executor(Runtime));",
+            "        (Pcl_Component.Handle(Self),",
+            "         Pcl_Process_Runtime.Executor(Runtime), Binding);",
             "   end On_Configure;",
             "",
             "   overriding procedure On_Tick",
@@ -696,7 +631,7 @@ class AdaComponentSkeletonGenerator:
             "      Dt_Seconds : Interfaces.C.double) is",
             "   begin",
             "      pragma Unreferenced(Self);",
-            f"      {self._impl_package}.On_Tick(Logic, Dt_Seconds);",
+            f"      {self._impl_package}.On_Tick(Dt_Seconds);",
             "   end On_Tick;",
             "",
             "   Container : Runtime_Container;",
@@ -722,6 +657,7 @@ class AdaComponentSkeletonGenerator:
             f"end {main_name};",
             "",
         ])
+        return "\n".join(lines)
 
     def _scaffold_gpr(self, component: str) -> str:
         project_name = component.title().replace("_", "_")
@@ -749,10 +685,3 @@ class AdaComponentSkeletonGenerator:
         path.write_text(content, encoding="utf-8", newline="\n")
         print(f"scaffold: created {path}")
         return path
-
-
-def _service_cpp_style_prefix(service_name: str) -> str:
-    name = service_name
-    if name.endswith("_Service"):
-        name = name[:-len("_Service")]
-    return "".join(part.capitalize() for part in name.split("_") if part)
