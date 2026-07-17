@@ -218,3 +218,6 @@ if(NOT WIN32)
     target_link_libraries(test_pcl_apos_transport PRIVATE pthread)
 endif()
 gtest_discover_tests(test_pcl_apos_transport DISCOVERY_MODE PRE_TEST)
+
+# Multi-process port-system stress test (worker binary + python driver).
+add_subdirectory(stress)

@@ -156,6 +156,8 @@ struct pcl_executor_t {
 
   pcl_pending_msg_t* incoming_head;
   pcl_pending_msg_t* incoming_tail;
+  uint32_t           incoming_count;
+  uint32_t           incoming_limit;
   pcl_mutex_t        incoming_lock;
 
   pcl_resp_cb_node_t* resp_cb_head;

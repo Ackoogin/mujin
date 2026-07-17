@@ -219,6 +219,8 @@ TEST(PclUdpTransport, PublishDeliveredToSubscriber) {
 
   EXPECT_TRUE(state.received) << "subscriber never received the UDP datagram";
   EXPECT_EQ(state.payload, "tick");
+  EXPECT_GT(pcl_udp_transport_received_datagrams(recv_udp), 0u);
+  EXPECT_EQ(pcl_udp_transport_dropped_datagrams(recv_udp), 0u);
 
   pcl_executor_remove(recv_exec, sub_c);
   pcl_container_destroy(sub_c);

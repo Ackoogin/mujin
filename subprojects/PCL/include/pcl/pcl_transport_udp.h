@@ -6,7 +6,7 @@
 /// use \ref pcl_transport_socket.h (TCP) for those.
 ///
 /// Protocol (single datagram, no length prefix -- UDP preserves boundaries):
-///   [1:type=PUBLISH=0x00][2:topic_len][topic]
+///   [1:type=PUBLISH=0x00][4:sequence][2:topic_len][topic]
 ///   [2:type_len][type_name][4:data_len][data]
 ///
 /// Each transport instance:
@@ -61,6 +61,19 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
 /// When created with \p local_port == 0, returns the ephemeral port
 /// assigned by the OS.  Returns 0 for a NULL handle.
 uint16_t pcl_udp_transport_get_local_port(const pcl_udp_transport_t* ctx);
+
+/// \brief Return the number of UDP datagrams received by this transport.
+///
+/// This includes malformed or unsupported datagrams discarded by the decoder,
+/// so it distinguishes an idle socket from one receiving unusable traffic.
+/// The value is intended for lightweight best-effort transport monitoring.
+uint64_t pcl_udp_transport_received_datagrams(const pcl_udp_transport_t* ctx);
+
+/// \brief Return detected forward sequence gaps in received UDP datagrams.
+///
+/// Gaps are tracked independently for each source address and port. Reordered
+/// or stale datagrams do not increase the counter.
+uint64_t pcl_udp_transport_dropped_datagrams(const pcl_udp_transport_t* ctx);
 
 /// \brief Set the logical peer identifier used for endpoint routing.
 ///

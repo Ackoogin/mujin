@@ -364,6 +364,45 @@ TEST(PclSharedMemoryTransport, PublishFansOutAcrossBusParticipants) {
   restore_logs();
 }
 
+TEST(PclSharedMemoryTransport, PublishTargetsOnlyInterestedParticipants) {
+  silence_logs();
+
+  const std::string bus = unique_token("interest_bus");
+  BusNode alpha;
+  BusNode bravo;
+  ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
+  ASSERT_TRUE(bravo.create(bus.c_str(), "bravo"));
+  ASSERT_TRUE(alpha.attach_transport());
+  ASSERT_TRUE(bravo.attach_transport());
+
+  const pcl_transport_t* alpha_transport =
+      pcl_shared_memory_transport_get_transport(alpha.transport);
+  const pcl_transport_t* bravo_transport =
+      pcl_shared_memory_transport_get_transport(bravo.transport);
+  ASSERT_NE(alpha_transport, nullptr);
+  ASSERT_NE(bravo_transport, nullptr);
+  ASSERT_EQ(bravo_transport->subscribe(bravo_transport->adapter_ctx,
+                                       "other/topic", "BusMsg"), PCL_OK);
+
+  const char payload[] = "interest";
+  pcl_msg_t msg = {};
+  msg.data = payload;
+  msg.size = static_cast<uint32_t>(sizeof(payload) - 1u);
+  msg.type_name = "BusMsg";
+
+  EXPECT_EQ(alpha_transport->publish(alpha_transport->adapter_ctx,
+                                     "wanted/topic", &msg), PCL_ERR_NOT_FOUND);
+
+  ASSERT_EQ(bravo_transport->subscribe(bravo_transport->adapter_ctx,
+                                       "wanted/topic", "BusMsg"), PCL_OK);
+  EXPECT_EQ(alpha_transport->publish(alpha_transport->adapter_ctx,
+                                     "wanted/topic", &msg), PCL_OK);
+
+  alpha.destroy();
+  bravo.destroy();
+  restore_logs();
+}
+
 TEST(PclSharedMemoryTransport, PublishHonoursSubscriberPeerFilter) {
   silence_logs();
 

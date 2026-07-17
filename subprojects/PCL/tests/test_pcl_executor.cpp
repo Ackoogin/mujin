@@ -217,6 +217,30 @@ TEST(PclExecutor, IntraProcessPubSub) {
   pcl_container_destroy(sub_c);
 }
 
+TEST(PclExecutor, IncomingQueueLimitRejectsExcessMessages) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  int payload = 42;
+  pcl_msg_t msg = {};
+  msg.data = &payload;
+  msg.size = sizeof(payload);
+  msg.type_name = "TestMsg";
+
+  EXPECT_EQ(pcl_executor_get_incoming_queue_depth(e), 0u);
+  EXPECT_EQ(pcl_executor_set_incoming_queue_limit(e, 1u), PCL_OK);
+  EXPECT_EQ(pcl_executor_post_incoming(e, "topic_a", &msg), PCL_OK);
+  EXPECT_EQ(pcl_executor_get_incoming_queue_depth(e), 1u);
+  EXPECT_EQ(pcl_executor_post_incoming(e, "topic_a", &msg), PCL_ERR_NOMEM);
+  EXPECT_EQ(pcl_executor_get_incoming_queue_depth(e), 1u);
+
+  EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_ERR_NOT_FOUND);
+  EXPECT_EQ(pcl_executor_get_incoming_queue_depth(e), 0u);
+  EXPECT_EQ(pcl_executor_post_incoming(e, "topic_a", &msg), PCL_OK);
+
+  pcl_executor_destroy(e);
+}
+
 TEST(PclExecutor, DispatchToUnknownTopicReturnsNotFound) {
   auto* e = pcl_executor_create();
 

@@ -17,6 +17,7 @@
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_alloc.h"
+#include "pcl/pcl_log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,11 +43,12 @@
 #define PCL_SHM_INTERNAL_STREAM_REQ_TYPE "pcl_shared_memory_stream_request"
 
 #define PCL_SHM_MAGIC 0x50434C53u
-#define PCL_SHM_VERSION 3u
+#define PCL_SHM_VERSION 4u
 
 #define PCL_SHM_MAX_PARTICIPANTS 8u
 #define PCL_SHM_QUEUE_DEPTH 16u
 #define PCL_SHM_MAX_SERVICES 16u
+#define PCL_SHM_MAX_SUBSCRIPTIONS 16u
 #define PCL_SHM_MAX_NAME 128u
 #define PCL_SHM_MAX_TYPE 128u
 #define PCL_SHM_MAX_ID 64u
@@ -56,6 +58,13 @@
 #define PCL_SHM_DISCOVERY_RETRIES 20u
 #define PCL_SHM_POLL_MS 1u
 #define PCL_SHM_SERVICE_SYNC_MS 1u
+
+/* Bounded window the egress worker will keep retrying a unary service request
+   whose provider mailbox is momentarily full, before giving up and delivering a
+   terminal (empty) response.  The provider drains its mailbox in microseconds,
+   so this converts a burst that overflows the 16-deep mailbox from a dropped
+   request into a slightly delayed one, rather than losing it outright. */
+#define PCL_SHM_SVC_REQ_RETRY_MS 50u
 
 typedef enum {
   PCL_SHM_FRAME_NONE = 0,
@@ -84,6 +93,7 @@ typedef struct {
   uint32_t read_index;
   uint32_t write_index;
   uint32_t service_count;
+  uint32_t subscription_count;
   char     participant_id[PCL_SHM_MAX_ID];
 #ifdef _WIN32
   char     notify_object_name[PCL_SHM_MAX_OBJECT_NAME];
@@ -91,6 +101,7 @@ typedef struct {
   sem_t    notify_sem;
 #endif
   char     services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME];
+  char     subscriptions[PCL_SHM_MAX_SUBSCRIPTIONS][PCL_SHM_MAX_NAME];
   pcl_shm_frame_t frames[PCL_SHM_QUEUE_DEPTH];
 } pcl_shm_slot_t;
 
@@ -201,6 +212,14 @@ typedef struct pcl_shared_memory_transport_t {
   pcl_shm_pending_stream_t*  pending_stream_head;
   pcl_shm_stream_send_target_t* active_stream_targets;
   pcl_shm_backpressure_policy_t backpressure[PCL_SHM_MAX_BACKPRESSURE_TOPICS];
+  /* Snapshot of the service set last written into this participant's shared
+     slot.  Owned solely by the recv thread, which re-advertises (and takes the
+     global bus lock) only when the local service set actually changes, instead
+     of on every receive-loop iteration.  Without this cache the recv thread
+     serialised all bus traffic behind the bus lock at the receive frequency. */
+  char                       synced_services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME];
+  uint32_t                   synced_service_count;
+  int                        services_synced_once;
   volatile int               egress_stop;
   pcl_shm_egress_item_t*     egress_head;
   pcl_shm_egress_item_t*     egress_tail;
@@ -894,14 +913,39 @@ static void pcl_shm_collect_local_services(
   pcl_executor_containers_unlock(ctx->executor);
 }
 
+/* Returns non-zero when the freshly collected service set is identical to the
+ * one already advertised into the shared slot.  The collection order is stable
+ * (container then port iteration order), so an element-wise compare is enough
+ * to tell "nothing changed" from "a service was added or removed". */
+static int pcl_shm_services_match_cache(const pcl_shared_memory_transport_t* ctx,
+                                        char services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME],
+                                        uint32_t count) {
+  uint32_t i;
+  if (!ctx->services_synced_once) return 0;
+  if (ctx->synced_service_count != count) return 0;
+  for (i = 0u; i < count; ++i) {
+    if (strcmp(ctx->synced_services[i], services[i]) != 0) return 0;
+  }
+  return 1;
+}
+
 static void pcl_shm_sync_local_services(pcl_shared_memory_transport_t* ctx) {
   char services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME];
   uint32_t count;
   uint32_t i;
+  int wrote = 0;
 
   if (!ctx || !ctx->region) return;
 
   pcl_shm_collect_local_services(ctx, services, &count);
+
+  /* Fast path: the local service set is unchanged since the last advertisement,
+     so there is nothing to write and no reason to take the global bus lock.
+     This is the steady state -- services are configured once at startup and
+     rarely change -- so the receive loop no longer contends the bus lock on
+     every iteration. */
+  if (pcl_shm_services_match_cache(ctx, services, count)) return;
+
   if (pcl_shm_bus_lock(ctx) != PCL_OK) return;
 
   if (ctx->slot_index < PCL_SHM_MAX_PARTICIPANTS &&
@@ -916,9 +960,22 @@ static void pcl_shm_sync_local_services(pcl_shared_memory_transport_t* ctx) {
     for (i = 0; i < count; ++i) {
       snprintf(slot->services[i], PCL_SHM_MAX_NAME, "%s", services[i]);
     }
+    wrote = 1;
   }
 
   pcl_shm_bus_unlock(ctx);
+
+  /* Record what we just advertised so subsequent iterations short-circuit until
+     the local service set changes again.  Only cache when the slot was actually
+     written, so a transient "slot not ours" state does not suppress a later
+     real advertisement. */
+  if (wrote) {
+    for (i = 0u; i < count && i < PCL_SHM_MAX_SERVICES; ++i) {
+      snprintf(ctx->synced_services[i], PCL_SHM_MAX_NAME, "%s", services[i]);
+    }
+    ctx->synced_service_count = count;
+    ctx->services_synced_once = 1;
+  }
 }
 
 static pcl_status_t pcl_shm_pending_remove(pcl_shared_memory_transport_t* ctx,
@@ -1280,6 +1337,21 @@ static int pcl_shm_slot_has_capacity_locked(const pcl_shm_slot_t* slot) {
   return next_index != slot->read_index;
 }
 
+static int pcl_shm_slot_is_interested_locked(const pcl_shm_slot_t* slot,
+                                             const char*           topic) {
+  uint32_t i;
+
+  if (!slot || !slot->in_use || !topic) return 0;
+  /* A participant which has not registered any subscriptions may have been
+     attached before its executor installs ports. Keep the historical
+     delivery-to-all behaviour for that short setup interval. */
+  if (slot->subscription_count == 0u) return 1;
+  for (i = 0u; i < slot->subscription_count; ++i) {
+    if (strcmp(slot->subscriptions[i], topic) == 0) return 1;
+  }
+  return 0;
+}
+
 static pcl_status_t pcl_shm_publish_once_locked(
     pcl_shared_memory_transport_t* ctx,
     const char*                    topic,
@@ -1295,7 +1367,7 @@ static pcl_status_t pcl_shm_publish_once_locked(
 
   for (i = 0u; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
     pcl_shm_slot_t* slot = &ctx->region->slots[i];
-    if (i == ctx->slot_index || !slot->in_use) continue;
+    if (i == ctx->slot_index || !pcl_shm_slot_is_interested_locked(slot, topic)) continue;
     targets[target_count] = i;
     original_write_index[target_count] = slot->write_index;
     ++target_count;
@@ -1554,24 +1626,43 @@ static void pcl_shm_worker_svc_req(pcl_shared_memory_transport_t* ctx,
   int found = pcl_shm_worker_discover(ctx, item->topic, &provider_slot);
   pcl_resp_cb_fn_t cb = NULL;
   void*            ud = NULL;
-  pcl_msg_t        req;
   pcl_msg_t        empty;
 
   if (found > 0) {
-    pcl_status_t rc = PCL_ERR_STATE;
-    if (pcl_shm_bus_lock(ctx) == PCL_OK) {
-      rc = pcl_shm_enqueue_frame_locked(ctx, provider_slot,
-                                        PCL_SHM_FRAME_SVC_REQ,
-                                        ctx->participant_id, item->topic,
-                                        item->type_name,
-                                        item->size > 0u ? item->data : NULL,
-                                        item->size, item->seq_id);
-      pcl_shm_bus_unlock(ctx);
+    uint64_t deadline_ms = pcl_shm_now_ms() + (uint64_t)PCL_SHM_SVC_REQ_RETRY_MS;
+    for (;;) {
+      pcl_status_t rc = PCL_ERR_STATE;
+      if (pcl_shm_bus_lock(ctx) == PCL_OK) {
+        /* Re-resolve the provider under the lock each attempt: across a retry
+           the provider may have detached or moved to a different slot. */
+        uint32_t slot = provider_slot;
+        int still = pcl_shm_find_provider_slot_locked(ctx, item->topic, &slot);
+        if (still > 0) {
+          rc = pcl_shm_enqueue_frame_locked(ctx, slot,
+                                            PCL_SHM_FRAME_SVC_REQ,
+                                            ctx->participant_id, item->topic,
+                                            item->type_name,
+                                            item->size > 0u ? item->data : NULL,
+                                            item->size, item->seq_id);
+        } else {
+          rc = (still < 0) ? PCL_ERR_INVALID : PCL_ERR_NOT_FOUND;
+        }
+        pcl_shm_bus_unlock(ctx);
+      }
+      if (rc == PCL_OK) return;  /* response arrives via the recv thread */
+
+      /* Only a full provider mailbox (PCL_ERR_NOMEM) is worth retrying.  Back
+         off one poll interval and try again until the bounded window elapses,
+         so a burst that briefly overflows the mailbox is delayed rather than
+         dropped.  Any other failure, a stop request, or the deadline ends the
+         attempt and falls through to the terminal response below. */
+      if (rc != PCL_ERR_NOMEM) break;
+      if (pcl_shm_egress_should_stop(ctx)) break;
+      if (pcl_shm_now_ms() >= deadline_ms) break;
+      pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
     }
-    if (rc == PCL_OK) return;  /* response arrives via the recv thread */
   }
 
-  (void)req;
   memset(&empty, 0, sizeof(empty));
   if (pcl_shm_pending_remove(ctx, item->seq_id, &cb, &ud) == PCL_OK && cb) {
     (void)pcl_executor_post_response_msg(ctx->executor, cb, ud, &empty);
@@ -1660,9 +1751,36 @@ static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
 static pcl_status_t pcl_shm_subscribe(void*       adapter_ctx,
                                       const char* topic,
                                       const char* type_name) {
-  (void)adapter_ctx;
-  (void)topic;
+  pcl_shared_memory_transport_t* ctx =
+      (pcl_shared_memory_transport_t*)adapter_ctx;
+  pcl_shm_slot_t* slot;
+  uint32_t i;
+
   (void)type_name;
+  if (!ctx || !topic || topic[0] == '\0') return PCL_ERR_INVALID;
+  if (strlen(topic) >= PCL_SHM_MAX_NAME) return PCL_ERR_NOMEM;
+
+  if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
+  slot = &ctx->region->slots[ctx->slot_index];
+  if (!slot->in_use ||
+      strcmp(slot->participant_id, ctx->participant_id) != 0) {
+    pcl_shm_bus_unlock(ctx);
+    return PCL_ERR_STATE;
+  }
+  for (i = 0u; i < slot->subscription_count; ++i) {
+    if (strcmp(slot->subscriptions[i], topic) == 0) {
+      pcl_shm_bus_unlock(ctx);
+      return PCL_OK;
+    }
+  }
+  if (slot->subscription_count >= PCL_SHM_MAX_SUBSCRIPTIONS) {
+    pcl_shm_bus_unlock(ctx);
+    return PCL_ERR_NOMEM;
+  }
+  snprintf(slot->subscriptions[slot->subscription_count],
+           sizeof(slot->subscriptions[slot->subscription_count]), "%s", topic);
+  ++slot->subscription_count;
+  pcl_shm_bus_unlock(ctx);
   return PCL_OK;
 }
 
@@ -2449,6 +2567,7 @@ static void* pcl_shm_recv_thread_main(void* arg)
   while (!ctx->recv_stop) {
     pcl_shm_frame_t frame;
     int has_frame = 0;
+    pcl_status_t handle_rc = PCL_OK;
 
     pcl_shm_sync_local_services(ctx);
 
@@ -2469,7 +2588,23 @@ static void* pcl_shm_recv_thread_main(void* arg)
     }
 
     if (has_frame) {
-      pcl_shm_handle_frame(ctx, &frame);
+      /* Deliver the frame.  If the executor's (optionally bounded) ingress
+         queue rejects it with PCL_ERR_NOMEM, re-deliver the same copy until it
+         is accepted or the transport is torn down.  Because the read index was
+         already advanced above, retrying here means this receive thread stops
+         draining the mailbox while it waits, so the mailbox's fixed capacity
+         fills and publishers see PCL_ERR_NOMEM backpressure instead of the
+         subscriber silently dropping the frame (defect D6).  PUBLISH delivery
+         is idempotent on PCL_ERR_NOMEM -- nothing is posted when the queue is
+         full -- so re-handling the copy cannot duplicate a message.  With the
+         default unbounded queue the first delivery always succeeds, so the
+         steady-state receive path still takes the bus lock only once per
+         frame. */
+      handle_rc = pcl_shm_handle_frame(ctx, &frame);
+      while (handle_rc == PCL_ERR_NOMEM && !ctx->recv_stop) {
+        pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+        handle_rc = pcl_shm_handle_frame(ctx, &frame);
+      }
     } else {
       /* A writer signals this participant after advancing write_index. The
        * bounded wait also preserves periodic service-advertisement refreshes
@@ -2494,6 +2629,7 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   char gateway_name[PCL_SHM_MAX_NAME];
   uint32_t i;
   pcl_status_t rc;
+  int notify_init_failed = 0;
 
   if (!bus_name || !participant_id || !participant_id[0] || !executor) {
     return NULL;  // GCOVR_EXCL_LINE: heap exhaustion is not injectable through this path
@@ -2543,6 +2679,10 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
     if (ctx->region->slots[i].in_use &&
         strcmp(ctx->region->slots[i].participant_id, ctx->participant_id) == 0) {
       pcl_shm_bus_unlock(ctx);
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "shared-memory bus '%s': participant id '%s' is already attached; "
+              "participant ids must be unique per bus",
+              bus_name, participant_id);
       pcl_shm_platform_close(ctx, 0);
       pcl_shm_egress_lock_destroy(ctx);
       pcl_shm_pending_lock_destroy(ctx);
@@ -2568,11 +2708,13 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
                                      slot->notify_object_name);
       if (!ctx->recv_event) {
         memset(slot, 0, sizeof(*slot));
+        notify_init_failed = 1;
         break;
       }
 #else
       if (sem_init(&slot->notify_sem, 1, 0) != 0) {
         memset(slot, 0, sizeof(*slot));
+        notify_init_failed = 1;
         break;
       }
 #endif
@@ -2588,6 +2730,22 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   pcl_shm_bus_unlock(ctx);
 
   if (ctx->slot_index >= PCL_SHM_MAX_PARTICIPANTS) {
+    if (notify_init_failed) {
+      // GCOVR_EXCL_START: the receive notification primitive fails to init only
+      // on OS resource exhaustion, which is not injectable in normal testing.
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "shared-memory bus '%s': could not initialise the receive "
+              "notification primitive for participant '%s'",
+              bus_name, participant_id);
+      // GCOVR_EXCL_STOP
+    } else {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "shared-memory bus '%s': cannot attach participant '%s': all %u "
+              "participant slots are in use (the compiled-in per-bus capacity "
+              "PCL_SHM_MAX_PARTICIPANTS); compose fewer participants on this bus "
+              "or split them across separate buses",
+              bus_name, participant_id, (unsigned)PCL_SHM_MAX_PARTICIPANTS);
+    }
     pcl_shm_platform_close(ctx, 0);
     pcl_shm_egress_lock_destroy(ctx);
     pcl_shm_pending_lock_destroy(ctx);

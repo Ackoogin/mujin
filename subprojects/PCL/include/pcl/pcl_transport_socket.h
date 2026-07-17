@@ -149,6 +149,16 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
 /// for a NULL handle.
 pcl_socket_state_t pcl_socket_transport_get_state(const pcl_socket_transport_t* ctx);
 
+/// \brief Number of publishes dropped because the outbound queue was full.
+///
+/// The send thread drains the outbound FIFO with blocking send()s.  When a
+/// publisher outruns the link, the queue is capped at a high-water mark and
+/// further publishes fail fast with PCL_ERR_NOMEM instead of growing memory
+/// without bound.  This counter is the running total of such drops, so a
+/// deployment can tell "quiet link" from "overflowing link".  Returns 0 for a
+/// NULL handle.  Safe to call from any thread.
+uint64_t pcl_socket_transport_dropped_publishes(const pcl_socket_transport_t* ctx);
+
 /// \brief Set the logical peer identifier used for endpoint routing.
 ///
 /// Use the same identifier when registering the transport with
