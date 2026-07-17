@@ -142,13 +142,13 @@ std::string owp_message_name(const char* type_name, const char* topic) {
   // Keep this boundary mapping here, rather than leaking wrapper names into
   // Sleet or teaching the codec about transport routing.
   if (declared == "ActionCommand_Service_Request") return "ActionCommand";
-  if (declared == "ActionCommand_Service_Requirement") {
+  if (declared == "ActionCommand_Service_Entity") {
     return "ActionCommandStatus";
   }
   // Generated information-port wrappers are a 1:1 "<Root>_Service_Information"
   // envelope around exactly one UCI root message -- strip the wrapper suffix
   // to recover the wire/XSD element name Sleet expects, same rationale as
-  // the Request/Requirement wrappers above.
+  // the Request/Entity wrappers above.
   static constexpr char kInfoSuffix[] = "_Service_Information";
   static constexpr std::size_t kInfoSuffixLen = sizeof(kInfoSuffix) - 1;
   if (declared.size() > kInfoSuffixLen &&

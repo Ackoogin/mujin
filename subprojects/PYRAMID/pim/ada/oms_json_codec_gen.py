@@ -99,13 +99,13 @@ package Pyramid.Data_Model.Uci.Oms_Json_Codec is
       (Msg : Pyramid.Components.Uci.Mission_Autonomy.Services.Provided.Types.Action_Command_Service_Request)
       return String;
    function To_Oms_Json
-      (Msg : Pyramid.Components.Uci.Mission_Autonomy.Services.Provided.Types.Action_Command_Service_Requirement)
+      (Msg : Pyramid.Components.Uci.Mission_Autonomy.Services.Provided.Types.Action_Command_Service_Entity)
       return String;
    function To_Oms_Json
       (Msg : Pyramid.Components.Uci.C2_Station.Services.Consumed.Types.Action_Command_Service_Request)
       return String;
    function To_Oms_Json
-      (Msg : Pyramid.Components.Uci.C2_Station.Services.Consumed.Types.Action_Command_Service_Requirement)
+      (Msg : Pyramid.Components.Uci.C2_Station.Services.Consumed.Types.Action_Command_Service_Entity)
       return String;
 end Pyramid.Data_Model.Uci.Oms_Json_Codec;
 '''.replace('\\"', '""'), encoding='utf-8')
@@ -180,7 +180,7 @@ package body Pyramid.Data_Model.Uci.Oms_Json_Codec is
       return To_Oms_Json (Msg.Update);
    end To_Oms_Json;
    function To_Oms_Json
-      (Msg : Pyramid.Components.Uci.Mission_Autonomy.Services.Provided.Types.Action_Command_Service_Requirement)
+      (Msg : Pyramid.Components.Uci.Mission_Autonomy.Services.Provided.Types.Action_Command_Service_Entity)
       return String is
    begin
       if not Msg.Has_Action_Command_Status then
@@ -200,7 +200,7 @@ package body Pyramid.Data_Model.Uci.Oms_Json_Codec is
       return To_Oms_Json (Msg.Update);
    end To_Oms_Json;
    function To_Oms_Json
-      (Msg : Pyramid.Components.Uci.C2_Station.Services.Consumed.Types.Action_Command_Service_Requirement)
+      (Msg : Pyramid.Components.Uci.C2_Station.Services.Consumed.Types.Action_Command_Service_Entity)
       return String is
    begin
       if not Msg.Has_Action_Command_Status then

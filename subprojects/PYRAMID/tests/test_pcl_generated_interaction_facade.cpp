@@ -128,7 +128,7 @@ class RecordingHandler final : public magra_prov::ProvidedHandler {
   }
 
   magra_prov::Ack onMaactionUpdate(
-      const magra_prov::MAAction_Service_Requirement& request) override {
+      const magra_prov::MAAction_Service_Entity& request) override {
     ++update_count;
     last_update = request;
     return magra_prov::Ack{true};
@@ -142,7 +142,7 @@ class RecordingHandler final : public magra_prov::ProvidedHandler {
 
   void onMaactionRead(
       const magra_prov::Query& query,
-      magra_prov::StreamWriter<magra_prov::MAAction_Service_Requirement> writer)
+      magra_prov::StreamWriter<magra_prov::MAAction_Service_Entity> writer)
       override {
     ++read_count;
     last_query = query;
@@ -154,10 +154,10 @@ class RecordingHandler final : public magra_prov::ProvidedHandler {
   int cancel_count = 0;
   int read_count = 0;
   magra_prov::MAAction_Service_Request last_create;
-  magra_prov::MAAction_Service_Requirement last_update;
+  magra_prov::MAAction_Service_Entity last_update;
   magra_prov::Identifier last_cancel;
   magra_prov::Query last_query;
-  magra_prov::StreamWriter<magra_prov::MAAction_Service_Requirement> open_writer;
+  magra_prov::StreamWriter<magra_prov::MAAction_Service_Entity> open_writer;
 };
 
 // Hand-wired provider component: hosts the real ProvidedService (RPC) and a
@@ -191,7 +191,7 @@ class ProviderComponent final : public pcl::Component {
 
   /// \brief Raw pub/sub probe standing in for the not-yet-built Phase 3
   ///        provider facade: subscribes the request topic (observes
-  ///        pub/sub-mode submit()) and publishes the requirement topic
+  ///        pub/sub-mode submit()) and publishes the entity topic
   ///        (simulates provider status broadcasts for pub/sub-mode
   ///        transitions()). Existing ConsumedService primitives only.
   magra_prov::ConsumedService& probe() { return probe_; }
@@ -199,7 +199,7 @@ class ProviderComponent final : public pcl::Component {
  protected:
   pcl_status_t on_configure() override {
     if (auto rc = provided_.bind(); rc != PCL_OK) return rc;
-    if (auto rc = probe_.addAgraMaActionRequirementPublisher(); rc != PCL_OK) {
+    if (auto rc = probe_.addAgraMaActionEntityPublisher(); rc != PCL_OK) {
       return rc;
     }
     auto* port = probe_.subscribeAgraMaActionRequest(
@@ -241,7 +241,7 @@ class FacadeHandler final : public magra_prov::MaactionRequestPortHandler {
   }
 
   magra_prov::Ack onUpdate(
-      const magra_prov::MAAction_Service_Requirement& request) override {
+      const magra_prov::MAAction_Service_Entity& request) override {
     ++update_count;
     last_update = request;
     return magra_prov::Ack{true};
@@ -257,7 +257,7 @@ class FacadeHandler final : public magra_prov::MaactionRequestPortHandler {
   int update_count = 0;
   int cancel_count = 0;
   magra_prov::MAAction_Service_Request last_create;
-  magra_prov::MAAction_Service_Requirement last_update;
+  magra_prov::MAAction_Service_Entity last_update;
   magra_prov::Identifier last_cancel;
 };
 
@@ -475,7 +475,7 @@ TEST(PclGeneratedInteractionFacade,
 
   // No publish is even attempted: a correct implementation must fail before
   // touching the wire at all (D2's "fail at the facade").
-  widget_cons::Widget_Service_Requirement command{};
+  widget_cons::Widget_Service_Entity command{};
   auto result = consumer.client().submit(command).get();
   EXPECT_FALSE(result.accepted);
   EXPECT_EQ(result.status, PCL_ERR_STATE);
@@ -535,13 +535,13 @@ TEST(PclGeneratedInteractionFacade,
   ASSERT_EQ(consumer.client().configureInteractionBinding(R"({"binding":"rpc"})"),
             PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  std::vector<magra_cons::MAAction_Service_Entity> received;
   bool ended = false;
   magra_cons::Query query{};
   query.id.push_back("action-3");
   auto handle = consumer.client().transitions(
       query,
-      [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      [&](const magra_cons::MAAction_Service_Entity& frame) {
         received.push_back(frame);
       },
       [&](pcl_status_t) { ended = true; });
@@ -550,7 +550,7 @@ TEST(PclGeneratedInteractionFacade,
   ASSERT_EQ(handler.last_query.id.size(), 1u);
   EXPECT_EQ(handler.last_query.id.front(), "action-3");
 
-  magra_prov::MAAction_Service_Requirement frame{};
+  magra_prov::MAAction_Service_Entity frame{};
   pyramid::domain_model::common::Requirement req{};
   req.id = "action-3";
   frame.ma_action_status = req;
@@ -588,37 +588,37 @@ TEST(PclGeneratedInteractionFacade, TransitionsUnderPubsubFiltersByQueryId) {
                 R"({"transport":"local"})"),
             PCL_OK);
   ASSERT_EQ(consumer.client().configureInteractionBinding(
-                R"({"requirement_leg":"pubsub"})"),
+                R"({"entity_leg":"pubsub"})"),
             PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  std::vector<magra_cons::MAAction_Service_Entity> received;
   magra_cons::Query query{};
   query.id.push_back("action-A");
   auto handle = consumer.client().transitions(
-      query, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      query, [&](const magra_cons::MAAction_Service_Entity& frame) {
         received.push_back(frame);
       });
   ASSERT_TRUE(handle.valid());
 
-  magra_prov::MAAction_Service_Requirement frame_a{};
+  magra_prov::MAAction_Service_Entity frame_a{};
   pyramid::domain_model::common::Requirement req_a{};
   req_a.id = "action-A";
   frame_a.ma_action_status = req_a;
 
-  magra_prov::MAAction_Service_Requirement frame_b{};
+  magra_prov::MAAction_Service_Entity frame_b{};
   pyramid::domain_model::common::Requirement req_b{};
   req_b.id = "action-B";
   frame_b.ma_action_status = req_b;
 
-  ASSERT_EQ(provider.probe().publishAgraMaActionRequirement(frame_a), PCL_OK);
-  ASSERT_EQ(provider.probe().publishAgraMaActionRequirement(frame_b), PCL_OK);
+  ASSERT_EQ(provider.probe().publishAgraMaActionEntity(frame_a), PCL_OK);
+  ASSERT_EQ(provider.probe().publishAgraMaActionEntity(frame_b), PCL_OK);
 
   ASSERT_EQ(received.size(), 1u);
   ASSERT_TRUE(received[0].ma_action_status.has_value());
   EXPECT_EQ(received[0].ma_action_status->id, "action-A");
 
   handle.cancel();
-  ASSERT_EQ(provider.probe().publishAgraMaActionRequirement(frame_a), PCL_OK);
+  ASSERT_EQ(provider.probe().publishAgraMaActionEntity(frame_a), PCL_OK);
   EXPECT_EQ(received.size(), 1u);  // cancel() suppressed further delivery
 }
 
@@ -646,10 +646,10 @@ TEST(PclGeneratedInteractionFacade,
                 R"({"transport":"local"})"),
             PCL_OK);
   ASSERT_EQ(consumer.client().configureInteractionBinding(
-                R"({"requirement_leg":"pubsub"})"),
+                R"({"entity_leg":"pubsub"})"),
             PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  std::vector<magra_cons::MAAction_Service_Entity> received;
   bool ended = false;
   pcl_status_t end_status = PCL_ERR_INVALID;
   magra_cons::Query query{};
@@ -657,7 +657,7 @@ TEST(PclGeneratedInteractionFacade,
   query.one_shot = true;
   auto handle = consumer.client().transitions(
       query,
-      [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      [&](const magra_cons::MAAction_Service_Entity& frame) {
         received.push_back(frame);
       },
       [&](pcl_status_t status) {
@@ -666,12 +666,12 @@ TEST(PclGeneratedInteractionFacade,
       });
   ASSERT_TRUE(handle.valid());
 
-  magra_prov::MAAction_Service_Requirement frame_a{};
+  magra_prov::MAAction_Service_Entity frame_a{};
   pyramid::domain_model::common::Requirement req_a{};
   req_a.id = "action-one-shot-pubsub";
   frame_a.ma_action_status = req_a;
 
-  ASSERT_EQ(provider.probe().publishAgraMaActionRequirement(frame_a), PCL_OK);
+  ASSERT_EQ(provider.probe().publishAgraMaActionEntity(frame_a), PCL_OK);
 
   ASSERT_EQ(received.size(), 1u);
   EXPECT_TRUE(ended);
@@ -679,7 +679,7 @@ TEST(PclGeneratedInteractionFacade,
 
   // one_shot deactivated the subscription: a second publication for the
   // same id must not be delivered.
-  ASSERT_EQ(provider.probe().publishAgraMaActionRequirement(frame_a), PCL_OK);
+  ASSERT_EQ(provider.probe().publishAgraMaActionEntity(frame_a), PCL_OK);
   EXPECT_EQ(received.size(), 1u);
 }
 
@@ -902,18 +902,18 @@ TEST(PclGeneratedInteractionFacadeProvider,
   ASSERT_EQ(consumer_b.client().configureInteractionBinding(R"({"binding":"rpc"})"),
             PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received_a, received_b;
+  std::vector<magra_cons::MAAction_Service_Entity> received_a, received_b;
   magra_cons::Query query_a{};
   query_a.id.push_back("facade-action-A");
   magra_cons::Query query_b{};
   query_b.id.push_back("facade-action-B");
 
   auto handle_a = consumer_a.client().transitions(
-      query_a, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      query_a, [&](const magra_cons::MAAction_Service_Entity& frame) {
         received_a.push_back(frame);
       });
   auto handle_b = consumer_b.client().transitions(
-      query_b, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      query_b, [&](const magra_cons::MAAction_Service_Entity& frame) {
         received_b.push_back(frame);
       });
   ASSERT_TRUE(handle_a.valid());
@@ -921,13 +921,13 @@ TEST(PclGeneratedInteractionFacadeProvider,
 
   auto writer = provider.provider().transitionWriter();
 
-  magra_prov::MAAction_Service_Requirement frame_a{};
+  magra_prov::MAAction_Service_Entity frame_a{};
   pyramid::domain_model::common::Requirement req_a{};
   req_a.id = "facade-action-A";
   frame_a.ma_action_status = req_a;
   ASSERT_EQ(writer.send(frame_a), PCL_OK);
 
-  magra_prov::MAAction_Service_Requirement frame_b{};
+  magra_prov::MAAction_Service_Entity frame_b{};
   pyramid::domain_model::common::Requirement req_b{};
   req_b.id = "facade-action-B";
   frame_b.ma_action_status = req_b;
@@ -961,7 +961,7 @@ TEST(PclGeneratedInteractionFacadeProvider,
   ASSERT_EQ(executor.add(provider), PCL_OK);
   ASSERT_EQ(provider.configureLocal(), PCL_OK);
   ASSERT_EQ(
-      provider.configureInteractionBinding(R"({"requirement_leg":"pubsub"})"),
+      provider.configureInteractionBinding(R"({"entity_leg":"pubsub"})"),
       PCL_OK);
 
   ASSERT_EQ(consumer.configure(), PCL_OK);
@@ -972,14 +972,14 @@ TEST(PclGeneratedInteractionFacadeProvider,
             PCL_OK);
   ASSERT_EQ(
       consumer.client().configureInteractionBinding(
-          R"({"request_leg":"pubsub","requirement_leg":"pubsub"})"),
+          R"({"request_leg":"pubsub","entity_leg":"pubsub"})"),
       PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  std::vector<magra_cons::MAAction_Service_Entity> received;
   magra_cons::Query query{};
   query.id.push_back("facade-action-late");
   auto handle = consumer.client().transitions(
-      query, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      query, [&](const magra_cons::MAAction_Service_Entity& frame) {
         received.push_back(frame);
       });
   ASSERT_TRUE(handle.valid());
@@ -987,7 +987,7 @@ TEST(PclGeneratedInteractionFacadeProvider,
   // Original send: recorded into the D6 snapshot store *and* delivered
   // normally to the already-live subscription (baseline, not the
   // mechanism under test).
-  magra_prov::MAAction_Service_Requirement original{};
+  magra_prov::MAAction_Service_Entity original{};
   pyramid::domain_model::common::Requirement original_req{};
   original_req.id = "facade-action-late";
   original.ma_action_status = original_req;
@@ -1041,17 +1041,17 @@ TEST(PclGeneratedInteractionFacadeProvider,
   // Transition happens *before* any Read stream is open -- nothing is
   // listening yet, so this can only reach a late reader via the D6
   // snapshot store, not fanOutRpc()'s normal live-delivery path.
-  magra_prov::MAAction_Service_Requirement original{};
+  magra_prov::MAAction_Service_Entity original{};
   pyramid::domain_model::common::Requirement original_req{};
   original_req.id = "facade-action-late-rpc";
   original.ma_action_status = original_req;
   ASSERT_EQ(provider.provider().transitionWriter().send(original), PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  std::vector<magra_cons::MAAction_Service_Entity> received;
   magra_cons::Query query{};
   query.id.push_back("facade-action-late-rpc");
   auto handle = consumer.client().transitions(
-      query, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      query, [&](const magra_cons::MAAction_Service_Entity& frame) {
         received.push_back(frame);
       });
   ASSERT_TRUE(handle.valid());
@@ -1088,18 +1088,18 @@ TEST(PclGeneratedInteractionFacadeProvider,
   ASSERT_EQ(consumer.client().configureInteractionBinding(R"({"binding":"rpc"})"),
             PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  std::vector<magra_cons::MAAction_Service_Entity> received;
   magra_cons::Query query{};
   query.id.push_back("facade-action-cancel");
   auto handle = consumer.client().transitions(
-      query, [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      query, [&](const magra_cons::MAAction_Service_Entity& frame) {
         received.push_back(frame);
       });
   ASSERT_TRUE(handle.valid());
 
   handle.cancel();
 
-  magra_prov::MAAction_Service_Requirement frame{};
+  magra_prov::MAAction_Service_Entity frame{};
   pyramid::domain_model::common::Requirement req{};
   req.id = "facade-action-cancel";
   frame.ma_action_status = req;
@@ -1152,7 +1152,7 @@ TEST(PclGeneratedInteractionFacadeProvider,
   ASSERT_EQ(consumer.client().configureInteractionBinding(R"({"binding":"rpc"})"),
             PCL_OK);
 
-  std::vector<magra_cons::MAAction_Service_Requirement> received;
+  std::vector<magra_cons::MAAction_Service_Entity> received;
   bool ended = false;
   pcl_status_t end_status = PCL_ERR_INVALID;
   magra_cons::Query query{};
@@ -1160,7 +1160,7 @@ TEST(PclGeneratedInteractionFacadeProvider,
   query.one_shot = true;
   auto handle = consumer.client().transitions(
       query,
-      [&](const magra_cons::MAAction_Service_Requirement& frame) {
+      [&](const magra_cons::MAAction_Service_Entity& frame) {
         received.push_back(frame);
       },
       [&](pcl_status_t status) {
@@ -1169,7 +1169,7 @@ TEST(PclGeneratedInteractionFacadeProvider,
       });
   ASSERT_TRUE(handle.valid());
 
-  magra_prov::MAAction_Service_Requirement frame{};
+  magra_prov::MAAction_Service_Entity frame{};
   pyramid::domain_model::common::Requirement req{};
   req.id = "facade-action-one-shot";
   frame.ma_action_status = req;
@@ -1181,7 +1181,7 @@ TEST(PclGeneratedInteractionFacadeProvider,
 
   // fanOutRpc() must have ended and pruned the stream after its one match:
   // a second transition for the same id is not delivered at all.
-  magra_prov::MAAction_Service_Requirement frame2{};
+  magra_prov::MAAction_Service_Entity frame2{};
   pyramid::domain_model::common::Requirement req2{};
   req2.id = "facade-action-one-shot";
   frame2.ma_action_status = req2;

@@ -19,7 +19,7 @@ import "pyramid/data_model/pyramid.data_model.common.proto";
 message Widget_Service_Request {
 }
 
-message Widget_Service_Requirement {
+message Widget_Service_Entity {
   pyramid.data_model.common.Requirement status = 1;
 }
 
@@ -37,7 +37,7 @@ service Widget_Service {
   // not a Phase 2 concern -- worked around here rather than touched.
   rpc Create(pyramid.components.interaction_facade_fixture.widget.services.consumed.Widget_Service_Request)
       returns (pyramid.data_model.common.Ack);
-  rpc Read(pyramid.data_model.common.Query) returns (stream Widget_Service_Requirement);
-  rpc Update(Widget_Service_Requirement) returns (pyramid.data_model.common.Ack);
+  rpc Read(pyramid.data_model.common.Query) returns (stream Widget_Service_Entity);
+  rpc Update(Widget_Service_Entity) returns (pyramid.data_model.common.Ack);
   rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
 }

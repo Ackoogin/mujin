@@ -165,7 +165,7 @@ class InteractionLeg:
     leg compiles to (see D5): `f"{service_key}.{leg_name}_leg"`, where
     `service_key` is the same string `_service_key` produces elsewhere in
     this module (e.g. `pyramid.components.agra.mission_autonomy.services.provided.MAAction_Service`)
-    and `leg_name` is `"request"` / `"requirement"` / `"information"`. This
+    and `leg_name` is `"request"` / `"entity"` / `"information"`. This
     convention must be reproducible from `binding_manifest.json` data alone
     -- `contract_routing_manifest.py` (and any future manifest generator)
     recomputes it rather than reading a stored group name, so the naming
@@ -173,11 +173,11 @@ class InteractionLeg:
 
     `side_a` is the rpc/service realization (one or more service endpoints
     -- multiple for the request leg's `Create`/`Update`/`Cancel`, exactly one
-    for the requirement/information leg's `Read`); `side_b` is the single
+    for the entity/information leg's `Read`); `side_b` is the single
     pub/sub topic realization.
     """
 
-    name: str  # "request" | "requirement" | "information"
+    name: str  # "request" | "entity" | "information"
     group_name: str
     side_a: Tuple[InteractionEndpoint, ...]
     side_b: Tuple[InteractionEndpoint, ...]
@@ -188,7 +188,7 @@ class Interaction:
     """One Request or Information port's contract element (plan §2.1).
 
     A Request-shape service (`port_kind == "request"`) yields one
-    `Interaction` with two legs (`request`, `requirement`); an
+    `Interaction` with two legs (`request`, `entity`); an
     Information-shape service (`port_kind == "information"`) yields one
     `Interaction` with a single `information` leg. Grouping only -- every
     endpoint referenced here also appears in `BindingContract.endpoint_requirements`;
@@ -732,7 +732,7 @@ def topics_for_proto_service(
         return subscribe, publish
 
     request_pattern = "SUBSCRIBE" if role == "provided" else "PUBLISH"
-    requirement_pattern = "PUBLISH" if role == "provided" else "SUBSCRIBE"
+    entity_pattern = "PUBLISH" if role == "provided" else "SUBSCRIBE"
     for rpc in service.rpcs:
         if rpc.name in ("Create", "Update", "Cancel"):
             add(_topic_from_rpc(
@@ -743,8 +743,8 @@ def topics_for_proto_service(
         elif rpc.name == "Read":
             add(_topic_from_rpc(
                 pf, service, rpc,
-                _topic_for_role(pf.package, service.name, "requirement"),
-                requirement_pattern,
+                _topic_for_role(pf.package, service.name, "entity"),
+                entity_pattern,
             ))
     return subscribe, publish
 
@@ -905,7 +905,7 @@ def _find_topic_by_role_suffix(
     rpc_names: Tuple[str, ...] = (),
 ) -> Optional[BindingTopic]:
     """The one topic (subscribe or publish side) whose wire name ends with
-    `wire_name_suffix` (`.request` / `.requirement` / `.information`) -- the
+    `wire_name_suffix` (`.request` / `.entity` / `.information`) -- the
     same suffix convention `_topic_for_role` uses to derive these wire names
     and `contract_routing_manifest.py` already matches against today.
 
@@ -978,7 +978,7 @@ def interaction_for_service(
             legs=(leg,),
         )
 
-    # Request-shape: up to two independent legs (request, requirement).
+    # Request-shape: up to two independent legs (request, entity).
     legs: List[InteractionLeg] = []
 
     command_rpcs = [
@@ -995,14 +995,14 @@ def interaction_for_service(
         ))
 
     read_rpc = next((r for r in service.rpcs if r.name == "Read"), None)
-    requirement_topic = _find_topic_by_role_suffix(
-        sub_topics, pub_topics, ".requirement", ("Read",))
-    if read_rpc is not None and requirement_topic is not None:
+    entity_topic = _find_topic_by_role_suffix(
+        sub_topics, pub_topics, ".entity", ("Read",))
+    if read_rpc is not None and entity_topic is not None:
         legs.append(InteractionLeg(
-            name="requirement",
-            group_name=_leg_group_name(service_key, "requirement"),
+            name="entity",
+            group_name=_leg_group_name(service_key, "entity"),
             side_a=(rpc_endpoint(read_rpc),),
-            side_b=(topic_endpoint(requirement_topic),),
+            side_b=(topic_endpoint(entity_topic),),
         ))
 
     if not legs:
@@ -1217,7 +1217,7 @@ def _has_emittable_interaction(interaction: Optional[Interaction]) -> bool:
         return False
     leg_names = {leg.name for leg in interaction.legs}
     if interaction.port_kind == "request":
-        return {"request", "requirement"} <= leg_names
+        return {"request", "entity"} <= leg_names
     return (
         interaction.port_kind == "information"
         and "information" in leg_names

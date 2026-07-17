@@ -69,7 +69,7 @@ package body Pyramid.Skeletons.Pim_Osprey.Sensor_Products is
            ),
            Pcl_Process_Runtime.Endpoint_Array'(
              1 => Pcl_Process_Runtime.Make_Endpoint("pim_osprey.authorisation_dependency.request", Pcl_Bindings.PCL_ENDPOINT_SUBSCRIBER),
-             2 => Pcl_Process_Runtime.Make_Endpoint("pim_osprey.authorisation_dependency.requirement", Pcl_Bindings.PCL_ENDPOINT_PUBLISHER)
+             2 => Pcl_Process_Runtime.Make_Endpoint("pim_osprey.authorisation_dependency.entity", Pcl_Bindings.PCL_ENDPOINT_PUBLISHER)
            )),
         2 => Pcl_Process_Runtime.Make_Port
           ("capability_evidence_information",
@@ -113,7 +113,7 @@ package body Pyramid.Skeletons.Pim_Osprey.Sensor_Products is
            ),
            Pcl_Process_Runtime.Endpoint_Array'(
              1 => Pcl_Process_Runtime.Make_Endpoint("pim_osprey.spr_requirement.request", Pcl_Bindings.PCL_ENDPOINT_SUBSCRIBER),
-             2 => Pcl_Process_Runtime.Make_Endpoint("pim_osprey.spr_requirement.requirement", Pcl_Bindings.PCL_ENDPOINT_PUBLISHER)
+             2 => Pcl_Process_Runtime.Make_Endpoint("pim_osprey.spr_requirement.entity", Pcl_Bindings.PCL_ENDPOINT_PUBLISHER)
            ))
       );
    end Deployment_Ports;

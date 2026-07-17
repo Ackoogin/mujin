@@ -17,7 +17,7 @@ message StrikeConsentRequest_Service_Request {
   }
 }
 
-message StrikeConsentRequest_Service_Requirement {
+message StrikeConsentRequest_Service_Entity {
   oneof payload {
     pyramid.data_model.agra.StrikeConsentRequestStatusMT strike_consent_request_status = 1;
   }
@@ -27,10 +27,10 @@ service StrikeConsentRequest_Service {
   rpc Create(StrikeConsentRequest_Service_Request) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "StrikeConsentRequest" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream StrikeConsentRequest_Service_Requirement) {
+  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream StrikeConsentRequest_Service_Entity) {
     option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "StrikeConsentRequestStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Update(StrikeConsentRequest_Service_Requirement) returns (pyramid.data_model.agra_port_grammar.Ack) {
+  rpc Update(StrikeConsentRequest_Service_Entity) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "StrikeConsentRequest" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
   rpc Cancel(pyramid.data_model.agra_port_grammar.Identifier) returns (pyramid.data_model.agra_port_grammar.Ack) {

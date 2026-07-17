@@ -91,7 +91,7 @@ full text in git history.
    realization is chosen per leg, per deployment. The facade promises only
    the weaker realization's guarantee (no synthesised acks).
 5. **Correlation by payload id, not by topic instance** (the A-GRA pattern):
-   request/requirement topic pairs on a flat namespace, acceptance and
+   request/entity topic pairs on a flat namespace, acceptance and
    progress as observable status transitions, cancel as another message.
 6. **Business logic runs only on the PCL executor thread.** Transports may
    own worker threads, but ingress is queued to the executor and egress
@@ -233,7 +233,7 @@ transport telemetry plugins/pcl_transport_udp_plugin.dll {"remote_host":"127.0.0
 
 # route <endpoint> <kind> <peer>[,<peer>...] [reliability]
 route agra.ma_action.request subscriber command_bus reliable
-route agra.ma_action.requirement publisher command_bus reliable
+route agra.ma_action.entity publisher command_bus reliable
 route agra.ma_action_plan.information publisher telemetry best_effort
 ```
 
@@ -327,7 +327,7 @@ sequenceDiagram
   C->>P: submit(command)   [id = "action-1"]
   Note over P: handler onCreate() fires either way
 
-  Note over C,P: requirement leg — realized as RPC Read stream<br/>or as the .requirement topic
+  Note over C,P: entity leg — realized as RPC Read stream<br/>or as the externally named .entity topic
   P-->>C: transition RECEIVED    (correlated by id)
   P-->>C: transition IN_PROGRESS (correlated by id)
   P-->>C: transition COMPLETED   (correlated by id)

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# LA-CAL Phase 5 positive: a correlated request/requirement interaction realized
+# LA-CAL Phase 5 positive: a correlated request/entity interaction realized
 # pub/sub on both legs over the LA-CAL transport, through real Sleet, using the
 # UCI ActionCommand / ActionCommandStatus pair.
 #
 # The consumer (seam-c2) publishes an ActionCommand and subscribes the
-# requirement topic; the provider (seam-ma) subscribes the request topic and
+# entity topic; the provider (seam-ma) subscribes the request topic and
 # publishes correlated ActionCommandStatus transitions (RECEIVED, ACCEPTED).
 # Both legs route over the LA-CAL (owp/asb) peer. SKIPs (exit 0) when Sleet is
 # unavailable; a reachable-but-rejecting Sleet is a FAIL.
@@ -90,8 +90,8 @@ fi
 PROV_PID=""
 
 if [[ ! -f "${OUTPUT}" ]] || ! grep -q '^seam-ok$' "${OUTPUT}"; then
-  echo "FAIL: consumer did not receive the correlated requirement transitions"
+  echo "FAIL: consumer did not receive the correlated entity transitions"
   exit 2
 fi
 
-echo "PASS: LA-CAL Phase 5 request/requirement seam over Sleet (both legs pub/sub)"
+echo "PASS: LA-CAL Phase 5 request/entity seam over Sleet (both legs pub/sub)"

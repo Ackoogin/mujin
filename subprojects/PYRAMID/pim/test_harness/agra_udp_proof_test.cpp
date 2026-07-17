@@ -3,7 +3,7 @@
 //        the UDP proof, including the fail-closed negative gate.
 //
 // Two scenarios against the A-GRA example contract (pim/agra_example/):
-//   1. Negative gate: a manifest routing agra.ma_action.requirement (the
+//   1. Negative gate: a manifest routing agra.ma_action.entity (the
 //      correlated pair's RELIABLE-stamped topic) over the real
 //      libpcl_transport_udp_plugin.so (BEST_EFFORT-declared) must fail
 //      closed at pcl_transport_routing_load -- the first exercise of the
@@ -112,10 +112,10 @@ void run_negative_gate(const std::string& udp_plugin_path, const std::string& sc
         out << "transport peer_udp " << udp_plugin_path
             << " {\"remote_host\":\"127.0.0.1\",\"remote_port\":" << remote_port
             << ",\"local_port\":" << local_port << ",\"peer_id\":\"peer_udp\"}\n";
-        // agra.ma_action.requirement is stamped RELIABLE in the contract
+        // agra.ma_action.entity is stamped RELIABLE in the contract
         // (pim/agra_example's provided proto, §3.3); UDP only ever offers
         // BEST_EFFORT. This route must fail closed.
-        out << "route " << ma::kTopicAgraMaActionRequirement
+        out << "route " << ma::kTopicAgraMaActionEntity
             << " publisher peer_udp reliable\n";
     }
 
@@ -136,7 +136,7 @@ void run_negative_gate(const std::string& udp_plugin_path, const std::string& sc
           "diagnostic names the required reliability ('reliable')");
     check(diag_text.find("best_effort") != std::string::npos,
           "diagnostic names the offered reliability ('best_effort')");
-    check(diag_text.find(ma::kTopicAgraMaActionRequirement) != std::string::npos,
+    check(diag_text.find(ma::kTopicAgraMaActionEntity) != std::string::npos,
           "diagnostic names the offending endpoint");
     std::printf("     diag: %s\n", diag);
 

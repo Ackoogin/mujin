@@ -5,7 +5,7 @@ Three cases, matching Phase 0's accept criteria:
   1. Fully-projectable: pim/agra_example/ post-Phase-0.1 fix (Create/Update/
      Cancel all classify projectable).
   2. The pre-existing uniform pim/test/ shape: Update non-projectable
-     (`Update`'s request type is the `_Requirement` wrapper everywhere in
+     (`Update`'s request type is the `_Entity` wrapper everywhere in
      the tree, never a `_Request` variant), Create/Cancel projectable.
   3. A synthetic ambiguous-variant negative: a wrapper whose oneof carries
      two variants of the same type, so a command matching that type cannot
@@ -59,7 +59,7 @@ message Widget_Service_Request {
   }
 }
 
-message Widget_Service_Requirement {
+message Widget_Service_Entity {
   oneof payload {
     Widget widget_status = 1;
   }
@@ -67,8 +67,8 @@ message Widget_Service_Requirement {
 
 service Widget_Service {
   rpc Create(Widget_Service_Request) returns (Ack);
-  rpc Read(Query) returns (stream Widget_Service_Requirement);
-  rpc Update(Widget_Service_Requirement) returns (Ack);
+  rpc Read(Query) returns (stream Widget_Service_Entity);
+  rpc Update(Widget_Service_Entity) returns (Ack);
   rpc Cancel(Identifier) returns (Ack);
 }
 """
@@ -208,7 +208,7 @@ class ConflictingVariantProjectabilityTest(unittest.TestCase):
         self.assertEqual(by_rpc["Cancel"].reason, "ambiguous_variant")
         self.assertEqual(by_rpc["Cancel"].variant_field, "")
 
-        # Update's request type (Widget_Service_Requirement) matches no
+        # Update's request type (Widget_Service_Entity) matches no
         # variant at all -- ordinary no_match, same as the uniform pim/test/
         # shape.
         self.assertFalse(by_rpc["Update"].projectable)
@@ -269,7 +269,7 @@ class InteractionModelTest(unittest.TestCase):
         )
 
         legs_by_name = {leg.name: leg for leg in interaction.legs}
-        self.assertEqual(set(legs_by_name), {"request", "requirement"})
+        self.assertEqual(set(legs_by_name), {"request", "entity"})
 
         request_leg = legs_by_name["request"]
         self.assertEqual(
@@ -290,19 +290,19 @@ class InteractionModelTest(unittest.TestCase):
         self.assertEqual(request_leg.side_b[0].endpoint_name, "agra.ma_action.request")
         self.assertEqual(request_leg.side_b[0].kind, "subscriber")
 
-        requirement_leg = legs_by_name["requirement"]
+        entity_leg = legs_by_name["entity"]
         self.assertEqual(
-            requirement_leg.group_name,
-            f"{interaction.service_key}.requirement_leg",
+            entity_leg.group_name,
+            f"{interaction.service_key}.entity_leg",
         )
-        self.assertEqual(len(requirement_leg.side_a), 1)
-        self.assertEqual(requirement_leg.side_a[0].endpoint_name, "ma_action.read")
-        self.assertEqual(requirement_leg.side_a[0].rpc_name, "Read")
-        self.assertEqual(len(requirement_leg.side_b), 1)
+        self.assertEqual(len(entity_leg.side_a), 1)
+        self.assertEqual(entity_leg.side_a[0].endpoint_name, "ma_action.read")
+        self.assertEqual(entity_leg.side_a[0].rpc_name, "Read")
+        self.assertEqual(len(entity_leg.side_b), 1)
         self.assertEqual(
-            requirement_leg.side_b[0].endpoint_name, "agra.ma_action.requirement"
+            entity_leg.side_b[0].endpoint_name, "agra.ma_action.entity"
         )
-        self.assertEqual(requirement_leg.side_b[0].kind, "publisher")
+        self.assertEqual(entity_leg.side_b[0].kind, "publisher")
 
     def test_agra_information_service_yields_single_leg(self):
         files = parse_proto_tree(AGRA_ROOT)

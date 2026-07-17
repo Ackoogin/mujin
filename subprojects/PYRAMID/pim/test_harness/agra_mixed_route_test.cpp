@@ -7,7 +7,7 @@
 //          transport pair_shm  libpcl_transport_shared_memory_plugin.so {...}
 //          transport info_udp  libpcl_transport_udp_plugin.so           {...}
 //          route agra.ma_action.request           subscriber pair_shm  reliable
-//          route agra.ma_action.requirement       publisher  pair_shm  reliable
+//          route agra.ma_action.entity       publisher  pair_shm  reliable
 //          route agra.ma_action_plan.information  publisher  info_udp best_effort
 //
 // -- and run the complete worked-example sequence: action tasking and
@@ -113,7 +113,7 @@ void run_negative_gate_replay(const std::string& udp_plugin_path,
         out << "transport peer_udp " << udp_plugin_path
             << " {\"remote_host\":\"127.0.0.1\",\"remote_port\":" << remote_port
             << ",\"local_port\":" << local_port << ",\"peer_id\":\"peer_udp\"}\n";
-        out << "route " << ma::kTopicAgraMaActionRequirement
+        out << "route " << ma::kTopicAgraMaActionEntity
             << " publisher peer_udp reliable\n";
     }
 
@@ -162,14 +162,14 @@ bool write_manifest(const std::string& path,
     if (is_ma) {
         out << "route " << ma::kTopicAgraMaActionRequest
             << " subscriber " << shm_peer_alias << " reliable\n";
-        out << "route " << ma::kTopicAgraMaActionRequirement
+        out << "route " << ma::kTopicAgraMaActionEntity
             << " publisher " << shm_peer_alias << " reliable\n";
         out << "route " << ma::kTopicAgraMaActionPlanInformation
             << " publisher info_udp best_effort\n";
     } else {
         out << "route " << c2::kTopicAgraMaActionRequest
             << " publisher " << shm_peer_alias << " reliable\n";
-        out << "route " << c2::kTopicAgraMaActionRequirement
+        out << "route " << c2::kTopicAgraMaActionEntity
             << " subscriber " << shm_peer_alias << " reliable\n";
         out << "route " << c2::kTopicAgraMaActionPlanInformation
             << " subscriber info_udp best_effort\n";
@@ -200,11 +200,11 @@ void ma_publish_transition(MaState* state, const std::string& id,
     req.status.id = id;
     req.status.status = progress;
     req.status.acceptance = acceptance;
-    ma::MAAction_Service_Requirement wrapper;
+    ma::MAAction_Service_Entity wrapper;
     wrapper.ma_action_status = req;
-    const pcl_status_t rc = ma::publishAgraMaActionRequirement(
+    const pcl_status_t rc = ma::publishAgraMaActionEntity(
         state->requirement_pub, wrapper, state->content_type.c_str());
-    check(rc == PCL_OK, "MA published requirement transition over the SHM route");
+    check(rc == PCL_OK, "MA published entity transition over the SHM route");
 }
 
 void ma_on_request(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
@@ -248,7 +248,7 @@ void ma_on_request(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
 pcl_status_t ma_on_configure(pcl_container_t* c, void* ud) {
     auto* state = static_cast<MaState*>(ud);
     state->requirement_pub = pcl_container_add_publisher(
-        c, ma::kTopicAgraMaActionRequirement, state->content_type.c_str());
+        c, ma::kTopicAgraMaActionEntity, state->content_type.c_str());
     state->info_pub = pcl_container_add_publisher(
         c, ma::kTopicAgraMaActionPlanInformation, state->content_type.c_str());
     pcl_port_t* sub = ma::subscribeAgraMaActionRequest(
@@ -267,9 +267,9 @@ struct C2State {
 
 void c2_on_requirement(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
     auto* state = static_cast<C2State*>(ud);
-    c2::MAAction_Service_Requirement payload;
-    if (!c2::decodeAgraMaActionRequirement(msg, &payload)) {
-        check(false, "C2 decoded requirement-topic payload received over the SHM route");
+    c2::MAAction_Service_Entity payload;
+    if (!c2::decodeAgraMaActionEntity(msg, &payload)) {
+        check(false, "C2 decoded entity-topic payload received over the SHM route");
         return;
     }
     if (!payload.ma_action_status) return;
@@ -290,7 +290,7 @@ pcl_status_t c2_on_configure(pcl_container_t* c, void* ud) {
     auto* state = static_cast<C2State*>(ud);
     state->request_pub = pcl_container_add_publisher(
         c, c2::kTopicAgraMaActionRequest, state->content_type.c_str());
-    pcl_port_t* req_sub = c2::subscribeAgraMaActionRequirement(
+    pcl_port_t* req_sub = c2::subscribeAgraMaActionEntity(
         c, c2_on_requirement, state, state->content_type.c_str());
     pcl_port_t* info_sub = c2::subscribeAgraMaActionPlanInformation(
         c, c2_on_information, state, state->content_type.c_str());

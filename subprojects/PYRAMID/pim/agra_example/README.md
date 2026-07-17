@@ -45,9 +45,9 @@ consumed mirror (`agra.c2_station`), C2 <-> MA per
 |---|---|---|
 | `MA_Action` (Command-2 tasking) | `agra.data_model.MA_Action` | `action_type` (FIND_SEARCH, MONITOR_OBSERVE), `target_object`, `action_constraints` (EMCON/keep-out strings) |
 | `ActionCancelCommand` | `MAAction_Service_Request.cancel` (`Identifier`) | the request wrapper's cancel variant |
-| `MA_ActionStatus` / `ActionProcessingState` | `MAAction_Service_Requirement.ma_action_status` (`pyramid.data_model.common.Requirement`, carrying `Achievement`'s acceptance layer: RECEIVED/REJECTED + reason) | an ordinary requirement transition, per the pubsub plan's §3 mapping |
+| `MA_ActionStatus` / `ActionProcessingState` | `MAAction_Service_Entity.ma_action_status` (`pyramid.data_model.common.Requirement`, carrying `Achievement`'s acceptance layer: RECEIVED/REJECTED + reason) | an ordinary entity transition, per the pubsub plan's §3 mapping |
 | `MA_ActionPlan` (Data-1 publication) | `agra.data_model.MA_ActionPlan` | plan id, correlated action id, summary -- what C2 reads before approving |
-| Correlated request/requirement pair (Command-2/ActionRequest-2) | `MAAction_Service` (Create/Read/Update/Cancel) | topics `agra.ma_action.request` / `agra.ma_action.requirement`, RELIABLE (intended transport: SHM) |
+| Correlated request/entity pair (Command-2/ActionRequest-2) | `MAAction_Service` (Create/Read/Update/Cancel) | topics `agra.ma_action.request` / `agra.ma_action.entity`, RELIABLE (intended transport: SHM) |
 | Information port (Data-1) | `MAActionPlan_Service` (Read) | topic `agra.ma_action_plan.information`, **BEST_EFFORT** (intended transport: UDP) |
 
 The BEST_EFFORT stamp on the information topic is deliberate: it exercises

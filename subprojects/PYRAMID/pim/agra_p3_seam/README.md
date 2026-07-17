@@ -15,7 +15,7 @@ derived from Table 3-1) carrying the PYRAMID pubsub/rpc port-grammar annotations
 contains P2's service API byte for byte, so unchanged P2 client source can
 use P3 as its larger contract. Topics
 are the bare XSD global element names; correlated Command/Status pairs
-follow the Request/Requirement pattern; everything else is a
+follow the Request/Entity pattern; everything else is a
 single-variant Information service. All operations are RELIABLE/VOLATILE
 with queue depth 10.
 

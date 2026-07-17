@@ -2,7 +2,7 @@
 # Build + run Phase A of doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md:
 # the routed-egress SHM proof. Generates C++/JSON bindings for the existing
 # pim_osprey sensor_products contract, compiles them + the JSON codec plugin
-# against libpcl_core, and drives the request/requirement/information topics
+# against libpcl_core, and drives the request/entity/information topics
 # through a real libpcl_transport_shared_memory_plugin.so loaded via
 # pcl_transport_routing_load -- first with two executors in one process, then
 # split across two OS processes.

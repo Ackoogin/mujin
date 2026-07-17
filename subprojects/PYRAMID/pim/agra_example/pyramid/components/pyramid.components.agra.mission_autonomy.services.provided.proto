@@ -15,22 +15,22 @@ message MAAction_Service_Request {
   oneof payload {
     pyramid.data_model.agra.MA_Action ma_action = 1;
     pyramid.data_model.base.Identifier cancel = 2;
-    MAAction_Service_Requirement update = 3;
+    MAAction_Service_Entity update = 3;
   }
 }
 
-// Requirement transitions carry Achievement's acceptance layer
+// Entity transitions carry Achievement's acceptance layer
 // (RECEIVED/REJECTED + reason) so a status transition -- the
-// MA_ActionStatus analogue -- is an ordinary requirement transition, per
+// MA_ActionStatus analogue -- is an ordinary entity transition, per
 // the pubsub plan's §3 mapping.
-message MAAction_Service_Requirement {
+message MAAction_Service_Entity {
   oneof payload {
     pyramid.data_model.common.Requirement ma_action_status = 1;
   }
 }
 
 // Request port 'pMAAction' (provided) refining MAAction: the correlated
-// request/requirement pair, stamped RELIABLE (intended transport: SHM).
+// request/entity pair, stamped RELIABLE (intended transport: SHM).
 service MAAction_Service {
   rpc Create(MAAction_Service_Request) returns (pyramid.data_model.common.Ack) {
     option (pyramid.options.pyramid_op) = {
@@ -39,14 +39,14 @@ service MAAction_Service {
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }
-  rpc Read(pyramid.data_model.common.Query) returns (stream MAAction_Service_Requirement) {
+  rpc Read(pyramid.data_model.common.Query) returns (stream MAAction_Service_Entity) {
     option (pyramid.options.pyramid_op) = {
       pattern: PUBLISH
-      topic: "agra.ma_action.requirement"
+      topic: "agra.ma_action.entity"
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }
-  rpc Update(MAAction_Service_Requirement) returns (pyramid.data_model.common.Ack) {
+  rpc Update(MAAction_Service_Entity) returns (pyramid.data_model.common.Ack) {
     option (pyramid.options.pyramid_op) = {
       pattern: SUBSCRIBE
       topic: "agra.ma_action.request"

@@ -61,7 +61,7 @@ bool fileExists(const std::filesystem::path& path) {
 
 std::filesystem::path writeManifest(const std::string& url, const char* service_id,
                                     const char* request_kind,
-                                    const char* requirement_kind,
+                                    const char* entity_kind,
                                     const std::filesystem::path& directory) {
   const auto path = directory / (std::string("lacal_generated_") + service_id + ".manifest");
   std::ofstream out(path, std::ios::binary | std::ios::trunc);
@@ -71,7 +71,7 @@ std::filesystem::path writeManifest(const std::string& url, const char* service_
          "\"peer_id\":\"asb\",\"connect_timeout_ms\":3000,"
          "\"declare_reliability\":\"reliable\"}\n"
       << "route mission.action_command.request " << request_kind << " asb reliable\n"
-      << "route mission.action_command.requirement " << requirement_kind
+      << "route mission.action_command.entity " << entity_kind
       << " asb reliable\n";
   return path;
 }
@@ -117,7 +117,7 @@ class ProviderHandler final : public ma::ActioncommandRequestPortHandler {
 
  private:
   void send(const std::string& id, const char* state) {
-    ma::ActionCommand_Service_Requirement transition;
+    ma::ActionCommand_Service_Entity transition;
     uci::ActionCommandStatusMT status;
     fillUciEnvelope(status.security_information, status.message_header);
     status.message_data.base.command_id.uuid = id;
@@ -178,7 +178,7 @@ int runProvider(const std::string& url, const std::filesystem::path& ready,
   ProviderComponent component(executor, handler);
   handler.bindWriter(component.provider().transitionWriter());
   const bool configured = component.provider().configureInteractionBinding(
-                              "{\"request_leg\":\"pubsub\",\"requirement_leg\":\"pubsub\"}") == PCL_OK &&
+                              "{\"request_leg\":\"pubsub\",\"entity_leg\":\"pubsub\"}") == PCL_OK &&
                           component.configure() == PCL_OK &&
                           component.provider().consumedService().configurePubSubTransport(
                               "{\"transport\":\"remote\",\"peer\":\"asb\"}") == PCL_OK &&
@@ -211,7 +211,7 @@ int runConsumer(const std::string& url, const std::filesystem::path& output,
                                  sizeof(diag)) != PCL_OK) return 2;
   ConsumerComponent component(executor);
   if (component.client().configureInteractionBinding(
-          "{\"request_leg\":\"pubsub\",\"requirement_leg\":\"pubsub\"}") != PCL_OK ||
+          "{\"request_leg\":\"pubsub\",\"entity_leg\":\"pubsub\"}") != PCL_OK ||
       component.configure() != PCL_OK ||
       component.client().consumedService().configurePubSubTransport(
           "{\"transport\":\"remote\",\"peer\":\"asb\"}") != PCL_OK ||
@@ -220,7 +220,7 @@ int runConsumer(const std::string& url, const std::filesystem::path& output,
 
   std::vector<std::string> states;
   auto subscription = component.client().transitions(
-      c2::Query{}, [&states](const c2::ActionCommand_Service_Requirement& transition) {
+      c2::Query{}, [&states](const c2::ActionCommand_Service_Entity& transition) {
         if (transition.action_command_status) {
           const auto& status = *transition.action_command_status;
           if (status.message_data.base.command_id.uuid == kCommandId) {

@@ -118,7 +118,7 @@ void run_rpc_roundtrip() {
 struct TopicProviderState {
     std::string content_type;
     pcl_port_t* information_pub = nullptr;
-    pcl_port_t* requirement_pub = nullptr;
+    pcl_port_t* entity_pub = nullptr;
     bool request_seen = false;
     bool cancel_seen = false;
 };
@@ -127,16 +127,16 @@ struct TopicConsumerState {
     std::string content_type;
     pcl_port_t* request_pub = nullptr;
     bool information_seen = false;
-    bool requirement_seen = false;
-    unsigned requirement_count = 0;
+    bool entity_seen = false;
+    unsigned entity_count = 0;
 };
 
-void publish_requirement_transition(TopicProviderState* state) {
-    prov::SPRRequirement_Service_Requirement requirement;
-    requirement.sprrequirement.emplace();
-    pcl_status_t rc = prov::publishPimOspreySprRequirementRequirement(
-        state->requirement_pub, requirement, state->content_type.c_str());
-    check(rc == PCL_OK, "provider published requirement transition");
+void publish_entity_transition(TopicProviderState* state) {
+    prov::SPRRequirement_Service_Entity entity;
+    entity.sprrequirement.emplace();
+    pcl_status_t rc = prov::publishPimOspreySprRequirementEntity(
+        state->entity_pub, entity, state->content_type.c_str());
+    check(rc == PCL_OK, "provider published entity transition");
 }
 
 void on_request_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
@@ -152,7 +152,7 @@ void on_request_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
     if (request.cancel) {
         state->cancel_seen = true;
     }
-    publish_requirement_transition(state);
+    publish_entity_transition(state);
 }
 
 void on_information_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
@@ -163,14 +163,14 @@ void on_information_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
         && static_cast<bool>(payload.sprinformation);
 }
 
-void on_requirement_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
+void on_entity_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
     auto* state = static_cast<TopicConsumerState*>(ud);
-    prov::SPRRequirement_Service_Requirement payload;
-    state->requirement_seen =
-        prov::decodePimOspreySprRequirementRequirement(msg, &payload)
+    prov::SPRRequirement_Service_Entity payload;
+    state->entity_seen =
+        prov::decodePimOspreySprRequirementEntity(msg, &payload)
         && static_cast<bool>(payload.sprrequirement);
-    if (state->requirement_seen) {
-        ++state->requirement_count;
+    if (state->entity_seen) {
+        ++state->entity_count;
     }
 }
 
@@ -179,12 +179,12 @@ pcl_status_t provider_topics_on_configure(pcl_container_t* c, void* ud) {
     state->information_pub = pcl_container_add_publisher(
         c, prov::kTopicPimOspreySprInformationInformation,
         state->content_type.c_str());
-    state->requirement_pub = pcl_container_add_publisher(
-        c, prov::kTopicPimOspreySprRequirementRequirement,
+    state->entity_pub = pcl_container_add_publisher(
+        c, prov::kTopicPimOspreySprRequirementEntity,
         state->content_type.c_str());
     pcl_port_t* sub = prov::subscribePimOspreySprRequirementRequest(
         c, on_request_topic, state, state->content_type.c_str());
-    return (state->information_pub && state->requirement_pub && sub)
+    return (state->information_pub && state->entity_pub && sub)
         ? PCL_OK
         : PCL_ERR_NOMEM;
 }
@@ -196,8 +196,8 @@ pcl_status_t consumer_topics_on_configure(pcl_container_t* c, void* ud) {
         state->content_type.c_str());
     pcl_port_t* info_sub = prov::subscribePimOspreySprInformationInformation(
         c, on_information_topic, state, state->content_type.c_str());
-    pcl_port_t* req_sub = prov::subscribePimOspreySprRequirementRequirement(
-        c, on_requirement_topic, state, state->content_type.c_str());
+    pcl_port_t* req_sub = prov::subscribePimOspreySprRequirementEntity(
+        c, on_entity_topic, state, state->content_type.c_str());
     return (state->request_pub && info_sub && req_sub)
         ? PCL_OK
         : PCL_ERR_NOMEM;
@@ -247,23 +247,23 @@ void run_topic_roundtrip(const char* content_type) {
               consumer_state.request_pub, create_request, content_type) == PCL_OK,
           "consumer published request topic");
     check(provider_state.request_seen, "provider observed request topic");
-    check(consumer_state.requirement_seen,
-          "consumer observed requirement transition");
-    check(consumer_state.requirement_count >= 1,
-          "conformance: request followed by requirement transition");
+    check(consumer_state.entity_seen,
+          "consumer observed entity transition");
+    check(consumer_state.entity_count >= 1,
+          "conformance: request followed by entity transition");
 
-    consumer_state.requirement_seen = false;
-    const unsigned before_cancel_requirements = consumer_state.requirement_count;
+    consumer_state.entity_seen = false;
+    const unsigned before_cancel_entities = consumer_state.entity_count;
     prov::SPRRequirement_Service_Request cancel_request;
     cancel_request.cancel = std::string("cancel-spr-001");
     check(prov::publishPimOspreySprRequirementRequest(
               consumer_state.request_pub, cancel_request, content_type) == PCL_OK,
           "consumer published cancel on request topic");
     check(provider_state.cancel_seen, "provider observed cancel topic payload");
-    check(consumer_state.requirement_seen,
-          "consumer observed post-cancel requirement transition");
-    check(consumer_state.requirement_count > before_cancel_requirements,
-          "conformance: cancel followed by requirement transition");
+    check(consumer_state.entity_seen,
+          "consumer observed post-cancel entity transition");
+    check(consumer_state.entity_count > before_cancel_entities,
+          "conformance: cancel followed by entity transition");
 
     pcl_executor_destroy(exec);
     pcl_container_destroy(provider);

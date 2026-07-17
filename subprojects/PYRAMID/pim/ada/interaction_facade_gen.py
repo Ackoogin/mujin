@@ -11,7 +11,7 @@ Ada's binding model allows:
 - RPC realization dispatches through the existing per-RPC `Invoke_*`
   procedures on the client, and through dedicated `Add_Service`/
   `Add_Stream_Service` PCL ports on the provider (a live PCL stream for
-  the requirement leg, not a poll -- see `Pcl_Bindings.Invoke_Stream`/
+  the entity leg, not a poll -- see `Pcl_Bindings.Invoke_Stream`/
   `Add_Stream_Service`/`Stream_Send`).
 - Pub/sub realization dispatches through `Pcl_Bindings.Add_Publisher`/
   `Add_Subscriber`/`Port_Publish` directly (there is no pre-existing
@@ -120,15 +120,15 @@ def _fqn(index: ProtoTypeIndex, type_name: str, current_package: str) -> str:
     return ''
 
 
-def _requirement_correlation_field(
+def _entity_correlation_field(
     index: ProtoTypeIndex, pf: ProtoFile, read_rpc: ProtoRpc,
 ) -> Optional[str]:
     """Ada field name of the Read stream frame's single-oneof-single-variant
     wrapping a message with an `Id` field (D4's client/provider-side
     correlation-id filter) -- Ada port of the C++ facade's
-    `_requirement_correlation_field`. Only handles the single-oneof shape
-    every Requirement wrapper in the tree uses today (e.g. A-GRA's
-    `MAAction_Service_Requirement.ma_action_status`); returns `None` (a
+    `_entity_correlation_field`. Only handles the single-oneof shape
+    every Entity wrapper in the tree uses today (e.g. A-GRA's
+    `MAAction_Service_Entity.ma_action_status`); returns `None` (a
     documented gap, not a silently-wrong filter) otherwise, in which case
     generated code treats every frame as matching every filter.
     """
@@ -168,7 +168,7 @@ class InteractionFacadeSpecMixin:
     `Send_Transition`) on the provided side.
 
     Scoped to Request-shape services (Create/Update/Cancel command legs plus
-    a Read/requirement leg) -- the same scope the C++ facade covers.
+    a Read/entity leg) -- the same scope the C++ facade covers.
     Information-shape ports already have a working pub/sub
     Subscribe_*/Publish_* surface from the pre-existing generator; adding an
     RPC-streaming alternative for them is not part of this scope.
@@ -200,10 +200,10 @@ class InteractionFacadeSpecMixin:
             rpcs = rpcs_by_service.get(ia.service_name, {})
             svc = svcs_by_name.get(ia.service_name)
             request_leg = next((leg for leg in ia.legs if leg.name == 'request'), None)
-            requirement_leg = next((leg for leg in ia.legs if leg.name == 'requirement'), None)
+            entity_leg = next((leg for leg in ia.legs if leg.name == 'entity'), None)
             read_rpc = None
-            if requirement_leg is not None and requirement_leg.side_a:
-                read_rpc = rpcs.get(requirement_leg.side_a[0].rpc_name)
+            if entity_leg is not None and entity_leg.side_a:
+                read_rpc = rpcs.get(entity_leg.side_a[0].rpc_name)
             frame_t = _proto_type_to_ada(_short_type(read_rpc.response_type)) if read_rpc else None
 
             f.write(f'   type {prefix}_Interaction_Binding is\n')
@@ -220,7 +220,7 @@ class InteractionFacadeSpecMixin:
                 f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
                 f.write(f'      Executor  : Pcl_Bindings.Pcl_Executor_Access);\n')
                 f.write(f'   --  Bind the pub/sub-realization ports (request-leg publisher,\n')
-                f.write(f'   --  requirement-leg subscriber) and remember Executor for the\n')
+                f.write(f'   --  entity-leg subscriber) and remember Executor for the\n')
                 f.write(f'   --  RPC-realization Invoke_*/Invoke_Stream calls. Call once from\n')
                 f.write(f'   --  on_configure(); harmless if a binding later selects "rpc" for\n')
                 f.write(f'   --  both legs -- the bound pub/sub ports then simply sit idle.\n')
@@ -230,7 +230,7 @@ class InteractionFacadeSpecMixin:
                 f.write(f'     (Config_Json : String);\n')
                 f.write(f'   --  Runtime selection of RPC vs pub/sub realization per leg (D1).\n')
                 f.write(f'   --  Config_Json keys: "binding" (both legs), "request_leg",\n')
-                f.write(f'   --  "requirement_leg" -> "rpc" | "pubsub". Unset legs fall back to\n')
+                f.write(f'   --  "entity_leg" -> "rpc" | "pubsub". Unset legs fall back to\n')
                 f.write(f'   --  "binding"; unset "binding" defaults to "rpc".\n')
                 f.write('\n')
 
@@ -281,11 +281,11 @@ class InteractionFacadeSpecMixin:
 
                     f.write(f'   procedure {prefix}_Configure_Interaction_Binding\n')
                     f.write(f'     (Config_Json : String);\n')
-                    f.write(f'   --  Selects the requirement leg\'s emission realization (D1); the\n')
+                    f.write(f'   --  Selects the entity leg\'s emission realization (D1); the\n')
                     f.write(f'   --  request leg is always dual-bound and listening on both RPC and\n')
                     f.write(f'   --  pub/sub -- no per-leg choice on the provider side (matches the\n')
                     f.write(f'   --  C++ facade\'s RequestPortProvider::configureInteractionBinding()).\n')
-                    f.write(f'   --  Config_Json keys: "requirement_leg" or "binding" -> "rpc" | "pubsub".\n')
+                    f.write(f'   --  Config_Json keys: "entity_leg" or "binding" -> "rpc" | "pubsub".\n')
                     f.write('\n')
 
                     f.write(f'   procedure {prefix}_Provider_Bind\n')
@@ -293,7 +293,7 @@ class InteractionFacadeSpecMixin:
                     f.write(f'      Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                     f.write(f'      Handlers  : {prefix}_Interaction_Handlers);\n')
                     f.write(f'   --  Binds unary Create/Update/Cancel RPC ports, a streaming Read\n')
-                    f.write(f'   --  RPC port, and the pub/sub request/requirement probe ports.\n')
+                    f.write(f'   --  RPC port, and the pub/sub request/entity probe ports.\n')
                     f.write(f'   --  Call once from on_configure().\n')
                     f.write('\n')
 
@@ -302,7 +302,7 @@ class InteractionFacadeSpecMixin:
                         f.write(f'   --  D6: the provider\'s single way to emit a transition. Fans out\n')
                         f.write(f'   --  to every open Read stream matching the transition\'s\n')
                         f.write(f'   --  correlation id (RPC realization) or publishes on the\n')
-                        f.write(f'   --  requirement topic (pub/sub realization), per\n')
+                        f.write(f'   --  entity topic (pub/sub realization), per\n')
                         f.write(f'   --  {prefix}_Configure_Interaction_Binding. Either way, records a\n')
                         f.write(f'   --  bounded per-id snapshot new RPC Read streams replay at open\n')
                         f.write(f'   --  time (D4).\n')
@@ -331,28 +331,28 @@ class InteractionFacadeSpecMixin:
             rpcs = rpcs_by_service.get(ia.service_name, {})
             svc = svcs_by_name.get(ia.service_name)
             request_leg = next((leg for leg in ia.legs if leg.name == 'request'), None)
-            requirement_leg = next((leg for leg in ia.legs if leg.name == 'requirement'), None)
+            entity_leg = next((leg for leg in ia.legs if leg.name == 'entity'), None)
             read_rpc = None
-            if requirement_leg is not None and requirement_leg.side_a:
-                read_rpc = rpcs.get(requirement_leg.side_a[0].rpc_name)
+            if entity_leg is not None and entity_leg.side_a:
+                read_rpc = rpcs.get(entity_leg.side_a[0].rpc_name)
             frame_t = _proto_type_to_ada(_short_type(read_rpc.response_type)) if read_rpc else None
             frame_schema = _short_type(read_rpc.response_type) if read_rpc else None
             corr_field = (
-                _requirement_correlation_field(index, parsed, read_rpc)
+                _entity_correlation_field(index, parsed, read_rpc)
                 if read_rpc is not None else None
             )
             request_wire = request_leg.side_b[0].endpoint_name if request_leg else None
-            requirement_wire = requirement_leg.side_b[0].endpoint_name if requirement_leg else None
+            entity_wire = entity_leg.side_b[0].endpoint_name if entity_leg else None
 
             if not is_provided:
                 self._write_client_facade_body(
                     f, prefix, ia, index, parsed, svc, rpcs, read_rpc, frame_t,
-                    frame_schema, corr_field, request_wire, requirement_wire,
+                    frame_schema, corr_field, request_wire, entity_wire,
                 )
             else:
                 self._write_provider_facade_body(
                     f, prefix, ia, index, parsed, svc, rpcs, read_rpc, frame_t,
-                    frame_schema, corr_field, request_wire, requirement_wire,
+                    frame_schema, corr_field, request_wire, entity_wire,
                 )
 
     # -- Client (consumed-role) body -----------------------------------
@@ -379,7 +379,7 @@ class InteractionFacadeSpecMixin:
 
     def _write_client_facade_body(
         self, f, prefix, ia, index, parsed, svc, rpcs, read_rpc, frame_t, frame_schema,
-        corr_field, request_wire, requirement_wire,
+        corr_field, request_wire, entity_wire,
     ) -> None:
         request_leg = next((leg for leg in ia.legs if leg.name == 'request'), None)
         cp_by_rpc: Dict[str, CommandProjectability] = {}
@@ -390,7 +390,7 @@ class InteractionFacadeSpecMixin:
 
         f.write(f'   {prefix}_Request_Binding     : {prefix}_Interaction_Binding :=\n')
         f.write(f'     {prefix}_Binding_Rpc;\n')
-        f.write(f'   {prefix}_Requirement_Binding : {prefix}_Interaction_Binding :=\n')
+        f.write(f'   {prefix}_Entity_Binding : {prefix}_Interaction_Binding :=\n')
         f.write(f'     {prefix}_Binding_Rpc;\n')
         f.write(f'   {prefix}_Client_Executor   : Pcl_Bindings.Pcl_Executor_Access := null;\n')
         f.write(f'   {prefix}_Request_Publisher : Pcl_Bindings.Pcl_Port_Access := null;\n')
@@ -411,11 +411,11 @@ class InteractionFacadeSpecMixin:
         f.write(f'   pragma Convention (C, {prefix}_On_Rpc_Reply);\n')
         f.write('\n')
         if frame_t is not None:
-            f.write(f'   procedure {prefix}_On_Requirement_Message\n')
+            f.write(f'   procedure {prefix}_On_Entity_Message\n')
             f.write(f'     (Self      : Pcl_Bindings.Pcl_Container_Access;\n')
             f.write(f'      Msg       : access constant Pcl_Bindings.Pcl_Msg;\n')
             f.write(f'      User_Data : System.Address);\n')
-            f.write(f'   pragma Convention (C, {prefix}_On_Requirement_Message);\n')
+            f.write(f'   pragma Convention (C, {prefix}_On_Entity_Message);\n')
             f.write('\n')
             f.write(f'   procedure {prefix}_On_Stream_Msg\n')
             f.write(f'     (Msg           : access constant Pcl_Bindings.Pcl_Msg;\n')
@@ -475,7 +475,7 @@ class InteractionFacadeSpecMixin:
             f.write(f'     array (1 .. {prefix}_Max_Transition_Subscriptions) of {prefix}_Transition_Slot;\n')
             f.write('\n')
 
-            f.write(f'   procedure {prefix}_On_Requirement_Message\n')
+            f.write(f'   procedure {prefix}_On_Entity_Message\n')
             f.write(f'     (Self      : Pcl_Bindings.Pcl_Container_Access;\n')
             f.write(f'      Msg       : access constant Pcl_Bindings.Pcl_Msg;\n')
             f.write(f'      User_Data : System.Address)\n')
@@ -510,7 +510,7 @@ class InteractionFacadeSpecMixin:
                 f.write(f'      end;\n')
             else:
                 f.write(f'      --  D4: no resolvable correlation field on this frame type --\n')
-                f.write(f'      --  documented gap (see _requirement_correlation_field); every\n')
+                f.write(f'      --  documented gap (see _entity_correlation_field); every\n')
                 f.write(f'      --  active subscription is treated as accept-all.\n')
                 f.write(f'      for I in {prefix}_Transition_Slots\'Range loop\n')
                 f.write(f'         if {prefix}_Transition_Slots (I).Active then\n')
@@ -522,7 +522,7 @@ class InteractionFacadeSpecMixin:
                 f.write(f'            end if;\n')
                 f.write(f'         end if;\n')
                 f.write(f'      end loop;\n')
-            f.write(f'   end {prefix}_On_Requirement_Message;\n')
+            f.write(f'   end {prefix}_On_Entity_Message;\n')
             f.write('\n')
 
             f.write(f'   {prefix}_Max_Rpc_Streams : constant := 8;\n')
@@ -602,16 +602,16 @@ class InteractionFacadeSpecMixin:
             f.write(f'           ({prefix}_Request_Publisher, Pcl_Bindings.PCL_ROUTE_LOCAL,\n')
             f.write(f'            System.Null_Address, 0);\n')
             f.write(f'      end;\n')
-        if requirement_wire is not None and frame_t is not None:
+        if entity_wire is not None and frame_t is not None:
             f.write(f'      declare\n')
             f.write(f'         Topic_C : Interfaces.C.Strings.chars_ptr :=\n')
-            f.write(f'           Interfaces.C.Strings.New_String ("{requirement_wire}");\n')
+            f.write(f'           Interfaces.C.Strings.New_String ("{entity_wire}");\n')
             f.write(f'         Type_C  : Interfaces.C.Strings.chars_ptr :=\n')
             f.write(f'           Interfaces.C.Strings.New_String (Json_Content_Type);\n')
             f.write(f'      begin\n')
             f.write(f'         Port := Pcl_Bindings.Add_Subscriber\n')
             f.write(f'           (Container, Topic_C, Type_C,\n')
-            f.write(f'            {prefix}_On_Requirement_Message\'Access, System.Null_Address);\n')
+            f.write(f'            {prefix}_On_Entity_Message\'Access, System.Null_Address);\n')
             f.write(f'         Interfaces.C.Strings.Free (Topic_C);\n')
             f.write(f'         Interfaces.C.Strings.Free (Type_C);\n')
             f.write(f'         Route_Status := Pcl_Bindings.Port_Set_Route\n')
@@ -623,13 +623,13 @@ class InteractionFacadeSpecMixin:
         f.write(f'   procedure {prefix}_Configure_Interaction_Binding (Config_Json : String) is\n')
         f.write(f'      Binding_Value     : constant String := Config_Value (Config_Json, "binding");\n')
         f.write(f'      Request_Value     : constant String := Config_Value (Config_Json, "request_leg");\n')
-        f.write(f'      Requirement_Value : constant String :=\n')
-        f.write(f'        Config_Value (Config_Json, "requirement_leg");\n')
+        f.write(f'      Entity_Value : constant String :=\n')
+        f.write(f'        Config_Value (Config_Json, "entity_leg");\n')
         f.write(f'   begin\n')
         f.write(f'      {prefix}_Request_Binding := {prefix}_Parse_Binding\n')
         f.write(f'        (if Request_Value\'Length /= 0 then Request_Value else Binding_Value);\n')
-        f.write(f'      {prefix}_Requirement_Binding := {prefix}_Parse_Binding\n')
-        f.write(f'        (if Requirement_Value\'Length /= 0 then Requirement_Value else Binding_Value);\n')
+        f.write(f'      {prefix}_Entity_Binding := {prefix}_Parse_Binding\n')
+        f.write(f'        (if Entity_Value\'Length /= 0 then Entity_Value else Binding_Value);\n')
         f.write(f'   end {prefix}_Configure_Interaction_Binding;\n')
         f.write('\n')
 
@@ -768,7 +768,7 @@ class InteractionFacadeSpecMixin:
         f.write(f'      Callback : {prefix}_Transition_Callback)\n')
         f.write(f'   is\n')
         f.write(f'   begin\n')
-        f.write(f'      if {prefix}_Requirement_Binding = {prefix}_Binding_Pubsub then\n')
+        f.write(f'      if {prefix}_Entity_Binding = {prefix}_Binding_Pubsub then\n')
         f.write(f'         for I in {prefix}_Transition_Slots\'Range loop\n')
         f.write(f'            if not {prefix}_Transition_Slots (I).Active then\n')
         f.write(f'               {prefix}_Transition_Slots (I) :=\n')
@@ -827,7 +827,7 @@ class InteractionFacadeSpecMixin:
 
     def _write_provider_facade_body(
         self, f, prefix, ia, index, parsed, svc, rpcs, read_rpc, frame_t,
-        frame_schema, corr_field, request_wire, requirement_wire,
+        frame_schema, corr_field, request_wire, entity_wire,
     ) -> None:
         if svc is None:
             return
@@ -840,10 +840,10 @@ class InteractionFacadeSpecMixin:
             return
         wrapper_t = _ada_req_type_of_wrapper(wrapper) if wrapper else None
 
-        f.write(f'   {prefix}_Requirement_Binding : {prefix}_Interaction_Binding :=\n')
+        f.write(f'   {prefix}_Entity_Binding : {prefix}_Interaction_Binding :=\n')
         f.write(f'     {prefix}_Binding_Rpc;\n')
         f.write(f'   {prefix}_Provider_Handlers  : {prefix}_Interaction_Handlers;\n')
-        f.write(f'   {prefix}_Requirement_Publisher : Pcl_Bindings.Pcl_Port_Access := null;\n')
+        f.write(f'   {prefix}_Entity_Publisher : Pcl_Bindings.Pcl_Port_Access := null;\n')
         f.write('\n')
 
         # Forward declarations (+ pragma Convention) for the C-convention
@@ -977,7 +977,7 @@ class InteractionFacadeSpecMixin:
                 f.write(f'         Frame_Id := Transition.{corr_field}.Id;\n')
                 f.write(f'      end if;\n')
             f.write(f'      {prefix}_Record_Snapshot (Frame_Id, Transition);\n')
-            f.write(f'      if {prefix}_Requirement_Binding = {prefix}_Binding_Rpc then\n')
+            f.write(f'      if {prefix}_Entity_Binding = {prefix}_Binding_Rpc then\n')
             f.write(f'         for I in {prefix}_Open_Streams\'Range loop\n')
             f.write(f'            if {prefix}_Open_Streams (I).Active\n')
             f.write(f'              and then (not Has_Id or else {prefix}_Id_Matches\n')
@@ -996,7 +996,7 @@ class InteractionFacadeSpecMixin:
             f.write(f'            end if;\n')
             f.write(f'         end loop;\n')
             f.write(f'      else\n')
-            f.write(f'         if {prefix}_Requirement_Publisher /= null then\n')
+            f.write(f'         if {prefix}_Entity_Publisher /= null then\n')
             f.write(f'            declare\n')
             f.write(f'               Payload : Unbounded_String;\n')
             f.write(f'               Encoded : constant Boolean :=\n')
@@ -1015,7 +1015,7 @@ class InteractionFacadeSpecMixin:
             f.write(f'                     Status : Pcl_Bindings.Pcl_Status;\n')
             f.write(f'                     pragma Unreferenced (Status);\n')
             f.write(f'                  begin\n')
-            f.write(f'                     Status := Pcl_Bindings.Port_Publish ({prefix}_Requirement_Publisher, Msg\'Access);\n')
+            f.write(f'                     Status := Pcl_Bindings.Port_Publish ({prefix}_Entity_Publisher, Msg\'Access);\n')
             f.write(f'                     Interfaces.C.Strings.Free (Buf);\n')
             f.write(f'                     Interfaces.C.Strings.Free (Msg.Type_Name);\n')
             f.write(f'                  end;\n')
@@ -1073,11 +1073,11 @@ class InteractionFacadeSpecMixin:
 
         f.write(f'   procedure {prefix}_Configure_Interaction_Binding (Config_Json : String) is\n')
         f.write(f'      Binding_Value     : constant String := Config_Value (Config_Json, "binding");\n')
-        f.write(f'      Requirement_Value : constant String :=\n')
-        f.write(f'        Config_Value (Config_Json, "requirement_leg");\n')
+        f.write(f'      Entity_Value : constant String :=\n')
+        f.write(f'        Config_Value (Config_Json, "entity_leg");\n')
         f.write(f'   begin\n')
-        f.write(f'      {prefix}_Requirement_Binding := {prefix}_Parse_Binding\n')
-        f.write(f'        (if Requirement_Value\'Length /= 0 then Requirement_Value else Binding_Value);\n')
+        f.write(f'      {prefix}_Entity_Binding := {prefix}_Parse_Binding\n')
+        f.write(f'        (if Entity_Value\'Length /= 0 then Entity_Value else Binding_Value);\n')
         f.write(f'   end {prefix}_Configure_Interaction_Binding;\n')
         f.write('\n')
 
@@ -1139,19 +1139,19 @@ class InteractionFacadeSpecMixin:
             f.write(f'         Route_Status := Pcl_Bindings.Port_Set_Route\n')
             f.write(f'           (Port, Pcl_Bindings.PCL_ROUTE_LOCAL, System.Null_Address, 0);\n')
             f.write(f'      end;\n')
-        if requirement_wire is not None and frame_t is not None:
+        if entity_wire is not None and frame_t is not None:
             f.write(f'      declare\n')
             f.write(f'         Topic_C : Interfaces.C.Strings.chars_ptr :=\n')
-            f.write(f'           Interfaces.C.Strings.New_String ("{requirement_wire}");\n')
+            f.write(f'           Interfaces.C.Strings.New_String ("{entity_wire}");\n')
             f.write(f'         Type_C  : Interfaces.C.Strings.chars_ptr :=\n')
             f.write(f'           Interfaces.C.Strings.New_String (Json_Content_Type);\n')
             f.write(f'      begin\n')
-            f.write(f'         {prefix}_Requirement_Publisher :=\n')
+            f.write(f'         {prefix}_Entity_Publisher :=\n')
             f.write(f'           Pcl_Bindings.Add_Publisher (Container, Topic_C, Type_C);\n')
             f.write(f'         Interfaces.C.Strings.Free (Topic_C);\n')
             f.write(f'         Interfaces.C.Strings.Free (Type_C);\n')
             f.write(f'         Route_Status := Pcl_Bindings.Port_Set_Route\n')
-            f.write(f'           ({prefix}_Requirement_Publisher, Pcl_Bindings.PCL_ROUTE_LOCAL,\n')
+            f.write(f'           ({prefix}_Entity_Publisher, Pcl_Bindings.PCL_ROUTE_LOCAL,\n')
             f.write(f'            System.Null_Address, 0);\n')
             f.write(f'      end;\n')
         f.write(f'   end {prefix}_Provider_Bind;\n')

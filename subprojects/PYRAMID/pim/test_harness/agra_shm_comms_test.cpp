@@ -1,6 +1,6 @@
 // \file agra_shm_comms_test.cpp
 // \brief Phase C of doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md --
-//        the correlated request/requirement pair for the A-GRA example
+//        the correlated request/entity pair for the A-GRA example
 //        contract (pim/agra_example/), cross-process over a real shared-
 //        memory bus loaded via pcl_transport_routing_load (the manifest-
 //        driven path Phase A proved out, not the direct transport API).
@@ -10,8 +10,8 @@
 // per-run-unique SHM bus:
 //   1. C2 publishes MA_Action (FIND_SEARCH, target, constraints) on
 //      agra.ma_action.request, correlated by Entity.id = "action-1".
-//   2. MA observes it and publishes three requirement transitions on
-//      agra.ma_action.requirement (all bearing id "action-1"): acceptance
+//   2. MA observes it and publishes three entity transitions on
+//      agra.ma_action.entity (all bearing id "action-1"): acceptance
 //      RECEIVED -> progress IN_PROGRESS -> COMPLETED. C2 observes each.
 //   3. C2 publishes the cancel variant for a second, concurrently-tracked
 //      action ("action-2") on the same flat topic; MA publishes the
@@ -125,12 +125,12 @@ bool write_manifest(const std::string& path,
     if (is_ma) {
         out << "route " << ma::kTopicAgraMaActionRequest
             << " subscriber " << peer_alias << " reliable\n";
-        out << "route " << ma::kTopicAgraMaActionRequirement
+        out << "route " << ma::kTopicAgraMaActionEntity
             << " publisher " << peer_alias << " reliable\n";
     } else {
         out << "route " << c2::kTopicAgraMaActionRequest
             << " publisher " << peer_alias << " reliable\n";
-        out << "route " << c2::kTopicAgraMaActionRequirement
+        out << "route " << c2::kTopicAgraMaActionEntity
             << " subscriber " << peer_alias << " reliable\n";
     }
     return out.good();
@@ -139,7 +139,7 @@ bool write_manifest(const std::string& path,
 constexpr const char* kActionOne = "action-1";
 constexpr const char* kActionTwo = "action-2";
 
-struct RequirementLog {
+struct EntityLog {
     std::vector<dm_common::Progress> progress;
     std::vector<dm_common::AcceptanceState> acceptance;
 };
@@ -147,7 +147,7 @@ struct RequirementLog {
 // -- MissionAutonomy (provider) role -----------------------------------
 
 struct MaState {
-    pcl_port_t* requirement_pub = nullptr;
+    pcl_port_t* entity_pub = nullptr;
     std::string content_type;
     bool saw_action_one_create = false;
     bool saw_action_two_cancel = false;
@@ -161,11 +161,11 @@ void ma_publish_transition(MaState* state, const std::string& id,
     req.status.id = id;
     req.status.status = progress;
     req.status.acceptance = acceptance;
-    ma::MAAction_Service_Requirement wrapper;
+    ma::MAAction_Service_Entity wrapper;
     wrapper.ma_action_status = req;
-    const pcl_status_t rc = ma::publishAgraMaActionRequirement(
-        state->requirement_pub, wrapper, state->content_type.c_str());
-    check(rc == PCL_OK, "MA published requirement transition over SHM route");
+    const pcl_status_t rc = ma::publishAgraMaActionEntity(
+        state->entity_pub, wrapper, state->content_type.c_str());
+    check(rc == PCL_OK, "MA published entity transition over SHM route");
 }
 
 void ma_on_request(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
@@ -194,11 +194,11 @@ void ma_on_request(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
 
 pcl_status_t ma_on_configure(pcl_container_t* c, void* ud) {
     auto* state = static_cast<MaState*>(ud);
-    state->requirement_pub = pcl_container_add_publisher(
-        c, ma::kTopicAgraMaActionRequirement, state->content_type.c_str());
+    state->entity_pub = pcl_container_add_publisher(
+        c, ma::kTopicAgraMaActionEntity, state->content_type.c_str());
     pcl_port_t* sub = ma::subscribeAgraMaActionRequest(
         c, ma_on_request, state, state->content_type.c_str());
-    return (state->requirement_pub && sub) ? PCL_OK : PCL_ERR_NOMEM;
+    return (state->entity_pub && sub) ? PCL_OK : PCL_ERR_NOMEM;
 }
 
 // -- C2Station (consumer) role ------------------------------------------
@@ -206,19 +206,19 @@ pcl_status_t ma_on_configure(pcl_container_t* c, void* ud) {
 struct C2State {
     pcl_port_t* request_pub = nullptr;
     std::string content_type;
-    std::map<std::string, RequirementLog> log;
+    std::map<std::string, EntityLog> log;
 };
 
-void c2_on_requirement(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
+void c2_on_entity(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
     auto* state = static_cast<C2State*>(ud);
-    c2::MAAction_Service_Requirement payload;
-    if (!c2::decodeAgraMaActionRequirement(msg, &payload)) {
-        check(false, "C2 decoded requirement-topic payload received over SHM");
+    c2::MAAction_Service_Entity payload;
+    if (!c2::decodeAgraMaActionEntity(msg, &payload)) {
+        check(false, "C2 decoded entity-topic payload received over SHM");
         return;
     }
     if (!payload.ma_action_status) return;
     const auto& r = *payload.ma_action_status;
-    RequirementLog& entry = state->log[r.id];
+    EntityLog& entry = state->log[r.id];
     entry.progress.push_back(r.status.status);
     entry.acceptance.push_back(r.status.acceptance);
 }
@@ -227,8 +227,8 @@ pcl_status_t c2_on_configure(pcl_container_t* c, void* ud) {
     auto* state = static_cast<C2State*>(ud);
     state->request_pub = pcl_container_add_publisher(
         c, c2::kTopicAgraMaActionRequest, state->content_type.c_str());
-    pcl_port_t* sub = c2::subscribeAgraMaActionRequirement(
-        c, c2_on_requirement, state, state->content_type.c_str());
+    pcl_port_t* sub = c2::subscribeAgraMaActionEntity(
+        c, c2_on_entity, state, state->content_type.c_str());
     return (state->request_pub && sub) ? PCL_OK : PCL_ERR_NOMEM;
 }
 
@@ -360,8 +360,8 @@ int run_role(const std::string& role,
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    const RequirementLog& log_one = c2_state.log[kActionOne];
-    const RequirementLog& log_two = c2_state.log[kActionTwo];
+    const EntityLog& log_one = c2_state.log[kActionOne];
+    const EntityLog& log_two = c2_state.log[kActionTwo];
     const bool ok =
         log_one.progress.size() >= 3 &&
         log_one.progress.back() == dm_common::Progress::Completed &&

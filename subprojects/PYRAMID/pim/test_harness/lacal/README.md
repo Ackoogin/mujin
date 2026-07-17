@@ -65,18 +65,18 @@ The script SKIPs (exit 0) when `SLEET_URL` is unreachable, no harness-capable
 Python is given, or the XSD is absent; a reachable Sleet that then rejects any
 step is a FAIL. A captured PASS run is committed at `interop_run.log`.
 
-## Phase 5 request/requirement seam (`build_lacal_seam_test.sh`)
+## Phase 5 request/entity seam (`build_lacal_seam_test.sh`)
 
 Demonstrates the interaction seam's **pubsub-works over the real broker** leg
-with a UCI vocabulary Sleet validates: a correlated request/requirement
+with a UCI vocabulary Sleet validates: a correlated request/entity
 interaction, both legs realized pub/sub over LA-CAL, using the
 `ActionCommand` / `ActionCommandStatus` pair (correlation key `CommandID.UUID`).
 
 - provider (`seam-ma`) subscribes the request topic; on an `ActionCommand` it
   publishes correlated `ActionCommandStatus` transitions (`RECEIVED`,
-  `ACCEPTED`) on the requirement topic;
+  `ACCEPTED`) on the entity topic;
 - consumer (`seam-c2`) publishes the `ActionCommand`, subscribes the
-  requirement topic, and asserts it collects both correlated transitions.
+  entity topic, and asserts it collects both correlated transitions.
 
 ```bash
 SLEET_URL=ws://127.0.0.1:21402 ./build_lacal_seam_test.sh

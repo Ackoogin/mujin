@@ -62,7 +62,7 @@ def _fqn(index: ProtoTypeIndex, type_name: str, current_package: str) -> str:
     return ''
 
 
-def _requirement_correlation_field(
+def _entity_correlation_field(
     index: ProtoTypeIndex,
     pf: ProtoFile,
     read_rpc: ProtoRpc,
@@ -71,8 +71,8 @@ def _requirement_correlation_field(
     frame type (D4's client-side query.id filter under pub/sub).
 
     Only handles the single-oneof-single-variant wrapper shape (every
-    Requirement wrapper seen in the tree at Phase 2 authoring time -- the
-    A-GRA example's MAAction_Service_Requirement, one 'ma_action_status'
+    Entity wrapper seen in the tree at Phase 2 authoring time -- the
+    A-GRA example's MAAction_Service_Entity, one 'ma_action_status'
     variant of type Requirement): the variant payload type must expose an
     'id' field, directly or one level of Entity-style inlining via a 'base'
     field (matching types_gen.py's own _inline_base_fields, which is why the
@@ -129,7 +129,7 @@ def _direct_id_accessor(index: ProtoTypeIndex, type_fqn: str) -> Optional[str]:
     `_UNIT_FIELD_NAMES` convention), a direct `id` field, or one level of
     `Entity`-style `base` inlining (types_gen.py flattens this, so no
     literal '.base.id' path exists in the generated C++ -- see
-    `_requirement_correlation_field`'s docstring for the same fact). `None`
+    `_entity_correlation_field`'s docstring for the same fact). `None`
     if none of these shapes match.
     """
     msg = index.resolve_message(type_fqn) if type_fqn else None
@@ -158,7 +158,7 @@ def _command_correlation_accessor(
     already-dereferenced command variant value of `type_fqn`, or `None` if
     unresolvable (documented gap, not a silently-wrong lookup -- same
     "structural discovery with a skip fallback" philosophy as
-    `_requirement_correlation_field`).
+    `_entity_correlation_field`).
 
     Returns `(needs_check, accessor)`:
       - `needs_check is None`: `accessor` is directly appendable to the
@@ -167,9 +167,9 @@ def _command_correlation_accessor(
       - `needs_check` names a `tl::optional`-wrapped field the caller must
         `.has_value()`-check before dereferencing with `->` and applying
         `accessor` (one level of single-oneof/single-variant unwrap, e.g.
-        Update's `MAAction_Service_Requirement` wrapping a `Requirement` via
+        Update's `MAAction_Service_Entity` wrapping a `Requirement` via
         its `ma_action_status` field -- structurally the same shape
-        `_requirement_correlation_field` already handles for the Read frame
+        `_entity_correlation_field` already handles for the Read frame
         type, just returned here as an explicit two-step accessor instead
         of leaving the intermediate optional-check to a caller convention).
     """
@@ -245,7 +245,7 @@ class InteractionFacadeEmitterMixin:
                 continue
             leg_names = {leg.name for leg in interaction.legs}
             if service.port_kind == 'request':
-                if not {'request', 'requirement'} <= leg_names:
+                if not {'request', 'entity'} <= leg_names:
                     continue
             else:
                 if 'information' not in leg_names:
@@ -412,20 +412,20 @@ class InteractionFacadeEmitterMixin:
             wrapper_cpp_type = next(iter(projectability.values())).wrapper_type.split('.')[-1]
 
         request_leg = next(leg for leg in interaction.legs if leg.name == 'request')
-        requirement_leg = next(leg for leg in interaction.legs if leg.name == 'requirement')
+        entity_leg = next(leg for leg in interaction.legs if leg.name == 'entity')
         request_topic_key = _topic_key_for_wire_name(
             all_topics, request_leg.side_b[0].endpoint_name)
-        requirement_topic_key = _topic_key_for_wire_name(
-            all_topics, requirement_leg.side_b[0].endpoint_name)
+        entity_topic_key = _topic_key_for_wire_name(
+            all_topics, entity_leg.side_b[0].endpoint_name)
         request_pascal = _snake_to_pascal(request_topic_key) if request_topic_key else ''
-        requirement_pascal = _snake_to_pascal(requirement_topic_key) if requirement_topic_key else ''
+        entity_pascal = _snake_to_pascal(entity_topic_key) if entity_topic_key else ''
 
         read_req_t = _cpp_req_type(read_rpc)
         read_frame_t = _cpp_rsp_type(read_rpc)[len('std::vector<'):-1]
         read_async_base = _rpc_symbol_base(service.name, read_rpc, duplicate_rpc_names)
         read_streaming_name = _lc_first(read_async_base) + 'Streaming'
 
-        correlation_field = _requirement_correlation_field(index, parsed, read_rpc)
+        correlation_field = _entity_correlation_field(index, parsed, read_rpc)
         query_has_id, query_has_one_shot = _query_fields(
             index, parsed, read_rpc)
 
@@ -435,7 +435,7 @@ class InteractionFacadeEmitterMixin:
         f.write(f'// {class_name} -- consumer facade for the \'{service.name}\' request port.\n')
         f.write('// One submit() overload per command; the leg realization (rpc/pubsub) is\n')
         f.write('// selected from loaded routes, independently for the request leg\n')
-        f.write('// (submit) and the requirement leg (transitions).\n')
+        f.write('// (submit) and the entity leg (transitions).\n')
         f.write(_SEP + '\n\n')
 
         f.write(f'class {class_name} {{\n')
@@ -492,14 +492,14 @@ class InteractionFacadeEmitterMixin:
         f.write('        if (auto rc = inferInteractionBindingFromRoutes(\n')
         f.write(f'                *executor_, {{{_rpc_service_const(service.name, read_rpc, duplicate_rpc_names)}}},\n')
         f.write('                PCL_ENDPOINT_STREAM_CONSUMED,\n')
-        f.write(f'                "{requirement_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_SUBSCRIBER,\n')
-        f.write('                requirement_binding_); rc != PCL_OK) {\n')
+        f.write(f'                "{entity_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_SUBSCRIBER,\n')
+        f.write('                entity_binding_); rc != PCL_OK) {\n')
         f.write('            return rc;\n')
         f.write('        }\n')
         f.write(f'        if (auto rc = consumed_.add{request_pascal}Publisher(); rc != PCL_OK) {{\n')
         f.write('            return rc;\n')
         f.write('        }\n')
-        f.write(f'        auto* port = consumed_.subscribe{requirement_pascal}(\n')
+        f.write(f'        auto* port = consumed_.subscribe{entity_pascal}(\n')
         f.write(f'            [this](const {read_frame_t}& frame) {{ dispatchPubsubTransition(frame); }});\n')
         f.write('        return port ? PCL_OK : PCL_ERR_NOMEM;\n')
         f.write('    }\n\n')
@@ -507,15 +507,15 @@ class InteractionFacadeEmitterMixin:
         f.write('    /// \\brief Override the realization when no endpoint routes are loaded.\n')
         f.write('    ///        Routed deployments are inferred by bind(). Config shapes:\n')
         f.write('    ///        {"binding":"rpc"}, {"binding":"pubsub"}, or the per-leg\n')
-        f.write('    ///        override {"request_leg":"rpc","requirement_leg":"pubsub"}.\n')
+        f.write('    ///        override {"request_leg":"rpc","entity_leg":"pubsub"}.\n')
         f.write('    ///        An unset leg falls back to "binding"; an unset "binding" too\n')
         f.write('    ///        defaults to "rpc" for both legs (the conservative default\n')
         f.write('    ///        this plan\'s Phase 1 manifest tooling also uses -- see §7).\n')
         f.write('    pcl_status_t configureInteractionBinding(\n')
         f.write('            InteractionBinding request_binding,\n')
-        f.write('            InteractionBinding requirement_binding) {\n')
+        f.write('            InteractionBinding entity_binding) {\n')
         f.write('        request_binding_ = request_binding;\n')
-        f.write('        requirement_binding_ = requirement_binding;\n')
+        f.write('        entity_binding_ = entity_binding;\n')
         f.write('        return PCL_OK;\n')
         f.write('    }\n\n')
 
@@ -526,15 +526,15 @@ class InteractionFacadeEmitterMixin:
         f.write('    pcl_status_t configureInteractionBinding(std::string_view config_json) {\n')
         f.write('        const auto binding_value = configValue(config_json, "binding");\n')
         f.write('        auto request_value = configValue(config_json, "request_leg");\n')
-        f.write('        auto requirement_value = configValue(config_json, "requirement_leg");\n')
+        f.write('        auto entity_value = configValue(config_json, "entity_leg");\n')
         f.write('        if (request_value.empty()) request_value = binding_value;\n')
-        f.write('        if (requirement_value.empty()) requirement_value = binding_value;\n')
+        f.write('        if (entity_value.empty()) entity_value = binding_value;\n')
         f.write('        const auto parsed_request = parseInteractionBindingValue(request_value);\n')
-        f.write('        const auto parsed_requirement =\n')
-        f.write('            parseInteractionBindingValue(requirement_value);\n')
-        f.write('        if (!parsed_request || !parsed_requirement) return PCL_ERR_INVALID;\n')
+        f.write('        const auto parsed_entity =\n')
+        f.write('            parseInteractionBindingValue(entity_value);\n')
+        f.write('        if (!parsed_request || !parsed_entity) return PCL_ERR_INVALID;\n')
         f.write('        return configureInteractionBinding(\n')
-        f.write('            *parsed_request, *parsed_requirement);\n')
+        f.write('            *parsed_request, *parsed_entity);\n')
         f.write('    }\n\n')
 
         f.write('    /// \\brief D3: transfer-accepted result. accepted is true when the\n')
@@ -542,7 +542,7 @@ class InteractionFacadeEmitterMixin:
         f.write('    ///        RPC: the remote call completed without a transport error;\n')
         f.write('    ///        pub/sub: publish() returned PCL_OK. This is *not* an\n')
         f.write('    ///        acceptance/processing outcome -- read the correlated\n')
-        f.write('    ///        requirement transition (Achievement.acceptance) for that.\n')
+        f.write('    ///        entity transition (Achievement.acceptance) for that.\n')
         f.write('    struct SubmitResult {\n')
         f.write('        bool accepted = false;\n')
         f.write('        /// \\brief PCL_OK on success under either realization; the\n')
@@ -562,7 +562,7 @@ class InteractionFacadeEmitterMixin:
                 request_pascal, duplicate_rpc_names)
 
         f.write('    /// \\brief D4: RPC realization is a server-streaming Read; pub/sub\n')
-        f.write(f'    ///        realization subscribes {requirement_leg.side_b[0].endpoint_name}\n')
+        f.write(f'    ///        realization subscribes {entity_leg.side_b[0].endpoint_name}\n')
         if query_has_id:
             f.write('    ///        and filters client-side by query.id (empty = accept all).\n')
         else:
@@ -584,7 +584,7 @@ class InteractionFacadeEmitterMixin:
         f.write(f'    transitions(const {read_req_t}& query,\n')
         f.write(f'                std::function<void(const {read_frame_t}&)> on_transition,\n')
         f.write('                std::function<void(pcl_status_t)> on_end = {}) {\n')
-        f.write('        if (requirement_binding_ == InteractionBinding::kRpc) {\n')
+        f.write('        if (entity_binding_ == InteractionBinding::kRpc) {\n')
         f.write(f'            return SubscriptionHandle(consumed_.{read_streaming_name}(\n')
         f.write('                query, std::move(on_transition), std::move(on_end)));\n')
         f.write('        }\n')
@@ -634,7 +634,7 @@ class InteractionFacadeEmitterMixin:
             f.write('                }\n')
             f.write('            }\n')
         elif query_has_id:
-            f.write('            // This port\'s requirement frame type does not expose a\n')
+            f.write('            // This port\'s entity frame type does not expose a\n')
             f.write('            // structurally-resolvable correlation id at generation time\n')
             f.write('            // (D4): query.id is accepted but not applied as a filter\n')
             f.write('            // under the pub/sub realization here (matched stays\n')
@@ -663,7 +663,7 @@ class InteractionFacadeEmitterMixin:
         f.write('    pcl::Executor*               executor_ = nullptr;\n')
         f.write('    ConsumedService              consumed_;\n')
         f.write('    InteractionBinding            request_binding_ = InteractionBinding::kRpc;\n')
-        f.write('    InteractionBinding            requirement_binding_ = InteractionBinding::kRpc;\n')
+        f.write('    InteractionBinding            entity_binding_ = InteractionBinding::kRpc;\n')
         f.write('    std::list<PubsubTransition>   pubsub_transitions_;\n')
         f.write('};\n\n')
 
@@ -752,18 +752,18 @@ class InteractionFacadeEmitterMixin:
             wrapper_cpp_type = next(iter(projectability.values())).wrapper_type.split('.')[-1]
 
         request_leg = next(leg for leg in interaction.legs if leg.name == 'request')
-        requirement_leg = next(leg for leg in interaction.legs if leg.name == 'requirement')
+        entity_leg = next(leg for leg in interaction.legs if leg.name == 'entity')
         request_topic_key = _topic_key_for_wire_name(
             all_topics, request_leg.side_b[0].endpoint_name)
-        requirement_topic_key = _topic_key_for_wire_name(
-            all_topics, requirement_leg.side_b[0].endpoint_name)
+        entity_topic_key = _topic_key_for_wire_name(
+            all_topics, entity_leg.side_b[0].endpoint_name)
         request_pascal = _snake_to_pascal(request_topic_key) if request_topic_key else ''
-        requirement_pascal = _snake_to_pascal(requirement_topic_key) if requirement_topic_key else ''
+        entity_pascal = _snake_to_pascal(entity_topic_key) if entity_topic_key else ''
 
         req_t = _cpp_req_type(read_rpc)  # Query
         frame_t = _cpp_rsp_type(read_rpc)[len('std::vector<'):-1]  # Requirement type
         ack_t = _cpp_rsp_type(command_rpcs[0]) if command_rpcs else 'Ack'
-        correlation_field = _requirement_correlation_field(index, parsed, read_rpc)
+        correlation_field = _entity_correlation_field(index, parsed, read_rpc)
         query_has_id, query_has_one_shot = _query_fields(
             index, parsed, read_rpc)
         read_svc_const = _rpc_service_const(
@@ -775,7 +775,7 @@ class InteractionFacadeEmitterMixin:
         f.write(f'// implements {handler_class} (command callbacks only -- Read is\n')
         f.write(f'// facade-internal); {class_name} owns RPC dispatch, a pub/sub probe,\n')
         f.write('// the open-Read-stream registry, and the bounded per-id snapshot store\n')
-        f.write('// that backs both realizations of the requirement leg.\n')
+        f.write('// that backs both realizations of the entity leg.\n')
         f.write(_SEP + '\n\n')
 
         # ---- Handler interface --------------------------------------------
@@ -853,8 +853,8 @@ class InteractionFacadeEmitterMixin:
         f.write('    pcl_status_t bind() {\n')
         f.write('        if (auto rc = inferInteractionBindingFromRoutes(\n')
         f.write(f'                *executor_, {{{read_svc_const}}}, PCL_ENDPOINT_STREAM_PROVIDED,\n')
-        f.write(f'                "{requirement_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_PUBLISHER,\n')
-        f.write('                requirement_binding_); rc != PCL_OK) {\n')
+        f.write(f'                "{entity_leg.side_b[0].endpoint_name}", PCL_ENDPOINT_PUBLISHER,\n')
+        f.write('                entity_binding_); rc != PCL_OK) {\n')
         f.write('            return rc;\n')
         f.write('        }\n')
         f.write('        if (!supportsContentType(content_type_.c_str())) {\n')
@@ -866,7 +866,7 @@ class InteractionFacadeEmitterMixin:
             f.write(f'        if (!addUnaryBinding({svc_const}, ServiceChannel::{enum_val})) return PCL_ERR_NOMEM;\n')
         read_enum_val = _rpc_enum_value(service.name, read_rpc, duplicate_rpc_names)
         f.write(f'        if (!addStreamBinding({read_svc_const}, ServiceChannel::{read_enum_val})) return PCL_ERR_NOMEM;\n')
-        f.write(f'        if (auto rc = probe_.add{requirement_pascal}Publisher(); rc != PCL_OK) {{\n')
+        f.write(f'        if (auto rc = probe_.add{entity_pascal}Publisher(); rc != PCL_OK) {{\n')
         f.write('            return rc;\n')
         f.write('        }\n')
         f.write(f'        auto* port = probe_.subscribe{request_pascal}(\n')
@@ -874,20 +874,20 @@ class InteractionFacadeEmitterMixin:
         f.write('        return port ? PCL_OK : PCL_ERR_NOMEM;\n')
         f.write('    }\n\n')
 
-        f.write('    /// \\brief Override the requirement leg when no routes are loaded.\n')
+        f.write('    /// \\brief Override the entity leg when no routes are loaded.\n')
         f.write('    ///        Routed deployments are inferred by bind().\n')
-        f.write('    ///        Config shape: {"requirement_leg":"rpc"|"pubsub"} or\n')
+        f.write('    ///        Config shape: {"entity_leg":"rpc"|"pubsub"} or\n')
         f.write('    ///        {"binding":"rpc"|"pubsub"} (both keys accepted, "binding" as\n')
         f.write('    ///        a fallback). Defaults to "rpc". "request_leg" is accepted and\n')
         f.write('    ///        ignored -- see bind()\'s doc comment for why.\n')
         f.write('    pcl_status_t configureInteractionBinding(\n')
-        f.write('            InteractionBinding requirement_binding) {\n')
-        f.write('        requirement_binding_ = requirement_binding;\n')
+        f.write('            InteractionBinding entity_binding) {\n')
+        f.write('        entity_binding_ = entity_binding;\n')
         f.write('        return PCL_OK;\n')
         f.write('    }\n\n')
 
         f.write('    pcl_status_t configureInteractionBinding(std::string_view config_json) {\n')
-        f.write('        auto value = configValue(config_json, "requirement_leg");\n')
+        f.write('        auto value = configValue(config_json, "entity_leg");\n')
         f.write('        if (value.empty()) value = configValue(config_json, "binding");\n')
         f.write('        const auto parsed_value = parseInteractionBindingValue(value);\n')
         f.write('        if (!parsed_value) return PCL_ERR_INVALID;\n')
@@ -897,7 +897,7 @@ class InteractionFacadeEmitterMixin:
         f.write('    /// \\brief D6: the provider\'s single way to emit a transition. Fans\n')
         f.write('    ///        out to every open Read stream matching the transition\'s\n')
         f.write('    ///        correlation id (RPC realization) or publishes on the\n')
-        f.write('    ///        requirement topic (pub/sub realization), per the loaded route.\n')
+        f.write('    ///        entity topic (pub/sub realization), per the loaded route.\n')
         f.write('    ///        Either way, updates the\n')
         f.write('    ///        bounded per-id snapshot this transition\'s id maps to\n')
         f.write('    ///        (serves RPC Read initial-state callers indirectly via\n')
@@ -1162,10 +1162,10 @@ class InteractionFacadeEmitterMixin:
 
         f.write(f'    pcl_status_t sendTransition(const {frame_t}& transition) {{\n')
         f.write('        recordSnapshot(transition);\n')
-        f.write('        if (requirement_binding_ == InteractionBinding::kRpc) {\n')
+        f.write('        if (entity_binding_ == InteractionBinding::kRpc) {\n')
         f.write('            return fanOutRpc(transition);\n')
         f.write('        }\n')
-        f.write(f'        return probe_.publish{requirement_pascal}(transition);\n')
+        f.write(f'        return probe_.publish{entity_pascal}(transition);\n')
         f.write('    }\n\n')
         f.write('    friend class TransitionWriter;\n\n')
 
@@ -1244,7 +1244,7 @@ class InteractionFacadeEmitterMixin:
         f.write('    std::string                      content_type_;\n')
         f.write('    Bridge                            bridge_;\n')
         f.write('    ConsumedService                   probe_;\n')
-        f.write('    InteractionBinding                 requirement_binding_ = InteractionBinding::kRpc;\n')
+        f.write('    InteractionBinding                 entity_binding_ = InteractionBinding::kRpc;\n')
         f.write('    std::list<UnaryBinding>           unary_bindings_;\n')
         f.write('    std::list<StreamBinding>          stream_bindings_;\n')
         f.write('    std::vector<pcl::Port>            ports_;\n')
@@ -1446,7 +1446,7 @@ class InteractionFacadeEmitterMixin:
         f.write('// (RPC realization) or publishes the information topic (pub/sub\n')
         f.write('// realization), per the loaded route. No per-message\n')
         f.write('// correlation/snapshot store -- Data-1 publications are a one-way\n')
-        f.write('// broadcast, not a correlated request/requirement pair (D6 is scoped\n')
+        f.write('// broadcast, not a correlated request/entity pair (D6 is scoped\n')
         f.write('// to Request-shape ports only).\n')
         f.write(_SEP + '\n\n')
 

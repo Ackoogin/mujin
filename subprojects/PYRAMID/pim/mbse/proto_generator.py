@@ -703,7 +703,7 @@ class ProtobufGenerator:
                 # Import the payload base types' packages (referenced directly or
                 # as a same-package oneof wrapper). Cross-package variants are not
                 # expanded (see _payload_message), so their packages are not imported.
-                for slot in ('request', 'requirement', 'information'):
+                for slot in ('request', 'entity', 'information'):
                     pref = payloads.get(slot)
                     if pref:
                         _add_ref(pref)
@@ -745,7 +745,7 @@ class ProtobufGenerator:
                     needs['base_for_identifier'] = True
 
         # Port-driven services use google.protobuf.Empty (information reads and
-        # absent request/requirement payloads).
+        # absent request/entity payloads).
         for cls in types['classes']:
             if cls.get('stereotype') != 'block' or cls.get('isAbstract'):
                 continue
@@ -1263,13 +1263,13 @@ class ProtobufGenerator:
         return out
 
     def _classify_iface_payloads(self, iface: Optional[Dict]) -> Dict[str, Optional[str]]:
-        """Classify an interface block's bound properties into request/requirement/information.
+        """Classify an interface block's bound properties into request/entity/information.
 
         Support types (Ack/Query/Identifier) are ignored; anything that does not
-        derive from Request/Requirement/Information falls into the information slot
+        derive from Request/Entity/Information falls into the information slot
         (provider-style payload).
         """
-        res = {'request': None, 'requirement': None, 'information': None}
+        res = {'request': None, 'entity': None, 'information': None}
         if not iface:
             return res
         support = {'Ack', 'Query', 'Identifier'}
@@ -1280,8 +1280,10 @@ class ProtobufGenerator:
             name = self._type_name(ref)
             if name in support:
                 continue
-            if self._derives_from(ref, 'Requirement') and not res['requirement']:
-                res['requirement'] = ref
+            # The domain type remains Requirement.  The emitted port-grammar
+            # role and wrapper are Entity, which avoids conflating the two.
+            if self._derives_from(ref, 'Requirement') and not res['entity']:
+                res['entity'] = ref
             elif self._derives_from(ref, 'Request') and not res['request']:
                 res['request'] = ref
             elif self._derives_from(ref, 'Information') and not res['information']:
@@ -1409,23 +1411,23 @@ class ProtobufGenerator:
             query = self._get_qualified_type('Query', current_package)
             identifier = self._get_qualified_type('Identifier', current_package)
             request_pattern = 'SUBSCRIBE' if direction == 'provided' else 'PUBLISH'
-            requirement_pattern = 'PUBLISH' if direction == 'provided' else 'SUBSCRIBE'
+            entity_pattern = 'PUBLISH' if direction == 'provided' else 'SUBSCRIBE'
             req_msg = self._payload_message(f, f'{svc_name}_Request',
                                             payloads.get('request'), current_package,
                                             extra_fields=[(identifier, 'cancel')])
-            reqmt_msg = self._payload_message(f, f'{svc_name}_Requirement',
-                                              payloads.get('requirement'), current_package)
+            entity_msg = self._payload_message(f, f'{svc_name}_Entity',
+                                               payloads.get('entity'), current_package)
             f.write(f"// Request port '{port['name']}' ({direction}) refining {iface_name}\n")
             f.write(f'service {svc_name} {{\n')
             f.write(f'  rpc Create({req_msg}) returns ({ack})')
             self._write_interaction_option(
                 f, current_package, svc_name, 'request', request_pattern)
             f.write('\n')
-            f.write(f'  rpc Read({query}) returns (stream {reqmt_msg})')
+            f.write(f'  rpc Read({query}) returns (stream {entity_msg})')
             self._write_interaction_option(
-                f, current_package, svc_name, 'requirement', requirement_pattern)
+                f, current_package, svc_name, 'entity', entity_pattern)
             f.write('\n')
-            f.write(f'  rpc Update({reqmt_msg}) returns ({ack})')
+            f.write(f'  rpc Update({entity_msg}) returns ({ack})')
             self._write_interaction_option(
                 f, current_package, svc_name, 'request', request_pattern)
             f.write('\n')

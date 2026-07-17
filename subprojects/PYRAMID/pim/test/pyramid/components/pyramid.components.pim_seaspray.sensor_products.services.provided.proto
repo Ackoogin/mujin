@@ -37,7 +37,7 @@ message SPRRequirement_Service_Request {
   }
 }
 
-message SPRRequirement_Service_Requirement {
+message SPRRequirement_Service_Entity {
   oneof payload {
     pyramid.data_model.common_pim_components.sensor_products.SPRRequirement sprrequirement = 1;
     pyramid.data_model.pim_seaspray.sensor_products.SPRRadarDisplayRequirement sprradar_display_requirement = 2;
@@ -53,14 +53,14 @@ service SPRRequirement_Service {
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }
-  rpc Read(pyramid.data_model.common.Query) returns (stream SPRRequirement_Service_Requirement) {
+  rpc Read(pyramid.data_model.common.Query) returns (stream SPRRequirement_Service_Entity) {
     option (pyramid.options.pyramid_op) = {
       pattern: PUBLISH
-      topic: "pim_seaspray.spr_requirement.requirement"
+      topic: "pim_seaspray.spr_requirement.entity"
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }
-  rpc Update(SPRRequirement_Service_Requirement) returns (pyramid.data_model.common.Ack) {
+  rpc Update(SPRRequirement_Service_Entity) returns (pyramid.data_model.common.Ack) {
     option (pyramid.options.pyramid_op) = {
       pattern: SUBSCRIBE
       topic: "pim_seaspray.spr_requirement.request"
@@ -96,7 +96,7 @@ message Authorisation_Dependency_Service_Request {
   }
 }
 
-message Authorisation_Dependency_Service_Requirement {
+message Authorisation_Dependency_Service_Entity {
   oneof payload {
     pyramid.data_model.common_pim_components.authorisation.AUTRequirement autrequirement = 1;
     pyramid.data_model.common_pim_components.authorisation.AUTPredecessorRequirement autpredecessor_requirement = 2;
@@ -113,14 +113,14 @@ service Authorisation_Dependency_Service {
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }
-  rpc Read(pyramid.data_model.common.Query) returns (stream Authorisation_Dependency_Service_Requirement) {
+  rpc Read(pyramid.data_model.common.Query) returns (stream Authorisation_Dependency_Service_Entity) {
     option (pyramid.options.pyramid_op) = {
       pattern: PUBLISH
-      topic: "pim_seaspray.authorisation_dependency.requirement"
+      topic: "pim_seaspray.authorisation_dependency.entity"
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }
-  rpc Update(Authorisation_Dependency_Service_Requirement) returns (pyramid.data_model.common.Ack) {
+  rpc Update(Authorisation_Dependency_Service_Entity) returns (pyramid.data_model.common.Ack) {
     option (pyramid.options.pyramid_op) = {
       pattern: SUBSCRIBE
       topic: "pim_seaspray.authorisation_dependency.request"

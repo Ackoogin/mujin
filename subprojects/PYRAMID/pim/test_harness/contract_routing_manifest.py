@@ -7,7 +7,7 @@ per Request/Information port, each leg listing its two mutually-exclusive
 sides (side A: rpc/service endpoint(s); side B: the one topic endpoint).
 This script picks the first Request-shape interaction realized from the
 *consumed* role (the consumer-side test component every existing caller of
-this script exercises), and for its `request`/`requirement` legs emits:
+this script exercises), and for its `request`/`entity` legs emits:
 
   - a `transport` line per peer (`svc_rpc` for the rpc side, `topic_pubsub`
     for the pub/sub side -- always both, regardless of which side is
@@ -19,7 +19,7 @@ this script exercises), and for its `request`/`requirement` legs emits:
     side ("rpc") for both legs, with a per-leg override via --realize.
 
     D5/D1's `pattern` stamp does not resolve to a single side cleanly (a
-    request leg's stamp differs by role, and the requirement leg's stamp is
+    request leg's stamp differs by role, and the entity leg's stamp is
     the request leg's inverse -- there is no one reading of "the stamp" that
     picks one side per leg without also depending on which role generated
     the manifest). Absent an unambiguous reading, "rpc" is the conservative
@@ -44,7 +44,7 @@ import argparse
 import json
 from pathlib import Path
 
-_LEG_NAMES = ("request", "requirement", "information")
+_LEG_NAMES = ("request", "entity", "information")
 
 
 _PCL_RELIABILITY_TOKENS = ("reliable", "best_effort")
@@ -83,7 +83,7 @@ def _route_line(endpoint: dict, peer: str, floors: dict) -> str:
 
 def _find_request_interaction(interactions: list) -> dict:
     """The first Request-shape interaction (`port_kind == "request"`, both a
-    `request` and a `requirement` leg present) whose request leg's side A
+    `request` and an `entity` leg present) whose request leg's side A
     (the rpc/service side) is the *consumed* role -- the consumer-side
     component shape every existing caller of this script exercises."""
     for interaction in interactions:
@@ -91,8 +91,8 @@ def _find_request_interaction(interactions: list) -> dict:
             continue
         legs_by_name = {leg["name"]: leg for leg in interaction.get("legs", [])}
         request_leg = legs_by_name.get("request")
-        requirement_leg = legs_by_name.get("requirement")
-        if not request_leg or not requirement_leg or not request_leg.get("side_a"):
+        entity_leg = legs_by_name.get("entity")
+        if not request_leg or not entity_leg or not request_leg.get("side_a"):
             continue
         if request_leg["side_a"][0].get("kind") != "consumed":
             continue
@@ -127,8 +127,8 @@ def main() -> int:
         default=[],
         metavar="<leg>=rpc|pubsub",
         help="override the default realization (rpc) of one leg "
-             "(request|requirement|information); repeatable, e.g. "
-             "--realize request=pubsub --realize requirement=pubsub",
+             "(request|entity|information); repeatable, e.g. "
+             "--realize request=pubsub --realize entity=pubsub",
     )
     args = parser.parse_args()
     overrides = _parse_realize_overrides(args.realize)
@@ -145,7 +145,7 @@ def main() -> int:
     ]
 
     summary = []
-    for leg_name in ("request", "requirement"):
+    for leg_name in ("request", "entity"):
         leg = legs_by_name[leg_name]
         side_choice = overrides.get(leg_name, "rpc")
         routed_side = leg["side_a"] if side_choice == "rpc" else leg["side_b"]

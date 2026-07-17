@@ -223,7 +223,7 @@ equals the root list exactly (test-guarded) — and the checked-in P2 seam.
 
 The derivation rules mirror the P1/P2 grammar and are documented in the
 generator's docstring; in brief: `X`/`XStatus` pairs where `X` ends in
-"Command" or "Request" become correlated Request/Requirement services
+"Command" or "Request" become correlated Request/Entity services
 (the A-GRA Command-2 pattern), everything else becomes a single-variant
 Information service; the provided/consumed split and PUBLISH/SUBSCRIBE
 polarity follow the table's direction column (the MA system executes what

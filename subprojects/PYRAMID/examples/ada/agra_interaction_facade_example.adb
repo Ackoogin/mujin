@@ -14,7 +14,7 @@
 --  Demonstrated flow:
 --    1. Build one provider container and one client container on a single
 --       pcl::Executor (local dispatch only -- see the "Scope" note below).
---    2. Pick the requirement leg's realization -- RPC or pub/sub -- from a
+--    2. Pick the entity leg's realization -- RPC or pub/sub -- from a
 --       manifest-style JSON string, selectable on the command line
 --       (--binding=rpc (default) or --binding=pubsub). Same component code
 --       either way: only Configure_Interaction_Binding's argument changes.
@@ -92,7 +92,7 @@ procedure Agra_Interaction_Facade_Example is
       return (Success => True, Identifier => Id);
    end On_Create;
 
-   function On_Update (Request : Prov_T.Ma_Action_Service_Requirement) return Ack is
+   function On_Update (Request : Prov_T.Ma_Action_Service_Entity) return Ack is
       pragma Unreferenced (Request);
    begin
       return (Success => True, Identifier => Null_Unbounded_String);
@@ -139,7 +139,7 @@ procedure Agra_Interaction_Facade_Example is
    end Client_On_Configure;
 
    --  [client] observes the transition the provider later publishes back.
-   procedure On_Transition (Item : Cons_T.Ma_Action_Service_Requirement) is
+   procedure On_Transition (Item : Cons_T.Ma_Action_Service_Entity) is
    begin
       if Item.Has_Ma_Action_Status then
          Ada.Text_IO.Put_Line
@@ -269,7 +269,7 @@ begin
    --     in for whatever drives the mission autonomy state machine) uses
    --     Send_Transition, owned internally by the provider facade. --
    declare
-      Frame : Prov_T.Ma_Action_Service_Requirement := (others => <>);
+      Frame : Prov_T.Ma_Action_Service_Entity := (others => <>);
       Status_Field : Requirement;
    begin
       Status_Field.Id := To_Unbounded_String ("example-action-1");

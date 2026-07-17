@@ -31,7 +31,7 @@ service HDIDependency_Service {
   rpc Read(pyramid.data_model.common.Query) returns (stream pyramid.data_model.common_pim_components.hmi_dialogue.HDIDependencyRequirement) {
     option (pyramid.options.pyramid_op) = {
       pattern: SUBSCRIBE
-      topic: "pim_seaspray.hdi_dependency.requirement"
+      topic: "pim_seaspray.hdi_dependency.entity"
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }

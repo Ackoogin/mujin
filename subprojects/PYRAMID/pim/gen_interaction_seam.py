@@ -43,7 +43,7 @@ Service derivation rules (mirroring the P1/P2 seam grammar):
 
 * A message X ending in "Command" or "Request" whose partner "XStatus"
   is on the same interface forms a correlated command pair (the A-GRA
-  Command-2 pattern). The pair becomes one Request/Requirement service
+  Command-2 pattern). The pair becomes one Request/Entity service
   with Create/Read/Update/Cancel rpcs. When the far side commands the MA
   system (command direction 'out'), the service is provided: commands are
   SUBSCRIBEd, statuses PUBLISHed. When the MA system is the commander
@@ -110,7 +110,7 @@ def pair_up(elements: dict) -> tuple:
 
 
 def _command_service(out, dm_pkg, pg_pkg, roots, cmd, status, provided):
-    """One Request/Requirement command service. ``provided`` selects the
+    """One Request/Entity command service. ``provided`` selects the
     executor side (SUBSCRIBE commands, PUBLISH statuses); the consumer
     side inverts every pattern, mirroring the hand-authored
     provided/consumed pairs in pim/uci_p1_seam and pim/agra_example."""
@@ -126,7 +126,7 @@ def _command_service(out, dm_pkg, pg_pkg, roots, cmd, status, provided):
     out.append('  }')
     out.append('}')
     out.append('')
-    out.append(f'message {svc}_Requirement {{')
+    out.append(f'message {svc}_Entity {{')
     out.append('  oneof payload {')
     out.append(f'    {status_type} {snake_case(status)} = 1;')
     out.append('  }')
@@ -136,10 +136,10 @@ def _command_service(out, dm_pkg, pg_pkg, roots, cmd, status, provided):
     out.append(f'  rpc Create({svc}_Request) returns ({pg_pkg}.Ack) {{')
     out.append(f'    option (pyramid.options.pyramid_op) = {{ pattern: {sub} topic: "{cmd}" {QOS} }};')
     out.append('  }')
-    out.append(f'  rpc Read({pg_pkg}.Query) returns (stream {svc}_Requirement) {{')
+    out.append(f'  rpc Read({pg_pkg}.Query) returns (stream {svc}_Entity) {{')
     out.append(f'    option (pyramid.options.pyramid_op) = {{ pattern: {pub} topic: "{status}" {QOS} }};')
     out.append('  }')
-    out.append(f'  rpc Update({svc}_Requirement) returns ({pg_pkg}.Ack) {{')
+    out.append(f'  rpc Update({svc}_Entity) returns ({pg_pkg}.Ack) {{')
     out.append(f'    option (pyramid.options.pyramid_op) = {{ pattern: {sub} topic: "{cmd}" {QOS} }};')
     out.append('  }')
     out.append(f'  rpc Cancel({pg_pkg}.Identifier) returns ({pg_pkg}.Ack) {{')
@@ -230,7 +230,7 @@ derived from Table 3-1) carrying the PYRAMID pubsub/rpc port-grammar annotations
 contains P2's service API byte for byte, so unchanged P2 client source can
 use P3 as its larger contract. Topics
 are the bare XSD global element names; correlated Command/Status pairs
-follow the Request/Requirement pattern; everything else is a
+follow the Request/Entity pattern; everything else is a
 single-variant Information service. All operations are RELIABLE/VOLATILE
 with queue depth 10.
 

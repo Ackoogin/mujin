@@ -30,7 +30,7 @@ service IPRDependency_Service {
   rpc Read(pyramid.data_model.common.Query) returns (stream pyramid.data_model.common_pim_components.information_presentation.IPRDependencyRequirement) {
     option (pyramid.options.pyramid_op) = {
       pattern: SUBSCRIBE
-      topic: "pim_seaspray.ipr_dependency.requirement"
+      topic: "pim_seaspray.ipr_dependency.entity"
       qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
     };
   }

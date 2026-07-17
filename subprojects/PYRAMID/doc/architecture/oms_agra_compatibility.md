@@ -31,7 +31,7 @@ Three terms, not interchangeable:
 | Schema conversion (`xsd2proto`) | **Done, checked in.** 515 messages, 188 enums, 6 roots (`pim/uci_generated/uci_2_5_0/`) | **Done, not checked in.** 1,163 messages, 297 enums, 18 roots — converts strict-clean but held back pending deliberate closure pruning (Phase 4) |
 | OMS-JSON codec (C++) | **Done, live-proven** | Not generated — the P2 tree exists only as an offline conversion artifact |
 | OMS-JSON codec (Ada) | **Done, object-compiles, byte-parity with C++** | Not attempted |
-| Interaction facade (Request/Requirement + Information ports) | **Done, live-proven** (`pim/uci_p1_seam/`) | Not attempted |
+| Interaction facade (Request/Entity + Information ports) | **Done, live-proven** (`pim/uci_p1_seam/`) | Not attempted |
 | Validation tier ([D4](../../../../doc/plans/PYRAMID/uci_mms_conversion_plan.md#4-design-decisions-fixed-up-front)) | **(a)+(b)+(c)**: offline XSD shape, byte-equivalence golden, **live Sleet** | **(a) only**: offline XSD-instance validation — no live leg, no compliance claim |
 | Live environment | **Persistent Kitty Hawk stack** (`external/ams-gra/`, podman), both the command seam and all four information topics decode real, physics-driven traffic | None |
 | EXI/DMS, OMS/CAL onboard adapter, `agra_c2_bridge` | Out of scope everywhere | Out of scope everywhere — no compliance tasking exists |
@@ -63,7 +63,7 @@ flowchart LR
   end
 
   subgraph Overlay["pim/uci_p1_seam/ (PIM overlay, hand-authored)"]
-    Ports["Request/Requirement + Information\nport grammar (pyramid.options)"]
+    Ports["Request/Entity + Information\nport grammar (pyramid.options)"]
   end
 
   subgraph Codec["pim/cpp/oms_json_codec_gen.py + pim/ada/…"]
@@ -113,7 +113,7 @@ PASS: Kitty Hawk generated-P1 consumer over Sleet
 ```
 
 - The **command seam** (`ActionCommand`/`ActionCommandStatus`) is a full
-  correlated Request/Requirement round trip: a PCL process publishes an
+  correlated Request/Entity round trip: a PCL process publishes an
   `ActionCommand`, a PCL provider receives it and publishes `RECEIVED`/
   `ACCEPTED` status transitions, the original process observes both,
   correlated by `CommandID`.
@@ -167,7 +167,7 @@ the frame by the type name instead of accepting it by the element name.
 PYRAMID's port grammar wraps each UCI root in a small PIM-only oneof
 message (`ActionCommand_Service_Request`, `PositionReport_Service_Information`,
 etc.) that never appears on the wire — it exists to give the interaction
-facade a typed Request/Requirement/Information port. The codec generator
+facade a typed Request/Entity/Information port. The codec generator
 detects these wrappers and emits encode/decode dispatch cases that unwrap
 straight to the bare UCI root JSON key. It originally only recognized the
 two-variant **command** wrapper shape

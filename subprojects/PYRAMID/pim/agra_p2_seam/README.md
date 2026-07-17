@@ -1,7 +1,7 @@
 # A-GRA P2 interaction overlay
 
 This directory adds PYRAMID interaction services to the generated A-GRA 5.0a
-P2 data model. It contains four Request/Requirement command services and twelve
+P2 data model. It contains four Request/Entity command services and twelve
 single-variant Information services. Every operation uses reliable, volatile
 delivery with queue depth 10. Topic names are the A-GRA global element names.
 

@@ -79,7 +79,7 @@ procedure Agra_Ada_Interaction_Facade_Proof is
       return (Success => True, Identifier => Last_Create_Id);
    end On_Create;
 
-   function On_Update (Request : Prov_T.Ma_Action_Service_Requirement) return Ack is
+   function On_Update (Request : Prov_T.Ma_Action_Service_Entity) return Ack is
       pragma Unreferenced (Request);
    begin
       return (Success => True, Identifier => Null_Unbounded_String);
@@ -127,7 +127,7 @@ procedure Agra_Ada_Interaction_Facade_Proof is
    Transition_Received : Natural := 0;
    Last_Transition_Id  : Unbounded_String := Null_Unbounded_String;
 
-   procedure On_Transition (Item : Cons_T.Ma_Action_Service_Requirement) is
+   procedure On_Transition (Item : Cons_T.Ma_Action_Service_Entity) is
    begin
       Transition_Received := Transition_Received + 1;
       if Item.Has_Ma_Action_Status then
@@ -226,7 +226,7 @@ procedure Agra_Ada_Interaction_Facade_Proof is
       end;
 
       declare
-         Frame : Prov_T.Ma_Action_Service_Requirement := (others => <>);
+         Frame : Prov_T.Ma_Action_Service_Entity := (others => <>);
          Status_Field : Requirement;
       begin
          Status_Field.Id := To_Unbounded_String ("action-1");

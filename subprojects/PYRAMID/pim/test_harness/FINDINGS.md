@@ -111,7 +111,7 @@ independent blockers:
 ## Phase 3 exit: generated P1 seam + Kitty Hawk consumer, both live-verified over real Sleet (2026-07-12)
 
 `pim/uci_p1_seam/` is the new overlay that puts the PIM port grammar
-(Request/Requirement command ports, four PUBLISH-pattern information ports)
+(Request/Entity command ports, four PUBLISH-pattern information ports)
 on top of the checked-in xsd2proto-converted P1 tree (`pim/uci_generated/uci_2_5_0/`)
 instead of the hand-authored `uci_seam_example`. `lacal_generated_seam_test`
 now generates from this overlay and exercises the real `ActionCommandMT`/
@@ -159,7 +159,7 @@ to this overlay, all fixed at the shared-tooling level:
    package instead of reopening the checked-in one.
 2. **The codec generator never learned the single-variant "Information"
    wrapper shape.** `oms_json_codec_gen.py`'s wrapper-unwrap detection
-   handled the two-variant Request/Requirement command wrapper
+   handled the two-variant Request/Entity command wrapper
    (`oneof { CommandType a=1; StatusType b=2; }`) but not the simpler
    one-variant information wrapper this overlay's four PUBLISH-pattern
    ports use (`X_Service_Information { oneof payload { XMT x=1; } }`) —
@@ -173,12 +173,12 @@ to this overlay, all fixed at the shared-tooling level:
 3. **The LA-CAL transport plugin's wire-message-name mapping was also
    command-wrapper-specific.** `owp_message_name()` in
    `pyramid_lacal_transport_plugin.cpp` had hardcoded
-   `ActionCommand_Service_Request`/`_Requirement` → bare-root-name mappings
+   `ActionCommand_Service_Request`/`_Entity` → bare-root-name mappings
    for the OWP `SUB` frame's message name, with no equivalent for
    `*_Service_Information`; without it Sleet rejected the `SUB` with
    `unknown message name PositionReport_Service_Information` etc. Added a
    general `_Service_Information` suffix-strip rule (a clean 1:1 mapping,
-   unlike the irregular Request/Requirement pair).
+   unlike the irregular Request/Entity pair).
 
 Local git-ignored registration: `external/ams-gra/sleet/services.d.local/kittyhawk-consumer.toml`
 (mirrors the sibling `ame-sniffer.toml`/`seam-ma.toml`/`seam-c2.toml`
@@ -286,7 +286,7 @@ Reproduce: `./viability_check.sh` (or `.bat`); comms test:
 | `build_plugin_load_test.sh` / `.bat` | Builds the codec plugin as a standalone shared lib + the codec-free test, runs the no-relink demonstration |
 | `contract_routing_validation.cpp` / `build_contract_routing_test.sh` / `.bat` | Compose-time-only: contract-derived endpoint requirements validated against a NULL-vtable stub plugin's declared caps/QoS |
 | `routed_egress_shm_test.cpp` / `build_routed_egress_test.sh` / `.bat` | **Data-plane, real transport**: proves generated pub/sub helpers cross a real `libpcl_transport_shared_memory_plugin.so` bus loaded via `pcl_transport_routing_load`, same-process then cross-process (proving-plan Phase A) |
-| `agra_shm_comms_test.cpp` / `build_agra_shm_comms_test.sh` / `.bat` | A-GRA example contract's correlated request/requirement pair, cross-process over real SHM, JSON + FlatBuffers (Phase C) |
+| `agra_shm_comms_test.cpp` / `build_agra_shm_comms_test.sh` / `.bat` | A-GRA example contract's correlated request/entity pair, cross-process over real SHM, JSON + FlatBuffers (Phase C) |
 | `agra_udp_proof_test.cpp` / `build_agra_udp_proof_test.sh` / `.bat` | UDP fail-closed negative gate + the BEST_EFFORT information topic over real UDP datagrams, cross-process (Phase D) |
 | `agra_mixed_route_test.cpp` / `build_agra_mixed_route_test.sh` / `.bat` | **Plan-terminal**: MA/C2 each load two transports (real SHM + real UDP) from one manifest, full worked-example sequence, both codecs (Phase E) |
 | `_msvc_env.bat` | Helper: enter a VS x64 dev environment (vswhere/vcvars) for the `.bat` scripts |
@@ -301,7 +301,7 @@ the routed-egress seam (container port -> executor route -> plugin egress
 -> remote executor ingress -> subscriber callback) is proven over a real
 SHM transport loaded from a routing manifest (Phase A); a new
 A-GRA-vocabulary example contract exists at `pim/agra_example/` (Phase B);
-its correlated request/requirement pair round-trips cross-process over
+its correlated request/entity pair round-trips cross-process over
 real SHM (Phase C); its information topic round-trips over real UDP
 datagrams, with the RELIABLE/BEST_EFFORT QoS-floor mismatch failing closed
 (Phase D); and MissionAutonomy/C2Station each load both transports from
@@ -574,7 +574,7 @@ transport is registered. This confirms the capability row now recorded in
 Request legs can be realized pub/sub over this peer but never RPC.
 `owp.*` suite now 13/13.
 
-**Next (Phase 5 positive):** the correlated request/requirement interaction over
+**Next (Phase 5 positive):** the correlated request/entity interaction over
 real Sleet using the UCI `ActionCommand` / `ActionCommandStatus` pair
 (correlation key `CommandID.UUID`), which the pinned schema validates — the
 vocabulary confirmed feasible by generating both messages from the XSD.
@@ -585,14 +585,14 @@ vocabulary confirmed feasible by generating both messages from the XSD.
 demonstrated over the real broker.** Both halves:
 
 - **pubsub-works (positive):** `lacal_seam_test` runs a correlated
-  request/requirement interaction over real Sleet with the UCI
+  request/entity interaction over real Sleet with the UCI
   `ActionCommand` / `ActionCommandStatus` pair, **both legs realized pub/sub**
   over the LA-CAL (owp/asb) transport. `seam-c2` publishes an `ActionCommand`
-  (`CommandState=NEW`) on the request topic and subscribes the requirement
+  (`CommandState=NEW`) on the request topic and subscribes the entity
   topic; `seam-ma` subscribes the request topic and, on receipt, publishes two
   correlated `ActionCommandStatus` transitions (`RECEIVED`, `ACCEPTED`) keyed by
   the request's `CommandID.UUID`; `seam-c2` collects both by matching that key
-  → `seam-ok`. `PASS: LA-CAL Phase 5 request/requirement seam over Sleet (both
+  → `seam-ok`. `PASS: LA-CAL Phase 5 request/entity seam over Sleet (both
   legs pub/sub)`. Sleet validated every `ActionCommand`/`ActionCommandStatus`
   payload against the pinned UCI 2.5 schema. Captured at `lacal/seam_run.log`;
   SKIP-safe on absent/unreachable Sleet.
@@ -605,8 +605,8 @@ demonstrated over the real broker.** Both halves:
 PositionReport/SignalReport). `OmsJsonUciCodec` now 8/8, `owp.*` 13/13.
 
 **Scope honesty — what the positive proves and doesn't.** `lacal_seam_test`
-demonstrates the request/requirement *interaction semantics* (correlated
-request → requirement transitions, both legs pub/sub, over the real broker,
+demonstrates the request/entity *interaction semantics* (correlated
+request → entity transitions, both legs pub/sub, over the real broker,
 UCI-validated) using the PCL publish/subscribe primitives directly — it is
 **not** the generated `MaactionRequestPortProvider/Client` interaction facade
 from `agra_seam_interchange_test.cpp`. Driving that generated facade over LA-CAL
@@ -646,12 +646,12 @@ delegated to Codex; Claude specced, integrated, and ran the real-Sleet leg
   OMS-JSON codecs. Scope is schema-valid UCI only (not arbitrary proto).
 - **`pim/uci_seam_example/`**: a UCI-XSD-faithful Request-port contract
   (`ActionCommand`/`ActionCommandStatus`, `Cancel(Identifier)`,
-  `.request`/`.requirement` topic legs) that generates the interaction facade
+  `.request`/`.entity` topic legs) that generates the interaction facade
   classes `ActioncommandRequestPort{Client,Provider,Handler}`.
 - **Byte-equivalence**: the generated C++ OMS-JSON codec produces JSON
   byte-identical to the hand-written `pyramid_oms_json_codec_uci.cpp` for
   `ActionCommand`/`ActionCommandStatus` (Sleet already accepts that output).
-  The generated codec also unwraps the `ActionCommand_Service_Request/_Requirement`
+  The generated codec also unwraps the `ActionCommand_Service_Request/_Entity`
   oneof wrappers to the bare UCI root JSON on encode and re-wraps on decode.
 - **Ada**: the generated Ada OMS-JSON codec object-compiles (GNAT 10.5).
 - **e2e harness** (`lacal_generated_seam_test.cpp` + `build_lacal_generated_seam_test.sh`):
@@ -673,7 +673,7 @@ not provide Sleet.
 
 The final boundary split is explicit. Generated topic ports declare their
 schema identity; the LA-CAL adapter maps the generated
-`ActionCommand_Service_Request` and `_Requirement` wrappers to the UCI root
+`ActionCommand_Service_Request` and `_Entity` wrappers to the UCI root
 message names `ActionCommand` and `ActionCommandStatus` for OWP `SUB`, while
 ingress remains tagged `application/oms-json` for codec lookup. Thus the
 oneof wrapper is unwrapped at the transport/facade boundary, not in the codec.

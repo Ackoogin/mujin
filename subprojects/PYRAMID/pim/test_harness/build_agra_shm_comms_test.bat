@@ -2,7 +2,7 @@
 REM build_agra_shm_comms_test.bat -- Windows counterpart to
 REM build_agra_shm_comms_test.sh: Phase C of
 REM doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md, the A-GRA example
-REM contract's correlated request/requirement pair, cross-process over a
+REM contract's correlated request/entity pair, cross-process over a
 REM real SHM bus. Authored for parity; not exercised in this Linux
 REM environment (carried note, same as the other test_harness .bat scripts).
 setlocal enabledelayedexpansion

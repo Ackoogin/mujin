@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build + run Phase C of doc/plans/PYRAMID/agra_pubsub_shm_udp_proving_plan.md:
-# the A-GRA example contract's correlated request/requirement pair, cross-
+# the A-GRA example contract's correlated request/entity pair, cross-
 # process over a real libpcl_transport_shared_memory_plugin.so bus loaded
 # via pcl_transport_routing_load, driving the generated
 # publish*/subscribe*/encode*/decode* helpers for pim/agra_example/. JSON
@@ -59,7 +59,7 @@ pcl_alloc_obj="$gen/pcl_alloc.o"
 cc -std=c11 -fPIC -I"$pyramid/../PCL/include" -c "$pyramid/../PCL/src/pcl_alloc.c" -o "$pcl_alloc_obj"
 
 # Shared data-model dependency closure both mission_autonomy and c2_station
-# reference (their oneof payloads / Requirement wrapper types).
+# reference (their oneof payloads / Entity wrapper types).
 common_pkgs=(
   pyramid_data_model_base
   pyramid_data_model_common

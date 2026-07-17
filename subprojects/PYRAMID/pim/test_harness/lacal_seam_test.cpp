@@ -1,12 +1,12 @@
 /// \file lacal_seam_test.cpp
-/// \brief Phase 5 positive: a correlated request/requirement interaction
+/// \brief Phase 5 positive: a correlated request/entity interaction
 ///        realized pub/sub on both legs over the LA-CAL transport, through
 ///        real Sleet, using the UCI ActionCommand / ActionCommandStatus pair.
 ///
 /// The consumer (C2) publishes an ActionCommand on the request topic and
-/// subscribes the requirement topic; the provider (MA) subscribes the request
+/// subscribes the entity topic; the provider (MA) subscribes the request
 /// topic and, on receipt, publishes correlated ActionCommandStatus transitions
-/// (RECEIVED then ACCEPTED) on the requirement topic. Correlation is the UCI
+/// (RECEIVED then ACCEPTED) on the entity topic. Correlation is the UCI
 /// CommandID.UUID. Both legs route over the LA-CAL (owp/asb) transport, so this
 /// is the seam's "pubsub-works over the real broker" leg with a UCI vocabulary
 /// Sleet's schema validates (the agra_example vocabulary would be rejected).
@@ -41,7 +41,7 @@ namespace {
 
 using namespace std::chrono_literals;
 constexpr const char* kRequestTopic = "mission.action-command";
-constexpr const char* kRequirementTopic = "mission.action-command-status";
+constexpr const char* kEntityTopic = "mission.action-command-status";
 constexpr const char* kCommandUuid = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
 template <size_t Size>
@@ -65,7 +65,7 @@ void fill_header(pyramid_uci_oms_header_c* header) {
 std::filesystem::path write_manifest(const std::string& url,
                                      const char* service_id,
                                      const char* request_kind,
-                                     const char* requirement_kind) {
+                                     const char* entity_kind) {
   const auto path = std::filesystem::temp_directory_path() /
                     (std::string("pyramid_lacal_seam_") + service_id + ".manifest");
   std::ofstream out(path, std::ios::binary | std::ios::trunc);
@@ -74,7 +74,7 @@ std::filesystem::path write_manifest(const std::string& url,
       << "\",\"schema\":\"002.5.0\",\"content_type\":\"application/oms-json\","
          "\"peer_id\":\"asb\",\"connect_timeout_ms\":3000}\n"
       << "route " << kRequestTopic << ' ' << request_kind << " asb best_effort\n"
-      << "route " << kRequirementTopic << ' ' << requirement_kind
+      << "route " << kEntityTopic << ' ' << entity_kind
       << " asb best_effort\n";
   return path;
 }
@@ -132,7 +132,7 @@ void on_request(pcl_container_t*, const pcl_msg_t* message, void* user_data) {
     return;
   }
   state->saw_request = true;
-  // Emit correlated requirement transitions keyed by the request's CommandID.
+  // Emit correlated entity transitions keyed by the request's CommandID.
   publish_status(state, command.command_uuid, "RECEIVED");
   publish_status(state, command.command_uuid, "ACCEPTED");
 }
@@ -164,7 +164,7 @@ int run_provider(const std::string& url, const std::filesystem::path& ready,
                               void* user_data) -> pcl_status_t {
     auto* provider = static_cast<ProviderState*>(user_data);
     provider->status_port = pcl_container_add_publisher(
-        container, kRequirementTopic, "ActionCommandStatus");
+        container, kEntityTopic, "ActionCommandStatus");
     if (!provider->status_port) return PCL_ERR_NOMEM;
     return pcl_container_add_subscriber(container, kRequestTopic,
                                         "ActionCommand", on_request, user_data)
@@ -255,7 +255,7 @@ int run_consumer(const std::string& url, const std::filesystem::path& output,
     b->ports->request =
         pcl_container_add_publisher(container, kRequestTopic, "ActionCommand");
     if (!b->ports->request) return PCL_ERR_NOMEM;
-    return pcl_container_add_subscriber(container, kRequirementTopic,
+    return pcl_container_add_subscriber(container, kEntityTopic,
                                         "ActionCommandStatus", on_status,
                                         b->state)
                ? PCL_OK
@@ -267,7 +267,7 @@ int run_consumer(const std::string& url, const std::filesystem::path& output,
   if (container && pcl_container_configure(container) == PCL_OK &&
       pcl_container_activate(container) == PCL_OK &&
       pcl_executor_add(executor, container) == PCL_OK && ports.request) {
-    // Requirement subscription is active before we publish the request, so the
+    // Entity subscription is active before we publish the request, so the
     // provider's correlated status transitions cannot race an inactive sub.
     std::this_thread::sleep_for(300ms);
 

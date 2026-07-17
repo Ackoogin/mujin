@@ -265,7 +265,7 @@ uci::Query decode_Query(const json& j) { uci::Query r{};
   return r; }
 
 struct ActionCommandRequestWire { uint8_t has_action_command; pyramid_data_model_uci_ActionCommand_c action_command; uint8_t has_update; pyramid_data_model_uci_ActionCommandStatus_c update; };
-struct ActionCommandRequirementWire { uint8_t has_action_command_status; pyramid_data_model_uci_ActionCommandStatus_c action_command_status; };
+struct ActionCommandEntityWire { uint8_t has_action_command_status; pyramid_data_model_uci_ActionCommandStatus_c action_command_status; };
 
 pcl_status_t assign(const std::string& s, pcl_msg_t* out) {
   if (!out || s.size()>std::numeric_limits<uint32_t>::max()) return PCL_ERR_INVALID;
@@ -276,14 +276,14 @@ pcl_status_t encode(void*, const char* id, const void* value, pcl_msg_t* out) {
     if(std::strcmp(id,"ActionCommand")==0) { uci::ActionCommand n; pyramid::cabi::from_c(static_cast<const pyramid_data_model_uci_ActionCommand_c*>(value),n); return assign(json({{"ActionCommand",encode_ActionCommand(n)}}).dump(),out); }
     if(std::strcmp(id,"ActionCommandStatus")==0) { uci::ActionCommandStatus n; pyramid::cabi::from_c(static_cast<const pyramid_data_model_uci_ActionCommandStatus_c*>(value),n); return assign(json({{"ActionCommandStatus",encode_ActionCommandStatus(n)}}).dump(),out); }
     if(std::strcmp(id,"ActionCommand_Service_Request")==0) { const auto& w=*static_cast<const ActionCommandRequestWire*>(value); if(w.has_action_command == w.has_update) return PCL_ERR_INVALID; if(w.has_action_command) { uci::ActionCommand n; pyramid::cabi::from_c(&w.action_command,n); return assign(json({{"ActionCommand",encode_ActionCommand(n)}}).dump(),out); } uci::ActionCommandStatus n; pyramid::cabi::from_c(&w.update,n); return assign(json({{"ActionCommandStatus",encode_ActionCommandStatus(n)}}).dump(),out); }
-    if(std::strcmp(id,"ActionCommand_Service_Requirement")==0) { const auto& w=*static_cast<const ActionCommandRequirementWire*>(value); if(!w.has_action_command_status) return PCL_ERR_INVALID; uci::ActionCommandStatus n; pyramid::cabi::from_c(&w.action_command_status,n); return assign(json({{"ActionCommandStatus",encode_ActionCommandStatus(n)}}).dump(),out); }
+    if(std::strcmp(id,"ActionCommand_Service_Entity")==0) { const auto& w=*static_cast<const ActionCommandEntityWire*>(value); if(!w.has_action_command_status) return PCL_ERR_INVALID; uci::ActionCommandStatus n; pyramid::cabi::from_c(&w.action_command_status,n); return assign(json({{"ActionCommandStatus",encode_ActionCommandStatus(n)}}).dump(),out); }
   } catch (...) { return PCL_ERR_INVALID; } return PCL_ERR_NOT_FOUND; }
 pcl_status_t decode(void*, const char* id, const pcl_msg_t* msg, void* value) {
   if(!id||!msg||(!msg->data&&msg->size)||!value) return PCL_ERR_INVALID; try { json d=json::parse(msg->data?std::string(static_cast<const char*>(msg->data),msg->size):std::string());
     if(std::strcmp(id,"ActionCommand")==0) { auto n=decode_ActionCommand(d.at("ActionCommand")); pyramid::cabi::to_c(n,static_cast<pyramid_data_model_uci_ActionCommand_c*>(value)); return PCL_OK; }
     if(std::strcmp(id,"ActionCommandStatus")==0) { auto n=decode_ActionCommandStatus(d.at("ActionCommandStatus")); pyramid::cabi::to_c(n,static_cast<pyramid_data_model_uci_ActionCommandStatus_c*>(value)); return PCL_OK; }
     if(std::strcmp(id,"ActionCommand_Service_Request")==0) { auto* w=static_cast<ActionCommandRequestWire*>(value); std::memset(w,0,sizeof(*w)); if(d.contains("ActionCommand")) { auto n=decode_ActionCommand(d.at("ActionCommand")); pyramid::cabi::to_c(n,&w->action_command); w->has_action_command=1; return PCL_OK; } if(d.contains("ActionCommandStatus")) { auto n=decode_ActionCommandStatus(d.at("ActionCommandStatus")); pyramid::cabi::to_c(n,&w->update); w->has_update=1; return PCL_OK; } return PCL_ERR_INVALID; }
-    if(std::strcmp(id,"ActionCommand_Service_Requirement")==0) { auto* w=static_cast<ActionCommandRequirementWire*>(value); std::memset(w,0,sizeof(*w)); if(!d.contains("ActionCommandStatus")) return PCL_ERR_INVALID; auto n=decode_ActionCommandStatus(d.at("ActionCommandStatus")); pyramid::cabi::to_c(n,&w->action_command_status); w->has_action_command_status=1; return PCL_OK; }
+    if(std::strcmp(id,"ActionCommand_Service_Entity")==0) { auto* w=static_cast<ActionCommandEntityWire*>(value); std::memset(w,0,sizeof(*w)); if(!d.contains("ActionCommandStatus")) return PCL_ERR_INVALID; auto n=decode_ActionCommandStatus(d.at("ActionCommandStatus")); pyramid::cabi::to_c(n,&w->action_command_status); w->has_action_command_status=1; return PCL_OK; }
   } catch (...) { return PCL_ERR_INVALID; } return PCL_ERR_NOT_FOUND; }
 void free_msg(void*, pcl_msg_t* m) { if(!m)return; pcl_free(const_cast<void*>(m->data)); m->data=nullptr;m->size=0;m->type_name=nullptr; }
 pcl_codec_t codec={PCL_CODEC_ABI_VERSION,kContentType,encode,decode,free_msg,nullptr};

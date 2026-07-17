@@ -1,7 +1,7 @@
 # UCI OMS-JSON seam contract
 
 This is a deliberately small, mechanically XSD-shaped UCI 2.5 contract for
-the ActionCommand request and ActionCommandStatus requirement legs.  It is not
+the ActionCommand request and ActionCommandStatus entity legs.  It is not
 a general UCI model.  The OMS-JSON backend accepts this shape only.
 
 Proto field names are normal `snake_case`.  The backend maps them to UCI
@@ -14,5 +14,5 @@ and ServiceID are omitted when absent.
 
 The provided/consumed request ports use the standard Create/Read/Update/Cancel
 grammar. Their request topic is `mission.action_command.request`; their
-requirement topic is `mission.action_command.requirement`. `Cancel` receives
+entity topic is `mission.action_command.entity`. `Cancel` receives
 an `Identifier`; its `id` is the CommandID UUID string.

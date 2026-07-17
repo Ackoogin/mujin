@@ -7,7 +7,7 @@
 //        rather than the executor's local in-process dispatch that
 //        components_comms_test.cpp exercises.
 //
-// Two scenarios, both driving the request/requirement/information topics
+// Two scenarios, both driving the request/entity/information topics
 // through the generated publish*/subscribe* helpers and the JSON codec:
 //   1. Two executors, one process, sharing one SHM bus.
 //   2. The same routing setup split across two OS processes (fork + re-exec
@@ -123,14 +123,14 @@ bool write_manifest(const std::string& path,
     if (is_provider) {
         out << "route " << prov::kTopicPimOspreySprRequirementRequest
             << " subscriber " << peer_alias << " reliable\n";
-        out << "route " << prov::kTopicPimOspreySprRequirementRequirement
+        out << "route " << prov::kTopicPimOspreySprRequirementEntity
             << " publisher " << peer_alias << " reliable\n";
         out << "route " << prov::kTopicPimOspreySprInformationInformation
             << " publisher " << peer_alias << " reliable\n";
     } else {
         out << "route " << prov::kTopicPimOspreySprRequirementRequest
             << " publisher " << peer_alias << " reliable\n";
-        out << "route " << prov::kTopicPimOspreySprRequirementRequirement
+        out << "route " << prov::kTopicPimOspreySprRequirementEntity
             << " subscriber " << peer_alias << " reliable\n";
         out << "route " << prov::kTopicPimOspreySprInformationInformation
             << " subscriber " << peer_alias << " reliable\n";
@@ -142,7 +142,7 @@ bool write_manifest(const std::string& path,
 
 struct ProviderState {
     pcl_port_t* information_pub = nullptr;
-    pcl_port_t* requirement_pub = nullptr;
+    pcl_port_t* entity_pub = nullptr;
     bool request_seen = false;
     bool cancel_seen = false;
     bool information_published = false;
@@ -151,16 +151,16 @@ struct ProviderState {
 struct ConsumerState {
     pcl_port_t* request_pub = nullptr;
     bool information_seen = false;
-    bool requirement_seen = false;
-    unsigned requirement_count = 0;
+    bool entity_seen = false;
+    unsigned entity_count = 0;
 };
 
-void publish_requirement_transition(ProviderState* state) {
-    prov::SPRRequirement_Service_Requirement requirement;
-    requirement.sprrequirement.emplace();
-    const pcl_status_t rc = prov::publishPimOspreySprRequirementRequirement(
-        state->requirement_pub, requirement, prov::kJsonContentType);
-    check(rc == PCL_OK, "provider published requirement transition over SHM route");
+void publish_entity_transition(ProviderState* state) {
+    prov::SPRRequirement_Service_Entity entity;
+    entity.sprrequirement.emplace();
+    const pcl_status_t rc = prov::publishPimOspreySprRequirementEntity(
+        state->entity_pub, entity, prov::kJsonContentType);
+    check(rc == PCL_OK, "provider published entity transition over SHM route");
 }
 
 void publish_information_once(ProviderState* state) {
@@ -187,7 +187,7 @@ void on_request_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
     if (request.cancel) {
         state->cancel_seen = true;
     }
-    publish_requirement_transition(state);
+    publish_entity_transition(state);
 }
 
 void on_information_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
@@ -198,15 +198,15 @@ void on_information_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
         static_cast<bool>(payload.sprinformation);
 }
 
-void on_requirement_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
+void on_entity_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
     auto* state = static_cast<ConsumerState*>(ud);
-    prov::SPRRequirement_Service_Requirement payload;
+    prov::SPRRequirement_Service_Entity payload;
     const bool ok =
-        prov::decodePimOspreySprRequirementRequirement(msg, &payload) &&
+        prov::decodePimOspreySprRequirementEntity(msg, &payload) &&
         static_cast<bool>(payload.sprrequirement);
     if (ok) {
-        state->requirement_seen = true;
-        ++state->requirement_count;
+        state->entity_seen = true;
+        ++state->entity_count;
     }
 }
 
@@ -214,11 +214,11 @@ pcl_status_t provider_on_configure(pcl_container_t* c, void* ud) {
     auto* state = static_cast<ProviderState*>(ud);
     state->information_pub = pcl_container_add_publisher(
         c, prov::kTopicPimOspreySprInformationInformation, prov::kJsonContentType);
-    state->requirement_pub = pcl_container_add_publisher(
-        c, prov::kTopicPimOspreySprRequirementRequirement, prov::kJsonContentType);
+    state->entity_pub = pcl_container_add_publisher(
+        c, prov::kTopicPimOspreySprRequirementEntity, prov::kJsonContentType);
     pcl_port_t* sub = prov::subscribePimOspreySprRequirementRequest(
         c, on_request_topic, state, prov::kJsonContentType);
-    return (state->information_pub && state->requirement_pub && sub)
+    return (state->information_pub && state->entity_pub && sub)
         ? PCL_OK : PCL_ERR_NOMEM;
 }
 
@@ -228,8 +228,8 @@ pcl_status_t consumer_on_configure(pcl_container_t* c, void* ud) {
         c, prov::kTopicPimOspreySprRequirementRequest, prov::kJsonContentType);
     pcl_port_t* info_sub = prov::subscribePimOspreySprInformationInformation(
         c, on_information_topic, state, prov::kJsonContentType);
-    pcl_port_t* req_sub = prov::subscribePimOspreySprRequirementRequirement(
-        c, on_requirement_topic, state, prov::kJsonContentType);
+    pcl_port_t* req_sub = prov::subscribePimOspreySprRequirementEntity(
+        c, on_entity_topic, state, prov::kJsonContentType);
     return (state->request_pub && info_sub && req_sub) ? PCL_OK : PCL_ERR_NOMEM;
 }
 
@@ -243,7 +243,7 @@ void register_json_codec() {
 //
 // Loads the real SHM plugin twice (once per executor) via
 // pcl_transport_routing_load, bound to the same bus_name, and drives the
-// correlated request/requirement pair plus the information topic through the
+// correlated request/entity pair plus the information topic through the
 // manifest-installed routes -- proving the routing path, not local dispatch.
 void run_same_process_scenario(const std::string& plugin_path,
                                const std::string& manifest_dir) {
@@ -317,13 +317,13 @@ void run_same_process_scenario(const std::string& plugin_path,
           "provider observed request topic crossing the real SHM bus");
     check(consumer_state.information_seen,
           "consumer observed information topic crossing the real SHM bus");
-    check(consumer_state.requirement_seen,
-          "consumer observed requirement transition crossing the real SHM bus");
-    check(consumer_state.requirement_count >= 1,
-          "conformance: request followed by requirement transition (routed)");
+    check(consumer_state.entity_seen,
+          "consumer observed entity transition crossing the real SHM bus");
+    check(consumer_state.entity_count >= 1,
+          "conformance: request followed by entity transition (routed)");
 
-    consumer_state.requirement_seen = false;
-    const unsigned before_cancel = consumer_state.requirement_count;
+    consumer_state.entity_seen = false;
+    const unsigned before_cancel = consumer_state.entity_count;
     prov::SPRRequirement_Service_Request cancel_request;
     cancel_request.cancel = std::string("cancel-spr-same-process");
     check(prov::publishPimOspreySprRequirementRequest(
@@ -332,10 +332,10 @@ void run_same_process_scenario(const std::string& plugin_path,
     pump(std::chrono::milliseconds(500));
     check(provider_state.cancel_seen,
           "provider observed cancel topic payload crossing the real SHM bus");
-    check(consumer_state.requirement_seen,
-          "consumer observed post-cancel requirement transition (routed)");
-    check(consumer_state.requirement_count > before_cancel,
-          "conformance: cancel followed by requirement transition (routed)");
+    check(consumer_state.entity_seen,
+          "consumer observed post-cancel entity transition (routed)");
+    check(consumer_state.entity_count > before_cancel,
+          "conformance: cancel followed by entity transition (routed)");
 
     pcl_transport_routing_destroy(provider_routing);
     pcl_transport_routing_destroy(consumer_routing);
@@ -435,11 +435,11 @@ int run_role(const std::string& role,
         consumer_state.request_pub, create_request, prov::kJsonContentType);
 
     while (std::chrono::steady_clock::now() < deadline &&
-          !(consumer_state.information_seen && consumer_state.requirement_count >= 1)) {
+          !(consumer_state.information_seen && consumer_state.entity_count >= 1)) {
         pcl_executor_spin_once(exec, 0);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    const unsigned before_cancel = consumer_state.requirement_count;
+    const unsigned before_cancel = consumer_state.entity_count;
 
     prov::SPRRequirement_Service_Request cancel_request;
     cancel_request.cancel = std::string("cancel-spr-cross-process");
@@ -447,16 +447,16 @@ int run_role(const std::string& role,
         consumer_state.request_pub, cancel_request, prov::kJsonContentType);
 
     while (std::chrono::steady_clock::now() < deadline &&
-          !(consumer_state.requirement_count > before_cancel)) {
+          !(consumer_state.entity_count > before_cancel)) {
         pcl_executor_spin_once(exec, 0);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     const bool ok = consumer_state.information_seen &&
-                    consumer_state.requirement_count > before_cancel;
+                    consumer_state.entity_count > before_cancel;
     if (ok) {
-        write_text(result_file, "information_seen=1 requirement_count=" +
-                                     std::to_string(consumer_state.requirement_count));
+        write_text(result_file, "information_seen=1 entity_count=" +
+                                     std::to_string(consumer_state.entity_count));
     }
     pcl_executor_remove(exec, container);
     pcl_container_destroy(container);
@@ -545,7 +545,7 @@ void run_cross_process_scenario(const std::string& self_path,
     const int provider_rc = provider.wait(6000);
     const int consumer_rc = consumer.wait(6000);
     check(provider_rc == 0, "provider process exited 0 (observed request + cancel over SHM)");
-    check(consumer_rc == 0, "consumer process exited 0 (observed information + requirement transitions over SHM)");
+    check(consumer_rc == 0, "consumer process exited 0 (observed information + entity transitions over SHM)");
 
     std::string provider_result_text;
     std::string consumer_result_text;

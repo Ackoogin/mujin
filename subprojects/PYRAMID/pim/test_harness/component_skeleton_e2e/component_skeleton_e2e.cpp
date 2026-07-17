@@ -24,7 +24,7 @@ class FilledSensorsStub;
 
 // Request-port deploymentDescriptor() describes the command leg. The
 // role-symmetric client harness also needs to route the independent
-// requirement leg so it can observe transitions in either realization.
+// entity leg so it can observe transitions in either realization.
 provided::InteractionPortDescriptor providerRequirementDescriptor() {
   return {
       {{provided::kSvcSenrequirementRead, PCL_ENDPOINT_STREAM_PROVIDED}},
@@ -52,7 +52,7 @@ public:
     return pyramid::domain_model::kAckOk;
   }
   provided::Ack onUpdate(
-      const provided::Authorisation_Dependency_Service_Requirement&) override {
+      const provided::Authorisation_Dependency_Service_Entity&) override {
     return pyramid::domain_model::kAckOk;
   }
 };
@@ -69,7 +69,7 @@ public:
     return pyramid::domain_model::kAckOk;
   }
   provided::Ack onUpdate(
-      const provided::SENRequirement_Service_Requirement&) override {
+      const provided::SENRequirement_Service_Entity&) override {
     return pyramid::domain_model::kAckOk;
   }
 
@@ -84,7 +84,7 @@ public:
             executor, std::move(handlers), "sensors_provider") {}
 
   pcl_status_t sendTransition(
-      const provided::SENRequirement_Service_Requirement& transition) {
+      const provided::SENRequirement_Service_Entity& transition) {
     return senRequirementRequestPort().transitionWriter().send(transition);
   }
 };
@@ -97,7 +97,7 @@ provided::Ack SenRequirementHandler::onCancel(
   FilledSensorsStub* owner = owner_;
   std::thread([owner] {
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    provided::SENRequirement_Service_Requirement transition{};
+    provided::SENRequirement_Service_Entity transition{};
     transition.senrequirement =
         pyramid::domain_model::common_pim_components::sensors::SENRequirement{};
     const auto status = owner->sendTransition(transition);
@@ -133,7 +133,7 @@ private:
       query.one_shot = true;
       auto subscription = client_.transitions(
           query,
-          [this](const provided::SENRequirement_Service_Requirement&) {
+          [this](const provided::SENRequirement_Service_Entity&) {
             std::lock_guard<std::mutex> lock(mutex_);
             transition_observed_ = true;
             condition_.notify_all();
@@ -148,7 +148,7 @@ private:
       if (!condition_.wait_for(
               lock, std::chrono::seconds(5),
               [this] { return transition_observed_; })) {
-        throw std::runtime_error("requirement transition timed out");
+        throw std::runtime_error("entity transition timed out");
       }
       std::cout << "TRANSITION_OBSERVED" << std::endl;
     } catch (const std::exception& error) {

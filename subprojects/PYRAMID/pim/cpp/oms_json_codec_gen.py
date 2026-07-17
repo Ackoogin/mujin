@@ -197,12 +197,12 @@ class _PackageEmitter:
         if sidecar_roots is not None:
             return [(el, msg) for el, msg in sidecar_roots.items()]
         # Heuristic path: data-model messages referenced as variants of any
-        # *_Service_Request/_Requirement wrapper, in data-model doc order.
+        # *_Service_Request/_Entity wrapper, in data-model doc order.
         referenced = set()
         for other in self.index.files:
             for msg in other.messages:
                 if not msg.name.split('_Service_')[-1] in (
-                        'Request', 'Requirement'):
+                        'Request', 'Entity'):
                     continue
                 for oo in msg.oneofs:
                     for fld in oo.fields:
@@ -214,7 +214,7 @@ class _PackageEmitter:
     def _resolve_wrappers(self) -> List[dict]:
         """Thin service wrappers around package roots.
 
-        Request/Requirement wrappers may carry multiple variants; Information
+        Request/Entity wrappers may carry multiple variants; Information
         wrappers carry one. Both cross the codec boundary as the active UCI
         root rather than as a PIM wrapper object.
         """
@@ -224,7 +224,7 @@ class _PackageEmitter:
             for msg in other.messages:
                 parts = msg.name.split('_Service_')
                 if len(parts) != 2 or parts[1] not in ('Request',
-                                                       'Requirement',
+                                                       'Entity',
                                                        'Information'):
                     continue
                 if msg.name in seen:

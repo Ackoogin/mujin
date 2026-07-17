@@ -55,7 +55,7 @@ typedef struct {
 } pyramid_uci_position_report_c;
 
 /// \brief UCI 2.5 ActionCommand subset — the Request leg of the seam
-/// interaction. `command_uuid` (CommandID) is the request/requirement
+/// interaction. `command_uuid` (CommandID) is the request/entity
 /// correlation key.
 typedef struct {
   pyramid_uci_oms_header_c header;
@@ -66,7 +66,7 @@ typedef struct {
   char action_uuid[PYRAMID_OMS_UUID_SIZE];
 } pyramid_uci_action_command_c;
 
-/// \brief UCI 2.5 ActionCommandStatus subset — the Requirement leg of the seam
+/// \brief UCI 2.5 ActionCommandStatus subset — the entity leg of the seam
 /// interaction. `command_uuid` echoes the request's CommandID;
 /// `command_processing_state` carries the transition (RECEIVED/ACCEPTED/...).
 typedef struct {

@@ -95,7 +95,7 @@ public:
   services::provided::Ack onCreate(
       const services::provided::SENRequirement_Service_Request&) override;
   services::provided::Ack onUpdate(
-      const services::provided::SENRequirement_Service_Requirement&) override;
+      const services::provided::SENRequirement_Service_Entity&) override;
   services::provided::Ack onCancel(
       const services::provided::Identifier&) override;
 };

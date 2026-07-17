@@ -6,7 +6,7 @@
 // Unlike tobj_shared_memory_example.cpp (which hand-wires ProvidedService/
 // ConsumedService and hand-rolls stream tracking), both sides here are built
 // entirely from the generated facade: MaactionRequestPortProvider owns the
-// RPC service *and* the pub/sub request/requirement legs internally, and
+// RPC service *and* the pub/sub request/entity legs internally, and
 // MaactionRequestPortClient exposes submit()/transitions() as the sole
 // client-facing surface. Nothing in this file names an RPC or pub/sub
 // primitive directly -- that is exactly the point of the facade.
@@ -81,7 +81,7 @@ class DemoHandler final : public magra_prov::MaactionRequestPortHandler {
   }
 
   magra_prov::Ack onUpdate(
-      const magra_prov::MAAction_Service_Requirement&) override {
+      const magra_prov::MAAction_Service_Entity&) override {
     return magra_prov::Ack{true};
   }
 
@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
   // identical component code either way.
   //
   //   {"binding":"rpc"}                                  -- both legs, RPC
-  //   {"request_leg":"pubsub","requirement_leg":"pubsub"} -- both legs, pubsub
+  //   {"request_leg":"pubsub","entity_leg":"pubsub"} -- both legs, pubsub
   std::string config_json;
   if (binding == "rpc") {
     if (client.client().consumedService().routeAllLocal() != PCL_OK) {
@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "client local pub/sub routing failed\n");
       return 1;
     }
-    config_json = R"({"request_leg":"pubsub","requirement_leg":"pubsub"})";
+    config_json = R"({"request_leg":"pubsub","entity_leg":"pubsub"})";
   }
 
   if (client.client().configureInteractionBinding(config_json) != PCL_OK ||
@@ -198,7 +198,7 @@ int main(int argc, char** argv) {
   // transitions() -- subscribe before submitting, so the frame published
   // below (once the Create has been handled) is delivered rather than
   // missed. Under RPC this opens a streaming Read; under pub/sub it
-  // subscribes the requirement topic -- same client code either way.
+  // subscribes the entity topic -- same client code either way.
   const std::string kActionId = "example-action-1";
   magra_cons::Query query{};
   query.id.push_back(kActionId);
@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
   bool ended = false;
   auto handle = client.client().transitions(
       query,
-      [](const magra_cons::MAAction_Service_Requirement& frame) {
+      [](const magra_cons::MAAction_Service_Entity& frame) {
         const std::string id = frame.ma_action_status.has_value()
                                     ? frame.ma_action_status->id
                                     : "<none>";
@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
   // whatever drives the mission autonomy state machine) uses the provider's
   // transitionWriter() -- owned internally by RequestPortProvider, fans out
   // to every open Read stream and (under pub/sub) records the D6 snapshot.
-  magra_prov::MAAction_Service_Requirement frame{};
+  magra_prov::MAAction_Service_Entity frame{};
   pyramid::domain_model::common::Requirement status{};
   status.id = kActionId;
   frame.ma_action_status = status;

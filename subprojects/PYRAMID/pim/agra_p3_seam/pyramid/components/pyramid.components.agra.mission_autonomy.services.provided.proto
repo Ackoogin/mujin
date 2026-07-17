@@ -13,7 +13,7 @@ message MA_MissionPlanCommand_Service_Request {
   }
 }
 
-message MA_MissionPlanCommand_Service_Requirement {
+message MA_MissionPlanCommand_Service_Entity {
   oneof payload {
     pyramid.data_model.agra.MA_MissionPlanCommandStatusMT ma_mission_plan_command_status = 1;
   }
@@ -23,10 +23,10 @@ service MA_MissionPlanCommand_Service {
   rpc Create(MA_MissionPlanCommand_Service_Request) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_MissionPlanCommand" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_MissionPlanCommand_Service_Requirement) {
+  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_MissionPlanCommand_Service_Entity) {
     option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_MissionPlanCommandStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Update(MA_MissionPlanCommand_Service_Requirement) returns (pyramid.data_model.agra_port_grammar.Ack) {
+  rpc Update(MA_MissionPlanCommand_Service_Entity) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_MissionPlanCommand" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
   rpc Cancel(pyramid.data_model.agra_port_grammar.Identifier) returns (pyramid.data_model.agra_port_grammar.Ack) {
@@ -41,7 +41,7 @@ message MA_MissionPlanActivationCommand_Service_Request {
   }
 }
 
-message MA_MissionPlanActivationCommand_Service_Requirement {
+message MA_MissionPlanActivationCommand_Service_Entity {
   oneof payload {
     pyramid.data_model.agra.MA_MissionPlanActivationCommandStatusMT ma_mission_plan_activation_command_status = 1;
   }
@@ -51,10 +51,10 @@ service MA_MissionPlanActivationCommand_Service {
   rpc Create(MA_MissionPlanActivationCommand_Service_Request) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_MissionPlanActivationCommand" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_MissionPlanActivationCommand_Service_Requirement) {
+  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_MissionPlanActivationCommand_Service_Entity) {
     option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_MissionPlanActivationCommandStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Update(MA_MissionPlanActivationCommand_Service_Requirement) returns (pyramid.data_model.agra_port_grammar.Ack) {
+  rpc Update(MA_MissionPlanActivationCommand_Service_Entity) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_MissionPlanActivationCommand" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
   rpc Cancel(pyramid.data_model.agra_port_grammar.Identifier) returns (pyramid.data_model.agra_port_grammar.Ack) {
@@ -69,7 +69,7 @@ message MA_PlanningFunctionSettingsCommand_Service_Request {
   }
 }
 
-message MA_PlanningFunctionSettingsCommand_Service_Requirement {
+message MA_PlanningFunctionSettingsCommand_Service_Entity {
   oneof payload {
     pyramid.data_model.agra.MA_PlanningFunctionSettingsCommandStatusMT ma_planning_function_settings_command_status = 1;
   }
@@ -79,10 +79,10 @@ service MA_PlanningFunctionSettingsCommand_Service {
   rpc Create(MA_PlanningFunctionSettingsCommand_Service_Request) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_PlanningFunctionSettingsCommand" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_PlanningFunctionSettingsCommand_Service_Requirement) {
+  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_PlanningFunctionSettingsCommand_Service_Entity) {
     option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_PlanningFunctionSettingsCommandStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Update(MA_PlanningFunctionSettingsCommand_Service_Requirement) returns (pyramid.data_model.agra_port_grammar.Ack) {
+  rpc Update(MA_PlanningFunctionSettingsCommand_Service_Entity) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_PlanningFunctionSettingsCommand" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
   rpc Cancel(pyramid.data_model.agra_port_grammar.Identifier) returns (pyramid.data_model.agra_port_grammar.Ack) {
@@ -97,7 +97,7 @@ message MA_ApprovalRequest_Service_Request {
   }
 }
 
-message MA_ApprovalRequest_Service_Requirement {
+message MA_ApprovalRequest_Service_Entity {
   oneof payload {
     pyramid.data_model.agra.MA_ApprovalRequestStatusMT ma_approval_request_status = 1;
   }
@@ -107,10 +107,10 @@ service MA_ApprovalRequest_Service {
   rpc Create(MA_ApprovalRequest_Service_Request) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_ApprovalRequest" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_ApprovalRequest_Service_Requirement) {
+  rpc Read(pyramid.data_model.agra_port_grammar.Query) returns (stream MA_ApprovalRequest_Service_Entity) {
     option (pyramid.options.pyramid_op) = { pattern: PUBLISH topic: "MA_ApprovalRequestStatus" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
-  rpc Update(MA_ApprovalRequest_Service_Requirement) returns (pyramid.data_model.agra_port_grammar.Ack) {
+  rpc Update(MA_ApprovalRequest_Service_Entity) returns (pyramid.data_model.agra_port_grammar.Ack) {
     option (pyramid.options.pyramid_op) = { pattern: SUBSCRIBE topic: "MA_ApprovalRequest" qos: { reliability: RELIABLE durability: VOLATILE depth: 10 } };
   }
   rpc Cancel(pyramid.data_model.agra_port_grammar.Identifier) returns (pyramid.data_model.agra_port_grammar.Ack) {

@@ -113,12 +113,12 @@ options onto the generated services — topic-bearing methods are never
 hand-authored in these trees. Topic names follow:
 
 ```
-<project>.<interface_snake>.<role>      role ∈ { request, requirement, information }
+<project>.<interface_snake>.<role>      role ∈ { request, entity, information }
 ```
 
 A Request port realized as pub/sub uses the **correlated pair**: a
 `.request` topic (consumer → provider, the service's `_Request` wrapper
-message) and a `.requirement` topic (provider → consumer, status
+message) and a `.entity` topic (provider → consumer, status
 transitions). Correlation is by `Entity.id` in the payload. An Information
 port maps to a single `.information` topic. Semantics, legs, and the
 provider/consumer API are in the

@@ -4,7 +4,7 @@
 //        the interaction facade's RPC/pub-sub interchangeability claim
 //        end-to-end: the same MissionAutonomy (MA) provider and C2Station
 //        (C2) consumer component code, cross-process over a real shared-
-//        memory bus, carries the MAAction_Service request/requirement legs
+//        memory bus, carries the MAAction_Service request/entity legs
 //        under four independently-selectable realizations -- purely by
 //        changing the PCL routing manifest, never the component logic.
 //
@@ -20,9 +20,9 @@
 // re-executed with different CLI args and a fresh manifest each time --
 // "byte-identical component objects across runs" holds trivially, since it
 // is the same compiled file every time):
-//   1. request=rpc,    requirement=rpc     -- facade over classic RPC
-//   2. request=pubsub, requirement=pubsub  -- Phase C's scenario via the facade
-//   3. request=rpc,    requirement=pubsub  -- mixed legs, neither end aware
+//   1. request=rpc,    entity=rpc     -- facade over classic RPC
+//   2. request=pubsub, entity=pubsub  -- Phase C's scenario via the facade
+//   3. request=rpc,    entity=pubsub  -- mixed legs, neither end aware
 //   4. negative: both realizations of the request leg routed at once --
 //      Phase 1's D5 compose-time exclusivity must fail closed (replayed
 //      compose-time-only, no processes spawned, same style as
@@ -134,7 +134,7 @@ bool write_manifest(const std::string& path,
                     const std::string& peer_participant_id,
                     bool is_ma,
                     const std::string& request_leg,
-                    const std::string& requirement_leg) {
+                    const std::string& entity_leg) {
     std::ofstream out(path, std::ios::trunc);
     if (!out) return false;
     const std::string& peer_alias = peer_participant_id;
@@ -145,8 +145,8 @@ bool write_manifest(const std::string& path,
     out << "exclusive request_leg "
         << ma::kSvcMaactionCreate << "," << ma::kSvcMaactionUpdate << ","
         << ma::kSvcMaactionCancel << " " << ma::kTopicAgraMaActionRequest << "\n";
-    out << "exclusive requirement_leg "
-        << ma::kSvcMaactionRead << " " << ma::kTopicAgraMaActionRequirement << "\n";
+    out << "exclusive entity_leg "
+        << ma::kSvcMaactionRead << " " << ma::kTopicAgraMaActionEntity << "\n";
 
     const char* rpc_command_kind = is_ma ? "provided" : "consumed";
     // stream_consumed, not consumed: Read is a streaming rpc, so the client
@@ -154,7 +154,7 @@ bool write_manifest(const std::string& path,
     // fix), not just PCL_CAP_RPC_UNARY -- see pcl_transport_routing.h.
     const char* rpc_read_kind = is_ma ? "stream_provided" : "stream_consumed";
     const char* request_topic_kind = is_ma ? "subscriber" : "publisher";
-    const char* requirement_topic_kind = is_ma ? "publisher" : "subscriber";
+    const char* entity_topic_kind = is_ma ? "publisher" : "subscriber";
 
     if (request_leg == "rpc") {
         out << "route " << ma::kSvcMaactionCreate << " " << rpc_command_kind
@@ -168,12 +168,12 @@ bool write_manifest(const std::string& path,
             << " " << peer_alias << " reliable\n";
     }
 
-    if (requirement_leg == "rpc") {
+    if (entity_leg == "rpc") {
         out << "route " << ma::kSvcMaactionRead << " " << rpc_read_kind
             << " " << peer_alias << " reliable\n";
     } else {
-        out << "route " << ma::kTopicAgraMaActionRequirement << " "
-            << requirement_topic_kind << " " << peer_alias << " reliable\n";
+        out << "route " << ma::kTopicAgraMaActionEntity << " "
+            << entity_topic_kind << " " << peer_alias << " reliable\n";
     }
     return out.good();
 }
@@ -200,7 +200,7 @@ public:
         return ma::Ack{true};
     }
 
-    ma::Ack onUpdate(const ma::MAAction_Service_Requirement&) override {
+    ma::Ack onUpdate(const ma::MAAction_Service_Entity&) override {
         return ma::Ack{true};
     }
 
@@ -222,12 +222,12 @@ private:
         req.status.id = id;
         req.status.status = progress;
         req.status.acceptance = acceptance;
-        ma::MAAction_Service_Requirement wrapper;
+        ma::MAAction_Service_Entity wrapper;
         wrapper.ma_action_status = req;
         check(writer_.has_value(), "MA transition writer bound before dispatch");
         if (writer_) {
             const pcl_status_t rc = writer_->send(wrapper);
-            check(rc == PCL_OK, "MA sent requirement transition via TransitionWriter");
+            check(rc == PCL_OK, "MA sent entity transition via TransitionWriter");
         }
     }
 
@@ -269,7 +269,7 @@ private:
     c2::MaactionRequestPortClient client_;
 };
 
-struct RequirementLog {
+struct EntityLog {
     std::vector<dm_common::Progress> progress;
     std::vector<dm_common::AcceptanceState> acceptance;
 };
@@ -316,7 +316,7 @@ int run_role(const std::string& role,
             const std::string& content_type,
             const std::string& bus_name,
             const std::string& request_leg,
-            const std::string& requirement_leg,
+            const std::string& entity_leg,
             const std::string& manifest_path,
             const std::string& ready_file,
             const std::string& peer_ready_file,
@@ -341,7 +341,7 @@ int run_role(const std::string& role,
 
     if (!write_manifest(manifest_path, plugin_path, bus_name,
                         is_ma ? "ma" : "c2", is_ma ? "c2" : "ma", is_ma,
-                        request_leg, requirement_leg)) {
+                        request_leg, entity_leg)) {
         return 2;
     }
 
@@ -418,13 +418,13 @@ int run_role(const std::string& role,
         return unload_and_return(false);
     }
 
-    std::map<std::string, RequirementLog> log;
+    std::map<std::string, EntityLog> log;
     auto sub = component.client().transitions(
         c2::Query{},
-        [&](const c2::MAAction_Service_Requirement& frame) {
+        [&](const c2::MAAction_Service_Entity& frame) {
             if (!frame.ma_action_status) return;
             const auto& r = *frame.ma_action_status;
-            RequirementLog& entry = log[r.id];
+            EntityLog& entry = log[r.id];
             entry.progress.push_back(r.status.status);
             entry.acceptance.push_back(r.status.acceptance);
         });
@@ -492,8 +492,8 @@ int run_role(const std::string& role,
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    const RequirementLog& log_one = log[kActionOne];
-    const RequirementLog& log_two = log[kActionTwo];
+    const EntityLog& log_one = log[kActionOne];
+    const EntityLog& log_two = log[kActionTwo];
     const bool ok =
         log_one.progress.size() >= 3 &&
         log_one.progress.back() == dm_common::Progress::Completed &&
@@ -572,9 +572,9 @@ void run_scenario(const std::string& self_path,
                   const std::string& scratch_dir,
                   const std::string& label,
                   const std::string& request_leg,
-                  const std::string& requirement_leg) {
-    std::printf("\n== agra seam interchange: %s (request=%s, requirement=%s) ==\n",
-               label.c_str(), request_leg.c_str(), requirement_leg.c_str());
+                  const std::string& entity_leg) {
+    std::printf("\n== agra seam interchange: %s (request=%s, entity=%s) ==\n",
+               label.c_str(), request_leg.c_str(), entity_leg.c_str());
 
     const long long run_id =
         static_cast<long long>(::getpid()) * 1000 +
@@ -596,7 +596,7 @@ void run_scenario(const std::string& self_path,
                          "--flat-plugin=" + ma_flat_plugin_path,
                          "--content-type=" + content_type, "--bus=" + bus_name,
                          "--request-leg=" + request_leg,
-                         "--requirement-leg=" + requirement_leg,
+                         "--entity-leg=" + entity_leg,
                          "--manifest=" + ma_manifest, "--ready-file=" + ma_ready,
                          "--peer-ready-file=" + c2_ready, "--result-file=" + ma_result,
                          "--timeout-ms=6000"}),
@@ -607,7 +607,7 @@ void run_scenario(const std::string& self_path,
                          "--flat-plugin=" + c2_flat_plugin_path,
                          "--content-type=" + content_type, "--bus=" + bus_name,
                          "--request-leg=" + request_leg,
-                         "--requirement-leg=" + requirement_leg,
+                         "--entity-leg=" + entity_leg,
                          "--manifest=" + c2_manifest, "--ready-file=" + c2_ready,
                          "--peer-ready-file=" + ma_ready, "--result-file=" + c2_result,
                          "--timeout-ms=6000"}),
@@ -688,7 +688,7 @@ int main(int argc, char** argv) {
                         get_option(argc, argv, "--content-type="),
                         get_option(argc, argv, "--bus="),
                         get_option(argc, argv, "--request-leg="),
-                        get_option(argc, argv, "--requirement-leg="),
+                        get_option(argc, argv, "--entity-leg="),
                         get_option(argc, argv, "--manifest="),
                         get_option(argc, argv, "--ready-file="),
                         get_option(argc, argv, "--peer-ready-file="),
@@ -720,7 +720,7 @@ int main(int argc, char** argv) {
     struct RunSpec {
         const char* label;
         const char* request_leg;
-        const char* requirement_leg;
+        const char* entity_leg;
     };
     const RunSpec runs[] = {
         {"run1_rpc_rpc", "rpc", "rpc"},
@@ -735,7 +735,7 @@ int main(int argc, char** argv) {
                 (content_type == ma::kJsonContentType ? "json" : "flatbuffers");
             run_scenario(argv[0], plugin_path, ma_json_plugin_path, c2_json_plugin_path,
                         ma_flat_plugin_path, c2_flat_plugin_path, content_type,
-                        scratch_dir, label, run.request_leg, run.requirement_leg);
+                        scratch_dir, label, run.request_leg, run.entity_leg);
         }
     }
 

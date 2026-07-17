@@ -57,10 +57,10 @@ hand-authored tree). Nothing is hardcoded in the generators. The naming
 scheme is:
 
 ```
-<project>.<interface_snake>.<role>      role ∈ { request, requirement, information }
+<project>.<interface_snake>.<role>      role ∈ { request, entity, information }
 ```
 
-| Port kind × side | request topic | requirement topic | information topic |
+| Port kind × side | request topic | entity topic | information topic |
 |---|---|---|---|
 | Request, provided | subscribe | publish | — |
 | Request, consumed | publish | subscribe | — |
@@ -80,14 +80,14 @@ A Request port realized as pub/sub uses **two topics on a flat namespace**
 
 - `<...>.request` — consumer → provider. Carries the service's `_Request`
   wrapper message (command variants + `cancel`).
-- `<...>.requirement` — provider → consumer. Carries requirement
+- `<...>.entity` — provider → consumer. Carries entity
   transitions (status objects with an acceptance layer:
   RECEIVED / REJECTED / IN_PROGRESS / COMPLETED / CANCELLED …).
 
 Correlation is by `Entity.id`/`source` **in the payload**, not by topic
 instance — everyone shares the flat topics and filters by id. There is no
 synchronous acknowledgement in this realization; acceptance is itself a
-requirement transition.
+entity transition.
 
 ### Legs
 
@@ -96,8 +96,8 @@ leg's realization is chosen independently:
 
 - **request leg** (consumer → provider): `Create`/`Update`/`Cancel` as RPC,
   *or* the `.request` topic.
-- **requirement leg** (provider → consumer): the `Read` stream, *or* the
-  `.requirement` topic.
+- **entity leg** (provider → consumer): the `Read` stream, *or* the
+  `.entity` topic.
 
 A deployment can therefore run commands as RPC (point-to-point, transport
 acks) while status flows as pub/sub (observable by any authorized
@@ -128,7 +128,7 @@ flowchart TB
   Rpc["RPC seam (primitives)<br/>ConsumedService: &lt;op&gt;Async / &lt;op&gt;Streaming<br/>built on invoke*/dispatch"]
   Pub["Pub/sub seam (primitives)<br/>publish* / subscribe* topic helpers"]
   SvcEp["service endpoints<br/>ma_action.create / .update / .cancel / .read"]
-  TopEp["topic endpoints<br/>agra.ma_action.request / .requirement"]
+  TopEp["topic endpoints<br/>agra.ma_action.request / .entity"]
   Route["routing manifest<br/>exclusive: one realization per leg"]
   Wire["transport plugin(s)"]
 
@@ -227,7 +227,7 @@ the two realizations' guarantees:
 
 Code that reads `remoteAck()` is therefore *visibly*
 realization-dependent. Authoritative acceptance (RECEIVED / REJECTED +
-reason) always arrives as a requirement transition, under either
+reason) always arrives as a entity transition, under either
 realization.
 
 > **Waiting on the future:** `submit()` returns a *deferred* future —
@@ -248,7 +248,7 @@ c2::Query query{};
 query.id.push_back("action-1");            // empty id list = all
 auto handle = client.transitions(
     query,
-    [&](const c2::MAAction_Service_Requirement& t) {
+    [&](const c2::MAAction_Service_Entity& t) {
       // RECEIVED -> IN_PROGRESS -> COMPLETED, correlated by id
     },
     [&](pcl_status_t end_status) { /* stream ended */ });
@@ -256,7 +256,7 @@ auto handle = client.transitions(
 
 - Under RPC this is a server-streaming `Read`; the provider can serve
   current state immediately.
-- Under pub/sub it subscribes the `.requirement` topic and filters
+- Under pub/sub it subscribes the `.entity` topic and filters
   client-side by `query.id`. A late-joining subscriber sees only future
   publications (VOLATILE, no history) — mitigated by the provider's
   snapshot re-publication (§3), not by durability.
@@ -295,7 +295,7 @@ flowchart TB
   Writer["transitionWriter().send(t)"]
   Snap["bounded per-id<br/>snapshot store"]
   Streams["fan-out to open<br/>Read streams"]
-  Topic["publish on<br/>.requirement topic"]
+  Topic["publish on<br/>.entity topic"]
 
   RpcIn --> Provider
   TopIn --> Provider
@@ -315,7 +315,7 @@ class MissionAutonomyHandler final : public ma::MaactionRequestPortHandler {
     // start tracking the action; emit transitions later via the writer
     return ma::Ack{true};
   }
-  ma::Ack onUpdate(const ma::MAAction_Service_Requirement& r) override { /* ... */ }
+  ma::Ack onUpdate(const ma::MAAction_Service_Entity& r) override { /* ... */ }
   ma::Ack onCancel(const ma::Identifier& id) override { /* ... */ }
 };
 
@@ -348,7 +348,7 @@ carry it.)
 transition, regardless of realization:
 
 ```cpp
-ma::MAAction_Service_Requirement t{};
+ma::MAAction_Service_Entity t{};
 dm_common::Requirement req{};
 req.id = "action-1";                        // the correlation id
 // ... acceptance/progress state ...
@@ -358,7 +358,7 @@ provider.transitionWriter().send(t);
 
 - Under RPC it fans out to every open `Read` stream whose query matches the
   transition's id.
-- Under pub/sub it publishes on the `.requirement` topic.
+- Under pub/sub it publishes on the `.entity` topic.
 - In both modes it updates a **bounded per-id snapshot store** (latest
   transition per `Entity.id`, insertion-order evicted). The snapshot serves
   RPC `Read` initial state, is replayed to late-joining RPC `Read` streams,
@@ -366,12 +366,12 @@ provider.transitionWriter().send(t);
   arrives**, which is the documented late-join mitigation (idempotent
   re-publication, the cost A-GRA accepts).
 
-On the provider, the loaded route selects the **requirement leg's**
+On the provider, the loaded route selects the **entity leg's**
 realization. The request leg has nothing to configure: both the RPC service
 ports and the request-topic subscriber are always bound and listening, and
 which one actually delivers is the routing manifest's decision. An
 in-process test without endpoint routes can use
-`configureInteractionBinding()` as an explicit requirement-leg override.
+`configureInteractionBinding()` as an explicit entity-leg override.
 
 ---
 
@@ -449,7 +449,7 @@ floor:
 
 ```sh
 python3 contract_routing_manifest.py binding_manifest.json plugin.so out.pcl \
-    --realize request=rpc --realize requirement=pubsub
+    --realize request=rpc --realize entity=pubsub
 ```
 
 This helper is currently scoped to the routing validation harness: it emits
@@ -487,7 +487,7 @@ papers over the difference:
 | Topic | The honest rule |
 |---|---|
 | Acks | `SubmitResult` = accepted for transfer. `remoteAck()` populated under RPC only; pub/sub never fakes one; RPC never synthesizes acceptance transitions from acks. |
-| Acceptance | Authoritative acceptance (RECEIVED/REJECTED + reason) is a requirement transition, under both realizations. |
+| Acceptance | Authoritative acceptance (RECEIVED/REJECTED + reason) is a entity transition, under both realizations. |
 | Late join | Pub/sub subscribers see only future publications (VOLATILE). Mitigation: provider snapshot re-publication on command arrival. Durability/history replay is out of scope (deferred with DDS). |
 | `one_shot` | Best-effort under pub/sub: "what is observable now". |
 | Non-projectable commands | Exist in the RPC realization only; `submit()` on a pub/sub leg fails closed at the facade. |
@@ -525,7 +525,7 @@ MA_Action_Client_Bind (Container, Executor);
 
 --  Realization selection, same JSON contract as the C++ facade.
 MA_Action_Configure_Interaction_Binding
-  (Config_Json => "{""request_leg"":""rpc"",""requirement_leg"":""pubsub""}");
+  (Config_Json => "{""request_leg"":""rpc"",""entity_leg"":""pubsub""}");
 
 --  One Submit per command rpc. Result_Has_Ack is only ever True under
 --  the RPC realization -- no ack is synthesized under pub/sub.
@@ -537,7 +537,7 @@ MA_Action_Submit_Create
    Result_Ack      => Remote_Ack);
 
 --  Correlated transition stream.
-procedure On_Transition (Item : MAAction_Service_Requirement);
+procedure On_Transition (Item : MAAction_Service_Entity);
 MA_Action_Transitions
   (Filter   => Query,
    Callback => On_Transition'Access);
@@ -545,7 +545,7 @@ MA_Action_Transitions
 
 The provider side binds unary Create/Update/Cancel RPC ports, a streaming
 Read RPC port (real live push via `Pcl_Bindings.Invoke_Stream`/
-`Add_Stream_Service`, not a poll), and the pub/sub request/requirement probe
+`Add_Stream_Service`, not a poll), and the pub/sub request/entity probe
 ports from one call:
 
 ```ada
@@ -556,7 +556,7 @@ MA_Action_Provider_Bind (Container, Executor, Handlers => (
 
 --  D6: the provider's single way to emit a transition -- fans out to
 --  every open Read stream matching the transition's id, or publishes on
---  the requirement topic, per MA_Action_Configure_Interaction_Binding.
+--  the entity topic, per MA_Action_Configure_Interaction_Binding.
 MA_Action_Send_Transition (Frame);
 ```
 
