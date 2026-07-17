@@ -16,11 +16,11 @@ properties of the code.
 > 16-CPU host, and defects **D2, D3, D4, D5** (and the socket half of **D7**)
 > have since been fixed and re-tested.  See
 > [Fixes applied and retest](#fixes-applied-and-retest) at the end of this
-> document for the before/after numbers. **D1** and **D6** were subsequently
-> implemented, and a UDP receive counter was added for the remaining half of
-> **D7**; see the [D1 / D6 retest](#d1--d6-retest).  The remaining global
-> shared-memory bus lock (the rest of **D2**) is still open and is annotated
-> below.
+> document for the before/after numbers. **D1**, **D6**, and **D7** were
+> subsequently implemented in full (D7 now counts both received datagrams and
+> per-source sequence gaps); see the [D1 / D6 retest](#d1--d6-retest).  The
+> only remaining open item is the single global shared-memory bus lock (the
+> rest of **D2**), which is annotated below with why it was not changed.
 
 ## Headline: maximum shared-memory plugin throughput
 
@@ -258,13 +258,15 @@ the transport to observe it; only the harness's sequence-gap tracking made
 it visible.  Deployments have no way to distinguish "quiet topic" from
 "drowning topic".
 
-> **Fixed (counter).** The UDP transport now exposes
+> **Fixed.** The UDP transport exposes
 > `pcl_udp_transport_received_datagrams()`. It counts every datagram received
 > from the socket, including malformed datagrams that the decoder rejects, so
 > a deployment can distinguish a quiet socket from inbound traffic that is
-> being discarded. UDP remains BEST_EFFORT. Per-source sequence-gap counting
-> remains a possible future wire-format extension, but is not required for
-> receive-side activity accounting.
+> being discarded. Each PUBLISH frame also carries a monotonically increasing
+> sequence number. The receiver tracks the last sequence for each source
+> address and port, counts only forward gaps, and exposes the total through
+> `pcl_udp_transport_dropped_datagrams()`. UDP remains BEST_EFFORT; reordered
+> and stale datagrams do not inflate the loss count.
 
 ## What held up well
 
@@ -321,10 +323,19 @@ The following work remains after the D1/D6/D7 updates above.
 
 1. **D2 (remainder)** — the single global bus lock still serialises every
    publish and service frame.  The service-table-sync contention was removed;
-   per-slot locks were not attempted because they would need a safe
-   multi-mailbox transaction/rollback protocol to retain exact fan-out
-   delivery. The global lock remains the correctness-preserving design in
-   this pass.
+   a per-slot lock change was assessed but not shipped. Correct detach/reuse
+   would require a target-slot reservation protocol: without it, a publisher
+   can select a slot, release the registry lock, and race teardown destroying
+   or reusing that slot's process-shared lock. Holding the registry lock while
+   locking all targets would retain the same serialisation. The global lock
+   remains the correctness-preserving design in this pass.
+
+The subsequent three-second shared-memory retest therefore establishes a
+correctness baseline, not a D2 throughput improvement: 64 B throughput was
+210,282 msg/s; 7-way fan-out was 500,875 msg/s aggregate (71,554 per
+subscriber); and one/two/four independent pairs delivered 209,758, 89,744,
+and 19,732 msg/s per pair. Every published frame was received by its intended
+subscriber and every shared-memory gap count was zero.
 
 ## D1 / D6 retest
 

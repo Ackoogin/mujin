@@ -42,6 +42,7 @@
 // -- Wire protocol constants ----------------------------------------------
 
 #define PCL_UDP_MSG_PUBLISH 0
+#define PCL_UDP_MAX_SOURCES 16u
 /* Conservative single-datagram payload cap.  Below the standard 1500-byte
    Ethernet MTU minus IP/UDP headers so fragmentation is rare on LAN links. */
 #define PCL_UDP_MAX_PAYLOAD 1400
@@ -53,6 +54,13 @@ typedef struct pcl_udp_outbound_frame_t {
   uint32_t                         size;
   struct pcl_udp_outbound_frame_t* next;
 } pcl_udp_outbound_frame_t;
+
+typedef struct {
+  uint32_t address;
+  uint32_t last_sequence;
+  uint16_t port;
+  int      in_use;
+} pcl_udp_source_state_t;
 
 struct pcl_udp_transport_t {
   pcl_executor_t* executor;
@@ -68,6 +76,9 @@ struct pcl_udp_transport_t {
   volatile int     recv_running;
   volatile int     send_stop;
   volatile uint64_t received_datagrams;
+  volatile uint64_t dropped_datagrams;
+  uint32_t         next_sequence;
+  pcl_udp_source_state_t sources[PCL_UDP_MAX_SOURCES];
 
 #ifdef _WIN32
   HANDLE           recv_thread;
@@ -106,6 +117,41 @@ static void udp_write_u32_be(uint8_t* p, uint32_t v) {
   p[1] = (uint8_t)(v >> 16);
   p[2] = (uint8_t)(v >> 8);
   p[3] = (uint8_t)(v & 0xFF);
+}
+
+static void udp_record_sequence(struct pcl_udp_transport_t* ctx,
+                                const struct sockaddr_in*  source,
+                                uint32_t                   sequence) {
+  pcl_udp_source_state_t* state = NULL;
+  uint32_t i;
+
+  if (!ctx || !source) return;
+  for (i = 0u; i < PCL_UDP_MAX_SOURCES; ++i) {
+    if (ctx->sources[i].in_use &&
+        ctx->sources[i].address == source->sin_addr.s_addr &&
+        ctx->sources[i].port == source->sin_port) {
+      state = &ctx->sources[i];
+      break;
+    }
+    if (!state && !ctx->sources[i].in_use) state = &ctx->sources[i];
+  }
+  if (!state) return;
+  if (!state->in_use) {
+    state->address = source->sin_addr.s_addr;
+    state->port = source->sin_port;
+    state->last_sequence = sequence;
+    state->in_use = 1;
+    return;
+  }
+  {
+    uint32_t delta = sequence - state->last_sequence;
+    /* Only forward movement less than half the sequence space is newer. This
+       tolerates reordering and handles the uint32_t wrap naturally. */
+    if (delta > 0u && delta < 0x80000000u) {
+      if (delta > 1u) ctx->dropped_datagrams += (uint64_t)(delta - 1u);
+      state->last_sequence = sequence;
+    }
+  }
 }
 
 static void udp_free_outbound_frame(pcl_udp_outbound_frame_t* frame) {
@@ -286,7 +332,7 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
                                 const pcl_msg_t* msg) {
   struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)adapter_ctx;
   uint16_t topic_len, type_len;
-  uint32_t data_len, payload_size;
+  uint32_t data_len, payload_size, sequence;
   uint8_t* buf;
   size_t   off;
   pcl_status_t rc;
@@ -300,7 +346,8 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
   topic_len    = (uint16_t)strlen(topic);
   type_len     = (uint16_t)(msg->type_name ? strlen(msg->type_name) : 0);
   data_len     = msg->size;
-  payload_size = 1u + 2u + topic_len + 2u + type_len + 4u + data_len;
+  sequence = ctx->next_sequence++;
+  payload_size = 1u + 4u + 2u + topic_len + 2u + type_len + 4u + data_len;
 
   if (payload_size > PCL_UDP_MAX_PAYLOAD) return PCL_ERR_NOMEM;
 
@@ -309,6 +356,7 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
 
   off = 0;
   buf[off++] = PCL_UDP_MSG_PUBLISH;
+  udp_write_u32_be(buf + off, sequence);                off += 4;
   udp_write_u16_be(buf + off, topic_len);               off += 2;
   memcpy(buf + off, topic, topic_len);                  off += topic_len;
   udp_write_u16_be(buf + off, type_len);                off += 2;
@@ -359,9 +407,15 @@ static void* udp_recv_thread_main(void* arg)
 
   while (!ctx->recv_stop) {
 #ifdef _WIN32
-    int n = recvfrom(ctx->sock, (char*)buf, (int)sizeof(buf), 0, NULL, NULL);
+    struct sockaddr_in source;
+    int source_len = (int)sizeof(source);
+    int n = recvfrom(ctx->sock, (char*)buf, (int)sizeof(buf), 0,
+                     (struct sockaddr*)&source, &source_len);
 #else
-    ssize_t n = recvfrom(ctx->sock, buf, sizeof(buf), 0, NULL, NULL);
+    struct sockaddr_in source;
+    socklen_t source_len = (socklen_t)sizeof(source);
+    ssize_t n = recvfrom(ctx->sock, buf, sizeof(buf), 0,
+                         (struct sockaddr*)&source, &source_len);
 #endif
     if (n <= 0) {
       if (ctx->recv_stop) break;
@@ -370,11 +424,12 @@ static void* udp_recv_thread_main(void* arg)
 
     ++ctx->received_datagrams;
 
-    if ((size_t)n < 1u + 2u + 2u + 4u) continue;
+    if ((size_t)n < 1u + 4u + 2u + 2u + 4u) continue;
     if (buf[0] != PCL_UDP_MSG_PUBLISH) continue;
 
     {
-      uint16_t topic_len = udp_read_u16_be(buf + 1);
+      uint32_t sequence = udp_read_u32_be(buf + 1);
+      uint16_t topic_len = udp_read_u16_be(buf + 5);
       uint16_t type_len;
       uint32_t data_len;
       char*    topic_s;
@@ -382,15 +437,15 @@ static void* udp_recv_thread_main(void* arg)
       size_t   payload_len = (size_t)n;
       pcl_msg_t msg;
 
-      if (1u + 2u + topic_len + 2u + 4u > payload_len) continue;
+      if (1u + 4u + 2u + topic_len + 2u + 4u > payload_len) continue;
 
       topic_s = (char*)pcl_alloc((size_t)topic_len + 1u);
       if (!topic_s) continue;
-      memcpy(topic_s, buf + 3, topic_len);
+      memcpy(topic_s, buf + 7, topic_len);
       topic_s[topic_len] = '\0';
 
-      type_len = udp_read_u16_be(buf + 3 + topic_len);
-      if (1u + 2u + topic_len + 2u + type_len + 4u > payload_len) {
+      type_len = udp_read_u16_be(buf + 7 + topic_len);
+      if (1u + 4u + 2u + topic_len + 2u + type_len + 4u > payload_len) {
         pcl_free(topic_s);
         continue;
       }
@@ -398,20 +453,22 @@ static void* udp_recv_thread_main(void* arg)
       if (type_len > 0u) {
         type_s = (char*)pcl_alloc((size_t)type_len + 1u);
         if (!type_s) { pcl_free(topic_s); continue; }
-        memcpy(type_s, buf + 5 + topic_len, type_len);
+        memcpy(type_s, buf + 9 + topic_len, type_len);
         type_s[type_len] = '\0';
       }
 
-      data_len = udp_read_u32_be(buf + 5 + topic_len + type_len);
-      if (1u + 2u + topic_len + 2u + type_len + 4u + data_len > payload_len) {
+      data_len = udp_read_u32_be(buf + 9 + topic_len + type_len);
+      if (1u + 4u + 2u + topic_len + 2u + type_len + 4u + data_len > payload_len) {
         pcl_free(topic_s); pcl_free(type_s);
         continue;
       }
 
       memset(&msg, 0, sizeof(msg));
-      msg.data      = (data_len > 0u) ? (buf + 9 + topic_len + type_len) : NULL;
+      msg.data      = (data_len > 0u) ? (buf + 13 + topic_len + type_len) : NULL;
       msg.size      = data_len;
       msg.type_name = type_s;
+
+      udp_record_sequence(ctx, &source, sequence);
 
       pcl_executor_post_remote_incoming(ctx->executor, ctx->peer_id, topic_s, &msg);
 
@@ -622,6 +679,13 @@ uint64_t pcl_udp_transport_received_datagrams(const pcl_udp_transport_t* ctx_opa
       (const struct pcl_udp_transport_t*)ctx_opaque;
   if (!ctx) return 0u;
   return ctx->received_datagrams;
+}
+
+uint64_t pcl_udp_transport_dropped_datagrams(const pcl_udp_transport_t* ctx_opaque) {
+  const struct pcl_udp_transport_t* ctx =
+      (const struct pcl_udp_transport_t*)ctx_opaque;
+  if (!ctx) return 0u;
+  return ctx->dropped_datagrams;
 }
 
 pcl_status_t pcl_udp_transport_set_peer_id(pcl_udp_transport_t* ctx_opaque,
