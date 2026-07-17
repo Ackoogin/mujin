@@ -1,6 +1,6 @@
 # PYRAMID — Consolidated TODO & Plan
 
-**Last consolidated: 2026-07-14.** This is the single tracker for remaining
+**Last consolidated: 2026-07-17.** This is the single tracker for remaining
 PCL/PYRAMID work. Completed workstreams have been folded into "Delivered"
 below; the executed plans, reviews, and status reports that used to carry
 their detail were removed in the 2026-07-10 doc review — their design
@@ -12,6 +12,7 @@ Live companion documents:
 
 | Document | Role |
 |----------|------|
+| [`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md) | **Live plan (2026-07-17, proposed):** coordinated breaking rename of the Request-port result/update role, wrapper, topic, manifest leg, and generated APIs from `Requirement` to `Entity`, while retaining legitimate domain requirements |
 | [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **Live plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
 | [`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md) | **Live plan:** XSD-to-proto profile ladder; Phase 3/P1 is live-proven, while Phase 4/P2 supplies the detailed background for WS-G below |
 | [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) | Current support boundary and evidence for UCI 2.5/AMS-GRA versus formal A-GRA |
@@ -64,10 +65,11 @@ see below for what's still open).
 
 | Order | Item | Size |
 |-------|------|------|
-| 1 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
-| 2 | F2(b) Tactical Objects example (rides on PIM migration plan) | S/M |
-| 3 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
-| 4 | G1 Formal A-GRA P2 OMS codec and CAL validation (requires the G1 prerequisites) | L |
+| 1 | G1 Formal A-GRA P2 OMS codec and CAL validation (in progress; reach a stable checkpoint before changing generated contracts) | L |
+| 2 | H1 Rename the port-grammar result/update role from `Requirement` to `Entity` | L |
+| 3 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
+| 4 | F2(b) Tactical Objects example (rides on PIM migration plan and follows H1) | S/M |
+| 5 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
 
 ---
 
@@ -427,6 +429,28 @@ Detailed conversion design and current P2 measurements remain in
 [`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md)
 Phase 4; the live support statement remains
 [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md).
+
+---
+
+## WS-H — Port-grammar terminology
+
+### H1. Rename the Request-port result/update role to `Entity`
+
+**Status: proposed, not yet scheduled (2026-07-17).**
+
+Rename the grammar wrapper `_Service_Requirement` to `_Service_Entity`, the
+derived `.requirement` topic to `.entity`, and the interaction/configuration
+leg `requirement_leg` to `entity_leg`. Regenerate all PIM, P1, P2, and P3
+contracts and the C++/Ada APIs together.
+
+This is a coordinated breaking contract change, not a global replacement of
+the English word "requirement". Domain types such as
+`ObjectEvidenceRequirement`, endpoint capability requirements, and formal
+HLR/LLR requirements remain.
+
+The full impact analysis, compatibility policy, phased implementation plan,
+validation matrix, and completion criteria are in
+[`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md).
 
 ---
 

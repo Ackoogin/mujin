@@ -8,6 +8,7 @@ were removed. What remains is:
 |---------------|----------------|
 | **Outstanding work** (the single tracker) | [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md) |
 | **High-level design & usage** (single user-guide entry, with diagrams) | [`subprojects/PYRAMID/doc/guides/pyramid_user_guide.md`](../../../subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) |
+| **Live plan** (proposed, not yet scheduled) | [`port_grammar_entity_rename_plan.md`](port_grammar_entity_rename_plan.md) — coordinated breaking rename of the Request-port result/update grammar role from `Requirement` to `Entity` |
 | **Live plan** (proposed, not yet scheduled) | [`pyramid_split_and_tobj_pim_migration_plan.md`](pyramid_split_and_tobj_pim_migration_plan.md) |
 | **Live plan** (in progress; Phases 0–4 and Phase 5 step 1 verified against real Sleet; Phase 6 superseded) | [`la_cal_integration_plan.md`](la_cal_integration_plan.md) — LA-CAL (`owp`) transport plugin + OMS JSON codec, rung 1 of the OMS CAL join |
 | **Live plan** (done 2026-07-12; supersedes the AME-facing scope of Phase 6 above) | [`kitty_hawk_pcl_consumer_plan.md`](kitty_hawk_pcl_consumer_plan.md) — PCL-only consumer proof against the full live Kitty Hawk stack |
