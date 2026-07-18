@@ -171,15 +171,18 @@ static int apos_wait_locked(const int* channels, int count, unsigned int ms) {
 #endif
 }
 
+/* Implements: REQ_PCL_107. */
 void setupAPOS(unsigned int uiProcessNo) {
   apos_init();
   g_process_id = uiProcessNo;
 }
 
+/* Implements: REQ_PCL_107. */
 void setupApos(unsigned int uiProcessNo) {
   setupAPOS(uiProcessNo);
 }
 
+/* Implements: REQ_PCL_109. */
 void setDelayFunction(DelayCallback pDelay) {
   apos_init();
   apos_lock();
@@ -187,6 +190,7 @@ void setDelayFunction(DelayCallback pDelay) {
   apos_unlock();
 }
 
+/* Implements: REQ_PCL_297. */
 void sendMessage(int            iLVC,
                  unsigned char* pucData,
                  int            iDataSize,
@@ -198,6 +202,7 @@ void sendMessage(int            iLVC,
   if (pStatus) *pStatus = (status == RS_SUCCESS) ? TM_SUCCESS : TM_ERROR;
 }
 
+/* Implements: REQ_PCL_109, REQ_PCL_444. */
 void sendMessageNonBlocking(int            iLVC,
                             unsigned char* pucData,
                             int            iDataSize,
@@ -257,6 +262,7 @@ void sendMessageNonBlocking(int            iLVC,
   if (pStatus) *pStatus = RS_SUCCESS;
 }
 
+/* Implements: REQ_PCL_297, REQ_PCL_324. */
 void receiveMessage(int            iLVC,
                     unsigned char* pucData,
                     int            iMaxSize,
@@ -298,6 +304,7 @@ void receiveMessage(int            iLVC,
   }
 }
 
+/* Implements: REQ_PCL_322, REQ_PCL_444. */
 void receiveMessageNonBlocking(int            iLVC,
                                unsigned char* pucData,
                                int            iMaxSize,
@@ -337,6 +344,7 @@ void receiveMessageNonBlocking(int            iLVC,
   if (pStatus) *pStatus = RS_SUCCESS;
 }
 
+/* Implements: REQ_PCL_218, REQ_PCL_222, REQ_PCL_323. */
 void waitOnMultiChannel(int*       piVCSetIn,
                         int        iMinVcNo,
                         int*       piVCSetOut,
@@ -363,6 +371,7 @@ void waitOnMultiChannel(int*       piVCSetIn,
   if (pStatus) *pStatus = TM_SUCCESS;
 }
 
+/* Implements: REQ_PCL_108. */
 void logEvent(char* pcLogEntry) {
   (void)pcLogEntry;
 }

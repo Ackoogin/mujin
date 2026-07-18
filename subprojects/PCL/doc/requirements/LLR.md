@@ -55,7 +55,7 @@ The container shall reject invalid transitions with `PCL_ERR_STATE` and remain i
 **Verification**: `test_pcl_lifecycle.cpp::ShutdownFromAnyState` shuts down from ACTIVE and verifies FINALIZED, then verifies shutdown from FINALIZED returns ERR_STATE.
 
 ### REQ_PCL_007 - Callback Failure Aborts Transition
-If a lifecycle callback returns non-OK, the transition shall be aborted and the container shall remain in its previous state.
+If a lifecycle callback returns non-OK, the transition shall abort, leaving the container in its previous state.
 
 **Traces**: PCL.004
 
@@ -101,7 +101,7 @@ If `on_activate` returns non-OK, the container shall remain CONFIGURED.
 ## 3. Parameters
 
 ### REQ_PCL_013 - String Parameter Round-Trip
-String parameters shall be stored and retrieved with exact fidelity. Missing keys shall return the caller-supplied default.
+String parameters shall be stored and retrieved with exact fidelity, or the caller-supplied default when the key is not found.
 
 **Traces**: PCL.012, PCL.014
 
@@ -225,7 +225,7 @@ A newly created container shall have a default tick rate of 100 Hz.
 **Verification**: `test_pcl_lifecycle.cpp::DefaultIs100Hz`.
 
 ### REQ_PCL_029 - Tick Rate Set And Get
-`pcl_container_set_tick_rate_hz()` shall update the rate and `pcl_container_get_tick_rate_hz()` shall return it.
+`pcl_container_set_tick_rate_hz()` shall update the tick rate returned by `pcl_container_get_tick_rate_hz()`.
 
 **Traces**: PCL.015
 
@@ -242,8 +242,15 @@ Zero and negative tick rates shall be rejected with `PCL_ERR_INVALID`.
 
 ## 7. Executor Core
 
-### REQ_PCL_031 - Executor Create And Destroy
-`pcl_executor_create()` shall return a non-NULL handle. `pcl_executor_destroy()` shall free resources.
+### REQ_PCL_031 - Executor Create Returns Valid Handle
+`pcl_executor_create()` shall return a non-NULL handle.
+
+**Traces**: PCL.018
+
+**Verification**: `test_pcl_executor.cpp::CreateDestroy`.
+
+### REQ_PCL_094 - Executor Destroy Frees Resources
+`pcl_executor_destroy()` shall free resources associated with the executor.
 
 **Traces**: PCL.018
 
@@ -377,11 +384,18 @@ Null executor or message arguments shall return `PCL_ERR_INVALID`.
 ## 9. Cross-Thread Ingress
 
 ### REQ_PCL_049 - External Thread Posts Copied Message
-`pcl_executor_post_incoming()` shall deep-copy the message so the producer may release buffers immediately. The callback shall execute on the executor thread.
+`pcl_executor_post_incoming()` shall deep-copy the message so the producer may release buffers immediately.
 
 **Traces**: PCL.025
 
-**Verification**: `test_pcl_executor.cpp::ExternalThreadPostsCopiedMessageToExecutorThread` overwrites the source buffer after posting and verifies the subscriber receives the original value, and that the callback runs on the executor thread.
+**Verification**: `test_pcl_executor.cpp::ExternalThreadPostsCopiedMessageToExecutorThread` overwrites the source buffer after posting and verifies the subscriber receives the original value.
+
+### REQ_PCL_095 - Posted Message Callback Runs On Executor Thread
+A message posted via `pcl_executor_post_incoming()` shall have its subscriber callback executed on the executor thread.
+
+**Traces**: PCL.026
+
+**Verification**: `test_pcl_executor.cpp::ExternalThreadPostsCopiedMessageToExecutorThread` verifies that the callback runs on the executor thread.
 
 ### REQ_PCL_050 - Post Incoming Bad Inputs
 `pcl_executor_post_incoming()` shall handle NULL executor, NULL topic, and NULL message gracefully.
@@ -476,7 +490,7 @@ Destroying an executor with queued response callbacks (including those with data
 ## 11. Transport Adapter
 
 ### REQ_PCL_062 - Set Transport And Clear
-`pcl_executor_set_transport()` shall accept a transport adapter. Passing NULL shall revert to direct dispatch.
+`pcl_executor_set_transport()` shall install the given transport adapter, or revert to direct intra-process dispatch when passed NULL.
 
 **Traces**: PCL.029
 
@@ -497,7 +511,7 @@ Destroying an executor with queued response callbacks (including those with data
 **Verification**: `test_pcl_robustness.cpp::InvokeAsyncRoutesViaTransport`.
 
 ### REQ_PCL_165 - Invoke Async Intra-Process Fallback
-`pcl_executor_invoke_async()` shall fall back to intra-process synchronous dispatch when no transport is set or when the transport's `invoke_async` is NULL. The service handler shall be invoked immediately and the callback fired before returning.
+`pcl_executor_invoke_async()` shall fall back to synchronous intra-process dispatch -- invoking the service handler and firing the callback before returning -- when no transport is set or the transport's `invoke_async` is NULL.
 
 **Traces**: PCL.085, PCL.022, PCL.088
 
@@ -595,8 +609,15 @@ The default handler shall include the container name when a container context is
 
 ## 13. Bridge
 
-### REQ_PCL_075 - Bridge Create And Destroy
-`pcl_bridge_create()` shall return a non-NULL handle with a valid internal container. `pcl_bridge_destroy()` shall free all bridge-owned resources.
+### REQ_PCL_075 - Bridge Create Returns Valid Handle
+`pcl_bridge_create()` shall return a non-NULL handle with a valid internal container.
+
+**Traces**: PCL.041
+
+**Verification**: `test_pcl_dining.cpp::CreateAndDestroy`; also `test_pcl_bridge.cpp::PclBridge.CreateDestroy` in isolation from the dining integration.
+
+### REQ_PCL_096 - Bridge Destroy Frees Resources
+`pcl_bridge_destroy()` shall free all bridge-owned resources.
 
 **Traces**: PCL.041
 
@@ -673,6 +694,8 @@ The `user_data` pointer supplied to `pcl_bridge_create()` shall be forwarded to 
 A graph of 5 philosopher containers, 5 bridges, and 1 monitor container shall execute without mutual exclusion violations and with all philosophers completing the required meals.
 
 **Traces**: PCL.018, PCL.042
+
+**Implementation**: test-only — an end-to-end integration property of the executor, container, and bridge working together; no single implementation unit carries it, so it is verified by the integration test alone.
 
 **Verification**: `test_pcl_dining.cpp::FivePhilosophersWithBridges` asserts no mutual exclusion violation and that each philosopher completes >= 3 meals.
 
@@ -762,6 +785,8 @@ All container API functions shall return appropriate error codes or safe default
 All executor API functions shall return appropriate error codes when passed NULL handles.
 
 **Traces**: PCL.045
+
+**Implementation**: test-only — a cross-cutting robustness property implemented by the argument guard at the top of every executor API function; tagging every function with this identifier would drown the per-function trace, so it is verified by the dedicated null-safety test instead.
 
 **Verification**: `test_pcl_executor.cpp::NullSafety`.
 
@@ -945,7 +970,7 @@ When the gateway receives a service request for which no handler is registered, 
 **Verification**: `test_pcl_socket_transport.cpp::ClientExSingleShotFailsFast`.
 
 ### REQ_PCL_191 - Client Extended Create Retries Connect With Backoff
-`pcl_socket_transport_create_client_ex()` shall retry the TCP connect with exponential backoff (starting at 100 ms, doubling up to a 2 s cap) until it succeeds, `max_retries` is exceeded, or `connect_timeout_ms` elapses. A server that starts after the client begins connecting shall be reachable within the deadline.
+`pcl_socket_transport_create_client_ex()` shall retry the TCP connect with exponential backoff (starting at 100 ms, doubling up to a 2 s cap) until it succeeds, `max_retries` is exceeded, or `connect_timeout_ms` elapses, so that a server which starts after the client begins connecting becomes reachable within the deadline.
 
 **Traces**: PCL.032, PCL.096
 
@@ -973,7 +998,7 @@ When `pcl_socket_client_opts_t::state_cb` is non-NULL, it shall be invoked with 
 **Verification**: `test_pcl_socket_transport.cpp::StateCallbackFiresOnInitialConnect`.
 
 ### REQ_PCL_195 - Client Auto-Reconnects After Server Restart
-When `pcl_socket_client_opts_t::auto_reconnect` is non-zero, the receive thread shall detect a dropped connection, fire the state callback with `DISCONNECTED`, then attempt to reconnect with the same backoff policy. A server restarted on the same port shall cause `get_state()` to return `CONNECTED` again without the caller re-creating the transport.
+When `pcl_socket_client_opts_t::auto_reconnect` is non-zero, the receive thread shall detect a dropped connection, fire the state callback with `DISCONNECTED`, then attempt to reconnect with the same backoff policy, so that `get_state()` reports `CONNECTED` again after a server restart on the same port without the caller re-creating the transport.
 
 **Traces**: PCL.031, PCL.032, PCL.096
 
@@ -987,23 +1012,37 @@ When `pcl_socket_client_opts_t::auto_reconnect` is non-zero, the receive thread 
 **Verification**: `test_pcl_socket_transport.cpp::ClientCreationAndDestroy` and `test_pcl_socket_transport.cpp::ClientExRetryConnectsToDelayedServer` exercise the getaddrinfo resolution path against `"127.0.0.1"`.
 
 ### REQ_PCL_197 - TCP Keepalive Enabled On Connected Sockets
-Every connected TCP socket (client-connect and server-accept) shall have `SO_KEEPALIVE` enabled. On Linux, `TCP_KEEPIDLE`, `TCP_KEEPINTVL`, and `TCP_KEEPCNT` shall be tuned so silent peer death is detected within approximately eight seconds.
+Every connected TCP socket (client-connect and server-accept) shall have `SO_KEEPALIVE` enabled and, on Linux, `TCP_KEEPIDLE`/`TCP_KEEPINTVL`/`TCP_KEEPCNT` tuned so that silent peer death is detected within approximately eight seconds.
 
 **Traces**: PCL.031, PCL.032, PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::AutoReconnectAfterServerRestart` depends on timely peer-death detection via the keepalive settings.
 
 ### REQ_PCL_198 - UDP Transport Creation
-`pcl_udp_transport_create(local_port, remote_host, remote_port, executor)` shall bind a UDP socket on `local_port` (0 = ephemeral), resolve `remote_host:remote_port`, spawn a receive thread, and expose a `pcl_transport_t` vtable with `publish`, `subscribe`, and `shutdown` populated. It shall return NULL for NULL `remote_host` or NULL `executor`.
+`pcl_udp_transport_create(local_port, remote_host, remote_port, executor)` shall bind a UDP socket on `local_port` (0 = ephemeral), resolve `remote_host:remote_port`, spawn a receive thread, and expose a `pcl_transport_t` vtable with `publish`, `subscribe`, and `shutdown` populated.
 
-**Traces**: PCL.097, PCL.045
+**Traces**: PCL.097
 
-**Verification**: `test_pcl_udp_transport.cpp::CreateAndDestroy`, `NullArgsReturnNull`, `DestroyNullIsNoOp`.
+**Verification**: `test_pcl_udp_transport.cpp::CreateAndDestroy`.
+
+### REQ_PCL_099 - UDP Transport Creation Null Argument Safety
+`pcl_udp_transport_create()` shall return NULL for a NULL `remote_host` or a NULL `executor`.
+
+**Traces**: PCL.045
+
+**Verification**: `test_pcl_udp_transport.cpp::NullArgsReturnNull`, `DestroyNullIsNoOp`.
 
 ### REQ_PCL_199 - UDP Transport Peer Identity Configurable
-`pcl_udp_transport_set_peer_id()` shall set the logical peer ID used when posting inbound datagrams to the executor. It shall reject NULL or empty peer IDs with `PCL_ERR_INVALID`.
+`pcl_udp_transport_set_peer_id()` shall set the logical peer ID used when posting inbound datagrams to the executor.
 
 **Traces**: PCL.097, PCL.092
+
+**Verification**: `test_pcl_udp_transport.cpp::SetPeerIdRoundTrip`.
+
+### REQ_PCL_100 - UDP Transport Set Peer ID Null Argument Safety
+`pcl_udp_transport_set_peer_id()` shall reject a NULL or empty peer ID with `PCL_ERR_INVALID`.
+
+**Traces**: PCL.092, PCL.045
 
 **Verification**: `test_pcl_udp_transport.cpp::SetPeerIdRoundTrip`.
 
@@ -1036,14 +1075,14 @@ The UDP transport's `pcl_transport_t` shall leave `invoke_async`, `respond`, `se
 **Verification**: `test_pcl_udp_transport.cpp::NoServiceRpcSupport`.
 
 ### REQ_PCL_204 - Non-Reconnecting Client Reports Disconnected After Peer Drop
-When a TCP client created with `auto_reconnect == 0` observes its peer closing the socket, `pcl_socket_transport_get_state()` shall transition to `PCL_SOCKET_STATE_DISCONNECTED` and the registered state callback shall fire with that value, regardless of whether the transport will attempt to re-establish the connection.
+When a TCP client created with `auto_reconnect == 0` observes its peer closing the socket, `pcl_socket_transport_get_state()` shall transition to `PCL_SOCKET_STATE_DISCONNECTED`, firing the registered state callback with that value regardless of whether the transport will attempt to re-establish the connection.
 
 **Traces**: PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::NonReconnectingClientReportsDisconnectedAfterServerClose`.
 
 ### REQ_PCL_205 - Connect Attempts Bounded By Connect Timeout Budget
-Each TCP connect attempt performed by `pcl_socket_transport_create_client_ex()` shall be bounded by the remaining `connect_timeout_ms` budget (or a 2-second slice when no total timeout is set), so a single SYN to a blackholed host cannot exceed the caller's deadline by more than one per-attempt slice. When the total budget is exhausted the function shall return NULL.
+Each TCP connect attempt performed by `pcl_socket_transport_create_client_ex()` shall be bounded by the remaining `connect_timeout_ms` budget (or a 2-second slice when no total timeout is set) and return NULL once that budget is exhausted, so a single SYN to a blackholed host cannot exceed the caller's deadline by more than one per-attempt slice.
 
 **Traces**: PCL.096
 
@@ -1096,35 +1135,35 @@ Virtual methods `on_configure`, `on_activate`, `on_deactivate`, `on_cleanup`, an
 **Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.AddServiceDuringConfigure`.
 
 ### REQ_PCL_137 - Component Parameter String Round-Trip
-`setParam(key, string)` followed by `paramStr(key)` shall return the stored string value; missing keys shall return the default.
+`setParam(key, string)` followed by `paramStr(key)` shall return the stored value, or the default when the key is missing.
 
 **Traces**: PCL.048
 
 **Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamStringRoundTrip`.
 
 ### REQ_PCL_138 - Component Parameter Double Round-Trip
-`setParam(key, double)` followed by `paramF64(key)` shall return the stored value; missing keys shall return the default.
+`setParam(key, double)` followed by `paramF64(key)` shall return the stored value, or the default when the key is missing.
 
 **Traces**: PCL.048
 
 **Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamDoubleRoundTrip`.
 
 ### REQ_PCL_139 - Component Parameter Int64 Round-Trip
-`setParam(key, int64_t)` followed by `paramI64(key)` shall return the stored value; missing keys shall return the default.
+`setParam(key, int64_t)` followed by `paramI64(key)` shall return the stored value, or the default when the key is missing.
 
 **Traces**: PCL.048
 
 **Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamInt64RoundTrip`.
 
 ### REQ_PCL_140 - Component Parameter Bool Round-Trip
-`setParam(key, bool)` followed by `paramBool(key)` shall return the stored value; missing keys shall return the default.
+`setParam(key, bool)` followed by `paramBool(key)` shall return the stored value, or the default when the key is missing.
 
 **Traces**: PCL.048
 
 **Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamBoolRoundTrip`.
 
 ### REQ_PCL_141 - Component Tick Rate Round-Trip
-`setTickRateHz()` followed by `tickRateHz()` shall return the stored rate; the default shall be 100 Hz.
+`setTickRateHz()` followed by `tickRateHz()` shall return the stored rate, defaulting to 100 Hz when never set.
 
 **Traces**: PCL.048
 
@@ -1205,7 +1244,7 @@ The `pcl::Executor` destructor shall call `pcl_executor_destroy()`, freeing all 
 **Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.ShutdownGracefulFinalizesComponents`.
 
 ### REQ_PCL_152 - Executor SetTransport Wires Adapter
-`setTransport()` shall wire a transport adapter to the executor; passing NULL shall clear it.
+`setTransport()` shall wire the given transport adapter to the executor, or clear it when passed NULL.
 
 **Traces**: PCL.049
 
@@ -1250,331 +1289,7 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 
 ## Traceability Summary
 
-| LLR | PCL (HLR) | Test File |
-|-----|-----------|-----------|
-| 001 | 001, 005 | test_pcl_lifecycle |
-| 002 | 045 | test_pcl_lifecycle |
-| 003 | 001 | test_pcl_lifecycle |
-| 004 | 002, 003 | test_pcl_lifecycle |
-| 005 | 002 | test_pcl_lifecycle |
-| 006 | 002 | test_pcl_lifecycle |
-| 007 | 004 | test_pcl_lifecycle |
-| 008 | 003 | test_pcl_lifecycle |
-| 009 | 004 | test_pcl_robustness |
-| 010 | 004 | test_pcl_robustness |
-| 011 | 004 | test_pcl_robustness |
-| 012 | 007 | test_pcl_robustness |
-| 013 | 012, 014 | test_pcl_lifecycle |
-| 014 | 012 | test_pcl_lifecycle |
-| 015 | 012 | test_pcl_lifecycle |
-| 016 | 013, 046 | test_pcl_robustness |
-| 017 | 014 | test_pcl_robustness |
-| 018 | 045 | test_pcl_robustness |
-| 019 | 007 | test_pcl_lifecycle |
-| 020 | 007 | test_pcl_lifecycle |
-| 021 | 008, 046 | test_pcl_robustness |
-| 022 | 045 | test_pcl_robustness |
-| 023 | 009 | test_pcl_robustness |
-| 024 | 009 | test_pcl_robustness |
-| 025 | 045 | test_pcl_robustness |
-| 026 | 009 | test_pcl_robustness |
-| 027 | 009, 022 | test_pcl_robustness |
-| 028 | 015 | test_pcl_lifecycle |
-| 029 | 015 | test_pcl_lifecycle |
-| 030 | 016 | test_pcl_lifecycle |
-| 031 | 018 | test_pcl_executor |
-| 032 | 018, 019 | test_pcl_executor |
-| 033 | 018 | test_pcl_executor |
-| 034 | 018 | test_pcl_executor |
-| 035 | 020 | test_pcl_executor |
-| 036 | 021 | test_pcl_executor |
-| 037 | 024, 046 | test_pcl_robustness |
-| 038 | 045 | test_pcl_robustness |
-| 039 | 024 | test_pcl_robustness |
-| 040 | 023 | test_pcl_robustness |
-| 041 | 021 | test_pcl_robustness |
-| 042 | 021 | test_pcl_robustness |
-| 043 | 017 | test_pcl_robustness |
-| 044 | 022, 010 | test_pcl_executor |
-| 045 | 022 | test_pcl_executor |
-| 046 | 045 | test_pcl_robustness |
-| 047 | 022 | test_pcl_robustness |
-| 048 | 028, 029 | test_pcl_robustness |
-| 049 | 025 | test_pcl_executor |
-| 050 | 025, 045 | test_pcl_robustness |
-| 051 | 025 | test_pcl_robustness |
-| 052 | 025, 046 | test_pcl_robustness |
-| 053 | 025 | test_pcl_robustness |
-| 054 | 025, 026 | test_pcl_robustness |
-| 055 | 020, 025 | test_pcl_robustness |
-| 056 | 025 | test_pcl_robustness |
-| 057 | 027 | test_pcl_robustness |
-| 058 | 027 | test_pcl_robustness |
-| 059 | 027 | test_pcl_robustness |
-| 060 | 027, 045 | test_pcl_robustness |
-| 061 | 027, 046 | test_pcl_robustness |
-| 062 | 029 | test_pcl_robustness |
-| 063 | 029, 045 | test_pcl_robustness |
-| 064 | 037, 038 | test_pcl_log |
-| 065 | 037 | test_pcl_log |
-| 066 | 039 | test_pcl_log |
-| 067 | 037 | test_pcl_log |
-| 068 | 038 | test_pcl_log |
-| 069 | 040 | test_pcl_robustness |
-| 070 | 039 | test_pcl_robustness |
-| 071 | 037 | test_pcl_robustness |
-| 072 | 038 | test_pcl_robustness |
-| 073 | 037 | test_pcl_robustness |
-| 074 | 037 | test_pcl_robustness |
-| 075 | 041 | test_pcl_dining |
-| 076 | 044 | test_pcl_dining |
-| 077 | 044 | test_pcl_dining |
-| 078 | 044 | test_pcl_dining |
-| 079 | 042 | test_pcl_dining |
-| 080 | 043 | test_pcl_dining |
-| 081 | 041 | test_pcl_dining |
-| 082 | 041, 046 | test_pcl_dining |
-| 083 | 041 | test_pcl_dining |
-| 084 | 018, 042 | test_pcl_dining |
-| 085 | 046 | test_pcl_oom |
-| 086 | 046 | test_pcl_oom |
-| 087 | 046 | test_pcl_oom |
-| 088 | 046 | test_pcl_oom |
-| 089 | 046 | test_pcl_oom |
-| 090 | 046 | test_pcl_oom |
-| 091 | 018 | test_pcl_robustness |
-| 092 | 015 | test_pcl_robustness |
-| 093 | 018 | test_pcl_robustness |
-| 111 | 045 | test_pcl_lifecycle |
-| 112 | 045 | test_pcl_executor |
-| 113 | 045 | test_pcl_robustness |
-| 114 | 005, 045 | test_pcl_robustness |
-| 115 | 031 | test_pcl_socket_transport |
-| 116 | 031, 045 | test_pcl_socket_transport |
-| 117 | 032 | test_pcl_socket_transport |
-| 118 | 032, 045 | test_pcl_socket_transport |
-| 119 | 032 | test_pcl_socket_transport |
-| 120 | 033 | test_pcl_socket_transport |
-| 121 | 033 | test_pcl_socket_transport |
-| 122 | 034 | test_pcl_socket_transport |
-| 123 | 034, 045 | test_pcl_socket_transport |
-| 124 | 034 | test_pcl_socket_transport |
-| 125 | 035 | test_pcl_socket_transport |
-| 126 | 036 | test_pcl_socket_transport |
-| 127 | 036, 045 | test_pcl_socket_transport |
-| 128 | 036 | test_pcl_socket_transport |
-| 129 | 045 | test_pcl_socket_transport |
-| 130 | 045 | test_pcl_socket_transport |
-| 131 | 048 | test_pcl_cpp_wrappers |
-| 132 | 048 | test_pcl_cpp_wrappers |
-| 133 | 048 | test_pcl_cpp_wrappers |
-| 134 | 048 | test_pcl_cpp_wrappers |
-| 135 | 048 | test_pcl_cpp_wrappers |
-| 136 | 048 | test_pcl_cpp_wrappers |
-| 137 | 048 | test_pcl_cpp_wrappers |
-| 138 | 048 | test_pcl_cpp_wrappers |
-| 139 | 048 | test_pcl_cpp_wrappers |
-| 140 | 048 | test_pcl_cpp_wrappers |
-| 141 | 048 | test_pcl_cpp_wrappers |
-| 142 | 048 | test_pcl_cpp_wrappers |
-| 143 | 048 | test_pcl_cpp_wrappers |
-| 144 | 048 | test_pcl_cpp_wrappers |
-| 145 | 049 | test_pcl_cpp_wrappers |
-| 146 | 049 | test_pcl_cpp_wrappers |
-| 147 | 049 | test_pcl_cpp_wrappers |
-| 148 | 049 | test_pcl_cpp_wrappers |
-| 149 | 049 | test_pcl_cpp_wrappers |
-| 150 | 049 | test_pcl_cpp_wrappers |
-| 151 | 049 | test_pcl_cpp_wrappers |
-| 152 | 049 | test_pcl_cpp_wrappers |
-| 153 | 049 | test_pcl_cpp_wrappers |
-| 154 | 049 | test_pcl_cpp_wrappers |
-| 155 | 049 | test_pcl_cpp_wrappers |
-| 156 | 049 | test_pcl_cpp_wrappers |
-| 157 | 048, 049 | test_pcl_cpp_wrappers |
-| 158 | 031 | test_pcl_socket_transport |
-| 159 | 031 | test_pcl_socket_transport |
-| 160 | 036 | test_pcl_socket_transport |
-| 161 | 035 | test_pcl_socket_transport |
-| 162 | 036 | test_pcl_socket_transport |
-| 163 | 034, 036 | test_pcl_socket_transport |
-| 164 | 030a | test_pcl_robustness |
-| 165 | 030a, 045 | test_pcl_robustness |
-| 166 | 030a, 045 | test_pcl_robustness |
-| 173 | 030b, 030d | test_pcl_executor |
-| 174 | 030b, 030c | test_pcl_executor |
-| 175 | 030b, 030c | test_pcl_executor |
-| 176 | 033, 036a | test_pcl_socket_transport |
-| 177 | 034, 036, 036a | test_pcl_socket_transport |
-| 178 | 030c | test_pcl_executor |
-| 179 | 036a, 056 | test_pcl_socket_transport |
-| 186 | 036b, 036c | test_pcl_shared_memory_transport |
-| 187 | 036b, 036c | test_pcl_shared_memory_transport |
-| 188 | 036b, 036d | test_pcl_shared_memory_transport |
-| 189 | 036d, 045 | test_pcl_shared_memory_transport |
-| 211 | 036c, 036g | test_pcl_shared_memory_transport |
-| 212 | 036g, 045 | test_pcl_shared_memory_transport |
-| 167 | 011c | test_pcl_streaming |
-| 168 | 011c | test_pcl_streaming |
-| 169 | 011c | test_pcl_streaming |
-| 170 | 011c, 045 | test_pcl_streaming |
-| 171 | 011c | test_pcl_streaming |
-| 172 | 011c | test_pcl_streaming |
-| 213 | 074 | test_pcl_alloc |
-| 214 | 074 | test_pcl_alloc |
-| 215 | 074 | test_pcl_alloc |
-| 216 | 074, 045 | test_pcl_alloc |
-| 217 | 048 | test_pcl_cpp_wrappers |
-| 275 | 070 | test_pcl_transport_routing |
-| 286 | 071 | test_pcl_template_transport |
-| 288 | 071 | test_pcl_template_transport |
-| 290 | 071 | test_pcl_template_transport |
-| 292 | 071 | test_pcl_template_transport |
-| 293 | 071 | test_pcl_template_transport |
-| 294 | 071 | test_pcl_template_transport |
-| 295 | 071 | test_pcl_template_transport |
-| 297 | 073 | test_pcl_apos_transport |
-| 298 | 073, 045 | test_pcl_apos_transport |
-| 300 | 073 | test_pcl_apos_transport |
-| 301 | 036f | test_pcl_udp_transport |
-| 302 | 036f, 045 | test_pcl_udp_transport |
-| 303 | 036f | test_pcl_udp_transport |
-| 304 | 036f | test_pcl_udp_transport |
-| 305 | 036b | test_pcl_shared_memory_transport |
-| 306 | 030d, 036b | test_pcl_shared_memory_transport |
-| 307 | 036b | test_pcl_shared_memory_transport |
-| 308 | 036d | test_pcl_shared_memory_transport |
-| 309 | 036d, 046 | test_pcl_shared_memory_transport |
-| 310 | 036b, 046 | test_pcl_shared_memory_transport |
-| 311 | 030d, 011c | test_pcl_shared_memory_transport |
-| 312 | 011c | test_pcl_shared_memory_transport |
-| 313 | 036b | test_pcl_shared_memory_transport |
-| 314 | 030d, 036b | test_pcl_shared_memory_transport |
-| 315 | 036b | test_pcl_shared_memory_transport |
-| 316 | 036b | test_pcl_shared_memory_transport |
-| 317 | 069, 045 | test_pcl_transport_routing |
-| 318 | 070, 046 | test_pcl_transport_routing |
-| 319 | 070, 046 | test_pcl_transport_routing |
-| 320 | 071 | test_pcl_template_transport |
-| 321 | 071 | test_pcl_template_transport |
-| 322 | 073 | test_pcl_apos_transport |
-| 323 | 073 | test_pcl_apos_transport |
-| 324 | 073 | test_pcl_apos_transport |
-| 325 | 073 | test_pcl_apos_transport |
-| 326 | 036b | test_pcl_shared_memory_transport |
-| 327 | 030d, 036b | test_pcl_shared_memory_transport |
-| 328 | 041 | test_pcl_bridge |
-| 337 | 059 | test_pcl_codec_registry |
-| 338 | 059 | test_pcl_codec_registry |
-| 339 | 059 | test_pcl_codec_registry |
-| 340 | 059, 045 | test_pcl_codec_registry |
-| 341 | 059 | test_pcl_codec_registry |
-| 342 | 059 | test_pcl_codec_registry |
-| 343 | 059 | test_pcl_codec_registry |
-| 344 | 059 | test_pcl_codec_registry |
-| 345 | 059 | test_pcl_codec_registry |
-| 346 | 058 | test_pcl_codec_registry |
-| 347 | 060, 045 | test_pcl_capabilities |
-| 348 | 060 | test_pcl_capabilities |
-| 349 | 060 | test_pcl_capabilities |
-| 350 | 060 | test_pcl_capabilities |
-| 351 | 060 | test_pcl_capabilities |
-| 352 | 060 | test_pcl_capabilities |
-| 353 | 065, 045 | test_pcl_capabilities |
-| 354 | 060, 064 | test_pcl_capabilities |
-| 355 | 060, 064 | test_pcl_capabilities |
-| 356 | 068 | test_pcl_capabilities |
-| 357 | 068 | test_pcl_capabilities |
-| 358 | 068 | test_pcl_capabilities |
-| 359 | 068, 062 | test_pcl_capabilities |
-| 360 | 068, 062 | test_pcl_capabilities |
-| 361 | 068, 062 | test_pcl_capabilities |
-| 362 | 065, 045 | test_pcl_capabilities |
-| 363 | 061 | test_pcl_capabilities |
-| 364 | 060 | test_pcl_capabilities |
-| 365 | 063 | test_pcl_capabilities |
-| 366 | 063 | test_pcl_capabilities |
-| 367 | 063 | test_pcl_capabilities |
-| 368 | 063 | test_pcl_capabilities |
-| 369 | 063 | test_pcl_capabilities |
-| 370 | 062 | test_pcl_capabilities |
-| 371 | 063, 062 | test_pcl_capabilities |
-| 372 | 063, 062 | test_pcl_capabilities |
-| 373 | 063, 062 | test_pcl_capabilities |
-| 374 | 063, 062 | test_pcl_capabilities |
-| 375 | 061 | test_pcl_capabilities |
-| 376 | 062 | test_pcl_capabilities |
-| 377 | 062, 045 | test_pcl_capabilities |
-| 378 | 062, 045 | test_pcl_capabilities |
-| 379 | 063 | test_pcl_capabilities |
-| 380 | 063 | test_pcl_capabilities |
-| 381 | 067, 045 | test_pcl_plugin_loader |
-| 382 | 067 | test_pcl_plugin_loader |
-| 383 | 064 | test_pcl_plugin_loader |
-| 384 | 064, 029 | test_pcl_plugin_loader |
-| 385 | 066, 059 | test_pcl_plugin_loader |
-| 386 | 065 | test_pcl_plugin_loader |
-| 387 | 068 | test_pcl_plugin_loader |
-| 388 | 068, 045 | test_pcl_plugin_loader |
-| 389 | 068 | test_pcl_plugin_loader |
-| 390 | 068, 045 | test_pcl_plugin_loader |
-| 391 | 066 | test_pcl_plugin_loader |
-| 392 | 066 | test_pcl_plugin_loader |
-| 393 | 065 | test_pcl_plugin_loader |
-| 394 | 065 | test_pcl_plugin_loader |
-| 395 | 065, 059 | test_pcl_plugin_loader |
-| 396 | 065 | test_pcl_plugin_loader |
-| 397 | 065, 064 | test_pcl_plugin_loader |
-| 398 | 065 | test_pcl_plugin_loader |
-| 399 | 066, 045 | test_pcl_plugin_loader |
-| 400 | 066 | test_pcl_plugin_loader |
-| 401 | 066, 045 | test_pcl_plugin_loader |
-| 402 | 065 | test_pcl_plugin_loader |
-| 403 | 068, 067 | test_pcl_plugin_loader |
-| 404 | 068, 045 | test_pcl_plugin_loader |
-| 405 | 066 | test_pcl_plugin_loader |
-| 406 | 068, 045 | test_pcl_plugin_loader |
-| 407 | 067, 068 | test_pcl_plugin_loader |
-| 408 | 068, 045 | test_pcl_plugin_loader |
-| 409 | 034, 046 | test_pcl_socket_faults |
-| 410 | 036, 046 | test_pcl_socket_faults |
-| 411 | 036, 046 | test_pcl_socket_faults |
-| 412 | 033 | test_pcl_socket_faults |
-| 413 | 033, 046 | test_pcl_socket_faults |
-| 414 | 036e | test_pcl_socket_faults |
-| 415 | 036e | test_pcl_socket_faults |
-| 416 | 069, 070 | test_pcl_transport_routing |
-| 417 | 069 | test_pcl_transport_routing |
-| 418 | 069 | test_pcl_transport_routing |
-| 419 | 069 | test_pcl_transport_routing |
-| 420 | 070, 063 | test_pcl_transport_routing |
-| 421 | 070 | test_pcl_transport_routing |
-| 422 | 070 | test_pcl_transport_routing |
-| 423 | 070 | test_pcl_transport_routing |
-| 424 | 070 | test_pcl_transport_routing |
-| 425 | 069, 070 | test_pcl_transport_routing |
-| 426 | 070, 062 | test_pcl_transport_routing |
-| 427 | 070 | test_pcl_transport_routing |
-| 428 | 070 | test_pcl_transport_routing |
-| 429 | 071, 045 | test_pcl_template_transport |
-| 430 | 071 | test_pcl_template_transport |
-| 431 | 071, 045 | test_pcl_template_transport |
-| 432 | 071, 045 | test_pcl_template_transport |
-| 433 | 072 | test_pcl_template_transport |
-| 434 | 071 | test_pcl_template_transport |
-| 435 | 071 | test_pcl_template_transport |
-| 436 | 071 | test_pcl_template_transport |
-| 437 | 071 | test_pcl_template_transport |
-| 438 | 071, 030d | test_pcl_template_transport |
-| 439 | 071 | test_pcl_template_transport |
-| 440 | 071 | test_pcl_template_transport |
-| 441 | 072 | test_pcl_template_transport |
-| 442 | 072 | test_pcl_template_transport |
-| 443 | 072 | test_pcl_template_transport |
-| 444 | 073 | test_pcl_apos_transport |
-| 445 | 073, 072 | test_pcl_apos_transport |
-| 446 | 073, 072 | test_pcl_apos_transport |
-| 447 | 073, 072 | test_pcl_apos_transport |
+See the generated report `doc/reports/PCL/HLR_COVERAGE.md` for the full test-to-LLR-to-HLR trace matrix. Regenerate it with `python3 subprojects/PCL/scripts/gen_hlr_coverage.py` after any requirements change; do not hand-maintain a copy of it in this file.
 
 ---
 
@@ -1629,6 +1344,13 @@ The socket transport gateway shall dispatch inbound service requests through rem
 
 **Verification**: `test_pcl_socket_transport.cpp::PublishServerToClientDelivered`, `test_pcl_socket_transport.cpp::PublishClientToServerDelivered`, `test_pcl_socket_transport.cpp::AsyncRemoteServiceRoundTrip`.
 
+### REQ_PCL_235 - Port Route Configuration Argument Validation
+`pcl_port_set_route()` shall reject a NULL port, an invalid route mode, a remote route with zero peers, an oversized peer count, or a NULL peer entry with `PCL_ERR_INVALID`.
+
+**Traces**: PCL.089, PCL.045
+
+**Verification**: `test_pcl_robustness.cpp::PclRobustness.RouteAndStreamDefinitionsRejectInvalidInputs`.
+
 ---
 
 ## 19. Shared Memory Transport
@@ -1654,40 +1376,75 @@ The shared-memory transport shall route an async remote service request across p
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessAsyncServiceRoundTrip`.
 
-### REQ_PCL_189 - Shared Memory Invoke Async Without Provider Returns Not Found
-`pcl_executor_invoke_async()` shall return `PCL_ERR_NOT_FOUND` when the shared-memory bus does not advertise any provider for the requested remote service.
+### REQ_PCL_189 - Shared Memory Invoke Async Without Provider Completes Empty
+When the shared-memory bus does not advertise any provider for a requested remote service, the transport shall complete the call by delivering a terminal empty response to the caller's callback on the caller's executor thread, returning promptly from the invoking call instead of blocking it on provider discovery.
 
 **Traces**: PCL.095, PCL.045
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InvokeAsyncReturnsNotFoundWithoutProvider`.
 
 ### REQ_PCL_211 - Shared Memory Publish Fan-Out Is Atomic
-When a shared-memory publish targets multiple participants, the transport shall pre-check capacity in every target mailbox while holding the bus lock. If any target mailbox is full, the publish shall return an error and shall not enqueue that frame to any target mailbox.
+When a shared-memory publish targets multiple participants, the transport shall pre-check capacity in every target mailbox while holding the bus lock, returning an error and enqueuing the frame to no target mailbox when any target is full.
 
 **Traces**: PCL.094, PCL.098
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PublishFanoutIsAtomicWhenAnyMailboxIsFull`.
 
-### REQ_PCL_212 - Shared Memory Topic Backpressure Waits For Capacity
-`pcl_shared_memory_transport_set_topic_backpressure()` shall configure a per-topic bounded wait policy. Publishes on configured topics shall wait for all target mailboxes to have capacity until the timeout expires, while topics without a policy shall remain on the generic non-blocking output path. The API shall reject NULL transport handles or NULL/empty topic names.
+### REQ_PCL_212 - Shared Memory Topic Backpressure Queues On Egress Worker
+`pcl_shared_memory_transport_set_topic_backpressure()` shall configure a per-topic bounded wait policy whose publishes enqueue promptly on the egress worker instead of reporting delivery synchronously.
 
-**Traces**: PCL.103, PCL.045
+**Traces**: PCL.103
 
-**Verification**: `test_pcl_shared_memory_transport.cpp::TopicBackpressureWaitsForMailboxCapacity`.
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.TopicBackpressureQueuesOnEgressWorker`.
+
+### REQ_PCL_101 - Shared Memory Topic Backpressure Policy Lifecycle
+`pcl_shared_memory_transport_set_topic_backpressure()` shall allow an existing policy to be updated in place or cleared with a zero timeout, rejecting a policy-table overflow with `PCL_ERR_NOMEM`.
+
+**Traces**: PCL.103
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.TopicBackpressureConfigLifecycle`.
+
+### REQ_PCL_102 - Cleared Backpressure Restores Fail-Fast Publish
+Clearing a topic's backpressure policy shall restore that topic to the normal non-blocking, fail-fast publish path.
+
+**Traces**: PCL.103
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ClearedBackpressureRestoresFailFastPublish`.
+
+### REQ_PCL_103 - Shared Memory Topic Backpressure Argument Validation
+`pcl_shared_memory_transport_set_topic_backpressure()` shall reject a NULL transport handle, a NULL or empty topic name, or an over-long topic name with `PCL_ERR_INVALID`.
+
+**Traces**: PCL.045
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.TopicBackpressureRejectsOverlongTopic`.
 
 ---
 
 ## 20. Streaming Services
 
-### REQ_PCL_167 - Streaming Service Send and End
-`pcl_stream_send()` shall deliver messages to the client callback with `end=false`. `pcl_stream_end()` shall deliver a final callback with `end=true` and `status=PCL_OK`.
+### REQ_PCL_167 - Stream Send Delivers Non-Final Callback
+`pcl_stream_send()` shall deliver a message to the client callback with `end=false`.
+
+**Traces**: PCL.087
+
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.BasicStreamingSendEnd`, `PclStreaming.TransportStreamSendEnd`, `PclStreaming.TransportInvokeStream`.
+
+### REQ_PCL_097 - Stream End Delivers Final Callback
+`pcl_stream_end()` shall deliver a final callback to the client with `end=true` and `status=PCL_OK`.
 
 **Traces**: PCL.087
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.BasicStreamingSendEnd`, `PclStreaming.TransportStreamSendEnd`, `PclStreaming.TransportInvokeStream`.
 
 ### REQ_PCL_168 - Client Stream Cancellation
-`pcl_stream_cancel()` shall set the cancelled flag. `pcl_stream_is_cancelled()` shall return true after cancellation. `pcl_stream_send()` shall return `PCL_ERR_CANCELLED` when cancelled.
+`pcl_stream_cancel()` shall set the cancelled flag such that a subsequent `pcl_stream_is_cancelled()` call returns true.
+
+**Traces**: PCL.087
+
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.ClientCancellation`, `PclStreaming.TransportStreamCancel`.
+
+### REQ_PCL_098 - Cancelled Stream Rejects Further Sends
+`pcl_stream_send()` shall return `PCL_ERR_CANCELLED` once the stream has been cancelled.
 
 **Traces**: PCL.087
 
@@ -1740,7 +1497,7 @@ The service handler and response callback enqueued by `pcl_executor_post_service
 **Verification**: `test_pcl_robustness.cpp::PostServiceRequestFiresHandlerOnExecutorThread` posts from a background thread and records the thread ID in the handler; asserts it matches the spin thread.
 
 ### REQ_PCL_182 - Post Service Request Service Not Found Fires Empty Callback
-When the named service is not registered, `pcl_executor_post_service_request()` shall still enqueue the request. During drain, the response callback shall be fired with an empty (zero-size, NULL-data) message so the caller is not silently abandoned.
+When the named service is not registered, `pcl_executor_post_service_request()` shall still enqueue the request and, during drain, fire the response callback with an empty (zero-size, NULL-data) message so the caller is not silently abandoned.
 
 **Traces**: PCL.057
 
@@ -1771,8 +1528,15 @@ Destroying an executor that has queued service requests (not yet drained) shall 
 
 ## 21. Portable Allocator
 
-### REQ_PCL_213 - Alloc And Free Round Trip
-`pcl_alloc()` shall return usable memory for a nonzero size and NULL for a zero size; `pcl_free()` shall release it.
+### REQ_PCL_213 - Alloc Returns Usable Memory Or NULL
+`pcl_alloc()` shall return usable memory for a nonzero-size request and NULL for a zero-size request.
+
+**Traces**: PCL.074
+
+**Verification**: `test_pcl_alloc.cpp::PclAlloc.AllocAndFreeRoundTrip`.
+
+### REQ_PCL_104 - Free Releases Alloc'd Memory
+`pcl_free()` shall release memory previously returned by `pcl_alloc()`.
 
 **Traces**: PCL.074
 
@@ -1785,8 +1549,22 @@ Destroying an executor that has queued service requests (not yet drained) shall 
 
 **Verification**: `test_pcl_alloc.cpp::PclAlloc.CallocZeroesAndRejectsOverflow`.
 
-### REQ_PCL_215 - Realloc Semantics
-`pcl_realloc(NULL, size)` shall behave as `pcl_alloc()`; growing an allocation shall preserve its contents; `pcl_realloc(ptr, 0)` shall free `ptr` and return NULL.
+### REQ_PCL_215 - Realloc Of NULL Behaves As Alloc
+`pcl_realloc(NULL, size)` shall behave as `pcl_alloc()`.
+
+**Traces**: PCL.074
+
+**Verification**: `test_pcl_alloc.cpp::PclAlloc.ReallocSemantics`.
+
+### REQ_PCL_105 - Realloc Growth Preserves Contents
+Growing an allocation via `pcl_realloc()` shall preserve its existing contents.
+
+**Traces**: PCL.074
+
+**Verification**: `test_pcl_alloc.cpp::PclAlloc.ReallocSemantics`.
+
+### REQ_PCL_106 - Realloc To Zero Size Frees Memory
+`pcl_realloc(ptr, 0)` shall free `ptr` and return NULL.
 
 **Traces**: PCL.074
 
@@ -1825,7 +1603,7 @@ Destroying a template transport that is installed as the executor's default tran
 **Verification**: `test_pcl_template_transport.cpp::PclTransportTemplate.DestroyClearsDefaultTransportWhenSelf`.
 
 ### REQ_PCL_290 - Destroy Drains Queued Frames Behind A Slow Send Hook
-Frames queued behind a blocked `send_blocking` hook shall accumulate in FIFO order; destroying the transport shall drain the backlog without leaking.
+Destroying a transport with frames queued FIFO behind a blocked `send_blocking` hook shall drain the backlog without leaking.
 
 **Traces**: PCL.071
 
@@ -1839,7 +1617,7 @@ When `send_blocking` returns a non-OK status, the template shall log a warning, 
 **Verification**: `test_pcl_template_transport.cpp::PclTransportTemplate.SendHookFailureDropsFrame`.
 
 ### REQ_PCL_293 - Recv Hook Hard Failure Retries Until Destroy
-When `recv_blocking` returns a hard error (not a timeout), the template shall log and retry rather than exit, and shall still tear down cleanly on destroy.
+When `recv_blocking` returns a hard error (not a timeout), the template shall log and retry rather than exit, tearing down cleanly when later destroyed.
 
 **Traces**: PCL.071
 
@@ -1860,7 +1638,7 @@ The template's `subscribe` vtable entry shall return `PCL_OK` without action, si
 **Verification**: `test_pcl_template_transport.cpp::PclTransportTemplate.SubscribeVtableIsNoOp`.
 
 ### REQ_PCL_320 - Publish And Invoke Fail After Vtable Shutdown
-After the vtable `shutdown` function has stopped the send thread, `publish` and `invoke_async` shall return `PCL_ERR_STATE`, and any request already registered shall be rolled back rather than orphaned.
+After the vtable `shutdown` function has stopped the send thread, `publish` and `invoke_async` shall return `PCL_ERR_STATE`, rolling back rather than orphaning any request already registered.
 
 **Traces**: PCL.071
 
@@ -1877,17 +1655,45 @@ Destroying a transport with async requests still awaiting a response shall free 
 
 ## 23. APOS Transport
 
-### REQ_PCL_297 - Apos Stub Blocking Wrappers And Delay Function
-The APOS stub's blocking `sendMessage`/`receiveMessage` wrappers shall delegate to their non-blocking counterparts with a timeout, `setupApos` shall alias `setupAPOS`, `logEvent` shall be a safe no-op, and an installed delay callback shall fire once per non-blocking send.
+### REQ_PCL_297 - Apos Stub Blocking Wrappers Delegate With Timeout
+The APOS stub's blocking `sendMessage`/`receiveMessage` wrappers shall delegate to their non-blocking counterparts with a timeout.
+
+**Traces**: PCL.073
+
+**Verification**: `test_pcl_apos_transport.cpp::AposStub.BlockingWrappersAndDelayFunction`.
+
+### REQ_PCL_107 - Apos Stub SetupApos Aliases SetupAPOS
+The APOS stub's `setupApos` function shall alias `setupAPOS`.
+
+**Traces**: PCL.073
+
+**Verification**: `test_pcl_apos_transport.cpp::AposStub.BlockingWrappersAndDelayFunction`.
+
+### REQ_PCL_108 - Apos Stub LogEvent Is Safe No-Op
+The APOS stub's `logEvent` function shall be a safe no-op.
+
+**Traces**: PCL.073
+
+**Verification**: `test_pcl_apos_transport.cpp::AposStub.BlockingWrappersAndDelayFunction`.
+
+### REQ_PCL_109 - Apos Stub Delay Callback Fires Per Send
+An installed APOS stub delay callback shall fire once per non-blocking send.
 
 **Traces**: PCL.073
 
 **Verification**: `test_pcl_apos_transport.cpp::AposStub.BlockingWrappersAndDelayFunction`.
 
 ### REQ_PCL_298 - Apos Transport Create Without Executor Returns Null
-`pcl_apos_transport_create()` shall return NULL when the executor argument is NULL; `pcl_apos_transport_destroy(NULL)` shall be a safe no-op.
+`pcl_apos_transport_create()` shall return NULL when the executor argument is NULL.
 
 **Traces**: PCL.073, PCL.045
+
+**Verification**: `test_pcl_apos_transport.cpp::PclTransportApos.CreateWithoutExecutorReturnsNull`.
+
+### REQ_PCL_110 - Apos Transport Destroy Null Is No-Op
+`pcl_apos_transport_destroy(NULL)` shall be a safe no-op.
+
+**Traces**: PCL.045
 
 **Verification**: `test_pcl_apos_transport.cpp::PclTransportApos.CreateWithoutExecutorReturnsNull`.
 
@@ -1906,9 +1712,16 @@ A frame whose topic, service name, or type name exceeds the 16-bit wire length l
 **Verification**: `test_pcl_apos_transport.cpp::AposStub.NonBlockingReceiveEdgeCases`.
 
 ### REQ_PCL_323 - Apos Stub Infinite Wait Woken By Producer
-`waitOnMultiChannel()` with a NULL timeout shall block until another thread queues data on one of the watched channels, and shall reject NULL channel arrays, a non-positive channel count, or a NULL output array with `TM_ERROR`.
+`waitOnMultiChannel()` with a NULL timeout shall block until another thread queues data on one of the watched channels.
 
 **Traces**: PCL.073
+
+**Verification**: `test_pcl_apos_transport.cpp::AposStub.InfiniteWaitWokenByProducerThread`.
+
+### REQ_PCL_218 - Apos Stub WaitOnMultiChannel Argument Validation
+`waitOnMultiChannel()` shall reject a NULL channel array, a non-positive channel count, or a NULL output array with `TM_ERROR`.
+
+**Traces**: PCL.073, PCL.045
 
 **Verification**: `test_pcl_apos_transport.cpp::AposStub.InfiniteWaitWokenByProducerThread`.
 
@@ -1930,10 +1743,17 @@ Malformed inbound APOS messages -- zero-length, an unrecognised frame kind, trun
 
 ## 24. UDP Transport Edge Cases
 
-### REQ_PCL_301 - Udp Subscribe And Shutdown Vtable
-The UDP transport's `subscribe` vtable entry shall return `PCL_OK` as a no-op; `shutdown` shall stop the receive thread and be NULL-safe.
+### REQ_PCL_301 - Udp Transport Subscribe Vtable Is A No-Op
+The UDP transport's `subscribe` vtable entry shall return `PCL_OK` as a no-op.
 
 **Traces**: PCL.097
+
+**Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.SubscribeAndShutdownVtable`.
+
+### REQ_PCL_206 - Udp Transport Shutdown Stops Receive Thread
+The UDP transport's `shutdown` vtable entry shall stop the receive thread and be safe to call with a NULL transport.
+
+**Traces**: PCL.097, PCL.045
 
 **Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.SubscribeAndShutdownVtable`.
 
@@ -1962,8 +1782,8 @@ Destroying a UDP transport installed as the executor's default transport shall c
 
 ## 25. Shared Memory Transport Edge Cases
 
-### REQ_PCL_305 - Shm Subscribe And Shutdown Vtable Are No-Ops
-The shared-memory transport's `subscribe` and `shutdown` vtable entries shall be no-ops, since bus interest and teardown are managed through the bus region itself.
+### REQ_PCL_305 - Shm Shutdown Vtable Entry Is A No-Op
+The shared-memory transport's `shutdown` vtable entry shall be a safe no-op, since participant teardown is managed through the bus region when the transport is destroyed. (Topic interest is recorded by the `subscribe` entry; see REQ_PCL_500.)
 
 **Traces**: PCL.093
 
@@ -1984,21 +1804,28 @@ When a remote unary service handler returns a non-OK, non-pending status, the ga
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServiceHandlerErrorYieldsEmptyResponse`.
 
 ### REQ_PCL_308 - Ambiguous Provider Fails Closed
-When two participants advertise the same service name, both unary invocation (`pcl_executor_invoke_async()`) and streaming invocation (`invoke_stream`) shall fail closed with `PCL_ERR_INVALID` rather than picking an arbitrary provider.
+When two participants advertise the same service name, the shared-memory transport shall fail the invocation closed rather than picking an arbitrary provider, completing a unary call with a terminal empty response and ending a streaming call with `PCL_ERR_INVALID`, in both cases delivered on the caller's executor thread.
 
 **Traces**: PCL.095
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.AmbiguousProviderFailsClosed`.
 
-### REQ_PCL_309 - Destroy With Pending Requests Cancels Them
-Destroying a participant with un-answered unary and stream requests shall free the pending unary correlation entries and shall fire the stream callback with `end=true, status=PCL_ERR_CANCELLED` for any pending stream.
+### REQ_PCL_309 - Destroy With Pending Unary Requests Frees Them
+Destroying a participant with un-answered unary requests shall free the pending unary correlation entries.
+
+**Traces**: PCL.095, PCL.046
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.DestroyWithPendingRequestsCancelsThem`.
+
+### REQ_PCL_207 - Shared Memory Destroy Cancels Pending Streams
+Destroying a participant with a pending stream request shall fire the stream callback with `end=true, status=PCL_ERR_CANCELLED`.
 
 **Traces**: PCL.095, PCL.046
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.DestroyWithPendingRequestsCancelsThem`.
 
 ### REQ_PCL_310 - Participant Slots Exhausted
-The shared-memory bus shall support at most 8 participants; `pcl_shared_memory_transport_create()` shall return NULL when the bus is full.
+`pcl_shared_memory_transport_create()` shall return NULL once the shared-memory bus's 8-participant bound is reached.
 
 **Traces**: PCL.093, PCL.046
 
@@ -2019,7 +1846,14 @@ When a stream handler returns an error instead of `PCL_STREAMING`, the gateway s
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.StreamHandlerErrorEndsStream`.
 
 ### REQ_PCL_313 - Service Advertisement Table Dedupes And Caps
-The per-participant service advertisement table shall deduplicate repeated service names and cap at 16 entries; a local-only service shall never be advertised.
+The per-participant service advertisement table shall deduplicate repeated service names and cap registration at 16 entries.
+
+**Traces**: PCL.093
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServiceTableDedupesAndCaps`.
+
+### REQ_PCL_208 - Local-Only Services Are Never Advertised
+A local-only service shall never be entered into the participant service advertisement table.
 
 **Traces**: PCL.093
 
@@ -2033,7 +1867,7 @@ A request that arrives after the provider re-routed its service to local-only sh
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.StaleAdvertisementRefusedAtDispatch`.
 
 ### REQ_PCL_315 - Service Without Route Uses Default Modes
-A service port with no explicit route configuration shall fall back to the legacy default (advertised remotely when a default transport is attached), and the round trip shall complete normally.
+A service port with no explicit route configuration shall fall back to the legacy default, being advertised remotely when a default transport is attached.
 
 **Traces**: PCL.093
 
@@ -2071,15 +1905,29 @@ Every malformed manifest shape -- a transport line missing its plugin path, a tr
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.FailsClosedOnEachMalformedManifestShape`.
 
-### REQ_PCL_317 - Routing Null Handle Accessors Are Safe
-`pcl_transport_routing_transport_count(NULL)` shall return 0, `pcl_transport_routing_destroy(NULL)` shall be a no-op, and `pcl_transport_routing_load()` shall reject NULL executor, manifest path, or output-handle arguments with `PCL_ERR_INVALID`.
+### REQ_PCL_317 - Routing Transport Count Null Is Safe
+`pcl_transport_routing_transport_count(NULL)` shall return 0.
+
+**Traces**: PCL.069, PCL.045
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.NullHandleAccessorsAreSafe`.
+
+### REQ_PCL_209 - Routing Destroy Null Is No-Op
+`pcl_transport_routing_destroy(NULL)` shall be a no-op.
+
+**Traces**: PCL.045
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.NullHandleAccessorsAreSafe`.
+
+### REQ_PCL_210 - Routing Load Null Argument Safety
+`pcl_transport_routing_load()` shall reject a NULL executor, manifest path, or output-handle argument with `PCL_ERR_INVALID`.
 
 **Traces**: PCL.069, PCL.045
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.NullHandleAccessorsAreSafe`.
 
 ### REQ_PCL_318 - Manifest Load Fails Closed When Transport Slots Exhausted
-When the manifest's transports would exceed the executor's fixed transport table, the load shall fail closed with a diagnostic naming the register failure, and any transports already registered by the failed load shall be rolled back.
+When the manifest's transports would exceed the executor's fixed transport table, the load shall fail closed with a diagnostic naming the register failure and roll back any transports already registered by the failed load.
 
 **Traces**: PCL.070, PCL.046
 
@@ -2111,14 +1959,21 @@ A codec vtable registered under a content_type shall be returned unmodified by a
 **Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.GetUnregisteredReturnsNull`.
 
 ### REQ_PCL_339 - Bad Abi Version Rejected With State
-Registering a codec whose `abi_version` does not equal `PCL_CODEC_ABI_VERSION` shall be rejected with `PCL_ERR_STATE` and shall not be counted.
+Registering a codec whose `abi_version` does not equal `PCL_CODEC_ABI_VERSION` shall be rejected with `PCL_ERR_STATE` without incrementing the registered count.
 
 **Traces**: PCL.059
 
 **Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.BadAbiVersionRejectedWithState`.
 
-### REQ_PCL_340 - Null Arguments Rejected With Invalid
-`pcl_codec_registry_register()` shall reject a NULL registry, NULL codec, or a codec with a NULL `content_type` with `PCL_ERR_INVALID`; `pcl_codec_registry_get()` shall return NULL for a NULL registry or NULL content_type.
+### REQ_PCL_340 - Codec Registry Register Null Argument Safety
+`pcl_codec_registry_register()` shall reject a NULL registry, NULL codec, or a codec with a NULL `content_type` with `PCL_ERR_INVALID`.
+
+**Traces**: PCL.059, PCL.045
+
+**Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.NullArgsRejectedWithInvalid`.
+
+### REQ_PCL_219 - Codec Registry Get Null Argument Safety
+`pcl_codec_registry_get()` shall return NULL for a NULL registry or a NULL `content_type`.
 
 **Traces**: PCL.059, PCL.045
 
@@ -2132,7 +1987,7 @@ Multiple codecs may register under the same content_type (e.g. per-component plu
 **Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.MultipleCodecsPerContentTypeAllowedFirstWinsForGet`.
 
 ### REQ_PCL_342 - Same Codec Pointer Rejected With State
-Re-registering the identical codec vtable pointer shall be rejected with `PCL_ERR_STATE` and shall not increase the registered count.
+Re-registering the identical codec vtable pointer shall be rejected with `PCL_ERR_STATE` without increasing the registered count.
 
 **Traces**: PCL.059
 
@@ -2145,8 +2000,15 @@ Re-registering the identical codec vtable pointer shall be rejected with `PCL_ER
 
 **Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.GetAtIteratesCodecsForContentTypeInRegistrationOrder`.
 
-### REQ_PCL_344 - Count And Clear
-`pcl_codec_registry_count()` shall reflect the number of registrations; `pcl_codec_registry_clear()` shall remove all registrations (without destroying the borrowed codec vtables) so subsequent lookups return NULL.
+### REQ_PCL_344 - Codec Registry Count Reflects Registrations
+`pcl_codec_registry_count()` shall reflect the number of registrations in the registry.
+
+**Traces**: PCL.059
+
+**Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.CountAndClearWork`.
+
+### REQ_PCL_220 - Codec Registry Clear Removes All Registrations
+`pcl_codec_registry_clear()` shall remove all registrations, without destroying the borrowed codec vtables, so that subsequent lookups return NULL.
 
 **Traces**: PCL.059
 
@@ -2160,9 +2022,11 @@ Re-registering the identical codec vtable pointer shall be rejected with `PCL_ER
 **Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.DefaultReturnsStableNonNullPointer`.
 
 ### REQ_PCL_346 - Codec Vtable Round Trip
-A codec vtable's `encode`/`decode`/`free_msg` functions shall round-trip a typed value through a `pcl_msg_t`, and `free_msg` shall release the encoded message.
+A codec vtable's `encode`/`decode`/`free_msg` functions shall round-trip a typed value through a `pcl_msg_t` and release the encoded message via `free_msg`.
 
 **Traces**: PCL.058
+
+**Implementation**: test-only — a contract on codec plugin vtables supplied from outside the PCL core; no production codec ships inside `subprojects/PCL/src`, so the contract is demonstrated against the stub codec plugin in the test suite.
 
 **Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.RoundTripEncodeDecodeFreeMsgThroughStubCodec`.
 
@@ -2511,7 +2375,7 @@ The UDP transport plugin's entry point shall return NULL (mapped to `PCL_ERR_STA
 **Verification**: `test_pcl_plugin_loader.cpp::PclPluginLoader.CodecEntryReturningNullFailsClosed`.
 
 ### REQ_PCL_395 - Reloading Same Codec Vtable Fails Closed
-Loading the same codec plugin twice in one process yields the identical static vtable pointer; the registry's duplicate-pointer rejection (`PCL_ERR_STATE`) shall propagate through `pcl_plugin_load_codec()`, and the loader shall unload the redundant library handle.
+When loading the same codec plugin twice in one process yields the identical static vtable pointer, `pcl_plugin_load_codec()` shall propagate the registry's duplicate-pointer rejection (`PCL_ERR_STATE`) and unload the redundant library handle.
 
 **Traces**: PCL.065, PCL.059
 
@@ -2539,14 +2403,21 @@ Loading the same codec plugin twice in one process yields the identical static v
 **Verification**: `test_pcl_plugin_loader.cpp::PclPluginLoader.TransportPluginWithoutEntrySymbolFailsClosed`.
 
 ### REQ_PCL_399 - Load Codec Plugins From Paths Skips Bad Entries
-`pcl_codec_registry_load_plugins_from_paths()` shall skip NULL, empty, missing, and non-codec path entries while still loading valid ones, and shall reject a NULL registry or a NULL path array with a nonzero count with `PCL_ERR_INVALID`.
+`pcl_codec_registry_load_plugins_from_paths()` shall skip NULL, empty, missing, and non-codec path entries while still loading the valid ones.
+
+**Traces**: PCL.066
+
+**Verification**: `test_pcl_plugin_loader.cpp::PclPluginLoader.LoadCodecPluginsFromPathsSkipsBadEntries`.
+
+### REQ_PCL_221 - Load Codec Plugins From Paths Null Argument Safety
+`pcl_codec_registry_load_plugins_from_paths()` shall reject a NULL registry, or a NULL path array with a nonzero count, with `PCL_ERR_INVALID`.
 
 **Traces**: PCL.066, PCL.045
 
 **Verification**: `test_pcl_plugin_loader.cpp::PclPluginLoader.LoadCodecPluginsFromPathsSkipsBadEntries`.
 
 ### REQ_PCL_400 - Load Codec Plugins From Environment Variable
-`pcl_codec_registry_load_plugins_from_env()` shall split the named environment variable's value on the platform path-list separator, skip a missing plugin path, and load the rest; an unset or empty variable shall be `PCL_OK` with nothing loaded.
+`pcl_codec_registry_load_plugins_from_env()` shall split the named environment variable's value on the platform path-list separator, skip a missing plugin path while loading the rest, and return `PCL_OK` with nothing loaded when the variable is unset or empty.
 
 **Traces**: PCL.066
 
@@ -2655,7 +2526,7 @@ The client receive thread shall handle an allocation failure while decoding a se
 **Verification**: `test_pcl_socket_faults.cpp::PclSocketFaults.ClientRetryCoversBadHostAndBackoffSleep`.
 
 ### REQ_PCL_415 - Auto-Reconnect Backoff Runs While Server Stays Down
-With `auto_reconnect` enabled, the client's reconnect backoff loop shall continue running while the server remains down, and `pcl_socket_transport_get_state()` shall report a non-CONNECTED state throughout.
+With `auto_reconnect` enabled, the client's reconnect backoff loop shall continue running while the server remains down, with `pcl_socket_transport_get_state()` reporting a non-CONNECTED state throughout.
 
 **Traces**: PCL.096
 
@@ -2824,7 +2695,7 @@ An inbound PUBLISH frame whose `type_name` is NULL shall be normalised to an emp
 **Verification**: `test_pcl_template_transport.cpp::PclTransportTemplate.InvokeAsyncFailsWhenSendStopped`.
 
 ### REQ_PCL_438 - Remote Svc Req Honours Local-Only Exposure
-An inbound SVC_REQ frame for a service configured local-only shall be dispatched through the remote-aware executor ingress path: the handler shall never be invoked, and the remote caller shall still receive an empty response rather than being left waiting.
+An inbound SVC_REQ frame for a service configured local-only shall be dispatched through the remote-aware executor ingress path without invoking the handler, delivering an empty response to the remote caller instead of leaving it waiting.
 
 **Traces**: PCL.071, PCL.091
 
@@ -2869,8 +2740,15 @@ The template transport shall preserve publish ordering across multiple messages 
 
 ## 33. APOS Transport Core Behaviour
 
-### REQ_PCL_444 - Apos Stub Fifo And Wait On Multi Channel
-The APOS stub shall deliver messages FIFO per channel, and `waitOnMultiChannel()` shall report which watched channel has data ready.
+### REQ_PCL_444 - Apos Stub Delivers Messages Fifo Per Channel
+The APOS stub shall deliver messages FIFO per channel.
+
+**Traces**: PCL.073
+
+**Verification**: `test_pcl_apos_transport.cpp::AposStub.FifoAndWaitOnMultiChannel`.
+
+### REQ_PCL_222 - Apos Stub WaitOnMultiChannel Reports Ready Channel
+`waitOnMultiChannel()` shall report which watched channel has data ready.
 
 **Traces**: PCL.073
 
@@ -2940,21 +2818,21 @@ The socket transport shall dispatch subscriber ingress on the executor thread, n
 **Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SocketIngressRunsOnExecutor`.
 
 ### REQ_PCL_452 - Template Async Response Callback Not Inline
-The template transport's `invoke_async` shall not fire the response callback before it returns; the callback shall be delivered on a later executor spin, on the executor thread.
+The template transport's `invoke_async` shall deliver its response callback on a later executor spin rather than firing it inline before returning.
 
 **Traces**: PCL.075, PCL.076
 
 **Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateResponseCallbackNotInline`.
 
 ### REQ_PCL_453 - Shared-Memory Async Response Callback Not Inline
-The shared-memory transport's `invoke_async` shall not fire the response callback inline; the callback shall be delivered on the executor thread.
+The shared-memory transport's `invoke_async` shall deliver its response callback on a later executor spin rather than firing it inline before returning.
 
 **Traces**: PCL.075, PCL.076
 
 **Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SharedMemoryResponseCallbackNotInline`.
 
 ### REQ_PCL_454 - Socket Async Response Callback Not Inline
-The socket transport's `invoke_async` shall not fire the response callback inline; the callback shall be delivered on the executor thread.
+The socket transport's `invoke_async` shall deliver its response callback on a later executor spin rather than firing it inline before returning.
 
 **Traces**: PCL.075, PCL.076
 
@@ -2975,7 +2853,7 @@ With the template send hook wedged, `invoke_async` shall register correlation st
 **Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateInvokeQueuesWhenSendBlocks`.
 
 ### REQ_PCL_457 - Backpressured Shared-Memory Publish Does Not Block Executor
-When a shared-memory topic has a non-zero backpressure budget, the executor-facing `publish` shall copy and enqueue the frame to the egress worker and return promptly; the mailbox-capacity wait shall be owned by the worker, not the executor thread.
+When a shared-memory topic has a non-zero backpressure budget, the executor-facing `publish` shall copy and enqueue the frame to the egress worker and return promptly, leaving the mailbox-capacity wait to the worker rather than the executor thread.
 
 **Traces**: PCL.075, PCL.076, PCL.103
 
@@ -2988,8 +2866,6 @@ With a frame queued behind a wedged send hook, `pcl_transport_template_destroy()
 
 **Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.TemplateDestroyWakesBlockedSendWorker`.
 
-## 35. Deferred Service Responses
-
 ### REQ_PCL_459 - Deferred Service Response Round Trip
 A service handler may save its `pcl_svc_context_t` and return `PCL_PENDING`; a later call to `pcl_service_respond()` with that context shall deliver the response to the original caller's callback.
 
@@ -2997,12 +2873,19 @@ A service handler may save its `pcl_svc_context_t` and return `PCL_PENDING`; a l
 
 **Verification**: `test_pcl_robustness.cpp::DeferredServiceResponse`, `test_pcl_executor.cpp::InvokeAsyncIntraProcessPendingResponse`.
 
-### REQ_PCL_460 - Deferred Response Null Safety And Context Release
-`pcl_service_respond()` shall return `PCL_ERR_INVALID` for a NULL context or NULL response, and the saved service context shall be releasable without leaking when the handler never responds.
+### REQ_PCL_460 - Deferred Response Null Argument Safety
+`pcl_service_respond()` shall return `PCL_ERR_INVALID` for a NULL context or a NULL response.
 
 **Traces**: PCL.086, PCL.045
 
-**Verification**: `test_pcl_robustness.cpp::ServiceRespondNullArgs`, `test_pcl_robustness.cpp::ServiceContextFree`.
+**Verification**: `test_pcl_robustness.cpp::ServiceRespondNullArgs`.
+
+### REQ_PCL_223 - Deferred Service Context Releasable Without Response
+A saved deferred-service context shall be releasable without leaking memory when the handler never responds.
+
+**Traces**: PCL.086, PCL.046
+
+**Verification**: `test_pcl_robustness.cpp::ServiceContextFree`.
 
 ### REQ_PCL_461 - Deferred Response Through Transport
 When the request arrived through a transport with a `respond` vtable slot, `pcl_service_respond()` shall route the deferred response back through that transport.
@@ -3011,24 +2894,14 @@ When the request arrived through a transport with a `respond` vtable slot, `pcl_
 
 **Verification**: `test_pcl_robustness.cpp::ServiceRespondWithTransport`.
 
-## 36. Status Code Discrimination
-
 ### REQ_PCL_462 - Status Codes Discriminate Failure Modes
 Each documented status code shall be returned by at least one exercised public API path: `PCL_OK` (any successful call), `PCL_ERR_INVALID` (NULL/invalid arguments), `PCL_ERR_STATE` (invalid lifecycle transition), `PCL_ERR_TIMEOUT` (graceful-shutdown timeout), `PCL_ERR_CALLBACK` (lifecycle callback failure), `PCL_ERR_NOMEM` (allocation failure or capacity overflow), `PCL_ERR_NOT_FOUND` (unknown topic/service/peer), and `PCL_ERR_PORT_CLOSED` (publish while inactive).
 
 **Traces**: PCL.047
 
+**Implementation**: test-only — a cross-cutting property of the status-code vocabulary exercised across the whole public API; each individual return path is traced through the requirement of the function that returns it.
+
 **Verification**: `test_pcl_lifecycle.cpp::InvalidTransitionsRejected` (ERR_STATE), `test_pcl_robustness.cpp::PublishOnInactiveContainerReturnsClosed` (ERR_PORT_CLOSED), `test_pcl_robustness.cpp::ParamOverflowReturnsNomem` (ERR_NOMEM), `test_pcl_robustness.cpp::DispatchToUnknownTopicReturnsNotFound` (ERR_NOT_FOUND), `test_pcl_robustness.cpp::GracefulShutdownTimeout` (ERR_TIMEOUT), `test_pcl_lifecycle.cpp::CallbackFailureAbortsTransition` (ERR_CALLBACK), `test_pcl_lifecycle.cpp::NullHandlesReturnError` (ERR_INVALID).
-
-## 37. Manifest Routing Exclusivity
-
-Two-sided `exclusive <group_name> <side_a_endpoints> <side_b_endpoints>` groups
-(PCL.077): mutual exclusivity is between the two named *sides* of one logical
-leg, not between individual members -- any number of same-side endpoints
-route together freely; the violation is routing anything from *both* sides.
-See design decision D5 ("Compose-time exclusivity") in the retired
-`rpc_pubsub_interchangeability_plan.md` (design intent summarised in
-`doc/plans/PYRAMID/README.md`; full text in git history).
 
 ### REQ_PCL_463 - Exclusive Group Two-Sided Conflict Fails Closed
 A `route` line that completes both sides of a declared `exclusive` group (one side-A endpoint and one side-B endpoint both routed) shall fail closed with `PCL_ERR_STATE` and a diagnostic naming the group and both conflicting endpoints.
@@ -3093,13 +2966,6 @@ A two-sided `exclusive` group conflict shall be detected and fail closed with `P
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.ExclusiveGroupConflictDetectedAgainstConcretePortRoute`. Implementation note: `pcl_executor_endpoint_route_exists_any_kind()` covers both live route stores -- the executor endpoint route table and every container's `route_configured` ports -- with the single query `validate_exclusivity()` calls.
 
-## Manifest-Driven Remote Streaming Invoke and Gateway Discovery
-
-These requirements cover routing `provided`/`stream_provided`/`stream_consumed`-kind
-endpoints through `pcl_transport_routing_load()` and carrying real
-cross-process RPC traffic over the routed transport, beyond the pub/sub-only
-routing the earlier manifest requirements exercise.
-
 ### REQ_PCL_470 - Manifest-Routed Streaming Invoke Dispatches Remotely
 `pcl_executor_invoke_stream()` shall dispatch a streaming service invocation through the named peer transport a `stream_consumed`-kind route table entry designates, before considering the legacy single executor-wide transport or the intra-process fallback -- mirroring `pcl_executor_invoke_async()`'s existing two-tier (per-endpoint route, then legacy transport) structure, but keyed on `PCL_ENDPOINT_STREAM_CONSUMED` rather than the unary `PCL_ENDPOINT_CONSUMED` (see REQ_PCL_472).
 
@@ -3122,23 +2988,42 @@ An endpoint with an explicit `PCL_ROUTE_LOCAL` route entry shall be dispatched i
 **Verification**: `test_pcl_executor.cpp::PclExecutor.InvokeAsyncExplicitLocalRouteBypassesDefaultTransport`, `test_pcl_streaming.cpp::PclStreaming.InvokeStreamExplicitLocalRouteBypassesDefaultTransport`. Implementation note: both `pcl_executor_invoke_async()` and `pcl_executor_invoke_stream()` gate the legacy transport fallback on the route not forcing `PCL_ROUTE_LOCAL`.
 
 ### REQ_PCL_471 - Routing-Manifest Gateway Container Discovery
-`pcl_transport_routing_get_gateway(routing, peer_id, out_gateway)` shall return `PCL_OK` with the named peer's transport's gateway container (if its plugin exports one of the known optional gateway-accessor symbols) or `PCL_OK` with `*out_gateway = NULL` (if it exports none -- not an error), and `PCL_ERR_NOT_FOUND` when no transport was loaded for `peer_id`. The routing manifest loader itself shall not add this container to the executor; a component providing a `provided`/`stream_provided` endpoint over such a transport is responsible for retrieving, configuring, activating, and adding it.
+`pcl_transport_routing_get_gateway(routing, peer_id, out_gateway)` shall return `PCL_OK` with the named peer's transport's gateway container when its plugin exports a gateway-accessor symbol, `PCL_OK` with `*out_gateway = NULL` when it exports none, and `PCL_ERR_NOT_FOUND` when no transport was loaded for `peer_id`.
 
 **Traces**: PCL.100
 
 **Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.GetGatewayReturnsUsableContainerForShmPeer`, `.GetGatewayReturnsNullForPluginWithoutGateway`, `.GetGatewayFailsClosedOnUnknownPeerAndBadArgs`.
 
-## 39. Standalone Process Runtime
+### REQ_PCL_224 - Routing Manifest Loader Does Not Auto-Add Gateway
+The routing manifest loader shall not add a discovered gateway container to the executor; a component providing a `provided`/`stream_provided` endpoint over that transport is responsible for retrieving, configuring, activating, and adding it.
 
-### REQ_PCL_476 - Process Runtime Creation And Null Safety
-`pcl_process_runtime_create()` shall create a runtime-owned executor and return it through `pcl_process_runtime_executor()`. Process-runtime functions shall reject required null or empty arguments with `PCL_ERR_INVALID`; null accessors shall return their documented null value; and null shutdown or destroy calls shall be no-ops.
+**Traces**: PCL.100
+
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.GetGatewayReturnsUsableContainerForShmPeer`.
+
+### REQ_PCL_476 - Process Runtime Creation Returns Owned Executor
+`pcl_process_runtime_create()` shall create a runtime-owned executor retrievable through `pcl_process_runtime_executor()`.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.CreatesExecutorAndHandlesNullArguments`.
+
+### REQ_PCL_225 - Process Runtime Null Argument And Accessor Safety
+Process-runtime functions shall reject required NULL or empty arguments with `PCL_ERR_INVALID`, return their documented null value from NULL accessors, and treat NULL shutdown or destroy calls as no-ops.
 
 **Traces**: PCL.079, PCL.045
 
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.CreatesExecutorAndHandlesNullArguments`.
 
 ### REQ_PCL_477 - Process Runtime Codec Loading
-`pcl_process_runtime_load_codec()` shall load a valid codec plugin into the process-wide registry and retain its plugin handle for the runtime lifetime. A missing or invalid plugin shall fail closed and record a diagnostic naming the codec-load operation.
+`pcl_process_runtime_load_codec()` shall load a valid codec plugin into the process-wide registry and retain its plugin handle for the runtime's lifetime.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.LoadsCodecAndReportsPluginFailure`.
+
+### REQ_PCL_226 - Process Runtime Codec Load Failure Diagnostics
+`pcl_process_runtime_load_codec()` shall fail closed and record a diagnostic naming the codec-load operation when given a missing or invalid plugin.
 
 **Traces**: PCL.079
 
@@ -3151,8 +3036,15 @@ An endpoint with an explicit `PCL_ROUTE_LOCAL` route entry shall be dispatched i
 
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.LoadsCompletePortsFileAndRejectsSecondLoad`.
 
-### REQ_PCL_479 - Process Runtime Gateway Lifecycle
-After a deployment manifest loads, `pcl_process_runtime_load_ports_file()` shall discover each selected transport's optional gateway container, configure it, activate it, and add it to the runtime executor. `pcl_process_runtime_destroy()` shall remove, deactivate, and clean up every gateway before destroying its routing handle and executor.
+### REQ_PCL_479 - Process Runtime Gateway Activation
+After a deployment manifest loads, `pcl_process_runtime_load_ports_file()` shall discover each selected transport's optional gateway container, configure it, activate it, and add it to the runtime executor.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ActivatesAndCleansUpSharedMemoryGateway`.
+
+### REQ_PCL_227 - Process Runtime Destroy Tears Down Gateways
+`pcl_process_runtime_destroy()` shall remove, deactivate, and clean up every gateway container before destroying its routing handle and executor.
 
 **Traces**: PCL.079
 
@@ -3166,21 +3058,21 @@ After a deployment manifest loads, `pcl_process_runtime_load_ports_file()` shall
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsInvalidDeploymentDescriptors`.
 
 ### REQ_PCL_481 - Deployment-File Entry Validation
-`pcl_process_runtime_load_ports_file()` shall reject malformed lines, unknown directives, unknown realization modes, missing plugin configuration, unknown logical-port names, duplicate logical-port entries, omitted logical ports, and conflicting plugin configurations for the same peer. Each rejection shall record a diagnostic and leave no routing handle installed.
+`pcl_process_runtime_load_ports_file()` shall reject a malformed line, an unknown directive or realization mode, missing plugin configuration, an unknown or duplicate logical-port name, an omitted logical port, or a conflicting plugin configuration for the same peer, recording a diagnostic and leaving no routing handle installed.
 
 **Traces**: PCL.079
 
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsInvalidPortsFileEntries`.
 
 ### REQ_PCL_482 - Process Runtime Peer Bound
-`pcl_process_runtime_load_ports_file()` shall accept at most 64 distinct transport peers and shall reject a deployment requiring a sixty-fifth peer with `PCL_ERR_NOMEM` before installing the generated routing manifest.
+`pcl_process_runtime_load_ports_file()` shall accept at most 64 distinct transport peers, rejecting a deployment that requires a sixty-fifth peer with `PCL_ERR_NOMEM` before installing the generated routing manifest.
 
 **Traces**: PCL.079
 
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsMoreThanMaximumPeers`.
 
 ### REQ_PCL_483 - Endpoint Descriptor Validation
-`pcl_process_runtime_load_ports_file()` shall validate every supplied endpoint descriptor before writing it to a temporary routing manifest. A null endpoint name or an endpoint kind outside the supported publisher, subscriber, provided, consumed, stream-provided, and stream-consumed kinds shall return `PCL_ERR_INVALID` with a diagnostic instead of dereferencing or formatting the invalid value.
+`pcl_process_runtime_load_ports_file()` shall validate every supplied endpoint descriptor before writing it to a temporary routing manifest, returning `PCL_ERR_INVALID` with a diagnostic for a null endpoint name or an endpoint kind outside the supported kinds instead of dereferencing or formatting the invalid value.
 
 **Traces**: PCL.079
 
@@ -3201,14 +3093,21 @@ If a temporary routing manifest cannot be created, `pcl_process_runtime_load_por
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ReportsTemporaryManifestCreationFailure`.
 
 ### REQ_PCL_486 - Normal Process Runtime Lifecycle
-`pcl_process_runtime_run()` shall configure and activate the component, add it to the runtime executor, spin until shutdown is requested, then remove, deactivate, and clean up the component. A successful run shall leave the component in `PCL_STATE_UNCONFIGURED`.
+`pcl_process_runtime_run()` shall configure and activate the component, add it to the runtime executor, spin until shutdown is requested, then remove, deactivate, and clean it up, leaving the component `PCL_STATE_UNCONFIGURED` after a successful run.
 
 **Traces**: PCL.079
 
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RunsComponentUntilShutdownRequest`.
 
 ### REQ_PCL_487 - Signal-Requested Process Shutdown
-While `pcl_process_runtime_run()` is active, `SIGINT` or `SIGTERM` shall request graceful shutdown. The runtime shall restore the process's previous handlers before returning.
+While `pcl_process_runtime_run()` is active, `SIGINT` or `SIGTERM` shall request graceful shutdown.
+
+**Traces**: PCL.079
+
+**Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.SignalRequestsGracefulShutdown`.
+
+### REQ_PCL_228 - Process Runtime Restores Prior Signal Handlers
+`pcl_process_runtime_run()` shall restore the process's previous `SIGINT`/`SIGTERM` handlers before returning.
 
 **Traces**: PCL.079
 
@@ -3222,7 +3121,7 @@ If component configure, activate, deactivate, or cleanup fails, `pcl_process_run
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.ReportsLifecycleFailures`.
 
 ### REQ_PCL_489 - Process Runtime Executor Add Failure
-If the component cannot be added because the runtime executor has reached its container bound, `pcl_process_runtime_run()` shall return `PCL_ERR_NOMEM` and shall still deactivate and clean up the component.
+If the component cannot be added because the runtime executor has reached its container bound, `pcl_process_runtime_run()` shall return `PCL_ERR_NOMEM` while still deactivating and cleaning up the component.
 
 **Traces**: PCL.079
 
@@ -3243,7 +3142,7 @@ When the runtime was created with a non-zero duration, `pcl_process_runtime_run(
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.DurationLimitStopsRun`.
 
 ### REQ_PCL_492 - Process Runtime Codec Bound
-`pcl_process_runtime_load_codec()` shall retain at most 32 codec-plugin handles and shall reject a thirty-third successful-load attempt with `PCL_ERR_NOMEM` before opening the plugin.
+`pcl_process_runtime_load_codec()` shall retain at most 32 codec-plugin handles, rejecting a thirty-third successful-load attempt with `PCL_ERR_NOMEM` before opening the plugin.
 
 **Traces**: PCL.079
 
@@ -3263,61 +3162,108 @@ If an opened per-port deployment file cannot be read, `pcl_process_runtime_load_
 
 **Verification**: `test_pcl_oom.cpp::PclOom.ProcessRuntimeAllocationFails`, `test_pcl_oom.cpp::PclOom.ProcessRuntimeExecutorAllocationFails`.
 
-## 40. Transport Flow Control and Monitoring
-
 ### REQ_PCL_495 - Remote Subscriber Registration During Container Add
-When `pcl_executor_add()` adds a remote subscriber, it shall call `subscribe` with the port's topic and type on each already-registered named transport selected by the port, or on the default transport when the port selects no named peer. It shall not register local-only ports or call transports that the port did not select.
+When `pcl_executor_add()` adds a remote subscriber, it shall call `subscribe` with the port's topic and type on each already-registered named transport the port selected.
 
 **Traces**: PCL.080
 
-**Verification**: `test_pcl_executor.cpp::PclExecutor.SubscriberPortRegistersWithNamedTransportDuringSetup`, `test_pcl_executor.cpp::PclExecutor.DefaultTransportRegistersUnboundRemoteSubscriberOnly`.
+**Verification**: `test_pcl_executor.cpp::PclExecutor.SubscriberPortRegistersWithNamedTransportDuringSetup`.
 
-### REQ_PCL_496 - Remote Subscriber Registration During Late Transport Add
-When `pcl_executor_register_transport()` registers a named transport after containers have been added, it shall call `subscribe` for every existing remote subscriber that selects that peer and shall not call it for subscribers that select another peer or the default transport. When `pcl_executor_set_transport()` installs a default transport after containers have been added, it shall register every remote subscriber that selects no named peer.
+### REQ_PCL_236 - Default Transport Registers Unbound Remote Subscriber
+When `pcl_executor_add()` adds a remote subscriber that selects no named peer, it shall call `subscribe` on the default transport.
 
 **Traces**: PCL.080
 
-**Verification**: `test_pcl_executor.cpp::PclExecutor.LateNamedTransportRegistersExistingSubscriberPort`, `test_pcl_executor.cpp::PclExecutor.LateDefaultTransportRegistersUnboundRemoteSubscriber`.
+**Verification**: `test_pcl_executor.cpp::PclExecutor.DefaultTransportRegistersUnboundRemoteSubscriberOnly`.
 
-### REQ_PCL_497 - Unsupported Or Rejected Subscription Fails Closed
-If a selected transport has no `subscribe` operation, subscriber registration shall return `PCL_ERR_NOT_FOUND` with a diagnostic. If the transport's `subscribe` operation returns an error, the executor operation performing registration shall return that error without adding the container or retaining the named transport registration.
+### REQ_PCL_496 - Late Named Transport Registers Existing Subscriber
+When `pcl_executor_register_transport()` registers a named transport after containers have been added, it shall call `subscribe` for every existing remote subscriber selecting that peer, leaving subscribers that select another peer or the default transport untouched.
+
+**Traces**: PCL.080
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.LateNamedTransportRegistersExistingSubscriberPort`.
+
+### REQ_PCL_229 - Late Default Transport Registers Unbound Subscribers
+When `pcl_executor_set_transport()` installs a default transport after containers have been added, it shall register every remote subscriber that selects no named peer.
+
+**Traces**: PCL.080
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.LateDefaultTransportRegistersUnboundRemoteSubscriber`.
+
+### REQ_PCL_497 - Unsupported Subscription Fails Closed
+If a selected transport has no `subscribe` operation, subscriber registration shall return `PCL_ERR_NOT_FOUND` with a diagnostic.
 
 **Traces**: PCL.080, PCL.045
 
-**Verification**: `test_pcl_executor.cpp::PclExecutor.SelectedTransportWithoutSubscribeFailsClosed`, `test_pcl_executor.cpp::PclExecutor.RejectedLateSubscriptionRollsBackTransport`.
+**Verification**: `test_pcl_executor.cpp::PclExecutor.SelectedTransportWithoutSubscribeFailsClosed`.
+
+### REQ_PCL_230 - Rejected Subscription Rolls Back Transport Registration
+If a selected transport's `subscribe` operation returns an error, the executor operation performing registration shall return that error without adding the container or retaining the named transport registration.
+
+**Traces**: PCL.080, PCL.045
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.RejectedLateSubscriptionRollsBackTransport`.
 
 ### REQ_PCL_498 - Executor Incoming Queue Limit
-`pcl_executor_set_incoming_queue_limit()` shall set the incoming publish/subscribe queue bound and shall reject a null executor with `PCL_ERR_INVALID`. A zero bound shall permit more than the formerly configured non-zero bound. When a post reaches a non-zero bound, it shall return `PCL_ERR_NOMEM` without increasing the queue depth or taking ownership of the caller's message.
+`pcl_executor_set_incoming_queue_limit()` shall set the incoming publish/subscribe queue bound, rejecting a NULL executor with `PCL_ERR_INVALID`.
+
+**Traces**: PCL.081, PCL.045
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.IncomingQueueLimitRejectsExcessMessages`.
+
+### REQ_PCL_231 - Zero Incoming Queue Limit Means Unbounded
+A zero incoming queue bound shall permit more queued messages than the formerly configured non-zero bound.
+
+**Traces**: PCL.081
+
+**Verification**: `test_pcl_executor.cpp::PclExecutor.IncomingQueueLimitRejectsExcessMessages`.
+
+### REQ_PCL_232 - Incoming Post At Queue Limit Rejected Without Ownership
+When an incoming post would exceed a configured non-zero queue bound, it shall return `PCL_ERR_NOMEM` without increasing the queue depth or taking ownership of the caller's message.
 
 **Traces**: PCL.081
 
 **Verification**: `test_pcl_executor.cpp::PclExecutor.IncomingQueueLimitRejectsExcessMessages`.
 
 ### REQ_PCL_499 - Executor Incoming Queue Depth
-`pcl_executor_get_incoming_queue_depth()` shall report the number of queued incoming publish/subscribe messages, shall decrease as executor spins drain messages, and shall return zero for a null executor.
+`pcl_executor_get_incoming_queue_depth()` shall report the current number of queued incoming publish/subscribe messages, decreasing as executor spins drain them, or zero for a NULL executor.
 
 **Traces**: PCL.081
 
 **Verification**: `test_pcl_executor.cpp::PclExecutor.IncomingQueueLimitRejectsExcessMessages`.
 
-### REQ_PCL_500 - Shared-Memory Subscription Interest
-The shared-memory transport `subscribe` operation shall record a valid topic once per participant, return `PCL_OK` for a duplicate, reject an empty or overlong topic, and return `PCL_ERR_NOMEM` after 16 distinct topics. Publish shall target only participants that advertised the topic and shall return `PCL_ERR_NOT_FOUND` when none are interested.
+### REQ_PCL_500 - Shared-Memory Subscription Validation And Capacity
+The shared-memory transport's `subscribe` operation shall record a valid topic once per participant, returning `PCL_OK` for a duplicate, rejecting an empty or overlong topic, and returning `PCL_ERR_NOMEM` once a participant has registered 16 distinct topics.
 
 **Traces**: PCL.082
 
-**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.PublishTargetsOnlyInterestedParticipants`, `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.SubscriptionValidationAndCapacity`.
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.SubscriptionValidationAndCapacity`.
+
+### REQ_PCL_233 - Shared Memory Publish Targets Only Interested Participants
+A shared-memory publish shall target only participants that advertised the topic, returning `PCL_ERR_NOT_FOUND` when none are interested.
+
+**Traces**: PCL.082
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.PublishTargetsOnlyInterestedParticipants`.
 
 ### REQ_PCL_501 - Shared-Memory Unary Service Congestion
-When a discovered unary service provider's mailbox is full, the shared-memory egress worker shall retry enqueueing the request for no longer than its configured bounded retry interval. If retry succeeds, the normal response shall be delivered; otherwise the pending call shall complete on the executor thread with an empty terminal response.
+When a discovered unary service provider's mailbox is full, the shared-memory egress worker shall retry enqueueing the request for no longer than its configured bounded retry interval, delivering the normal response on success or completing the pending call on the executor thread with an empty terminal response otherwise.
 
 **Traces**: PCL.101, PCL.075
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.UnaryServiceCongestionRetriesThenCompletesEmpty`.
 
 ### REQ_PCL_502 - Reliable-Socket Outbound Queue Bound
-The reliable socket transport shall reject an outbound frame with `PCL_ERR_NOMEM` when accepting it would make the queued byte count exceed 16 MiB. The rejected frame shall be freed and shall increment `pcl_socket_transport_dropped_publishes()` exactly once; the getter shall be thread-safe and shall return zero for a null transport.
+The reliable socket transport shall reject an outbound frame with `PCL_ERR_NOMEM`, freeing the frame and incrementing a thread-safe `pcl_socket_transport_dropped_publishes()` counter exactly once, when accepting it would make the queued byte count exceed 16 MiB.
 
 **Traces**: PCL.083
+
+**Verification**: `test_pcl_socket_transport.cpp::PclSocketTransport.OutboundQueueLimitReportsDrops`.
+
+### REQ_PCL_234 - Reliable Socket Dropped-Publish Counter Null Safety
+`pcl_socket_transport_dropped_publishes()` shall return zero for a NULL transport.
+
+**Traces**: PCL.083, PCL.045
 
 **Verification**: `test_pcl_socket_transport.cpp::PclSocketTransport.OutboundQueueLimitReportsDrops`.
 
@@ -3329,14 +3275,14 @@ The reliable socket transport shall reject an outbound frame with `PCL_ERR_NOMEM
 **Verification**: `test_pcl_socket_transport.cpp::PclSocketTransport.DestroyWithUnsentFramesNoLeak`.
 
 ### REQ_PCL_504 - UDP Received-Datagram Counter
-`pcl_udp_transport_received_datagrams()` shall count every datagram returned by the receive socket, including malformed and unsupported datagrams, and shall return zero for a null transport.
+`pcl_udp_transport_received_datagrams()` shall count every datagram returned by the receive socket, including malformed and unsupported ones, or return zero for a NULL transport.
 
 **Traces**: PCL.084
 
 **Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.MalformedDatagramsIncreaseReceivedCounter`.
 
 ### REQ_PCL_505 - UDP Per-Source Sequence-Gap Counter
-For each source address and port, the UDP transport shall establish a sequence baseline from the first valid publish datagram and add each later forward sequence gap to `pcl_udp_transport_dropped_datagrams()`. Duplicate, reordered, or stale sequence values shall not increase the count. The getter shall return zero for a null transport.
+For each source address and port, the UDP transport shall add each forward sequence gap after the first valid publish datagram to `pcl_udp_transport_dropped_datagrams()`, leaving duplicate, reordered, or stale sequence values uncounted, or return zero for a NULL transport.
 
 **Traces**: PCL.102
 

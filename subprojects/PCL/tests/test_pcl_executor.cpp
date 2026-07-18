@@ -217,9 +217,9 @@ TEST(PclExecutor, IntraProcessPubSub) {
   pcl_container_destroy(sub_c);
 }
 
-///< REQ_PCL_498, REQ_PCL_499: a configured ingress bound rejects excess
-///< messages without changing the reported depth, and zero restores unbounded
-///< operation. PCL.081.
+///< REQ_PCL_498, REQ_PCL_231, REQ_PCL_232, REQ_PCL_499: a configured
+///< ingress bound rejects excess messages without changing the reported
+///< depth, and zero restores unbounded operation. PCL.081.
 TEST(PclExecutor, IncomingQueueLimitRejectsExcessMessages) {
   auto* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -477,8 +477,9 @@ TEST(PclExecutor, LateNamedTransportRegistersExistingSubscriberPort) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_495: the default transport registers only remote subscribers that
-///< do not select a named peer; local and named routes are ignored. PCL.080.
+///< REQ_PCL_236: the default transport registers only remote subscribers
+///< that do not select a named peer; local and named routes are ignored.
+///< PCL.080.
 TEST(PclExecutor, DefaultTransportRegistersUnboundRemoteSubscriberOnly) {
   MockTransportState transport_state;
   pcl_transport_t transport = {};
@@ -519,7 +520,7 @@ TEST(PclExecutor, DefaultTransportRegistersUnboundRemoteSubscriberOnly) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_496: installing the default transport after container setup
+///< REQ_PCL_229: installing the default transport after container setup
 ///< registers an existing unbound remote subscriber. PCL.080.
 TEST(PclExecutor, LateDefaultTransportRegistersUnboundRemoteSubscriber) {
   MockTransportState transport_state;
@@ -545,6 +546,38 @@ TEST(PclExecutor, LateDefaultTransportRegistersUnboundRemoteSubscriber) {
   ASSERT_EQ(pcl_executor_set_transport(e, &transport), PCL_OK);
   EXPECT_EQ(transport_state.subscribe_count, 1);
   EXPECT_EQ(transport_state.last_name, "late/default");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+///< REQ_PCL_236: installing the default transport after container setup
+///< skips a remote subscriber that selected specific peers; it binds only
+///< to its named transports, never the default. PCL.080.
+TEST(PclExecutor, LateDefaultTransportSkipsPeerSelectedSubscriber) {
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  transport.subscribe = mock_subscribe;
+  transport.adapter_ctx = &transport_state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    const char* peers[] = {"peer_a"};
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "named/late", "NamedLateMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void*) {}, nullptr);
+    return port ? pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1)
+                : PCL_ERR_NOMEM;
+  };
+  auto* c = pcl_container_create("late_named_subscriber", &cbs, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  ASSERT_EQ(pcl_executor_set_transport(e, &transport), PCL_OK);
+  EXPECT_EQ(transport_state.subscribe_count, 0);
 
   pcl_executor_destroy(e);
   pcl_container_destroy(c);
@@ -577,7 +610,7 @@ TEST(PclExecutor, SelectedTransportWithoutSubscribeFailsClosed) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_497: a rejected late subscription leaves the named transport
+///< REQ_PCL_230: a rejected late subscription leaves the named transport
 ///< unregistered. PCL.080.
 TEST(PclExecutor, RejectedLateSubscriptionRollsBackTransport) {
   MockTransportState transport_state;

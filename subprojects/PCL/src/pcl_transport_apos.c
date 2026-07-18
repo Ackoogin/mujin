@@ -45,6 +45,7 @@ static uint32_t pcl_apos_strlen_u32(const char* s) {
   return s ? (uint32_t)strlen(s) : 0u;
 }
 
+/* Implements: REQ_PCL_325. */
 static pcl_status_t pcl_apos_alloc_string(const uint8_t** p,
                                           const uint8_t*  end,
                                           uint16_t        len,
@@ -60,6 +61,7 @@ static pcl_status_t pcl_apos_alloc_string(const uint8_t** p,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_300. */
 static pcl_status_t pcl_apos_encode_frame(const pcl_template_frame_t* frame,
                                           uint8_t**                   out_data,
                                           uint32_t*                   out_size) {
@@ -132,6 +134,7 @@ static pcl_status_t pcl_apos_encode_frame(const pcl_template_frame_t* frame,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_325. */
 static pcl_status_t pcl_apos_decode_frame(const uint8_t*           data,
                                           uint32_t                 size,
                                           pcl_template_frame_t*    out) {
@@ -276,6 +279,7 @@ static void pcl_apos_hook_wake(void* user_data) {
   (void)user_data;
 }
 
+/* Implements: REQ_PCL_298, REQ_PCL_446, REQ_PCL_447. */
 pcl_apos_transport_t* pcl_apos_transport_create(unsigned int    process_id,
                                                 int             send_lvc,
                                                 int             recv_lvc,
@@ -309,18 +313,22 @@ pcl_apos_transport_t* pcl_apos_transport_create(unsigned int    process_id,
   return ctx;
 }
 
+/* No LLR: thin wrapper delegating entirely to
+   pcl_transport_template_set_peer_id() (REQ_PCL_432). */
 pcl_status_t pcl_apos_transport_set_peer_id(pcl_apos_transport_t* ctx,
                                             const char*           peer_id) {
   if (!ctx) return PCL_ERR_INVALID;
   return pcl_transport_template_set_peer_id(ctx->template_transport, peer_id);
 }
 
+/* Implements: REQ_PCL_445. */
 const pcl_transport_t* pcl_apos_transport_get_transport(
     pcl_apos_transport_t* ctx) {
   if (!ctx) return 0;
   return pcl_transport_template_get_transport(ctx->template_transport);
 }
 
+/* Implements: REQ_PCL_110. */
 void pcl_apos_transport_destroy(pcl_apos_transport_t* ctx) {
   if (!ctx) return;
   pcl_transport_template_destroy(ctx->template_transport);

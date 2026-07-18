@@ -783,8 +783,10 @@ TEST(PclSocketTransport, DestroyWithUnsentFramesNoLeak) {
   restore_logs();
 }
 
-///< REQ_PCL_502: socket egress is bounded to 16 MiB, rejects overflow with
-///< NOMEM, and reports every rejected publish through its counter. PCL.083.
+///< REQ_PCL_502, REQ_PCL_234: socket egress is bounded to 16 MiB, rejects
+///< overflow with NOMEM, reports every rejected publish through its
+///< counter, and returns zero from that counter for a NULL transport.
+///< PCL.083.
 TEST(PclSocketTransport, OutboundQueueLimitReportsDrops) {
   silence_logs();
   pcl_executor_t* exec = pcl_executor_create();

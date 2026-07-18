@@ -27,6 +27,7 @@ static pcl_plugin_handle_t** pcl_resident_codec_plugins = NULL;
 static size_t pcl_resident_codec_plugin_count = 0;
 static size_t pcl_resident_codec_plugin_capacity = 0;
 
+/* Implements: REQ_PCL_405. */
 static int retain_codec_plugin(pcl_plugin_handle_t* handle) {
   pcl_plugin_handle_t** next;
   size_t next_capacity;
@@ -95,6 +96,8 @@ static void* resolve_symbol(pcl_plugin_handle_t* handle, const char* name) {
 }
 
 /// \brief Load a codec plugin and register its codec vtable.
+/* Implements: REQ_PCL_385, REQ_PCL_386, REQ_PCL_393, REQ_PCL_394,
+   REQ_PCL_395. */
 pcl_status_t pcl_plugin_load_codec(const char*             path,
                                    const char*             config_json,
                                    pcl_codec_registry_t*   registry,
@@ -158,6 +161,7 @@ pcl_status_t pcl_plugin_load_codec(const char*             path,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_399, REQ_PCL_221, REQ_PCL_405. */
 pcl_status_t pcl_codec_registry_load_plugins_from_paths(
     pcl_codec_registry_t* registry,
     const char* const*    paths,
@@ -184,6 +188,7 @@ pcl_status_t pcl_codec_registry_load_plugins_from_paths(
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_400. */
 pcl_status_t pcl_codec_registry_load_plugins_from_env(
     pcl_codec_registry_t* registry,
     const char*           env_var) {
@@ -232,6 +237,7 @@ pcl_status_t pcl_codec_registry_load_plugins_from_env(
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_391, REQ_PCL_392, REQ_PCL_401. */
 pcl_status_t pcl_codec_registry_load_plugins_from_manifest(
     pcl_codec_registry_t* registry,
     const char*           manifest_path) {
@@ -279,6 +285,7 @@ pcl_status_t pcl_codec_registry_load_plugins_from_manifest(
 }
 
 /// \brief Load a transport plugin and return its transport vtable.
+/* Implements: REQ_PCL_383, REQ_PCL_396, REQ_PCL_397, REQ_PCL_398. */
 pcl_status_t pcl_plugin_load_transport(const char*             path,
                                        const char*             config_json,
                                        pcl_plugin_handle_t**   out_handle,
@@ -348,6 +355,7 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
 }
 
 /// \brief Report the interaction capabilities of a loaded transport plugin.
+/* Implements: REQ_PCL_353, REQ_PCL_354, REQ_PCL_355. */
 pcl_status_t pcl_plugin_transport_caps(pcl_plugin_handle_t*   handle,
                                        const char*            config_json,
                                        const pcl_transport_t* vtable,
@@ -371,6 +379,7 @@ pcl_status_t pcl_plugin_transport_caps(pcl_plugin_handle_t*   handle,
 /// Reads the optional pcl_transport_plugin_qos symbol; when absent the offered
 /// QoS is PCL_QOS_RELIABILITY_UNSPECIFIED (there is nothing to derive from a
 /// vtable).
+/* Implements: REQ_PCL_362. */
 pcl_status_t pcl_plugin_transport_qos(pcl_plugin_handle_t* handle,
                                       const char*          config_json,
                                       pcl_qos_t*           out_qos) {
@@ -389,6 +398,7 @@ pcl_status_t pcl_plugin_transport_qos(pcl_plugin_handle_t* handle,
 }
 
 /// \brief Tear down a loaded transport, then unload its library, in that order.
+/* Implements: REQ_PCL_381, REQ_PCL_382, REQ_PCL_407. */
 pcl_status_t pcl_plugin_unload_transport(pcl_plugin_handle_t*   handle,
                                          const pcl_transport_t* vtable) {
   pcl_transport_plugin_teardown_fn teardown_fn;
@@ -408,16 +418,19 @@ pcl_status_t pcl_plugin_unload_transport(pcl_plugin_handle_t*   handle,
 }
 
 /// \brief Open an arbitrary shared library (no PCL entry point required).
+/* Implements: REQ_PCL_402. */
 pcl_plugin_handle_t* pcl_plugin_open(const char* path) {
   return open_library(path);
 }
 
 /// \brief Unload a plugin handle returned by a successful load call.
+/* Implements: REQ_PCL_402. */
 void pcl_plugin_unload(pcl_plugin_handle_t* handle) {
   close_library(handle);
 }
 
 /// \brief Resolve an arbitrary exported symbol from a loaded plugin.
+/* Implements: REQ_PCL_383, REQ_PCL_402. */
 void* pcl_plugin_symbol(pcl_plugin_handle_t* handle, const char* name) {
   return resolve_symbol(handle, name);
 }

@@ -82,18 +82,23 @@ static pcl_executor_t* read_executor(const char* config_json) {
   return (pcl_executor_t*)(uintptr_t)raw;
 }
 
+/* No LLR: constant ABI-version reporter with no requirement of its own;
+   consumed by pcl_plugin_load_transport()'s ABI checks (REQ_PCL_396,
+   REQ_PCL_397). */
 PCL_SOCKET_PLUGIN_EXPORT uint32_t pcl_transport_abi_version(void) {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
 /* Stream-socket transport: pub/sub plus consumed unary RPC (invoke_async).
  * No server-streaming. */
+/* Implements: REQ_PCL_357. */
 PCL_SOCKET_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
     const char* config_json) {
   (void)config_json;
   return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY;
 }
 
+/* Implements: REQ_PCL_360. */
 PCL_SOCKET_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
     const char* config_json) {
   pcl_qos_t qos;
@@ -103,6 +108,7 @@ PCL_SOCKET_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
   return qos;
 }
 
+/* Implements: REQ_PCL_403, REQ_PCL_404. */
 PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                    role[16];
@@ -149,6 +155,7 @@ PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   return pcl_socket_transport_get_transport(socket_transport);
 }
 
+/* Implements: REQ_PCL_403. */
 PCL_SOCKET_PLUGIN_EXPORT pcl_container_t* pcl_socket_transport_plugin_gateway(
     const pcl_transport_t* transport) {
   if (!transport) return NULL;
@@ -156,6 +163,7 @@ PCL_SOCKET_PLUGIN_EXPORT pcl_container_t* pcl_socket_transport_plugin_gateway(
       (pcl_socket_transport_t*)transport->adapter_ctx);
 }
 
+/* Implements: REQ_PCL_383. */
 PCL_SOCKET_PLUGIN_EXPORT void pcl_socket_transport_plugin_destroy(
     const pcl_transport_t* transport) {
   if (!transport) return;
@@ -164,6 +172,7 @@ PCL_SOCKET_PLUGIN_EXPORT void pcl_socket_transport_plugin_destroy(
 
 /* Standard teardown symbol (see pcl_plugin_unload_transport): release the
    executor-bound socket transport before the .so is unloaded. */
+/* Implements: REQ_PCL_403. */
 PCL_SOCKET_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
     const pcl_transport_t* transport) {
   if (!transport) return;

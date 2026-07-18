@@ -227,6 +227,7 @@ static void tpl_outbound_free(pcl_template_outbound_t* f) {
   free(f);
 }
 
+/* Implements: REQ_PCL_455, REQ_PCL_456. */
 static pcl_template_outbound_t* tpl_outbound_clone(
     pcl_template_frame_kind_t kind,
     uint32_t                  seq_id,
@@ -274,6 +275,7 @@ static pcl_template_outbound_t* tpl_outbound_clone(
 // thread has already been told to stop (the frame is freed in that
 // case so the caller does not need to clean it up).
 
+/* Implements: REQ_PCL_320, REQ_PCL_455, REQ_PCL_456. */
 static pcl_status_t tpl_send_enqueue(struct pcl_transport_template_t* ctx,
                                      pcl_template_outbound_t*         frame) {
   tpl_lock(ctx);
@@ -333,6 +335,7 @@ static pcl_template_pending_t* tpl_pending_take(
   return entry;
 }
 
+/* Implements: REQ_PCL_321. */
 static void tpl_pending_drain(struct pcl_transport_template_t* ctx) {
   pcl_template_pending_t* head;
   tpl_pending_lock(ctx);
@@ -349,6 +352,7 @@ static void tpl_pending_drain(struct pcl_transport_template_t* ctx) {
 // -- Peer-alias helpers -------------------------------------------------
 
 /* Internal: insert a peer alias — caller must hold pending_lock. */
+/* Implements: REQ_PCL_286, REQ_PCL_439. */
 static pcl_status_t tpl_alias_remember_locked(struct pcl_transport_template_t* ctx,
                                                const char*                       peer_id) {
   pcl_template_peer_alias_t* node;
@@ -371,6 +375,7 @@ static pcl_status_t tpl_alias_remember_locked(struct pcl_transport_template_t* c
 }
 
 /* Public wrapper — acquires pending_lock, delegates, releases. */
+/* Implements: REQ_PCL_286, REQ_PCL_439. */
 static pcl_status_t tpl_alias_remember(struct pcl_transport_template_t* ctx,
                                         const char*                       peer_id) {
   pcl_status_t rc;
@@ -388,6 +393,7 @@ static pcl_status_t tpl_alias_remember(struct pcl_transport_template_t* ctx,
 // torn down (send_stop set), the enqueue helper drops the frame and
 // frees it.
 
+/* Implements: REQ_PCL_442, REQ_PCL_438. */
 static void tpl_svc_response_cb(const pcl_msg_t* resp, void* user_data) {
   pcl_template_svc_dispatch_t* slot =
       (pcl_template_svc_dispatch_t*)user_data;
@@ -421,6 +427,7 @@ static void tpl_svc_response_cb(const pcl_msg_t* resp, void* user_data) {
 // is released across the blocking hook call so publish() on the
 // executor thread never stalls behind a slow wire.
 
+/* Implements: REQ_PCL_292, REQ_PCL_290, REQ_PCL_458. */
 #ifdef _WIN32
 static DWORD WINAPI tpl_send_thread_main(LPVOID arg)
 #else
@@ -513,6 +520,8 @@ static void* tpl_send_thread_main(void* arg)
 // post_remote_incoming() deep-copies before returning, so a single
 // free() pass here is safe.
 
+/* Implements: REQ_PCL_293, REQ_PCL_294, REQ_PCL_436, REQ_PCL_438,
+   REQ_PCL_448. */
 #ifdef _WIN32
 static DWORD WINAPI tpl_recv_thread_main(LPVOID arg)
 #else
@@ -647,6 +656,7 @@ static void* tpl_recv_thread_main(void* arg)
 // caller's borrowed buffers, append to the FIFO under send_lock, and
 // signal the send_thread.
 
+/* Implements: REQ_PCL_320, REQ_PCL_455. */
 static pcl_status_t tpl_publish(void*            adapter_ctx,
                                 const char*      topic,
                                 const pcl_msg_t* msg) {
@@ -671,6 +681,7 @@ static pcl_status_t tpl_publish(void*            adapter_ctx,
 // the recv_thread which delivers the response back via
 // pcl_executor_post_response_msg().
 
+/* Implements: REQ_PCL_320, REQ_PCL_437, REQ_PCL_452, REQ_PCL_456. */
 static pcl_status_t tpl_invoke_async(void*            adapter_ctx,
                                      const char*      service_name,
                                      const pcl_msg_t* request,
@@ -726,6 +737,7 @@ static pcl_status_t tpl_invoke_async(void*            adapter_ctx,
 // Concrete transports that *do* need per-topic registration (e.g. DDS
 // reader creation) should fan out to their stack here.
 
+/* Implements: REQ_PCL_295. */
 static pcl_status_t tpl_subscribe(void*       adapter_ctx,
                                   const char* topic,
                                   const char* type_name) {
@@ -743,6 +755,7 @@ static pcl_status_t tpl_subscribe(void*       adapter_ctx,
 // We must not join here (the executor thread is calling us) — we only
 // raise the stop flags and let destroy() perform the actual join.
 
+/* Implements: REQ_PCL_320. */
 static void tpl_shutdown(void* adapter_ctx) {
   struct pcl_transport_template_t* ctx =
       (struct pcl_transport_template_t*)adapter_ctx;
@@ -761,6 +774,8 @@ static void tpl_shutdown(void* adapter_ctx) {
 
 // -- Public API ---------------------------------------------------------
 
+/* Implements: REQ_PCL_429, REQ_PCL_430, REQ_PCL_433, REQ_PCL_441,
+   REQ_PCL_442, REQ_PCL_443. */
 pcl_transport_template_t* pcl_transport_template_create(
     const pcl_template_io_hooks_t* hooks,
     pcl_executor_t*                executor) {
@@ -905,6 +920,7 @@ pcl_transport_template_t* pcl_transport_template_create(
   return ctx;
 }
 
+/* Implements: REQ_PCL_432, REQ_PCL_286. */
 pcl_status_t pcl_transport_template_set_peer_id(
     pcl_transport_template_t* ctx,
     const char*               peer_id) {
@@ -931,12 +947,15 @@ pcl_status_t pcl_transport_template_set_peer_id(
   return rc;
 }
 
+/* Implements: REQ_PCL_433. */
 const pcl_transport_t* pcl_transport_template_get_transport(
     pcl_transport_template_t* ctx) {
   if (!ctx) return NULL;
   return &ctx->transport;
 }
 
+/* Implements: REQ_PCL_431, REQ_PCL_288, REQ_PCL_290, REQ_PCL_434,
+   REQ_PCL_435, REQ_PCL_439, REQ_PCL_440, REQ_PCL_321, REQ_PCL_458. */
 void pcl_transport_template_destroy(pcl_transport_template_t* ctx) {
   if (!ctx) return;
 

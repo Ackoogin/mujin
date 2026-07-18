@@ -46,7 +46,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.018 | Multi-Container Execution | 031, 032, 033, 034, 084, 091, 093 | test_pcl_dining, test_pcl_executor, test_pcl_robustness |
+| PCL.018 | Multi-Container Execution | 031, 032, 033, 034, 084, 091, 093, 094 | test_pcl_dining, test_pcl_executor, test_pcl_robustness |
 | PCL.019 | Spin and Spin-Once | 032 | test_pcl_executor |
 | PCL.020 | Shutdown Request | 035, 055 | test_pcl_executor, test_pcl_robustness |
 | PCL.021 | Graceful Shutdown | 036, 041, 042 | test_pcl_executor, test_pcl_robustness |
@@ -58,7 +58,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
 | PCL.025 | Cross-Thread Message Posting | 049, 050, 051, 052, 053, 054, 055, 056 | test_pcl_executor, test_pcl_robustness |
-| PCL.026 | Ingress Queue Drain | 054 | test_pcl_robustness |
+| PCL.026 | Ingress Queue Drain | 054, 095 | test_pcl_executor, test_pcl_robustness |
 | PCL.027 | Async Response Delivery | 057, 058, 059, 060, 061 | test_pcl_robustness |
 ## Transport Adapter
 
@@ -89,7 +89,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.041 | Bridge Creation | 075, 081, 082, 083, 328 | test_pcl_bridge, test_pcl_dining |
+| PCL.041 | Bridge Creation | 075, 081, 082, 083, 096, 328 | test_pcl_bridge, test_pcl_dining |
 | PCL.042 | Bridge Transform Dispatch | 079, 084 | test_pcl_bridge, test_pcl_dining |
 | PCL.043 | Bridge Message Suppression | 080 | test_pcl_bridge, test_pcl_dining |
 | PCL.044 | Bridge Null Safety | 076, 077, 078 | test_pcl_bridge, test_pcl_dining |
@@ -97,8 +97,8 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.045 | Null Handle Safety | 002, 018, 022, 025, 038, 046, 050, 060, 063, 111, 112, 113, 114, 116, 118, 123, 127, 129, 130, 166, 170, 184, 189, 192, 193, 198, 212, 216, 298, 302, 317, 340, 347, 353, 362, 377, 378, 381, 388, 390, 399, 401, 404, 406, 408, 429, 431, 432, 460, 476, 497 | test_pcl_alloc, test_pcl_apos_transport, test_pcl_capabilities, test_pcl_codec_registry, test_pcl_executor, test_pcl_lifecycle, test_pcl_plugin_loader, test_pcl_process_runtime, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_transport, test_pcl_streaming, test_pcl_template_transport, test_pcl_transport_routing, test_pcl_udp_transport |
-| PCL.046 | Allocation Failure Handling | 016, 021, 037, 052, 061, 082, 085, 086, 087, 088, 089, 090, 185, 309, 310, 318, 319, 409, 410, 411, 413, 494 | test_pcl_bridge, test_pcl_dining, test_pcl_oom, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_faults, test_pcl_transport_routing |
+| PCL.045 | Null Handle Safety | 002, 018, 022, 025, 038, 046, 050, 060, 063, 099, 100, 103, 110, 111, 112, 113, 114, 116, 118, 123, 127, 129, 130, 166, 170, 184, 189, 192, 193, 206, 209, 210, 216, 218, 219, 221, 225, 230, 234, 235, 298, 302, 317, 340, 347, 353, 362, 377, 378, 381, 388, 390, 401, 404, 406, 408, 429, 431, 432, 460, 497, 498 | test_pcl_alloc, test_pcl_apos_transport, test_pcl_capabilities, test_pcl_codec_registry, test_pcl_executor, test_pcl_lifecycle, test_pcl_plugin_loader, test_pcl_process_runtime, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_transport, test_pcl_streaming, test_pcl_template_transport, test_pcl_transport_routing, test_pcl_udp_transport |
+| PCL.046 | Allocation Failure Handling | 016, 021, 037, 052, 061, 082, 085, 086, 087, 088, 089, 090, 185, 207, 223, 309, 310, 318, 319, 409, 410, 411, 413, 494 | test_pcl_bridge, test_pcl_dining, test_pcl_oom, test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_socket_faults, test_pcl_transport_routing |
 | PCL.047 | Status Codes | 462 | test_pcl_lifecycle, test_pcl_robustness |
 ## C++ Wrappers
 
@@ -106,7 +106,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 |-----|-------------|--------|--------------|
 | PCL.048 | Component Base Class | 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 157, 217 | test_pcl_cpp_wrappers |
 | PCL.049 | Executor Wrapper | 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157 | test_pcl_cpp_wrappers |
-| PCL.056 | Public Route Configuration API | 179 | test_pcl_robustness, test_pcl_socket_transport |
+| PCL.056 | Public Route Configuration API | 179 | test_pcl_socket_transport |
 ## Cross-Thread Ingress
 
 | HLR | Description | LLR(s) | Test File(s) |
@@ -117,7 +117,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
 | PCL.058 | Codec Abstraction | 346 | test_pcl_codec_registry |
-| PCL.059 | Codec Registry | 337, 338, 339, 340, 341, 342, 343, 344, 345, 385, 395 | test_pcl_codec_registry, test_pcl_plugin_loader |
+| PCL.059 | Codec Registry | 219, 220, 337, 338, 339, 340, 341, 342, 343, 344, 345, 385, 395 | test_pcl_codec_registry, test_pcl_plugin_loader |
 ## Transport Capabilities and QoS
 
 | HLR | Description | LLR(s) | Test File(s) |
@@ -132,14 +132,14 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 |-----|-------------|--------|--------------|
 | PCL.064 | Transport Plugin ABI | 354, 355, 383, 384, 397 | test_pcl_capabilities, test_pcl_plugin_loader |
 | PCL.065 | Plugin Loader Fail-Closed Behaviour | 353, 362, 386, 393, 394, 395, 396, 397, 398, 402 | test_pcl_capabilities, test_pcl_plugin_loader |
-| PCL.066 | Codec Plugin Batch Loading | 385, 391, 392, 399, 400, 401, 405 | test_pcl_plugin_loader |
+| PCL.066 | Codec Plugin Batch Loading | 221, 385, 391, 392, 399, 400, 401, 405 | test_pcl_plugin_loader |
 | PCL.067 | Safe Teardown-Then-Unload | 381, 382, 403, 407 | test_pcl_plugin_loader |
 | PCL.068 | Reference Transport Plugins | 356, 357, 358, 359, 360, 361, 387, 388, 389, 390, 403, 404, 406, 407, 408 | test_pcl_capabilities, test_pcl_plugin_loader |
 ## Manifest-Driven Endpoint Routing
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.069 | Routing Manifest | 317, 416, 417, 418, 419, 425 | test_pcl_transport_routing |
+| PCL.069 | Routing Manifest | 210, 317, 416, 417, 418, 419, 425 | test_pcl_transport_routing |
 | PCL.070 | Routing Atomicity and Fail-Closed Diagnostics | 275, 318, 319, 416, 420, 421, 422, 423, 424, 425, 426, 427, 428, 466, 467, 468 | test_pcl_transport_routing |
 ## Transport Template and Conformance
 
@@ -147,12 +147,12 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 |-----|-------------|--------|--------------|
 | PCL.071 | Transport Template Scaffold | 286, 288, 290, 292, 293, 294, 295, 320, 321, 429, 430, 431, 432, 434, 435, 436, 437, 438, 439, 440 | test_pcl_template_transport |
 | PCL.072 | Transport Conformance Suite | 433, 441, 442, 443, 445, 446, 447 | test_pcl_apos_transport, test_pcl_template_transport |
-| PCL.073 | APOS LVC Transport | 297, 298, 300, 322, 323, 324, 325, 444, 445, 446, 447 | test_pcl_apos_transport |
+| PCL.073 | APOS LVC Transport | 107, 108, 109, 218, 222, 297, 298, 300, 322, 323, 324, 325, 444, 445, 446, 447 | test_pcl_apos_transport |
 ## Portable Allocator
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.074 | Portable Allocator | 213, 214, 215, 216 | test_pcl_alloc |
+| PCL.074 | Portable Allocator | 104, 105, 106, 213, 214, 215, 216 | test_pcl_alloc |
 ## Transport Threading Model
 
 | HLR | Description | LLR(s) | Test File(s) |
@@ -169,48 +169,48 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.079 | Standalone Component Process Runtime | 476, 477, 478, 479, 480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494 | test_pcl_oom, test_pcl_process_runtime |
+| PCL.079 | Standalone Component Process Runtime | 225, 226, 227, 228, 476, 477, 478, 479, 480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494 | test_pcl_oom, test_pcl_process_runtime |
 ## Transport Flow Control and Monitoring
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.080 | Remote Subscription Registration | 495, 496, 497 | test_pcl_executor |
-| PCL.081 | Bounded Executor Ingress | 498, 499 | test_pcl_executor |
-| PCL.082 | Shared-Memory Subscription Interest | 500 | test_pcl_shared_memory_transport |
-| PCL.083 | Bounded Reliable-Socket Egress | 502, 503 | test_pcl_socket_transport |
+| PCL.080 | Remote Subscription Registration | 229, 230, 236, 495, 496, 497 | test_pcl_executor |
+| PCL.081 | Bounded Executor Ingress | 231, 232, 498, 499 | test_pcl_executor |
+| PCL.082 | Shared-Memory Subscription Interest | 233, 500 | test_pcl_shared_memory_transport |
+| PCL.083 | Bounded Reliable-Socket Egress | 234, 502, 503 | test_pcl_socket_transport |
 | PCL.084 | UDP Received-Datagram Accounting | 504 | test_pcl_udp_transport |
 ## Port Management
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
 | PCL.085 | Async Service Invocation | 164, 165 | test_pcl_robustness, test_pcl_socket_transport |
-| PCL.086 | Deferred Service Response | 459, 460, 461 | test_pcl_executor, test_pcl_robustness |
-| PCL.087 | Streaming Service Response | 167, 168, 169, 170, 171, 172, 311, 312 | test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_streaming |
+| PCL.086 | Deferred Service Response | 223, 459, 460, 461 | test_pcl_executor, test_pcl_robustness |
+| PCL.087 | Streaming Service Response | 097, 098, 167, 168, 169, 170, 171, 172, 311, 312 | test_pcl_robustness, test_pcl_shared_memory_transport, test_pcl_streaming |
 ## Transport Adapter
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
 | PCL.088 | Transport Client Service Invocation | 164, 165, 166 | test_pcl_executor, test_pcl_robustness, test_pcl_socket_transport |
-| PCL.089 | Endpoint Routing Configuration | 173, 174, 175, 473 | test_pcl_executor, test_pcl_streaming |
+| PCL.089 | Endpoint Routing Configuration | 173, 174, 175, 235, 473 | test_pcl_executor, test_pcl_robustness, test_pcl_streaming |
 | PCL.090 | Named Peer Transport Registration | 174, 175, 178 | test_pcl_executor |
 | PCL.091 | Remote Ingress Filtering | 173, 201, 306, 311, 314, 327, 438 | test_pcl_executor, test_pcl_shared_memory_transport, test_pcl_template_transport, test_pcl_udp_transport |
 ## TCP Socket Transport
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.092 | Remote Peer Identity | 176, 177, 179, 199 | test_pcl_robustness, test_pcl_socket_transport, test_pcl_udp_transport |
-| PCL.093 | Inter-Process Shared Memory Bus | 186, 187, 188, 305, 306, 307, 310, 313, 314, 315, 316, 326, 327 | test_pcl_shared_memory_transport |
+| PCL.092 | Remote Peer Identity | 100, 176, 177, 179, 199 | test_pcl_socket_transport, test_pcl_udp_transport |
+| PCL.093 | Inter-Process Shared Memory Bus | 186, 187, 188, 208, 305, 306, 307, 310, 313, 314, 315, 316, 326, 327 | test_pcl_shared_memory_transport |
 | PCL.094 | Shared Memory Publish Fan-Out | 186, 187, 211 | test_pcl_shared_memory_transport |
-| PCL.095 | Shared Memory Async Remote Service Invocation | 188, 189, 308, 309 | test_pcl_shared_memory_transport |
+| PCL.095 | Shared Memory Async Remote Service Invocation | 188, 189, 207, 308, 309 | test_pcl_shared_memory_transport |
 | PCL.096 | Robust Client Connect Semantics | 190, 191, 192, 193, 194, 195, 196, 197, 204, 205, 414, 415 | test_pcl_socket_faults, test_pcl_socket_transport |
-| PCL.097 | UDP Datagram Transport | 198, 199, 200, 201, 202, 203, 301, 302, 303, 304 | test_pcl_udp_transport |
+| PCL.097 | UDP Datagram Transport | 198, 199, 200, 201, 202, 203, 206, 301, 302, 303, 304 | test_pcl_udp_transport |
 | PCL.098 | Shared Memory Atomic Fan-Out | 211 | test_pcl_shared_memory_transport |
 ## Manifest-Driven Endpoint Routing
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
 | PCL.099 | Streaming Route Capability | 472 | test_pcl_capabilities, test_pcl_transport_routing |
-| PCL.100 | Routed Transport Gateway Discovery | 471 | test_pcl_transport_routing |
+| PCL.100 | Routed Transport Gateway Discovery | 224, 471 | test_pcl_transport_routing |
 ## Transport Flow Control and Monitoring
 
 | HLR | Description | LLR(s) | Test File(s) |
@@ -221,7 +221,7 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 
 | HLR | Description | LLR(s) | Test File(s) |
 |-----|-------------|--------|--------------|
-| PCL.103 | Shared Memory Topic Backpressure | 212, 457 | test_pcl_shared_memory_transport, test_pcl_transport_threading |
+| PCL.103 | Shared Memory Topic Backpressure | 101, 102, 212, 457 | test_pcl_shared_memory_transport, test_pcl_transport_threading |
 
 
 ## Summary
@@ -229,8 +229,8 @@ Each test carries `///< REQ_PCL_NNN` tags; each LLR's **Traces** field names its
 | Metric | Count |
 |--------|-------|
 | HLRs | 97 |
-| LLRs | 403 |
-| LLRs with at least one verifying test file | 403 |
+| LLRs | 444 |
+| LLRs with at least one verifying test file | 444 |
 | Distinct test files carrying REQ_PCL tags | 19 |
 | HLRs with no tracing LLR | 0 |
 | LLRs with no test evidence | 0 |
@@ -256,6 +256,12 @@ None.
 None.
 
 ### Test tags naming unknown LLRs
+
+None.
+
+## Quality Checks
+
+Automated requirement quality gate from `subprojects/PCL/doc/standards/requirements_standard.md` sections 1 and 2: duplicate identifiers, suffix identifiers, one-"shall"-per-requirement, HLR implementation identifiers, and HLR references to higher-layer concepts.
 
 None.
 

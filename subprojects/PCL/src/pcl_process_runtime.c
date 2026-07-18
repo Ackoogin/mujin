@@ -57,6 +57,7 @@ struct pcl_process_runtime_t {
 
 static pcl_process_runtime_t* signal_runtime = NULL;
 
+/* Implements: REQ_PCL_487. */
 static void runtime_signal_handler(int signal_number) {
   (void)signal_number;
   if (signal_runtime) {
@@ -96,6 +97,7 @@ static char* trim(char* text) {
   return text;
 }
 
+/* Implements: REQ_PCL_483. */
 static const char* kind_name(pcl_endpoint_kind_t kind) {
   switch (kind) {
     case PCL_ENDPOINT_PUBLISHER: return "publisher";
@@ -132,6 +134,7 @@ static int find_peer(
   return -1;
 }
 
+/* Implements: REQ_PCL_485. */
 static int make_temporary_path(char* path, size_t path_size) {
 #if defined(_WIN32)
   char directory[MAX_PATH];
@@ -191,6 +194,7 @@ static uint64_t monotonic_milliseconds(void) {
 #endif
 }
 
+/* Implements: REQ_PCL_479. */
 static pcl_status_t activate_gateways(
     pcl_process_runtime_t* runtime,
     const pcl_runtime_peer_config_t* peers,
@@ -229,6 +233,7 @@ static pcl_status_t activate_gateways(
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_476, REQ_PCL_225, REQ_PCL_494. */
 pcl_status_t pcl_process_runtime_create(
     uint32_t duration_seconds,
     pcl_process_runtime_t** out_runtime) {
@@ -247,10 +252,12 @@ pcl_status_t pcl_process_runtime_create(
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_476, REQ_PCL_225. */
 pcl_executor_t* pcl_process_runtime_executor(pcl_process_runtime_t* runtime) {
   return runtime ? runtime->executor : NULL;
 }
 
+/* Implements: REQ_PCL_477, REQ_PCL_226, REQ_PCL_492, REQ_PCL_225. */
 pcl_status_t pcl_process_runtime_load_codec(
     pcl_process_runtime_t* runtime,
     const char* plugin_path) {
@@ -273,6 +280,8 @@ pcl_status_t pcl_process_runtime_load_codec(
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_478, REQ_PCL_480, REQ_PCL_481, REQ_PCL_482,
+   REQ_PCL_483, REQ_PCL_484, REQ_PCL_485, REQ_PCL_490, REQ_PCL_493. */
 pcl_status_t pcl_process_runtime_load_ports_file(
     pcl_process_runtime_t* runtime,
     const char* config_path,
@@ -522,6 +531,8 @@ cleanup:
   return status;
 }
 
+/* Implements: REQ_PCL_486, REQ_PCL_487, REQ_PCL_228, REQ_PCL_488,
+   REQ_PCL_489, REQ_PCL_491. */
 pcl_status_t pcl_process_runtime_run(
     pcl_process_runtime_t* runtime,
     pcl_container_t* component) {
@@ -588,16 +599,19 @@ finish:
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_225. */
 void pcl_process_runtime_request_shutdown(pcl_process_runtime_t* runtime) {
   if (!runtime) return;
   runtime->stop_requested = 1;
   pcl_executor_request_shutdown(runtime->executor);
 }
 
+/* Implements: REQ_PCL_225. */
 const char* pcl_process_runtime_error(const pcl_process_runtime_t* runtime) {
   return runtime ? runtime->error : "process runtime is null";
 }
 
+/* Implements: REQ_PCL_227, REQ_PCL_225. */
 void pcl_process_runtime_destroy(pcl_process_runtime_t* runtime) {
   size_t index;
   if (!runtime) return;

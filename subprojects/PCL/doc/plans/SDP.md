@@ -81,9 +81,13 @@ asserted, not analysed. The analyses are planned in SVP section 6.
 - Defensive-programming rules, banned constructs, and the allocator rule
   (all variable-length ABI-crossing buffers through `pcl_alloc`/`pcl_free`)
   are in the C coding standard.
-- Requirement tags: test code carries `///< REQ_PCL_NNN` tags. Source code
-  does not yet carry per-function LLR tags — code-to-LLR trace granularity is
-  currently file-level (open item, gap analysis GAP-C-08).
+- Requirement tags: test code carries `///< REQ_PCL_NNN` tags. Production
+  source code carries function-level `Implements: REQ_PCL_NNN` trace
+  comments (C coding standard, rule 5.6). The code-to-LLR trace is
+  machine-checked in both directions by
+  `scripts/gen_code_trace.py --check`, which also generates the matrix
+  `doc/reports/PCL/CODE_TO_LLR.md` (closes the mechanism for gap analysis
+  GAP-C-08).
 
 ## 6. Development Environment
 

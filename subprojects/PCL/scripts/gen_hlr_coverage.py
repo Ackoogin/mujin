@@ -12,18 +12,26 @@ Writes doc/reports/PCL/HLR_COVERAGE.md (test -> LLR -> HLR matrix plus gap
 lists). This file is generated evidence: do not hand-edit the output; fix the
 requirements documents or test tags and regenerate.
 
+In addition to trace gaps, `--check` also runs the requirement quality gate
+described in `subprojects/PCL/doc/standards/requirements_standard.md`: it
+rejects duplicate identifiers, letter-suffixed identifiers, HLR/LLR normative
+paragraphs that do not contain exactly one "shall", HLR text that names PCL
+implementation identifiers, and HLR text that reaches into concepts owned by
+a layer above PCL (PYRAMID protocol wire details, ROS2/DDS specifics, AME
+application concepts, and similar).
+
 Usage:
   python3 subprojects/PCL/scripts/gen_hlr_coverage.py [--check]
 
-  --check   exit 1 if any trace gap exists (for CI use); the matrix is
-            written either way.
+  --check   exit 1 if any trace gap or requirement quality issue exists (for
+            CI use); the matrix is written either way.
 """
 
 import argparse
 import datetime
 import re
 import sys
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -42,6 +50,49 @@ SECTION_HEADING = re.compile(r"^## (.+)$")
 TRACE_IDS = re.compile(r"PCL\.\d+")
 REQ_TAG = re.compile(r"REQ_PCL_(\d+)")
 TESTFILE_REF = re.compile(r"([A-Za-z0-9_]+\.(?:cpp|hpp|c))")
+
+# -- Requirement quality gate -------------------------------------------
+#
+# These patterns implement the checkable rules from
+# subprojects/PCL/doc/standards/requirements_standard.md sections 1.1-1.3
+# and 2.1-2.3: no suffix identifiers, no duplicate identifiers, exactly one
+# "shall" per normative paragraph, no implementation identifiers or
+# higher-layer concepts inside HLR text.
+
+SUFFIX_HLR_ID = re.compile(r"PCL\.\d+[a-zA-Z]")
+SUFFIX_LLR_ID = re.compile(r"REQ_PCL_\d+[a-zA-Z]")
+SHALL_WORD = re.compile(r"\bshall\b")
+
+# Implementation identifiers that do not belong in HLR normative text: PCL
+# C function/macro names, C++ wrapper type names, status-code-style
+# ALL_CAPS constants, and source file names.
+HLR_IMPL_PATTERNS = [
+    ("C function or macro name", re.compile(r"\bpcl_[a-z0-9_]*[a-z0-9](?:\(\))?\b")),
+    ("C++ wrapper type name", re.compile(r"\bPcl[A-Z][A-Za-z0-9_]*\b")),
+    ("status code or ALL_CAPS constant", re.compile(r"\bPCL_[A-Z][A-Z0-9_]*\b")),
+    ("source file name", re.compile(r"\b[A-Za-z0-9_]+\.(?:c|h)\b")),
+]
+
+# Concepts owned by a layer above PCL (see doc/todo/PCL/TODO.md and the
+# commit that deleted the generated-binding/application-domain HLRs for
+# examples of what this is meant to catch). Acronyms are matched
+# case-sensitively with word boundaries so they do not fire on ordinary
+# English substrings (e.g. "AME" inside "name", "DDS" inside a hyphenated
+# token); phrases are matched case-insensitively.
+HLR_HIGHER_LAYER_TERMS = [
+    (re.compile(r"\bPYRAMID protocol\b", re.IGNORECASE), "PYRAMID protocol"),
+    (re.compile(r"\bPYRAMID component\b", re.IGNORECASE), "PYRAMID component"),
+    (re.compile(r"\bwire[- ]name\b", re.IGNORECASE), "wire name"),
+    (re.compile(r"\bproto(?:col|buf)? definition\b", re.IGNORECASE), "proto definition"),
+    (re.compile(r"\bprotobuf\b", re.IGNORECASE), "protobuf"),
+    (re.compile(r"\bgenerated (?:service )?binding", re.IGNORECASE), "generated binding"),
+    (re.compile(r"\bROS2\b"), "ROS2"),
+    (re.compile(r"\bDDS\b"), "DDS"),
+    (re.compile(r"\bAME\b"), "AME"),
+    (re.compile(r"\bmission planning\b", re.IGNORECASE), "mission planning"),
+    (re.compile(r"\bautonomy mission\b", re.IGNORECASE), "autonomy mission"),
+    (re.compile(r"\bbehaviou?r tree\b", re.IGNORECASE), "behaviour tree"),
+]
 
 
 def parse_hlr(path):
@@ -83,6 +134,144 @@ def parse_llr(path):
                 set(TESTFILE_REF.findall(line))
             )
     return llrs
+
+
+def parse_hlr_bodies(path):
+    """Return OrderedDict hlr_id -> normative paragraph text (the lines
+    between the heading and the **Rationale** marker, joined with spaces).
+
+    Duplicate headings overwrite earlier entries here, same as parse_hlr;
+    duplicate detection itself is done separately in find_duplicate_ids so
+    both the first and later occurrences are reported.
+    """
+    bodies = OrderedDict()
+    current = None
+    buf = []
+
+    def flush():
+        if current is not None:
+            bodies[current] = " ".join(x for x in buf if x.strip())
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = HLR_HEADING.match(line)
+        if m:
+            flush()
+            current = m.group(1)
+            buf = []
+            continue
+        if current is None:
+            continue
+        if line.startswith("**Rationale**") or SECTION_HEADING.match(line):
+            flush()
+            current = None
+            buf = []
+            continue
+        buf.append(line)
+    flush()
+    return bodies
+
+
+def parse_llr_bodies(path):
+    """Return OrderedDict llr_id -> normative paragraph text (the lines
+    between the heading and the **Traces** marker, joined with spaces)."""
+    bodies = OrderedDict()
+    current = None
+    buf = []
+
+    def flush():
+        if current is not None:
+            bodies[current] = " ".join(x for x in buf if x.strip())
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = LLR_HEADING.match(line)
+        if m:
+            flush()
+            current = m.group(1)
+            buf = []
+            continue
+        if current is None:
+            continue
+        if line.startswith("**Traces**"):
+            flush()
+            current = None
+            buf = []
+            continue
+        buf.append(line)
+    flush()
+    return bodies
+
+
+def find_duplicate_ids(path, heading_re):
+    """Return sorted list of identifiers whose heading appears more than
+    once in the file at `path`."""
+    ids = [m.group(1) for line in path.read_text(encoding="utf-8").splitlines()
+           for m in [heading_re.match(line)] if m]
+    counts = Counter(ids)
+    return sorted(i for i, n in counts.items() if n > 1)
+
+
+def find_suffix_ids(path, suffix_re):
+    """Return sorted list of distinct letter-suffixed identifiers appearing
+    anywhere in `path` (headings or trace references)."""
+    return sorted(set(suffix_re.findall(path.read_text(encoding="utf-8"))))
+
+
+def check_hlr_quality(hlr_path):
+    """Run the HLR-specific quality rules from requirements_standard.md
+    section 1 and return a list of human-readable issue strings."""
+    issues = []
+
+    dup = find_duplicate_ids(hlr_path, HLR_HEADING)
+    for hid in dup:
+        issues.append(f"duplicate HLR identifier: {hid}")
+
+    suffix = find_suffix_ids(hlr_path, SUFFIX_HLR_ID)
+    for sid in suffix:
+        issues.append(f"suffix HLR identifier is not permitted: {sid}")
+
+    bodies = parse_hlr_bodies(hlr_path)
+    for hid, text in bodies.items():
+        count = len(SHALL_WORD.findall(text))
+        if count != 1:
+            issues.append(
+                f"{hid}: normative paragraph contains {count} \"shall\" "
+                f"statements (must be exactly 1)")
+        for label, pattern in HLR_IMPL_PATTERNS:
+            hit = pattern.search(text)
+            if hit:
+                issues.append(
+                    f"{hid}: HLR text names an implementation identifier "
+                    f"({label} \"{hit.group(0)}\"); move it to an LLR")
+        for pattern, label in HLR_HIGHER_LAYER_TERMS:
+            if pattern.search(text):
+                issues.append(
+                    f"{hid}: HLR text references a higher-layer concept "
+                    f"(\"{label}\"); keep higher-layer concepts out of PCL "
+                    f"requirements")
+    return issues
+
+
+def check_llr_quality(llr_path):
+    """Run the LLR-specific quality rules from requirements_standard.md
+    section 2 and return a list of human-readable issue strings."""
+    issues = []
+
+    dup = find_duplicate_ids(llr_path, LLR_HEADING)
+    for lid in dup:
+        issues.append(f"duplicate LLR identifier: {lid}")
+
+    suffix = find_suffix_ids(llr_path, SUFFIX_LLR_ID)
+    for sid in suffix:
+        issues.append(f"suffix LLR identifier is not permitted: {sid}")
+
+    bodies = parse_llr_bodies(llr_path)
+    for lid, text in bodies.items():
+        count = len(SHALL_WORD.findall(text))
+        if count != 1:
+            issues.append(
+                f"{lid}: normative paragraph contains {count} \"shall\" "
+                f"statements (must be exactly 1)")
+    return issues
 
 
 def scan_test_tags(paths):
@@ -230,6 +419,22 @@ def main():
         fmt=lambda kv: f"{kv[0]} referenced by {', '.join(kv[1])}")
     gap_section("Test tags naming unknown LLRs", tags_without_llr)
 
+    quality_issues = check_hlr_quality(HLR_PATH) + check_llr_quality(LLR_PATH)
+    w("## Quality Checks")
+    w("")
+    w("Automated requirement quality gate from "
+      "`subprojects/PCL/doc/standards/requirements_standard.md` sections 1 "
+      "and 2: duplicate identifiers, suffix identifiers, one-\"shall\"-per-"
+      "requirement, HLR implementation identifiers, and HLR references to "
+      "higher-layer concepts.")
+    w("")
+    if quality_issues:
+        for issue in quality_issues:
+            w(f"- {issue}")
+    else:
+        w("None.")
+    w("")
+
     w("## Trace Tag Format")
     w("")
     w("Tests use LLR requirement tags in comments:")
@@ -253,8 +458,16 @@ def main():
                  + len(unknown_hlr_refs))
     print(f"Wrote {OUT_PATH}")
     print(f"HLRs: {len(hlrs)}  LLRs: {len(llrs)}  gaps: {gap_count}")
-    if args.check and gap_count:
-        print("FAIL: trace gaps present (see Trace Gaps section)")
+    if quality_issues:
+        print(f"Quality issues: {len(quality_issues)}")
+        for issue in quality_issues:
+            print(f"  - {issue}")
+    if args.check and (gap_count or quality_issues):
+        if gap_count:
+            print("FAIL: trace gaps present (see Trace Gaps section)")
+        if quality_issues:
+            print("FAIL: requirement quality issues present "
+                  "(see Quality Checks section)")
         return 1
     return 0
 

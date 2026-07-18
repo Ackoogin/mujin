@@ -57,8 +57,8 @@ static pcl_status_t configure_route_validation_ports(pcl_container_t* c,
 // pcl_container.c -- uncovered branches
 // =======================================================================
 
-///< REQ_PCL_171, REQ_PCL_172, REQ_PCL_179: route configuration and stream
-///< service creation reject every invalid public input. PCL.087, PCL.045.
+///< REQ_PCL_235, REQ_PCL_171: port route configuration and stream service
+///< creation reject every invalid public input. PCL.089, PCL.087, PCL.045.
 TEST(PclRobustness, RouteAndStreamDefinitionsRejectInvalidInputs) {
   RouteValidationPorts ports;
   pcl_callbacks_t callbacks = {};

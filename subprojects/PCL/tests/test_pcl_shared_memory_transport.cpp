@@ -364,7 +364,7 @@ TEST(PclSharedMemoryTransport, PublishFansOutAcrossBusParticipants) {
   restore_logs();
 }
 
-///< REQ_PCL_500: shared-memory publish targets only participants that
+///< REQ_PCL_233: shared-memory publish targets only participants that
 ///< advertised the topic and reports when none are interested. PCL.082.
 TEST(PclSharedMemoryTransport, PublishTargetsOnlyInterestedParticipants) {
   silence_logs();
@@ -1470,7 +1470,7 @@ TEST(PclSharedMemoryTransport, SubscribeAndShutdownVtableAreNoOps) {
   restore_logs();
 }
 
-///< REQ_PCL_212: backpressure policies can be updated in place, cleared with
+///< REQ_PCL_101: backpressure policies can be updated in place, cleared with
 ///< a zero timeout (including for topics never configured), and the fixed
 ///< policy table rejects overflow with PCL_ERR_NOMEM.
 TEST(PclSharedMemoryTransport, TopicBackpressureConfigLifecycle) {
@@ -1958,7 +1958,7 @@ TEST(PclSharedMemoryTransport, AmbiguousProviderFailsClosed) {
   restore_logs();
 }
 
-///< REQ_PCL_309: destroying a participant with un-answered unary and stream
+///< REQ_PCL_309, REQ_PCL_207: destroying a participant with un-answered unary and stream
 ///< requests frees the pending records and fires stream callbacks with
 ///< PCL_ERR_CANCELLED.
 TEST(PclSharedMemoryTransport, DestroyWithPendingRequestsCancelsThem) {
@@ -2071,7 +2071,7 @@ TEST(PclSharedMemoryTransport, ParticipantSlotsExhausted) {
   restore_logs();
 }
 
-///< REQ_PCL_212: clearing a backpressure policy restores the normal fail-fast
+///< REQ_PCL_102: clearing a backpressure policy restores the normal fail-fast
 ///< publish path.
 TEST(PclSharedMemoryTransport, ClearedBackpressureRestoresFailFastPublish) {
   silence_logs();
@@ -2100,7 +2100,7 @@ TEST(PclSharedMemoryTransport, ClearedBackpressureRestoresFailFastPublish) {
   restore_logs();
 }
 
-///< REQ_PCL_212: backpressure configuration rejects an unterminated-length
+///< REQ_PCL_103: backpressure configuration rejects an unterminated-length
 ///< (over-long) topic name.
 TEST(PclSharedMemoryTransport, TopicBackpressureRejectsOverlongTopic) {
   silence_logs();
@@ -2331,7 +2331,7 @@ TEST(PclSharedMemoryTransport, StreamHandlerErrorEndsStream) {
   restore_logs();
 }
 
-///< REQ_PCL_313: the per-participant service table deduplicates repeated
+///< REQ_PCL_313, REQ_PCL_208: the per-participant service table deduplicates repeated
 ///< service names and caps at 16 advertised services.
 TEST(PclSharedMemoryTransport, ServiceTableDedupesAndCaps) {
   silence_logs();

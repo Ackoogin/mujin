@@ -81,7 +81,8 @@ struct AposPair {
 
 }  // namespace
 
-///< REQ_PCL_444: the APOS stub delivers messages FIFO per channel and waitOnMultiChannel() reports which channel has data.
+///< REQ_PCL_444, REQ_PCL_222: the APOS stub delivers messages FIFO per
+///< channel and waitOnMultiChannel() reports which channel has data.
 TEST(AposStub, FifoAndWaitOnMultiChannel) {
   setupAPOS(42u);
 
@@ -161,8 +162,9 @@ extern "C" void counting_delay(int uS) {
 
 }  // namespace
 
-///< REQ_PCL_297: the blocking send/receive wrappers, delay-function hook,
-///< setupApos alias, and logEvent stub behave per the APOS binding contract.
+///< REQ_PCL_297, REQ_PCL_107, REQ_PCL_108, REQ_PCL_109: the blocking
+///< send/receive wrappers, delay-function hook, setupApos alias, and
+///< logEvent stub behave per the APOS binding contract.
 TEST(AposStub, BlockingWrappersAndDelayFunction) {
   setupApos(43u);        // alias for setupAPOS
   logEvent(const_cast<char*>("apos stub log line"));  // no-op
@@ -239,8 +241,9 @@ TEST(AposStub, NonBlockingReceiveEdgeCases) {
   EXPECT_EQ(size, 4);
 }
 
-///< REQ_PCL_323: an infinite wait (NULL timeout) blocks until a producer
-///< thread queues data on one of the watched channels.
+///< REQ_PCL_323, REQ_PCL_218: an infinite wait (NULL timeout) blocks until
+///< a producer thread queues data on one of the watched channels, and
+///< waitOnMultiChannel() rejects invalid arguments.
 TEST(AposStub, InfiniteWaitWokenByProducerThread) {
   setupAPOS(45u);
 
@@ -283,7 +286,8 @@ TEST(AposStub, InfiniteWaitWokenByProducerThread) {
 // APOS transport error paths
 // ---------------------------------------------------------------------------
 
-///< REQ_PCL_298: transport creation fails closed without an executor.
+///< REQ_PCL_298, REQ_PCL_110: transport creation fails closed without an
+///< executor, and destroy(NULL) is a safe no-op.
 TEST(PclTransportApos, CreateWithoutExecutorReturnsNull) {
   EXPECT_EQ(pcl_apos_transport_create(1u, 1, 2, nullptr), nullptr);
   pcl_apos_transport_destroy(nullptr);  // NULL-safe

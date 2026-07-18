@@ -30,6 +30,8 @@ struct pcl_bridge_t {
 
 // -- Subscriber callback -------------------------------------------------
 
+/* Implements: REQ_PCL_079, REQ_PCL_080, REQ_PCL_081, REQ_PCL_083,
+   REQ_PCL_328. */
 static void bridge_sub_cb(pcl_container_t* c,
                            const pcl_msg_t* in,
                            void*            ud) {
@@ -60,6 +62,7 @@ static void bridge_sub_cb(pcl_container_t* c,
 
 // -- on_configure: wire up the subscriber port ---------------------------
 
+/* Implements: REQ_PCL_082. */
 static pcl_status_t bridge_on_configure(pcl_container_t* c, void* ud) {
   pcl_bridge_t* b = (pcl_bridge_t*)ud;
   pcl_port_t*   p;
@@ -76,6 +79,7 @@ static pcl_status_t bridge_on_configure(pcl_container_t* c, void* ud) {
 
 // -- Public API ---------------------------------------------------------
 
+/* Implements: REQ_PCL_075, REQ_PCL_076, REQ_PCL_089. */
 pcl_bridge_t* pcl_bridge_create(pcl_executor_t*  executor,
                                  const char*      name,
                                  const char*      in_topic,
@@ -115,11 +119,13 @@ pcl_bridge_t* pcl_bridge_create(pcl_executor_t*  executor,
   return b;
 }
 
+/* Implements: REQ_PCL_077. */
 pcl_container_t* pcl_bridge_container(pcl_bridge_t* b) {
   if (!b) return NULL;
   return b->container;
 }
 
+/* Implements: REQ_PCL_078, REQ_PCL_096. */
 void pcl_bridge_destroy(pcl_bridge_t* b) {
   if (!b) return;
   pcl_container_destroy(b->container);

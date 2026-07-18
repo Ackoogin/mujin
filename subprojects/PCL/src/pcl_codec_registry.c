@@ -15,6 +15,7 @@ struct pcl_codec_registry_t {
 
 static pcl_codec_registry_t* pcl_default_codec_registry = NULL;
 
+/* Implements: REQ_PCL_343. */
 static const pcl_codec_t* find_codec_at(const pcl_codec_registry_t* registry,
                                         const char*                 content_type,
                                         uint32_t                    index) {
@@ -40,6 +41,7 @@ static const pcl_codec_t* find_codec(const pcl_codec_registry_t* registry,
   return find_codec_at(registry, content_type, 0u);
 }
 
+/* Implements: REQ_PCL_342. */
 static int contains_codec(const pcl_codec_registry_t* registry,
                           const pcl_codec_t*          codec) {
   uint32_t i;
@@ -53,6 +55,7 @@ static int contains_codec(const pcl_codec_registry_t* registry,
   return 0;
 }
 
+/* Implements: REQ_PCL_339. */
 static pcl_status_t reserve_codec_slots(pcl_codec_registry_t* registry,
                                         uint32_t              required) {
   const pcl_codec_t** next_codecs;
@@ -76,16 +79,22 @@ static pcl_status_t reserve_codec_slots(pcl_codec_registry_t* registry,
   return PCL_OK;
 }
 
+/* No LLR: internal allocation helper with no dedicated requirement;
+   its behaviour is exercised through pcl_codec_registry_default()
+   (REQ_PCL_345) and the OOM suite covering registry construction. */
 pcl_codec_registry_t* pcl_codec_registry_create(void) {
   return (pcl_codec_registry_t*)pcl_calloc(1, sizeof(pcl_codec_registry_t));
 }
 
+/* No LLR: RAII counterpart of pcl_codec_registry_create(); no requirement
+   names this destructor specifically. */
 void pcl_codec_registry_destroy(pcl_codec_registry_t* registry) {
   if (!registry) return;
   pcl_free(registry->codecs);
   pcl_free(registry);
 }
 
+/* Implements: REQ_PCL_345. */
 pcl_codec_registry_t* pcl_codec_registry_default(void) {
   if (!pcl_default_codec_registry) {
     pcl_default_codec_registry = pcl_codec_registry_create();
@@ -93,11 +102,13 @@ pcl_codec_registry_t* pcl_codec_registry_default(void) {
   return pcl_default_codec_registry;
 }
 
+/* Implements: REQ_PCL_220. */
 void pcl_codec_registry_clear(pcl_codec_registry_t* registry) {
   if (!registry) return;
   registry->count = 0u;
 }
 
+/* Implements: REQ_PCL_340, REQ_PCL_339, REQ_PCL_342, REQ_PCL_341. */
 pcl_status_t pcl_codec_registry_register(pcl_codec_registry_t* registry,
                                          const pcl_codec_t*    codec) {
   pcl_status_t rc;
@@ -143,6 +154,7 @@ pcl_status_t pcl_codec_registry_register(pcl_codec_registry_t* registry,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_337, REQ_PCL_338, REQ_PCL_341, REQ_PCL_219. */
 const pcl_codec_t* pcl_codec_registry_get(const pcl_codec_registry_t* registry,
                                           const char*                 content_type) {
   if (!registry) {
@@ -158,6 +170,7 @@ const pcl_codec_t* pcl_codec_registry_get(const pcl_codec_registry_t* registry,
   return find_codec(registry, content_type);
 }
 
+/* Implements: REQ_PCL_343, REQ_PCL_219. */
 const pcl_codec_t* pcl_codec_registry_get_at(const pcl_codec_registry_t* registry,
                                              const char*                 content_type,
                                              uint32_t                    index) {
@@ -174,6 +187,7 @@ const pcl_codec_t* pcl_codec_registry_get_at(const pcl_codec_registry_t* registr
   return find_codec_at(registry, content_type, index);
 }
 
+/* Implements: REQ_PCL_344. */
 uint32_t pcl_codec_registry_count(const pcl_codec_registry_t* registry) {
   return registry ? registry->count : 0u;
 }

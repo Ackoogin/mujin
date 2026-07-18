@@ -58,6 +58,7 @@ static void set_diag(char* diag, size_t diag_size, const char* fmt, ...) {
   va_end(ap);
 }
 
+/* Implements: REQ_PCL_428. */
 static int kind_from_str(const char* s, pcl_endpoint_kind_t* out) {
   if (strcmp(s, "publisher") == 0)            { *out = PCL_ENDPOINT_PUBLISHER; return 1; }
   if (strcmp(s, "subscriber") == 0)           { *out = PCL_ENDPOINT_SUBSCRIBER; return 1; }
@@ -68,6 +69,7 @@ static int kind_from_str(const char* s, pcl_endpoint_kind_t* out) {
   return 0;
 }
 
+/* Implements: REQ_PCL_275. */
 static int reliability_from_str(const char* s, pcl_qos_reliability_t* out) {
   if (strcmp(s, "best_effort") == 0) { *out = PCL_QOS_RELIABILITY_BEST_EFFORT; return 1; }
   if (strcmp(s, "reliable") == 0)    { *out = PCL_QOS_RELIABILITY_RELIABLE; return 1; }
@@ -185,6 +187,8 @@ static const char* inject_routing_context(const pcl_executor_t* e,
   return buf;
 }
 
+/* Implements: REQ_PCL_275, REQ_PCL_418, REQ_PCL_423, REQ_PCL_318,
+   REQ_PCL_419. */
 static pcl_status_t handle_transport_line(pcl_executor_t*          e,
                                           pcl_transport_routing_t* r,
                                           char*                    cursor,
@@ -249,6 +253,7 @@ static pcl_status_t handle_transport_line(pcl_executor_t*          e,
    bounded by `max_count`. Fails closed on an empty member (leading/trailing/
    doubled comma) or an oversized list -- both are malformed input, not a
    silently-truncated one. */
+/* Implements: REQ_PCL_467. */
 static pcl_status_t split_endpoint_list(char*                list_str,
                                         char                 out[][64],
                                         uint32_t*             out_count,
@@ -287,6 +292,7 @@ static pcl_status_t split_endpoint_list(char*                list_str,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_466, REQ_PCL_467, REQ_PCL_464. */
 static pcl_status_t handle_exclusive_line(pcl_transport_routing_t* r,
                                           char*                    cursor,
                                           char*                    diag,
@@ -337,6 +343,7 @@ static pcl_status_t handle_exclusive_line(pcl_transport_routing_t* r,
    pcl_executor_set_endpoint_route call) -- the D5 fail-closed guarantee
    must hold against that pre-existing state too, not just against routes
    this one manifest happens to declare together. */
+/* Implements: REQ_PCL_463, REQ_PCL_474, REQ_PCL_475. */
 static const char* route_matching_list(const pcl_transport_routing_t* r,
                                        const char                    list[][64],
                                        uint32_t                       count) {
@@ -357,6 +364,8 @@ static const char* route_matching_list(const pcl_transport_routing_t* r,
    the check. For every declared group, fail closed if *both* sides have at
    least one routed member; any number of same-side endpoints routed
    together, and endpoints in no group, are unaffected. */
+/* Implements: REQ_PCL_463, REQ_PCL_465, REQ_PCL_469, REQ_PCL_474,
+   REQ_PCL_475. */
 static pcl_status_t validate_exclusivity(const pcl_transport_routing_t* r,
                                          char*                          diag,
                                          size_t                          diag_size) {
@@ -376,6 +385,8 @@ static pcl_status_t validate_exclusivity(const pcl_transport_routing_t* r,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_275, REQ_PCL_428, REQ_PCL_422, REQ_PCL_420,
+   REQ_PCL_426, REQ_PCL_427, REQ_PCL_472. */
 static pcl_status_t handle_route_line(pcl_executor_t*          e,
                                       pcl_transport_routing_t* r,
                                       char*                    cursor,
@@ -461,6 +472,8 @@ static pcl_status_t handle_route_line(pcl_executor_t*          e,
   return pcl_executor_validate_endpoint_route(e, &route, diag, diag_size);
 }
 
+/* Implements: REQ_PCL_210, REQ_PCL_416, REQ_PCL_417, REQ_PCL_421,
+   REQ_PCL_468, REQ_PCL_469, REQ_PCL_474, REQ_PCL_319, REQ_PCL_224. */
 pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
                                         const char*               manifest_path,
                                         pcl_transport_routing_t** out_routing,
@@ -542,6 +555,7 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_209, REQ_PCL_425, REQ_PCL_424, REQ_PCL_421. */
 void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
   size_t i;
   if (!routing) return;
@@ -573,6 +587,7 @@ void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
   free(routing);
 }
 
+/* Implements: REQ_PCL_317. */
 size_t pcl_transport_routing_transport_count(const pcl_transport_routing_t* routing) {
   return routing ? routing->count : 0u;
 }
@@ -590,6 +605,7 @@ static const char* const kRoutingGatewaySymbols[] = {
 
 typedef pcl_container_t* (*pcl_routing_gateway_fn)(const pcl_transport_t*);
 
+/* Implements: REQ_PCL_471. */
 pcl_status_t pcl_transport_routing_get_gateway(
     const pcl_transport_routing_t* routing,
     const char*                    peer_id,

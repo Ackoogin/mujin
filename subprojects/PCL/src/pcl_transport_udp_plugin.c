@@ -92,17 +92,22 @@ static pcl_executor_t* read_executor(const char* config_json) {
   return (pcl_executor_t*)(uintptr_t)raw;
 }
 
+/* No LLR: constant ABI-version reporter with no requirement of its own;
+   consumed by pcl_plugin_load_transport()'s ABI checks (REQ_PCL_396,
+   REQ_PCL_397). */
 PCL_UDP_PLUGIN_EXPORT uint32_t pcl_transport_abi_version(void) {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
 /* Datagram pub/sub transport: publish + subscribe only. */
+/* Implements: REQ_PCL_356. */
 PCL_UDP_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
     const char* config_json) {
   (void)config_json;
   return PCL_CAP_PUBSUB;
 }
 
+/* Implements: REQ_PCL_359. */
 PCL_UDP_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
     const char* config_json) {
   pcl_qos_t qos;
@@ -112,6 +117,7 @@ PCL_UDP_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
   return qos;
 }
 
+/* Implements: REQ_PCL_389, REQ_PCL_390, REQ_PCL_408. */
 PCL_UDP_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                 remote_host[256];
@@ -152,6 +158,7 @@ PCL_UDP_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   return pcl_udp_transport_get_transport(udp_transport);
 }
 
+/* Implements: REQ_PCL_383. */
 PCL_UDP_PLUGIN_EXPORT void pcl_udp_transport_plugin_destroy(
     const pcl_transport_t* transport) {
   if (!transport) return;
@@ -161,6 +168,7 @@ PCL_UDP_PLUGIN_EXPORT void pcl_udp_transport_plugin_destroy(
 /* Standard teardown symbol: stop the recv thread + close the socket before the
    .so is unloaded (pcl_plugin_unload_transport), so manifest-driven routing can
    release the transport without leaking its executor-bound thread. */
+/* Implements: REQ_PCL_389. */
 PCL_UDP_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
     const pcl_transport_t* transport) {
   if (!transport) return;

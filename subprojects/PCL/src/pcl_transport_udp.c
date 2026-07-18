@@ -119,6 +119,7 @@ static void udp_write_u32_be(uint8_t* p, uint32_t v) {
   p[3] = (uint8_t)(v & 0xFF);
 }
 
+/* Implements: REQ_PCL_505. */
 static void udp_record_sequence(struct pcl_udp_transport_t* ctx,
                                 const struct sockaddr_in*  source,
                                 uint32_t                   sequence) {
@@ -261,6 +262,7 @@ static void udp_destroy_send_sync(struct pcl_udp_transport_t* ctx) {
 
 // -- Send thread -----------------------------------------------------------
 
+/* Implements: REQ_PCL_200. */
 #ifdef _WIN32
 static DWORD WINAPI udp_send_thread_main(LPVOID arg)
 #else
@@ -327,6 +329,7 @@ static void* udp_send_thread_main(void* arg)
 
 // -- Transport vtable: publish (called on PCL main thread) ----------------
 
+/* Implements: REQ_PCL_200, REQ_PCL_202. */
 static pcl_status_t udp_publish(void*            adapter_ctx,
                                 const char*      topic,
                                 const pcl_msg_t* msg) {
@@ -378,6 +381,7 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
 
 // -- Transport vtable: subscribe / shutdown -------------------------------
 
+/* Implements: REQ_PCL_301. */
 static pcl_status_t udp_subscribe(void*       adapter_ctx,
                                   const char* topic,
                                   const char* type_name) {
@@ -385,6 +389,7 @@ static pcl_status_t udp_subscribe(void*       adapter_ctx,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_206. */
 static void udp_shutdown(void* adapter_ctx) {
   struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)adapter_ctx;
   if (!ctx) return;
@@ -394,6 +399,8 @@ static void udp_shutdown(void* adapter_ctx) {
 
 // -- Receive thread -------------------------------------------------------
 
+/* Implements: REQ_PCL_200, REQ_PCL_201, REQ_PCL_303, REQ_PCL_504,
+   REQ_PCL_450. */
 #ifdef _WIN32
 static DWORD WINAPI udp_recv_thread_main(LPVOID arg)
 #else
@@ -488,6 +495,7 @@ static void* udp_recv_thread_main(void* arg)
 
 // -- Remote address resolution -------------------------------------------
 
+/* Implements: REQ_PCL_302. */
 static int udp_resolve_remote(const char*        host,
                               uint16_t           port,
                               struct sockaddr_in* out) {
@@ -514,6 +522,7 @@ static int udp_resolve_remote(const char*        host,
 
 // -- Public API -----------------------------------------------------------
 
+/* Implements: REQ_PCL_198, REQ_PCL_099, REQ_PCL_203, REQ_PCL_302. */
 pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
                                               const char*     remote_host,
                                               uint16_t        remote_port,
@@ -668,12 +677,15 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   return (pcl_udp_transport_t*)ctx;
 }
 
+/* No LLR: plain accessor with no dedicated requirement; exercised by
+   tests validating the ephemeral-port behaviour of REQ_PCL_198. */
 uint16_t pcl_udp_transport_get_local_port(const pcl_udp_transport_t* ctx_opaque) {
   const struct pcl_udp_transport_t* ctx = (const struct pcl_udp_transport_t*)ctx_opaque;
   if (!ctx) return 0;
   return ctx->local_port;
 }
 
+/* Implements: REQ_PCL_504. */
 uint64_t pcl_udp_transport_received_datagrams(const pcl_udp_transport_t* ctx_opaque) {
   const struct pcl_udp_transport_t* ctx =
       (const struct pcl_udp_transport_t*)ctx_opaque;
@@ -681,6 +693,7 @@ uint64_t pcl_udp_transport_received_datagrams(const pcl_udp_transport_t* ctx_opa
   return ctx->received_datagrams;
 }
 
+/* Implements: REQ_PCL_505. */
 uint64_t pcl_udp_transport_dropped_datagrams(const pcl_udp_transport_t* ctx_opaque) {
   const struct pcl_udp_transport_t* ctx =
       (const struct pcl_udp_transport_t*)ctx_opaque;
@@ -688,6 +701,7 @@ uint64_t pcl_udp_transport_dropped_datagrams(const pcl_udp_transport_t* ctx_opaq
   return ctx->dropped_datagrams;
 }
 
+/* Implements: REQ_PCL_199, REQ_PCL_100. */
 pcl_status_t pcl_udp_transport_set_peer_id(pcl_udp_transport_t* ctx_opaque,
                                            const char*          peer_id) {
   struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)ctx_opaque;
@@ -696,12 +710,14 @@ pcl_status_t pcl_udp_transport_set_peer_id(pcl_udp_transport_t* ctx_opaque,
   return PCL_OK;
 }
 
+/* No LLR: plain vtable accessor with no dedicated requirement. */
 const pcl_transport_t* pcl_udp_transport_get_transport(pcl_udp_transport_t* ctx_opaque) {
   struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)ctx_opaque;
   if (!ctx) return NULL;
   return &ctx->transport;
 }
 
+/* Implements: REQ_PCL_099, REQ_PCL_304. */
 void pcl_udp_transport_destroy(pcl_udp_transport_t* ctx_opaque) {
   struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)ctx_opaque;
   if (!ctx) return;
