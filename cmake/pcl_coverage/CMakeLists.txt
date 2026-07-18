@@ -23,6 +23,11 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
+# Register the gtest_discover_tests() results with CTest so
+# `ctest --test-dir <build>` runs the suite; without this CTest reports
+# zero tests even though every binary is discovered.
+enable_testing()
+
 # -- PCL core library -----------------------------------------------------
 set(WORKSPACE_ROOT "${CMAKE_SOURCE_DIR}/../..")
 set(PCL_ROOT "${WORKSPACE_ROOT}/subprojects/PCL")
