@@ -20,7 +20,7 @@ extern "C" {
 // Bridge creation and destruction tests
 // =======================================================================
 
-///< REQ_PCL_075: bridge create/destroy in isolation (see also test_pcl_dining.cpp).
+///< REQ_PCL_075, REQ_PCL_096: bridge create/destroy in isolation (see also test_pcl_dining.cpp).
 TEST(PclBridge, CreateDestroy) {
   auto* e = pcl_executor_create();
 

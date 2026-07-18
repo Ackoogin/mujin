@@ -475,7 +475,9 @@ TEST(PclTransportRouting, FailsClosedOnEachMalformedManifestShape) {
   pcl_executor_destroy(e);
 }
 
-///< REQ_PCL_317: transport_count is NULL-safe and destroy(NULL) is a no-op.
+///< REQ_PCL_317, REQ_PCL_209, REQ_PCL_210: transport_count is NULL-safe,
+///< destroy(NULL) is a no-op, and load() rejects NULL executor, manifest
+///< path, or output-handle arguments.
 TEST(PclTransportRouting, NullHandleAccessorsAreSafe) {
   EXPECT_EQ(pcl_transport_routing_transport_count(nullptr), 0u);
   pcl_transport_routing_destroy(nullptr);
@@ -966,10 +968,11 @@ TEST(PclTransportRouting, StreamingRouteRejectsStreamIncapableTransport) {
 // pcl_transport_routing.h's doc comment for why).
 // ---------------------------------------------------------------------------
 
-///< REQ_PCL_471: a manifest-routed peer whose transport exposes a gateway
-///< container (shared memory) is discoverable via
+///< REQ_PCL_471, REQ_PCL_224: a manifest-routed peer whose transport exposes
+///< a gateway container (shared memory) is discoverable via
 ///< pcl_transport_routing_get_gateway(), and the returned container is a
-///< real, usable pcl_container_t (configure/activate/add all succeed).
+///< real, usable pcl_container_t (configure/activate/add all succeed) that
+///< the loader itself did not already configure, activate, or add.
 TEST(PclTransportRouting, GetGatewayReturnsUsableContainerForShmPeer) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);

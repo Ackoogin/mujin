@@ -115,7 +115,7 @@ uint32_t processId() {
 
 }  // namespace
 
-///< REQ_PCL_476: creating a process runtime creates its executor, and null-safe accessors fail closed. PCL.079.
+///< REQ_PCL_476, REQ_PCL_225: creating a process runtime creates its executor, and null-safe accessors fail closed. PCL.079.
 TEST(PclProcessRuntime, CreatesExecutorAndHandlesNullArguments) {
   pcl_process_runtime_t* runtime = nullptr;
   EXPECT_EQ(pcl_process_runtime_create(0u, nullptr), PCL_ERR_INVALID);
@@ -153,7 +153,7 @@ TEST(PclProcessRuntime, CreatesExecutorAndHandlesNullArguments) {
   pcl_process_runtime_destroy(runtime);
 }
 
-///< REQ_PCL_477: codec loading rejects missing plugins with a useful diagnostic. PCL.079.
+///< REQ_PCL_477, REQ_PCL_226: codec loading rejects missing plugins with a useful diagnostic. PCL.079.
 TEST(PclProcessRuntime, LoadsCodecAndReportsPluginFailure) {
   Runtime runtime;
   EXPECT_EQ(pcl_process_runtime_load_codec(
@@ -210,7 +210,7 @@ TEST(PclProcessRuntime, LoadsCompletePortsFileAndRejectsSecondLoad) {
   std::remove(path.c_str());
 }
 
-///< REQ_PCL_479: a discovered shared-memory gateway is activated and cleaned up. PCL.079.
+///< REQ_PCL_479, REQ_PCL_227: a discovered shared-memory gateway is activated and cleaned up. PCL.079.
 TEST(PclProcessRuntime, ActivatesAndCleansUpSharedMemoryGateway) {
   Runtime runtime;
   const pcl_process_endpoint_descriptor_t rpc[] = {
@@ -434,7 +434,7 @@ TEST(PclProcessRuntime, RunsComponentUntilShutdownRequest) {
   pcl_container_destroy(component);
 }
 
-///< REQ_PCL_487: SIGTERM requests graceful shutdown and restores handlers. PCL.079.
+///< REQ_PCL_487, REQ_PCL_228: SIGTERM requests graceful shutdown and restores handlers. PCL.079.
 TEST(PclProcessRuntime, SignalRequestsGracefulShutdown) {
   Runtime runtime;
   pcl_callbacks_t callbacks = {};

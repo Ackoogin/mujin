@@ -416,7 +416,7 @@ TEST(PclPluginLoader, TransportPluginWithoutEntrySymbolFailsClosed) {
   EXPECT_EQ(transport, nullptr);
 }
 
-///< REQ_PCL_399: pcl_codec_registry_load_plugins_from_paths() skips NULL/empty/missing/non-codec entries and still loads the valid ones; NULL registry or path array (with nonzero count) is rejected.
+///< REQ_PCL_399, REQ_PCL_221: pcl_codec_registry_load_plugins_from_paths() skips NULL/empty/missing/non-codec entries and still loads the valid ones; NULL registry or path array (with nonzero count) is rejected.
 TEST(PclPluginLoader, LoadCodecPluginsFromPathsSkipsBadEntries) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);

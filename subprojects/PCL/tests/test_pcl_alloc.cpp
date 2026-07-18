@@ -10,7 +10,7 @@ extern "C" {
 #include "pcl/pcl_alloc.h"
 }
 
-///< REQ_PCL_213: pcl_alloc returns usable memory; zero-size returns NULL.
+///< REQ_PCL_213, REQ_PCL_104: pcl_alloc returns usable memory; zero-size returns NULL; pcl_free releases it.
 TEST(PclAlloc, AllocAndFreeRoundTrip) {
   void* p = pcl_alloc(64u);
   ASSERT_NE(p, nullptr);
@@ -34,8 +34,9 @@ TEST(PclAlloc, CallocZeroesAndRejectsOverflow) {
   EXPECT_EQ(pcl_calloc((size_t)-1, 2u), nullptr);
 }
 
-///< REQ_PCL_215: pcl_realloc grows an allocation preserving contents,
-///< acts as pcl_alloc for a NULL pointer, and frees when size is zero.
+///< REQ_PCL_215, REQ_PCL_105, REQ_PCL_106: pcl_realloc grows an allocation
+///< preserving contents, acts as pcl_alloc for a NULL pointer, and frees
+///< when size is zero.
 TEST(PclAlloc, ReallocSemantics) {
   // NULL pointer: behaves as pcl_alloc.
   char* p = (char*)pcl_realloc(nullptr, 8u);

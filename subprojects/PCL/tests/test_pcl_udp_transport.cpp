@@ -87,6 +87,8 @@ static uint16_t pick_free_udp_port() {
 // Creation / destruction
 // ---------------------------------------------------------------------------
 
+///< REQ_PCL_198: creating a UDP transport binds a socket, spawns the receive
+///< thread, and exposes a full publish/subscribe/shutdown vtable. PCL.097.
 TEST(PclUdpTransport, CreateAndDestroy) {
   silence_logs();
   auto* e = pcl_executor_create();
@@ -109,6 +111,8 @@ TEST(PclUdpTransport, CreateAndDestroy) {
   restore_logs();
 }
 
+///< REQ_PCL_099: creation returns NULL for a NULL remote_host or executor.
+///< PCL.045.
 TEST(PclUdpTransport, NullArgsReturnNull) {
   silence_logs();
   auto* e = pcl_executor_create();
@@ -124,6 +128,9 @@ TEST(PclUdpTransport, NullArgsReturnNull) {
   restore_logs();
 }
 
+///< REQ_PCL_199, REQ_PCL_100: setting the peer id stores it for inbound
+///< datagram posting, and NULL/empty ids are rejected with PCL_ERR_INVALID.
+///< PCL.097, PCL.092.
 TEST(PclUdpTransport, SetPeerIdRoundTrip) {
   silence_logs();
   auto* e = pcl_executor_create();
@@ -354,8 +361,8 @@ TEST(PclUdpTransport, NoServiceRpcSupport) {
   restore_logs();
 }
 
-///< REQ_PCL_301: the UDP vtable subscribe is a no-op returning PCL_OK and
-///< shutdown stops the receive thread.
+///< REQ_PCL_301, REQ_PCL_206: the UDP vtable subscribe is a no-op returning
+///< PCL_OK and shutdown stops the receive thread and is NULL-safe.
 TEST(PclUdpTransport, SubscribeAndShutdownVtable) {
   pcl_executor_t* exec = pcl_executor_create();
   ASSERT_NE(exec, nullptr);

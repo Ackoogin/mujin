@@ -217,9 +217,9 @@ TEST(PclExecutor, IntraProcessPubSub) {
   pcl_container_destroy(sub_c);
 }
 
-///< REQ_PCL_498, REQ_PCL_499: a configured ingress bound rejects excess
-///< messages without changing the reported depth, and zero restores unbounded
-///< operation. PCL.081.
+///< REQ_PCL_498, REQ_PCL_231, REQ_PCL_232, REQ_PCL_499: a configured
+///< ingress bound rejects excess messages without changing the reported
+///< depth, and zero restores unbounded operation. PCL.081.
 TEST(PclExecutor, IncomingQueueLimitRejectsExcessMessages) {
   auto* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
@@ -477,8 +477,9 @@ TEST(PclExecutor, LateNamedTransportRegistersExistingSubscriberPort) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_495: the default transport registers only remote subscribers that
-///< do not select a named peer; local and named routes are ignored. PCL.080.
+///< REQ_PCL_236: the default transport registers only remote subscribers
+///< that do not select a named peer; local and named routes are ignored.
+///< PCL.080.
 TEST(PclExecutor, DefaultTransportRegistersUnboundRemoteSubscriberOnly) {
   MockTransportState transport_state;
   pcl_transport_t transport = {};
@@ -519,7 +520,7 @@ TEST(PclExecutor, DefaultTransportRegistersUnboundRemoteSubscriberOnly) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_496: installing the default transport after container setup
+///< REQ_PCL_229: installing the default transport after container setup
 ///< registers an existing unbound remote subscriber. PCL.080.
 TEST(PclExecutor, LateDefaultTransportRegistersUnboundRemoteSubscriber) {
   MockTransportState transport_state;
@@ -577,7 +578,7 @@ TEST(PclExecutor, SelectedTransportWithoutSubscribeFailsClosed) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_497: a rejected late subscription leaves the named transport
+///< REQ_PCL_230: a rejected late subscription leaves the named transport
 ///< unregistered. PCL.080.
 TEST(PclExecutor, RejectedLateSubscriptionRollsBackTransport) {
   MockTransportState transport_state;

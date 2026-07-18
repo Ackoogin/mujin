@@ -116,7 +116,7 @@ TEST(PclCodecRegistry, BadAbiVersionRejectedWithState) {
   pcl_codec_registry_destroy(registry);
 }
 
-///< REQ_PCL_340: NULL registry/codec/content_type arguments to register() and get() are rejected/return NULL.
+///< REQ_PCL_340, REQ_PCL_219: NULL registry/codec/content_type arguments to register() and get() are rejected/return NULL.
 TEST(PclCodecRegistry, NullArgsRejectedWithInvalid) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
@@ -195,7 +195,7 @@ TEST(PclCodecRegistry, GetAtIteratesCodecsForContentTypeInRegistrationOrder) {
   pcl_codec_registry_destroy(registry);
 }
 
-///< REQ_PCL_344: count() reflects registrations; clear() removes all registrations without destroying the borrowed codecs.
+///< REQ_PCL_344, REQ_PCL_220: count() reflects registrations; clear() removes all registrations without destroying the borrowed codecs.
 TEST(PclCodecRegistry, CountAndClearWork) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);

@@ -18,7 +18,7 @@ extern "C" {
 // Streaming service tests
 // =======================================================================
 
-///< REQ_PCL_167: Streaming service send and end. PCL.087.
+///< REQ_PCL_167, REQ_PCL_097: Streaming service send and end. PCL.087.
 TEST(PclStreaming, BasicStreamingSendEnd) {
   // Test basic streaming: handler sends 3 messages then ends
   struct Ctx {
@@ -92,7 +92,7 @@ TEST(PclStreaming, BasicStreamingSendEnd) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_168: Client stream cancellation. PCL.087.
+///< REQ_PCL_168, REQ_PCL_098: Client stream cancellation. PCL.087.
 TEST(PclStreaming, ClientCancellation) {
   // Test client cancellation mid-stream
   struct Ctx {
@@ -265,7 +265,7 @@ TEST(PclStreaming, AddStreamServiceDuringConfigure) {
 // Transport streaming vtable tests
 // =======================================================================
 
-///< REQ_PCL_167: Streaming with transport vtable. PCL.087.
+///< REQ_PCL_167, REQ_PCL_097: Streaming with transport vtable. PCL.087.
 TEST(PclStreaming, TransportStreamSendEnd) {
   struct TransportCtx {
     bool stream_send_called = false;
@@ -453,7 +453,7 @@ TEST(PclStreaming, TransportStreamAbort) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_168: Stream cancel with transport. PCL.087.
+///< REQ_PCL_168, REQ_PCL_098: Stream cancel with transport. PCL.087.
 TEST(PclStreaming, TransportStreamCancel) {
   struct TransportCtx {
     bool stream_cancel_called = false;
