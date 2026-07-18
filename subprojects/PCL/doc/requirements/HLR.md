@@ -79,12 +79,14 @@ The container shall enforce valid transitions: UNCONFIGURED -> CONFIGURED (confi
 **Rationale**: Invalid transitions must be rejected to prevent undefined behavior.
 
 ### PCL.003 - Transition Callback Invocation
-Each lifecycle transition shall invoke the corresponding user-supplied callback (`on_configure`, `on_activate`, `on_deactivate`, `on_cleanup`, `on_shutdown`). Null callbacks shall be treated as no-ops returning success.
+Each lifecycle transition shall invoke its corresponding user-supplied callback
+when one is configured.
 
 **Rationale**: Components need hooks to perform setup and teardown at each phase.
 
 ### PCL.004 - Callback Failure Aborts Transition
-If a lifecycle callback returns a non-OK status, the transition shall be aborted and the container shall remain in its previous state.
+A lifecycle transition shall preserve the prior state when its callback reports
+failure.
 
 **Rationale**: Failed initialization must not leave the container in an inconsistent state.
 
@@ -101,17 +103,17 @@ The container shall support four port types: publisher, subscriber, service (ser
 **Rationale**: Pub/sub and request/reply are the two fundamental communication patterns.
 
 ### PCL.007 - Port Creation During Configure Only
-Ports shall only be creatable during the `on_configure` callback. Attempts to create ports outside this phase shall fail.
+Port creation shall be permitted only while a container is being configured.
 
 **Rationale**: Immutable port topology after configuration enables deterministic memory layout and prevents runtime resource leaks.
 
 ### PCL.008 - Port Capacity Limit
-The container shall support a fixed maximum number of ports (64). Exceeding this limit shall return an error.
+A container shall reject creation of more than 64 ports.
 
 **Rationale**: Bounded resource usage is required for embedded targets with fixed memory budgets.
 
 ### PCL.009 - Publish Constraint
-Publishing shall only be permitted while the container is in the ACTIVE state. Attempts to publish on inactive containers shall return `PCL_ERR_PORT_CLOSED`.
+A container shall reject publishing unless it is active.
 
 **Rationale**: Ensures consumers only receive messages from fully initialized components.
 
@@ -125,18 +127,20 @@ When a service request arrives at a server, the container's service handler shal
 
 **Rationale**: Server-side request/reply handling for queries and commands.
 
-### PCL.011a - Async Service Invocation
-Client-side service invocation may be asynchronous. The client enqueues a request via the transport; the response callback fires on the executor thread when the reply arrives.
+### PCL.085 - Async Service Invocation
+A service client shall receive an asynchronous response on the executor thread.
 
 **Rationale**: Non-blocking service calls allow the client to continue processing while awaiting responses.
 
-### PCL.011b - Deferred Service Response
-A service handler may defer its response by returning `PCL_PENDING` and saving the service context. The handler shall later call `pcl_service_respond()` to send the response. This enables handlers that need to perform async operations (e.g., call other services) before responding.
+### PCL.086 - Deferred Service Response
+A service handler shall be able to complete its response after the handler
+invocation returns.
 
 **Rationale**: Service handlers often need to aggregate data from multiple sources or wait for external events before responding.
 
-### PCL.011c - Streaming Service Response
-A streaming service handler may return `PCL_STREAMING` to begin a multi-message response stream. The handler shall use `pcl_stream_send()` to send messages, `pcl_stream_end()` to complete normally, or `pcl_stream_abort()` to terminate with an error. Clients may cancel mid-stream via `pcl_stream_cancel()`, and servers may poll cancellation status via `pcl_stream_is_cancelled()`.
+### PCL.087 - Streaming Service Response
+A service handler shall be able to produce a cancellable sequence of response
+messages.
 
 **Rationale**: Query services often need to return large result sets incrementally (like gRPC server streaming).
 
@@ -148,7 +152,7 @@ The container shall support key-value parameters of types: string, double (f64),
 **Rationale**: Components need configuration data without external config file dependencies.
 
 ### PCL.013 - Parameter Capacity Limit
-The container shall support a fixed maximum number of parameters (128). Exceeding this limit shall return an error.
+A container shall reject creation of more than 128 parameters.
 
 **Rationale**: Bounded resource usage for embedded targets.
 
@@ -160,17 +164,18 @@ Parameter retrieval shall return a caller-supplied default when the key is not f
 ## Tick Rate and Periodic Execution
 
 ### PCL.015 - Configurable Tick Rate
-Each container shall have a configurable tick rate in Hz (default 100 Hz). The `on_tick` callback shall be called at approximately this rate while the container is ACTIVE.
+Each container shall have a configurable periodic execution rate.
 
 **Rationale**: Components need periodic execution at domain-appropriate rates.
 
 ### PCL.016 - Tick Rate Validation
-Invalid tick rates (zero, negative) shall be rejected with `PCL_ERR_INVALID`.
+Non-positive periodic execution rates shall be rejected.
 
 **Rationale**: Prevents infinite loops or undefined timer behavior.
 
 ### PCL.017 - Delta Time Reporting
-The `on_tick` callback shall receive the elapsed wall-clock time since the previous tick as a parameter.
+Each periodic callback shall receive the elapsed wall-clock time since its
+previous invocation.
 
 **Rationale**: Components need accurate time deltas for rate-independent logic.
 
@@ -182,7 +187,7 @@ The executor shall drive one or more containers on a single thread, ticking each
 **Rationale**: Multiple components share a single thread for deterministic, lock-free execution.
 
 ### PCL.019 - Spin and Spin-Once
-The executor shall provide both blocking (`spin`) and single-pass (`spin_once`) execution modes.
+Executor processing shall be available in blocking and single-pass modes.
 
 **Rationale**: Blocking mode for production; single-pass mode for testing and integration.
 
@@ -214,7 +219,8 @@ The executor shall support adding and removing containers dynamically (before sp
 ## Cross-Thread Ingress
 
 ### PCL.025 - Cross-Thread Message Posting
-The executor shall provide `pcl_executor_post_incoming()` for external I/O threads to enqueue messages safely. The function shall deep-copy the topic, type name, and payload before returning.
+External I/O threads shall be able to enqueue incoming messages without
+retaining ownership of their buffers.
 
 **Rationale**: External producer threads must be able to post data without retaining ownership of buffers.
 
@@ -224,48 +230,53 @@ Queued messages shall be drained and dispatched to subscriber callbacks on the e
 **Rationale**: Maintains the single-threaded callback execution guarantee.
 
 ### PCL.027 - Async Response Delivery
-The executor shall support `pcl_executor_post_response_cb()` for delivering async service responses from transport threads back to the executor thread.
+Asynchronous transport responses shall be delivered on the executor thread.
 
 **Rationale**: Non-blocking async service invocation requires a response delivery mechanism.
 
 ### PCL.057 - Cross-Thread Local Service Request Queuing
-The executor shall provide `pcl_executor_post_service_request()` for external threads to safely enqueue an intra-process service call. The function shall deep-copy the service name, type name, and request payload before returning. The service handler and response callback shall both execute on the executor thread during the next spin cycle.
+External threads shall be able to enqueue local service requests for later
+execution on the executor thread.
 
 **Rationale**: D5 forbids external threads from calling component callbacks directly. Without this function there is no thread-safe path for an external producer to trigger a local service handler -- callers were forced to use `pcl_executor_invoke_service()` which bypasses the threading model when called off the executor thread.
 
 ## Transport Adapter
 
 ### PCL.028 - Transport Adapter Interface
-The transport adapter shall be a C struct of function pointers (`publish`, `serve`, `subscribe`, `shutdown`) with an opaque context pointer.
+The transport adapter shall expose optional communication operations through a
+stable C interface.
 
 **Rationale**: Pluggable I/O without link-time coupling to any specific middleware.
 
 ### PCL.029 - Transport Wiring
-The executor shall accept a transport adapter before spinning. Passing NULL shall revert to intra-process direct dispatch.
+Executor communication shall be selectable between a configured transport and
+direct intra-process dispatch.
 
 **Rationale**: Runtime selection of communication backend.
 
 ### PCL.030 - Dispatch Incoming From Transport
-The transport adapter shall be able to dispatch incoming messages to subscriber callbacks via `pcl_executor_dispatch_incoming()` when already on the executor thread.
+A transport already executing on the executor thread shall be able to dispatch
+an incoming message synchronously.
 
 **Rationale**: Transport adapters that run on the executor thread need a synchronous dispatch path.
 
-### PCL.030a - Transport Client Service Invocation
-The transport adapter interface shall include an optional `invoke_async` function pointer for client-side service invocation. The executor shall provide `pcl_executor_invoke_async()` which routes requests through the configured transport.
+### PCL.088 - Transport Client Service Invocation
+Client-side service invocation shall use the selected transport asynchronously.
 
 **Rationale**: Service invocation must be as pluggable as pub/sub to maintain transport abstraction (D3). Components should not be coupled to specific transport implementations when calling services.
 
-### PCL.030b - Endpoint Routing Configuration
-PCL shall support explicit endpoint routing at startup for publisher, subscriber, provided-service, and consumed-service endpoints. Each endpoint route shall support local-only, remote-only, or local-plus-remote operation.
+### PCL.089 - Endpoint Routing Configuration
+Each endpoint's local and remote delivery mode shall be configurable at
+startup.
 
 **Rationale**: Endpoint locality must be deployment configuration, not inferred from whether an interface is `provided` or `consumed`.
 
-### PCL.030c - Named Peer Transport Registration
-The executor shall support registration of multiple named peer transports and shall resolve remote endpoint traffic to a specific peer transport using the configured route.
+### PCL.090 - Named Peer Transport Registration
+Remote endpoint traffic shall use the named transport selected by its route.
 
 **Rationale**: Multi-executor mesh and bridge deployments require more than one remote peer per executor.
 
-### PCL.030d - Remote Ingress Filtering
+### PCL.091 - Remote Ingress Filtering
 Subscriber and provided-service endpoints shall accept remote traffic only when their route configuration allows remote delivery, and when the source peer matches any configured peer allow-list.
 
 **Rationale**: Remote exposure must be explicit so local-only endpoints are not accidentally reachable over the network.
@@ -273,17 +284,17 @@ Subscriber and provided-service endpoints shall accept remote traffic only when 
 ## TCP Socket Transport
 
 ### PCL.031 - Server Mode
-The socket transport shall support server mode: listen on a TCP port, accept a client, and spawn recv/send threads.
+The socket transport shall support accepting remote peer connections.
 
 **Rationale**: Cross-process PCL communication for distributed deployments.
 
 ### PCL.032 - Client Mode
-The socket transport shall support client mode: connect to a server, spawn recv/send threads, and support async remote service invocation.
+The socket transport shall support establishing a connection to a remote peer.
 
 **Rationale**: Client-side of cross-process communication.
 
 ### PCL.033 - Wire Protocol
-The socket transport shall use a framed binary protocol: `[4-byte length big-endian][payload]` with type bytes for PUBLISH (0x00), SVC_REQ (0x01), and SVC_RESP (0x02).
+Socket transport messages shall use a big-endian length-prefixed binary frame with distinct publish, service-request, and service-response message types.
 
 **Rationale**: Minimal, unambiguous framing for reliable message delimitation.
 
@@ -293,74 +304,69 @@ The server-mode transport shall provide a gateway container that receives servic
 **Rationale**: Service routing for remote clients.
 
 ### PCL.035 - Non-Blocking Send
-All socket writes shall be performed by a dedicated send thread via a mutex-protected FIFO queue. No blocking I/O shall occur on the executor thread.
+Socket egress shall not perform blocking input or output on the executor thread.
 
 **Rationale**: Protects the deterministic tick loop from network latency.
 
 ### PCL.036 - Async Remote Service Invocation
-The client transport shall support `invoke_remote_async()` which enqueues a service request and fires a callback on the executor thread when the response arrives.
+Remote client service invocation shall enqueue its request and deliver its response on the executor thread.
 
 **Rationale**: Non-blocking remote service calls from component logic.
 
-### PCL.036a - Remote Peer Identity
+### PCL.092 - Remote Peer Identity
 The reference socket transport shall associate inbound traffic with a configured peer identity and pass that identity into executor routing decisions for remote pub/sub and service dispatch.
 
 **Rationale**: Per-peer routing and exposure control require the transport to preserve the logical source peer across ingress.
 
-### PCL.036e - Robust Client Connect Semantics
-The socket transport shall offer an extended client-create API that provides:
-(a) bounded retry with exponential backoff for the initial connect,
-(b) a connection-state callback exposing `CONNECTING`/`CONNECTED`/`DISCONNECTED` transitions,
-(c) transparent auto-reconnect by the receive thread after a dropped connection, and
-(d) TCP keepalive on all connected sockets for timely detection of silent peer death.
-Host resolution shall use `getaddrinfo` (thread-safe, IPv6-capable).
-The legacy single-shot client create shall remain available as a thin wrapper so existing call sites are unaffected.
+### PCL.096 - Robust Client Connect Semantics
+Socket client connection management shall tolerate bounded startup delay and remote peer restarts.
 
 **Rationale**: Production deployments cannot assume strict start order between peers, and peers may restart. Fail-fast semantics force every caller to implement retry plumbing, which is error-prone and often done incorrectly. Centralising the robust connect path in the transport keeps component logic focused on application behaviour while still detecting genuine unreachable peers within a bounded deadline.
 
-### PCL.036b - Inter-Process Shared Memory Bus
+### PCL.093 - Inter-Process Shared Memory Bus
 The shared-memory transport shall support multiple local processes joining the same named bus through an OS shared-memory region containing participant mailboxes.
 
 **Rationale**: A host-local deployment needs a pluggable transport with lower overhead than sockets while still preserving the PCL transport abstraction.
 
-### PCL.036c - Shared Memory Publish Fan-Out
+### PCL.094 - Shared Memory Publish Fan-Out
 The shared-memory transport shall fan out published messages from one participant to the other participants on the same named bus and preserve the source participant identity for remote ingress filtering.
 
 **Rationale**: A central-bus topology must deliver the same remote pub/sub semantics as other transports without devolving into point-to-point links.
 
-### PCL.036d - Shared Memory Async Remote Service Invocation
+### PCL.095 - Shared Memory Async Remote Service Invocation
 The shared-memory transport shall support async remote service invocation across processes by routing requests to the unique advertised provider on the bus and delivering responses back to the caller on the executor thread.
 
 **Rationale**: Request/reply traffic must be transport-pluggable just like pub/sub, including across process boundaries on the same host.
 
-### PCL.036g - Shared Memory Atomic Fan-Out And Topic Backpressure
-The shared-memory transport shall treat each published fan-out as one transaction: before writing a published frame, it shall verify that every target participant mailbox can accept the frame; if any target lacks capacity, no target shall receive that frame. The default publish path shall remain non-blocking and return an error on congestion. The transport shall also provide a per-topic configuration API allowing selected topics to wait for mailbox capacity up to a bounded timeout, so deployments can bind topics either to the generic non-blocking output path or to a topic-specific backpressure policy.
+### PCL.098 - Shared Memory Atomic Fan-Out
+A shared-memory publish shall enqueue its frame for every intended participant or for none of them.
 
-**Rationale**: Safety-relevant pub/sub traffic must not silently split fan-out delivery across a subset of peers. Optional per-topic backpressure allows reliable low-rate command/state topics to tolerate transient mailbox pressure without forcing high-rate telemetry topics to block component output paths. Any component that enables topic-specific blocking must review its output threading and deadline budget.
+**Rationale**: A congested participant must not cause silent partial delivery to the remaining participants.
 
-### PCL.036f - UDP Datagram Transport (Pub/Sub Only)
-PCL shall ship a connectionless UDP datagram transport for best-effort publish/subscribe traffic.
-Each datagram shall carry exactly one PUBLISH message serialised without a length prefix (UDP preserves message boundaries).
-The transport shall deliberately not expose `invoke_async`, `respond`, `serve`, or `invoke_stream`: service RPC and streaming services remain exclusive to reliable transports.
-Each transport instance shall bind a local UDP port and publish to a single configured remote peer; multi-peer fan-out is achieved by instantiating one transport per peer and registering each with `pcl_executor_register_transport()`.
-Inbound datagrams shall be posted as remote ingress from the configured logical peer ID so existing per-endpoint peer allow-lists apply unchanged.
+### PCL.103 - Shared Memory Topic Backpressure
+A shared-memory topic shall be configurable to wait for mailbox capacity for a bounded duration.
+
+**Rationale**: Selected low-rate topics need a bounded way to tolerate temporary mailbox pressure.
+
+### PCL.097 - UDP Datagram Transport
+PCL shall provide a connectionless best-effort publish-subscribe transport.
 
 **Rationale**: High-rate telemetry, sensor feeds, and state broadcasts often tolerate occasional loss but cannot afford TCP framing overhead or head-of-line blocking. A separate UDP transport keeps semantics explicit (pub/sub-only, best-effort) and prevents accidental use for reliability-sensitive RPC.
 
 ## Logging
 
 ### PCL.037 - Printf-Style Logging
-PCL shall provide a `pcl_log()` function with printf-style formatting, log level, and optional container context.
+PCL shall provide context-aware severity logging with formatted messages.
 
 **Rationale**: Consistent logging API across all components.
 
 ### PCL.038 - Pluggable Log Handler
-PCL shall support installing a custom log handler. Passing NULL shall revert to the default stderr handler.
+Configured logging shall be replaceable by a caller-supplied handler.
 
 **Rationale**: Integration with ROS2 logging, file loggers, or custom sinks.
 
 ### PCL.039 - Log Level Filtering
-PCL shall support a minimum log level. Messages below this level shall be discarded.
+Log messages below the configured minimum severity shall be discarded.
 
 **Rationale**: Noise reduction in production; verbosity in development.
 
@@ -377,7 +383,7 @@ A bridge shall be created with an input topic/type, output topic/type, and a tra
 **Rationale**: Reusable topic-to-topic adaptation without custom container code.
 
 ### PCL.042 - Bridge Transform Dispatch
-When a message arrives on the bridge's input topic, the transform function shall be called. If it returns PCL_OK, the transformed message shall be dispatched immediately to the output topic on the same tick.
+A successful bridge transformation shall publish the transformed message during the same executor cycle.
 
 **Rationale**: Same-tick forwarding for latency-sensitive data pipelines.
 
@@ -399,7 +405,7 @@ All public API functions shall handle NULL handles gracefully, returning appropr
 **Rationale**: Defensive programming prevents crashes from misuse.
 
 ### PCL.046 - Allocation Failure Handling
-When internal memory allocation fails, the function shall return `PCL_ERR_NOMEM` and clean up any partially allocated resources.
+A failed internal allocation shall leave no partial resource ownership.
 
 **Rationale**: Graceful degradation under memory pressure.
 
@@ -411,46 +417,14 @@ PCL shall use a consistent set of status codes: OK, ERR_INVALID, ERR_STATE, ERR_
 ## C++ Wrappers
 
 ### PCL.048 - Component Base Class
-The C++ wrapper shall provide a `pcl::Component` base class with virtual lifecycle methods, RAII destruction, parameter helpers, port creation helpers, and logging convenience methods.
+The C++ component wrapper shall manage component lifetime and provide type-safe component configuration.
 
 **Rationale**: Ergonomic C++ interface without compromising the C ABI.
 
 ### PCL.049 - Executor Wrapper
-The C++ wrapper shall provide a `pcl::Executor` class with RAII destruction, type-safe `add(Component&)`, and spin/shutdown methods.
+The C++ executor wrapper shall manage executor lifetime and provide type-safe component execution.
 
 **Rationale**: C++ developers expect RAII and type safety.
-
-## Service Bindings (Proto/Generated)
-
-### PCL.050 - Wire-Name Constants
-Generated service bindings shall provide compile-time constants for all service wire names matching the proto definitions.
-
-**Rationale**: Eliminates string literal duplication and typo risk.
-
-### PCL.051 - Topic Constants
-Generated service bindings shall provide compile-time constants for all standard topic names.
-
-**Rationale**: Consistent topic naming across all language bindings.
-
-### PCL.052 - Service Handler Base Class
-Generated bindings shall provide a `ServiceHandler` base class with virtual methods for each service operation, with default stub implementations.
-
-**Rationale**: Type-safe service dispatch with minimal boilerplate.
-
-### PCL.053 - JSON Builder Functions
-Generated bindings shall provide helper functions for constructing standard requirement and evidence JSON payloads.
-
-**Rationale**: Consistent payload format across components.
-
-### PCL.054 - Subscribe Wrappers
-Generated bindings shall provide topic subscription helper functions that register PCL subscriber ports with correct topic and type names.
-
-**Rationale**: Eliminates manual topic/type string wiring.
-
-### PCL.055 - Dispatch Function
-Generated bindings shall provide a dispatch function that routes service channel enum values to the appropriate handler method.
-
-**Rationale**: Clean mapping from wire protocol to business logic.
 
 ### PCL.056 - Public Route Configuration API
 PCL shall expose a public C ABI for configuring endpoint locality and peer selection without editing transport internals manually.
@@ -460,56 +434,56 @@ PCL shall expose a public C ABI for configuring endpoint locality and peer selec
 ## Codecs
 
 ### PCL.058 - Codec Abstraction
-PCL shall define a format-agnostic codec vtable (`pcl_codec_t`) carrying an ABI version, a content-type string, and `encode`/`decode`/`free_msg` function pointers, so payload serialization is pluggable without coupling `pcl_core` to any format.
+Payload codecs shall be pluggable by content type through a stable C interface.
 
 **Rationale**: PCL treats payloads as opaque bytes (see Exclusions); codecs adapt typed values at the boundary without violating D1.
 
 ### PCL.059 - Codec Registry
-PCL shall provide a codec registry mapping content-type strings to borrowed codec vtables: registration shall reject NULL arguments (`PCL_ERR_INVALID`), ABI-version mismatches and duplicate vtable pointers (`PCL_ERR_STATE`); multiple codecs may share a content type, with lookup returning the first registered and indexed iteration returning them in registration order; the registry shall expose count and clear operations and a lazily created, process-stable default registry.
+PCL shall provide process-wide registration and ordered lookup of payload codecs by content type.
 
 **Rationale**: A bridge process spanning several components must host their codec plugins side by side and select among them at dispatch time.
 
 ## Transport Capabilities and QoS
 
 ### PCL.060 - Transport Capability Declaration
-Each transport shall have an interaction-capability mask (pub/sub, unary RPC, streaming RPC, action RPC). A plugin may declare its mask explicitly via the optional caps symbol; when absent, the mask shall be conservatively derived from the non-NULL vtable slots. The action capability shall never be derived (it has no vtable slot). A NULL vtable or handle shall yield no capabilities (fail closed).
+Each transport shall declare the interaction capabilities it supports.
 
 **Rationale**: Compose-time validation (D9) needs an authoritative statement of what a transport can carry.
 
 ### PCL.061 - Endpoint Capability Requirements
-Each endpoint kind shall map to the transport capability it requires: publisher/subscriber to pub/sub, provided/consumed to unary RPC, stream-provided to streaming RPC. Unrecognised kinds shall impose no requirement.
+Each remote endpoint kind shall declare the transport capability it requires.
 
 **Rationale**: Deterministic mapping from interface shape to required transport behaviour.
 
 ### PCL.062 - QoS Declaration and Floor Semantics
-Transports may declare an offered QoS (reliability: unspecified < best-effort < reliable); endpoints may declare a QoS floor. An offer shall satisfy a floor only when every declared dimension is greater than or equal to the floor; an undeclared (unspecified) offer shall fail any declared floor.
+A transport shall satisfy an endpoint quality-of-service floor only when every declared offered value meets or exceeds it.
 
 **Rationale**: Reliability must be proven by the transport, not assumed by the deployment.
 
 ### PCL.063 - Compose-Time Route Validation
-The executor shall validate an endpoint route against the capability mask and offered QoS of each transport it routes to -- named peers or the default transport slot -- failing closed with `PCL_ERR_NOT_FOUND` for unknown/absent transports and `PCL_ERR_STATE` for missing capabilities or unmet QoS floors, and emitting a human-readable diagnostic naming the endpoint and the deficiency.
+Remote endpoint composition shall reject a route whose selected transport cannot prove the required capability and quality of service.
 
 **Rationale**: D9 -- misconfiguration must be caught before traffic flows.
 
 ## Plugin ABI and Loader
 
 ### PCL.064 - Transport Plugin ABI
-Transport plugins shall export a versioned ABI: a mandatory ABI-version symbol and entry-point symbol (returning a borrowed transport vtable for an opaque JSON configuration string), plus optional capability, QoS, and teardown symbols. The ABI version constant shall gate loading.
+Transport plugins shall use a version-gated stable C interface.
 
 **Rationale**: D8 -- a stable, versioned C contract lets independently built middleware adapters load into any PCL process.
 
 ### PCL.065 - Plugin Loader Fail-Closed Behaviour
-The plugin loader shall fail closed when a plugin cannot be trusted: missing file or missing mandatory symbols (`PCL_ERR_NOT_FOUND`), ABI-version mismatch or a NULL vtable/codec from the entry point (`PCL_ERR_STATE`). On any failure the library shall be unloaded and nothing registered. The loader shall also expose a portable raw open/symbol/unload wrapper over the platform dynamic loader.
+Plugin loading shall leave nothing registered when plugin identity or compatibility cannot be validated.
 
 **Rationale**: A half-loaded or ABI-incompatible plugin must never be reachable from live traffic.
 
 ### PCL.066 - Codec Plugin Batch Loading
-The loader shall load codec plugins individually (registering the codec and returning an owned handle) and in batches from a path array, a path-list environment variable, or a manifest file (blank lines and `#` comments ignored). Batch loading shall skip entries that are missing or are not codec plugins, and successfully loaded plugins shall remain resident while their codecs are registered.
+A codec plugin batch shall retain every valid codec independently of invalid entries.
 
 **Rationale**: Deployments enumerate codecs as data; one bad path must not abort the rest of the composition.
 
 ### PCL.067 - Safe Teardown-Then-Unload
-`pcl_plugin_unload_transport()` shall invoke the plugin's teardown symbol (releasing live resources and stopping background threads) before unloading the library, and shall degrade to a plain unload when the symbol is absent. NULL handles shall be rejected with `PCL_ERR_INVALID`.
+Transport plugin code shall remain loaded until its transport resources and worker threads have been released.
 
 **Rationale**: Unloading a library while its threads still execute in it is undefined behaviour; the safe order must be enforced centrally.
 
@@ -521,98 +495,136 @@ The socket, UDP, and shared-memory transports shall each ship as loadable plugin
 ## Manifest-Driven Endpoint Routing
 
 ### PCL.069 - Routing Manifest
-PCL shall load a line-based routing manifest with `transport <peer_id> <plugin_path> [config...]` and `route <endpoint> <kind> <peers>[ <reliability>]` directives (blank lines and `#` comments ignored): standing up each transport plugin, registering it as a named peer with its declared capabilities and QoS, installing each endpoint route, and validating every route at compose time. An empty or comment-only manifest shall succeed with an empty routing handle; the handle shall own the loaded plugins and report how many transports it loaded.
+PCL shall construct named transports and endpoint routes from a deployment routing manifest.
 
 **Rationale**: D8 -- one manifest composes heterogeneous middleware per deployment.
 
 ### PCL.070 - Routing Atomicity and Fail-Closed Diagnostics
-A failed manifest load shall leave nothing installed: transports already stood up shall be torn down (via safe teardown-then-unload), installed routes cleared, and a precise diagnostic written. The load shall fail closed on malformed lines, unknown directives or kinds or reliability tokens, oversized peer lists, unknown peers, duplicate transport peers, and routes duplicating an existing route; destroying a routing handle shall preserve unrelated transports (including an unrelated default transport) and free its executor transport slots for reuse.
+A failed routing manifest load shall leave executor routing state unchanged.
 
 **Rationale**: D9 -- partial composition after a failed load is worse than no composition.
 
-### PCL.078 - Manifest-Driven Remote Streaming Invoke and Gateway Discovery
-The manifest grammar shall support a `stream_consumed` endpoint kind, distinct from `consumed`, for the client side of a server-streaming rpc; `pcl_endpoint_required_caps(PCL_ENDPOINT_STREAM_CONSUMED)` shall require `PCL_CAP_RPC_STREAM` (not `PCL_CAP_RPC_UNARY`, which `consumed` requires), so a `stream_consumed` route to a transport lacking streaming support fails closed at compose time rather than only at first invocation. `pcl_executor_invoke_stream()` shall consult the per-endpoint route table installed by `pcl_transport_routing_load()` before falling back to the legacy single executor-wide transport, dispatching a `stream_consumed`-routed endpoint's remote invocation through its named peer's transport exactly as `pcl_executor_invoke_async()` already does for `consumed`-routed unary invocation. `pcl_transport_routing_get_gateway()` shall let a caller retrieve the "gateway" container (see PCL.068) a routing manifest's named peer transport exposes for dispatching inbound `provided`/`stream_provided` requests, returning `PCL_OK` with a NULL container for peers whose transport exposes none (not an error) and `PCL_ERR_NOT_FOUND` for an unrecognized peer id; the manifest loader itself shall not configure, activate, or add this container to the executor, since not every deployment provides rpc-realized endpoints at all.
+### PCL.078 - Manifest-Driven Remote Streaming Invocation
+Remote streaming invocation shall use the named transport selected for that
+endpoint.
 
-**Rationale**: D8 -- a manifest may route different endpoints (unary or streaming) to different named transports; a client-side invocation path that only ever consults the single legacy `e->transport` field cannot honour that per-endpoint choice for streaming calls, silently falling through to an always-failing intra-process lookup for any endpoint actually routed remotely. Conflating streaming and unary client routes under one `consumed` kind (requiring only `PCL_CAP_RPC_UNARY`) would let a manifest compose successfully against a unary-only peer for a streaming endpoint, failing only once the stream is actually invoked -- `stream_consumed` closes that gap the same way `PCL_ENDPOINT_STREAM_PROVIDED` already does on the provider side. D9 -- a component providing an rpc-realized endpoint over a gateway-pattern transport (shared-memory, socket) needs a way to obtain and wire that container without the manifest loader having to guess whether a given deployment intends to serve such endpoints at all.
+**Rationale**: Streaming calls must honour the same deployment-selected
+transport routing as other remote endpoint interactions.
+
+### PCL.099 - Streaming Route Capability
+A remote streaming-client route shall be rejected during composition when its
+selected transport does not support streaming.
+
+**Rationale**: An unsupported streaming route must fail before runtime traffic
+can reach it.
+
+### PCL.100 - Routed Transport Gateway Discovery
+A caller shall be able to discover the optional gateway container exposed by a
+named routed transport.
+
+**Rationale**: A component that provides remote services needs an explicit way
+to attach transport-owned ingress without making the manifest loader infer
+component intent.
 
 ### PCL.077 - Manifest Exclusive Realization Groups
-The routing manifest grammar shall support an `exclusive <group_name> <side_a_endpoints> <side_b_endpoints>` directive declaring two mutually-exclusive named sides of endpoints for one logical leg. `pcl_transport_routing_load()` shall accept any number of same-side endpoints routed together, and shall fail closed (`PCL_ERR_STATE`) with a diagnostic naming the group and the two conflicting endpoints when the manifest routes at least one endpoint from each of a declared group's two sides. This check shall be performed once, after the entire manifest has been parsed, so it is independent of whether a group's `exclusive` declaration appears before or after the `route` lines for its member endpoints within the file. An endpoint named in no `exclusive` group shall be unaffected by this check, and a manifest with no `exclusive` stanzas shall behave exactly as before this directive existed.
+A routing manifest shall reject a configuration that selects endpoints from
+both sides of a declared mutually exclusive group.
 
-**Rationale**: D9 -- a deployment that routes both realizations of one logical leg (e.g. an rpc-shaped and a pub/sub-shaped carrier of the same transaction) is a duplicate-delivery-path configuration error, and D9 already establishes that compose-time is where such errors must surface, not runtime. D8 -- which realization runs is deployment data (a manifest line), not code, so the manifest grammar is the right place to declare and enforce the constraint between them.
+**Rationale**: Selecting both realizations of one logical interaction creates
+duplicate delivery paths and must fail during composition.
 
 ## Transport Template and Conformance
 
 ### PCL.071 - Transport Template Scaffold
-PCL shall provide a transport template implementing the standard transport threading model (dedicated send and receive worker threads, non-blocking vtable calls, cross-thread ingress via the executor) around engineer-supplied blocking I/O hooks (`send_blocking`, `recv_blocking`, optional `open`/`close`/`wake`). Creation shall fail closed on missing mandatory hooks or a failed `open`; send-hook failures shall drop the frame (logged) without wedging the send thread; hard receive failures shall log and retry until destroy; frames with unknown kinds or unmatched response sequence ids shall be ignored; after shutdown, publish and async invocation shall fail with `PCL_ERR_STATE` and pending entries shall be reclaimed; destroy shall drain queued frames, honour every peer alias the transport was known by, and clear the executor's default slot only when it points at this transport.
+PCL shall provide a reusable worker-thread transport scaffold around blocking input and output hooks.
 
 **Rationale**: Every concrete transport re-implements the same threading skeleton; centralizing it makes new adapters small and uniformly correct (D2, D5).
 
 ### PCL.072 - Transport Conformance Suite
-PCL shall provide a reusable transport conformance suite (vtable shape, publish round trip, service round trip, publish ordering) that every transport adapter implementation shall pass.
+Every in-tree transport adapter shall pass the reusable delivery conformance suite.
 
 **Rationale**: A common behavioural bar keeps transport semantics interchangeable (D3).
 
 ### PCL.073 - APOS LVC Transport
-PCL shall provide a transport over APOS Local Virtual Channels, built on the transport template, that frames PCL messages onto raw APOS payloads with 16-bit string-length limits enforced at encode time and malformed or truncated inbound APOS messages dropped without disrupting the receive loop. Creation shall fail closed without an executor. The bundled APOS stub shall implement the blocking and non-blocking send/receive, multi-channel wait, timeout, delay-callback, and process-setup semantics of the APOS binding.
+PCL shall provide an APOS Local Virtual Channel transport that preserves the standard transport semantics.
 
 **Rationale**: Bare-metal ASAAC/APOS targets are a primary deployment environment (D1, D3).
 
 ## Portable Allocator
 
 ### PCL.074 - Portable Allocator
-PCL shall provide `pcl_alloc`/`pcl_calloc`/`pcl_realloc`/`pcl_free` routing through a single CRT-independent process heap on Windows (plain malloc/free elsewhere), rejecting zero-size and arithmetically overflowing requests with NULL, zeroing calloc'd memory, preserving contents across realloc growth, treating realloc of NULL as alloc and realloc to zero as free, and accepting `pcl_free(NULL)` as a no-op. All variable-length fields crossing the C ABI shall be allocated and freed through this pair.
+All variable-length memory crossing the C interface shall use one portable allocation domain.
 
 **Rationale**: Buffers cross DLL/EXE boundaries between different C runtimes (MSVC plugins vs GNAT/MinGW executables); a mismatched allocator pair corrupts the heap (D1, D4).
 
 ## Transport Threading Model
 
 ### PCL.075 - Transport Threading-Model Contract
-Every transport adapter shall obey a uniform threading contract at the `pcl_transport_t` boundary:
-(a) inbound wire traffic shall be deep-copied off the transport's own receive/worker threads and posted to executor-owned queues, so that subscriber callbacks, service handlers, stream callbacks, and async response callbacks execute only on the executor thread while it drains those queues, never inline on a transport thread;
-(b) executor-facing egress entry points (`publish`, `invoke_async`, `invoke_stream`) shall not perform blocking I/O, remote-service waits, provider-discovery polling, or unbounded lock waits -- they may validate, copy the payload, register correlation state, enqueue work to a transport-owned worker, and return promptly;
-(c) an `invoke_async` response callback shall never fire synchronously before `invoke_async` returns; it shall be delivered on a later executor spin;
-(d) transport teardown shall wake and join any blocked worker threads before releasing resources the workers may still touch, and shall reclaim any queued-but-undelivered work.
+Transport adapters shall isolate blocking input, blocking output, and foreign-thread activity from component callbacks on the executor thread.
 
 **Rationale**: D2 requires all component business logic to run on the single executor thread; D5 requires a hard I/O thread boundary. Stating the contract once, at the vtable, lets third-party adapter authors implement it correctly without reading reference-transport internals.
 
 ### PCL.076 - Transport Threading-Model Conformance Suite
-PCL shall provide a reusable threading-model conformance suite -- distinct from the delivery conformance suite (PCL.072) -- that proves the PCL.075 contract for a transport: (a) subscriber ingress runs on the executor/spin thread and not inline on a transport worker; (b) an async response callback runs on the executor thread and does not fire inline from `invoke_async`; (c) executor-facing egress returns promptly while the real send path is blocked; and (d) destroy wakes and joins a blocked send worker. Every in-tree transport (template, shared memory, UDP, socket) shall pass the applicable cases.
+Every in-tree transport shall pass the reusable threading-model conformance suite.
 
 **Rationale**: A common, mechanically-checked threading bar keeps the deterministic-execution guarantee (D2, D5) from silently regressing as new transports and plugins are added.
 
 ## Standalone Process Runtime
 
 ### PCL.079 - Standalone Component Process Runtime
-PCL shall provide a process runtime that: (a) owns one executor and loads the codec plugins selected for the process; (b) accepts a complete per-logical-port deployment file, validates it against generated endpoint descriptors, and atomically installs exactly one transport realization for every logical port; (c) configures and activates gateway containers exposed by the selected transports; (d) runs one component through configure, activate, executor spin, deactivate, and cleanup until an explicit shutdown request, `SIGINT`, `SIGTERM`, or a configured duration ends the run; and (e) fails closed with a diagnostic when process arguments, deployment descriptors, deployment-file entries, plugin composition, or lifecycle operations are invalid. Deployment loading shall be bounded to 128 logical ports, 64 transport peers, and 32 codec plugins.
+PCL shall run one component as a standalone process using deployment-selected
+codecs and transports.
 
-**Rationale**: D3 and D8 require generated component processes to select transports and codecs from deployment data without relinking. D6 requires the process wrapper to preserve the component lifecycle during both normal shutdown and failure. D1 and D9 require explicit bounds and validation before any partial deployment is allowed to run.
+**Rationale**: A standalone component process needs one reusable owner for
+deployment composition, lifecycle sequencing, execution, and cleanup.
 
 ## Transport Flow Control and Monitoring
 
 ### PCL.080 - Remote Subscription Registration
-When a remote subscriber port and its selected transport are both present in an executor, PCL shall register the topic and type with that transport. Registration shall occur whether the transport is registered before or after the container is added. PCL shall call only the default transport for a subscriber with no selected peer, and only the matching named transports for a subscriber with selected peers. A selected transport that does not support subscription registration, or that rejects registration, shall make the executor setup operation fail closed.
+Remote subscriber setup shall register each subscriber only with the transport
+selected for that endpoint.
 
-**Rationale**: D3 requires deployment-selected transports to receive enough endpoint information to establish remote delivery. Applying the same registration when either side arrives first avoids order-dependent deployments.
+**Rationale**: A transport needs the selected topic and type to establish
+remote delivery without making setup order affect the result.
 
 ### PCL.081 - Bounded Executor Ingress
-PCL shall allow a deployment to set a maximum number of queued incoming publish/subscribe messages. A limit of zero shall leave the queue unbounded. At the configured limit, an incoming post shall return `PCL_ERR_NOMEM` without taking ownership of the message. PCL shall expose the current queue depth for monitoring, and a null executor shall report a depth of zero.
+Executor ingress queue storage shall be boundable by deployment configuration.
 
-**Rationale**: D1 requires explicit resource bounds for long-running processes. Reporting backpressure to the transport permits a deployment-specific retry or load-shedding policy instead of silent loss.
+**Rationale**: Long-running processes need an explicit memory bound and an
+observable backpressure result.
 
-### PCL.082 - Shared-Memory Interest and Service Backpressure
-The shared-memory transport shall advertise each participant's subscribed topics and shall enqueue a published topic only to interested participants. A publish with no interested remote participant shall return `PCL_ERR_NOT_FOUND`. For a unary service request whose provider mailbox is temporarily full, the transport worker shall retry for a bounded interval; it shall deliver a terminal empty response if the request still cannot be enqueued or the provider disappears.
+### PCL.082 - Shared-Memory Subscription Interest
+The shared-memory transport shall enqueue published topics only for
+participants that registered interest in those topics.
 
-**Rationale**: D1 and D3 require bounded shared-memory mailboxes without broadcasting unrelated traffic. A bounded retry absorbs short service bursts while preserving an observable terminal outcome when congestion persists.
+**Rationale**: Bounded participant mailboxes must not carry unrelated traffic.
+
+### PCL.101 - Shared-Memory Service Backpressure
+A shared-memory unary service request shall produce a terminal outcome within a
+bounded interval when its provider mailbox is full.
+
+**Rationale**: Short bursts may be retried, but congestion must not leave a
+client call pending indefinitely.
 
 ### PCL.083 - Bounded Reliable-Socket Egress
-The reliable socket transport shall bound its outbound queue to 16 MiB. A frame that would exceed the bound shall be rejected with `PCL_ERR_NOMEM`, shall not be accepted for later transmission, and shall increment a thread-safe dropped-publish counter. Destroy shall allow the send worker to drain frames accepted before teardown and shall reclaim any frame that cannot be delivered.
+Reliable-socket outbound frame storage shall not exceed 16 MiB.
 
-**Rationale**: D1 and D5 prohibit unbounded memory growth and blocking network I/O on the executor thread. Explicit rejection and monitoring preserve reliable-transport semantics under sustained congestion.
+**Rationale**: Bounded storage prevents sustained network congestion from
+causing unbounded process memory growth.
 
-### PCL.084 - UDP Receive and Loss Accounting
-The UDP transport shall expose thread-safe counters for all received datagrams and for inferred forward sequence gaps. The received count shall include malformed and unsupported datagrams. Sequence tracking shall be independent for each source address and port; forward gaps shall increase the loss count, while duplicate, reordered, and stale datagrams shall not. Null transport handles shall report zero for both counters.
+### PCL.084 - UDP Received-Datagram Accounting
+The UDP transport shall report the number of datagrams received from the
+network.
 
-**Rationale**: D7 requires lightweight evidence that distinguishes an idle UDP link from malformed traffic and inferred packet loss without claiming acknowledgements or retransmission for a best-effort transport.
+**Rationale**: Operators need to distinguish an idle link from received traffic
+that could not be decoded.
+
+### PCL.102 - UDP Sequence-Gap Accounting
+The UDP transport shall report inferred forward sequence gaps independently for
+each traffic source.
+
+**Rationale**: Per-source gap accounting provides lightweight loss evidence
+without claiming acknowledgements or retransmission.
 
 ---
 
@@ -631,9 +643,9 @@ The UDP transport shall expose thread-safe counters for all received datagrams a
 | `PCL.009` | `D6` |
 | `PCL.010` | `D2` |
 | `PCL.011` | `D2` |
-| `PCL.011a` | `D3`, `D5` |
-| `PCL.011b` | `D2`, `D5` |
-| `PCL.011c` | `D2`, `D5` |
+| `PCL.085` | `D3`, `D5` |
+| `PCL.086` | `D2`, `D5` |
+| `PCL.087` | `D2`, `D5` |
 | `PCL.012` | `D1` |
 | `PCL.013` | `D1` |
 | `PCL.014` | `D1` |
@@ -654,21 +666,22 @@ The UDP transport shall expose thread-safe counters for all received datagrams a
 | `PCL.028` | `D3` |
 | `PCL.029` | `D3` |
 | `PCL.030` | `D3` |
-| `PCL.030a` | `D3` |
-| `PCL.030b` | `D3` |
-| `PCL.030c` | `D3` |
-| `PCL.030d` | `D2`, `D3`, `D5` |
+| `PCL.088` | `D3` |
+| `PCL.089` | `D3` |
+| `PCL.090` | `D3` |
+| `PCL.091` | `D2`, `D3`, `D5` |
 | `PCL.031` | `D3` |
 | `PCL.032` | `D3` |
 | `PCL.033` | `D3` |
 | `PCL.034` | `D3` |
 | `PCL.035` | `D2`, `D5` |
 | `PCL.036` | `D3`, `D5` |
-| `PCL.036a` | `D3`, `D5` |
-| `PCL.036b` | `D3`, `D5` |
-| `PCL.036c` | `D3`, `D5` |
-| `PCL.036d` | `D3`, `D5` |
-| `PCL.036g` | `D3`, `D5` |
+| `PCL.092` | `D3`, `D5` |
+| `PCL.093` | `D3`, `D5` |
+| `PCL.094` | `D3`, `D5` |
+| `PCL.095` | `D3`, `D5` |
+| `PCL.098` | `D3`, `D5` |
+| `PCL.103` | `D3`, `D5` |
 | `PCL.037` | `D1` |
 | `PCL.038` | `D3` |
 | `PCL.039` | `D1` |
@@ -682,12 +695,6 @@ The UDP transport shall expose thread-safe counters for all received datagrams a
 | `PCL.047` | `D1` |
 | `PCL.048` | `D4` |
 | `PCL.049` | `D4` |
-| `PCL.050` | `D3` |
-| `PCL.051` | `D3` |
-| `PCL.052` | `D4` |
-| `PCL.053` | `D3` |
-| `PCL.054` | `D3` |
-| `PCL.055` | `D3` |
 | `PCL.056` | `D3`, `D4` |
 | `PCL.058` | `D1`, `D3`, `D8` |
 | `PCL.059` | `D8` |
@@ -703,6 +710,9 @@ The UDP transport shall expose thread-safe counters for all received datagrams a
 | `PCL.069` | `D8` |
 | `PCL.070` | `D9` |
 | `PCL.077` | `D8`, `D9` |
+| `PCL.078` | `D3`, `D8` |
+| `PCL.099` | `D9` |
+| `PCL.100` | `D3`, `D8` |
 | `PCL.071` | `D2`, `D3`, `D5` |
 | `PCL.072` | `D3` |
 | `PCL.073` | `D1`, `D3` |
@@ -713,5 +723,7 @@ The UDP transport shall expose thread-safe counters for all received datagrams a
 | `PCL.080` | `D3` |
 | `PCL.081` | `D1` |
 | `PCL.082` | `D1`, `D3` |
+| `PCL.101` | `D1`, `D3` |
 | `PCL.083` | `D1`, `D5` |
 | `PCL.084` | `D7` |
+| `PCL.102` | `D7` |

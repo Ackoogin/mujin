@@ -765,6 +765,54 @@ TEST(PclTransportRouting, ExclusiveGroupFailsClosedOnEmptyListMember) {
   pcl_executor_destroy(e);
 }
 
+///< REQ_PCL_466: an exclusive group side that exceeds the bounded member
+///< capacity fails closed with a diagnostic. PCL.077, PCL.070.
+TEST(PclTransportRouting, ExclusiveGroupRejectsTooManyMembers) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  constexpr uint32_t kMaxGroupSideMembers = 16u;
+  std::string side_a;
+  for (uint32_t i = 0u; i <= kMaxGroupSideMembers; ++i) {
+    if (!side_a.empty()) side_a += ",";
+    side_a += "endpoint_" + std::to_string(i);
+  }
+  const auto path = WriteManifest(
+      "exclusive bounded_group " + side_a + " other_endpoint\n");
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(routing, nullptr);
+  EXPECT_NE(std::string(diag).find("too many endpoints"), std::string::npos)
+      << diag;
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_466: redeclaring an exclusive group name fails closed instead of
+///< shadowing the first declaration. PCL.077, PCL.070.
+TEST(PclTransportRouting, ExclusiveGroupRejectsDuplicateName) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const auto path = WriteManifest(
+      "exclusive duplicate_group endpoint_a endpoint_b\n"
+      "exclusive duplicate_group endpoint_c endpoint_d\n");
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(routing, nullptr);
+  EXPECT_NE(std::string(diag).find("already declared"), std::string::npos)
+      << diag;
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
 ///< REQ_PCL_469: a two-sided conflict fails closed even when both conflicting `route` lines appear BEFORE the `exclusive` line that groups them -- the check is order-independent, not declare-before-use.
 TEST(PclTransportRouting, ExclusiveGroupConflictDetectedRegardlessOfDeclarationOrder) {
   pcl_executor_t* e = pcl_executor_create();

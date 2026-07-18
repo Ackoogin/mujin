@@ -24,6 +24,39 @@ using LastTopicFn = const char* (*)(void);
 
 }  // namespace
 
+///< REQ_PCL_399, REQ_PCL_401: codec and transport plugin loading rejects
+///< missing required arguments before opening a library. PCL.045, PCL.065.
+TEST(PclPluginLoader, LoadRejectsInvalidArguments) {
+  pcl_codec_registry_t* registry = pcl_codec_registry_create();
+  ASSERT_NE(registry, nullptr);
+
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_transport_t* transport = nullptr;
+  EXPECT_EQ(pcl_plugin_load_codec(nullptr, nullptr, registry, &handle),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_plugin_load_codec("", nullptr, registry, &handle),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_plugin_load_codec(STUB_CODEC_PLUGIN_PATH, nullptr, nullptr,
+                                  &handle),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_plugin_load_codec(STUB_CODEC_PLUGIN_PATH, nullptr, registry,
+                                  nullptr),
+            PCL_ERR_INVALID);
+
+  EXPECT_EQ(pcl_plugin_load_transport(nullptr, nullptr, &handle, &transport),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_plugin_load_transport("", nullptr, &handle, &transport),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_plugin_load_transport(CAPTURE_PLUGIN_PATH, nullptr, nullptr,
+                                      &transport),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_plugin_load_transport(CAPTURE_PLUGIN_PATH, nullptr, &handle,
+                                      nullptr),
+            PCL_ERR_INVALID);
+
+  pcl_codec_registry_destroy(registry);
+}
+
 ///< REQ_PCL_381: pcl_plugin_unload_transport(NULL, ...) fails closed with PCL_ERR_INVALID.
 TEST(PclPluginLoader, UnloadTransportNullHandleFailsClosed) {
   EXPECT_EQ(pcl_plugin_unload_transport(nullptr, nullptr), PCL_ERR_INVALID);
@@ -502,7 +535,8 @@ TEST(PclPluginLoader, SocketPluginServerClientRoundTripViaEntry) {
   const unsigned short port = 18771;
   char server_config[256];
   std::snprintf(server_config, sizeof(server_config),
-                "{\"role\":\"provided\",\"port\":%u,\"executor\":%llu}",
+                "{\"role\":\"provided\",\"port\":%u,\"executor\":%llu,"
+                "\"peer_id\":\"plugin_client\"}",
                 (unsigned)port,
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(server_exec)));
@@ -523,7 +557,7 @@ TEST(PclPluginLoader, SocketPluginServerClientRoundTripViaEntry) {
   char client_config[256];
   std::snprintf(client_config, sizeof(client_config),
                 "{\"role\":\"consumed\",\"host\":\"127.0.0.1\",\"port\":%u,"
-                "\"executor\":%llu}",
+                "\"executor\":%llu,\"peer_id\":\"plugin_server\"}",
                 (unsigned)port,
                 static_cast<unsigned long long>(
                     reinterpret_cast<std::uintptr_t>(client_exec)));

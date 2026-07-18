@@ -29,9 +29,66 @@ static pcl_container_t* make_active(const char* name) {
   return c;
 }
 
+struct RouteValidationPorts {
+  pcl_port_t* publisher = nullptr;
+};
+
+static pcl_status_t configure_route_validation_ports(pcl_container_t* c,
+                                                     void* user_data) {
+  auto* ports = static_cast<RouteValidationPorts*>(user_data);
+  ports->publisher = pcl_container_add_publisher(c, "route_topic", "RouteMsg");
+  if (!ports->publisher) return PCL_ERR_NOMEM;
+
+  EXPECT_EQ(pcl_container_add_stream_service(
+                c, "invalid_stream", "StreamMsg", nullptr, nullptr),
+            nullptr);
+  EXPECT_EQ(pcl_container_add_stream_service(
+                c, nullptr, "StreamMsg",
+                [](pcl_container_t*, const pcl_msg_t*,
+                   pcl_stream_context_t*, void*) {
+                  return PCL_STREAMING;
+                },
+                nullptr),
+            nullptr);
+  return PCL_OK;
+}
+
 // =======================================================================
 // pcl_container.c -- uncovered branches
 // =======================================================================
+
+///< REQ_PCL_171, REQ_PCL_172, REQ_PCL_179: route configuration and stream
+///< service creation reject every invalid public input. PCL.087, PCL.045.
+TEST(PclRobustness, RouteAndStreamDefinitionsRejectInvalidInputs) {
+  RouteValidationPorts ports;
+  pcl_callbacks_t callbacks = {};
+  callbacks.on_configure = configure_route_validation_ports;
+  pcl_container_t* c =
+      pcl_container_create("route_validation", &callbacks, &ports);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_NE(ports.publisher, nullptr);
+
+  EXPECT_EQ(pcl_port_set_route(nullptr, PCL_ROUTE_REMOTE, nullptr, 0u),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_port_set_route(
+                ports.publisher, PCL_ROUTE_NONE, nullptr, 0u),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_port_set_route(
+                ports.publisher, PCL_ROUTE_REMOTE, nullptr,
+                PCL_MAX_ENDPOINT_PEERS + 1u),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_port_set_route(
+                ports.publisher, PCL_ROUTE_REMOTE, nullptr, 1u),
+            PCL_ERR_INVALID);
+
+  const char* peers[] = {nullptr};
+  EXPECT_EQ(pcl_port_set_route(
+                ports.publisher, PCL_ROUTE_REMOTE, peers, 1u),
+            PCL_ERR_INVALID);
+
+  pcl_container_destroy(c);
+}
 
 // -- Parameter overflow (PCL_MAX_PARAMS = 128) ------------------------
 

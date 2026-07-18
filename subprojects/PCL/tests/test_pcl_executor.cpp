@@ -796,6 +796,18 @@ TEST(PclExecutor, SetEndpointRouteRejectsInvalidConfigurations) {
   auto* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);
 
+  pcl_endpoint_route_t empty_route = {};
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(
+                nullptr, &empty_route, nullptr, 0u),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, nullptr, nullptr, 0u),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_set_endpoint_route(nullptr, &empty_route),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_set_endpoint_route(e, nullptr), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_set_endpoint_route(e, &empty_route),
+            PCL_ERR_INVALID);
+
   const char* peers[] = {"peer_a"};
   pcl_endpoint_route_t route = {};
   route.endpoint_name = "svc";
@@ -803,6 +815,14 @@ TEST(PclExecutor, SetEndpointRouteRejectsInvalidConfigurations) {
   route.peer_ids = peers;
   route.peer_count = 1;
 
+  route.route_mode = PCL_ROUTE_NONE;
+  EXPECT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_ERR_INVALID);
+
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_count = PCL_MAX_ENDPOINT_PEERS + 1u;
+  EXPECT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_ERR_INVALID);
+
+  route.peer_count = 1;
   route.route_mode = PCL_ROUTE_LOCAL;
   EXPECT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_ERR_INVALID);
 
@@ -813,6 +833,31 @@ TEST(PclExecutor, SetEndpointRouteRejectsInvalidConfigurations) {
   route.route_mode = PCL_ROUTE_REMOTE;
   route.peer_ids = bad_peers;
   EXPECT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_166, REQ_PCL_175: a remote consumed-service route with more
+///< than one peer fails closed at invocation. PCL.088, PCL.089.
+TEST(PclExecutor, InvokeAsyncRejectsMultipleRemotePeers) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const char* peers[] = {"peer_a", "peer_b"};
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "ambiguous.svc";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = peers;
+  route.peer_count = 2u;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  pcl_msg_t request = {};
+  request.type_name = "Request";
+  EXPECT_EQ(pcl_executor_invoke_async(
+                e, route.endpoint_name, &request,
+                [](const pcl_msg_t*, void*) {}, nullptr),
+            PCL_ERR_INVALID);
 
   pcl_executor_destroy(e);
 }

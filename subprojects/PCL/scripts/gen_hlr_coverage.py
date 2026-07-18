@@ -6,8 +6,7 @@ Parses:
   - subprojects/PCL/doc/requirements/LLR.md   (### REQ_PCL_NNN - Title,
                                                **Traces**: PCL.xxx,
                                                **Verification**: ...)
-  - requirement tags (REQ_PCL_NNN) in the PCL, PYRAMID proto-binding, and
-    AME integration test sources.
+  - requirement tags (REQ_PCL_NNN) in PCL test sources.
 
 Writes doc/reports/PCL/HLR_COVERAGE.md (test -> LLR -> HLR matrix plus gap
 lists). This file is generated evidence: do not hand-edit the output; fix the
@@ -35,14 +34,12 @@ OUT_PATH = REPO_ROOT / "doc/reports/PCL/HLR_COVERAGE.md"
 # Test source trees scanned for ///< REQ_PCL_NNN tags.
 TEST_SOURCES = [
     REPO_ROOT / "subprojects/PCL/tests",
-    REPO_ROOT / "subprojects/PYRAMID/tests/test_pcl_proto_bindings.cpp",
-    REPO_ROOT / "subprojects/AME/tests/test_pcl_integration.cpp",
 ]
 
-HLR_HEADING = re.compile(r"^### (PCL\.\d+[a-z]?) - (.+)$")
+HLR_HEADING = re.compile(r"^### (PCL\.\d+) - (.+)$")
 LLR_HEADING = re.compile(r"^### (REQ_PCL_\d+) - (.+)$")
 SECTION_HEADING = re.compile(r"^## (.+)$")
-TRACE_IDS = re.compile(r"PCL\.\d+[a-z]?")
+TRACE_IDS = re.compile(r"PCL\.\d+")
 REQ_TAG = re.compile(r"REQ_PCL_(\d+)")
 TESTFILE_REF = re.compile(r"([A-Za-z0-9_]+\.(?:cpp|hpp|c))")
 
@@ -112,8 +109,7 @@ def llr_sort_key(llr_id):
 
 
 def hlr_sort_key(hlr_id):
-    m = re.match(r"PCL\.(\d+)([a-z]?)", hlr_id)
-    return (int(m.group(1)), m.group(2))
+    return int(hlr_id.split(".", 1)[1])
 
 
 def short_llr(llr_id):

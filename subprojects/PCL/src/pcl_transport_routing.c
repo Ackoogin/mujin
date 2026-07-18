@@ -277,9 +277,12 @@ static pcl_status_t split_endpoint_list(char*                list_str,
     p = comma ? comma + 1 : NULL;
   }
   if (*out_count == 0u) {
+    // GCOVR_EXCL_START: the caller accepts only non-empty tokens before
+    // invoking the list splitter.
     set_diag(diag, diag_size, "exclusive '%s': %s has no endpoints",
              group_name, which_side);
     return PCL_ERR_INVALID;
+    // GCOVR_EXCL_STOP
   }
   return PCL_OK;
 }

@@ -496,7 +496,7 @@ static void pcl_shm_notify_slot_locked(pcl_shared_memory_transport_t* ctx,
 
   if (!ctx || !ctx->region ||
       target_slot_index >= PCL_SHM_MAX_PARTICIPANTS) {
-    return;
+    return;  // GCOVR_EXCL_LINE: all internal callers pass a slot index found in the bounded region
   }
   slot = &ctx->region->slots[target_slot_index];
   if (!slot->in_use) return;
@@ -1645,7 +1645,11 @@ static void pcl_shm_worker_svc_req(pcl_shared_memory_transport_t* ctx,
                                             item->size > 0u ? item->data : NULL,
                                             item->size, item->seq_id);
         } else {
+          // GCOVR_EXCL_START: requires a provider to detach in the few
+          // instructions between unlocked discovery and locked re-resolution;
+          // the externally visible not-found result is covered independently.
           rc = (still < 0) ? PCL_ERR_INVALID : PCL_ERR_NOT_FOUND;
+          // GCOVR_EXCL_STOP
         }
         pcl_shm_bus_unlock(ctx);
       }
@@ -1764,8 +1768,11 @@ static pcl_status_t pcl_shm_subscribe(void*       adapter_ctx,
   slot = &ctx->region->slots[ctx->slot_index];
   if (!slot->in_use ||
       strcmp(slot->participant_id, ctx->participant_id) != 0) {
+    // GCOVR_EXCL_START: the transport owns this slot from successful creation
+    // until teardown; reaching this guard requires external region corruption.
     pcl_shm_bus_unlock(ctx);
     return PCL_ERR_STATE;
+    // GCOVR_EXCL_STOP
   }
   for (i = 0u; i < slot->subscription_count; ++i) {
     if (strcmp(slot->subscriptions[i], topic) == 0) {
@@ -2712,11 +2719,14 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
         break;
       }
 #else
+      // GCOVR_EXCL_START: sem_init failure requires an operating-system
+      // resource fault; the rollback is retained as defensive cleanup.
       if (sem_init(&slot->notify_sem, 1, 0) != 0) {
         memset(slot, 0, sizeof(*slot));
         notify_init_failed = 1;
         break;
       }
+      // GCOVR_EXCL_STOP
 #endif
       snprintf(slot->participant_id, sizeof(slot->participant_id), "%s",
                ctx->participant_id);

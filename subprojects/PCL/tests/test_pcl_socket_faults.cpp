@@ -201,8 +201,10 @@ struct LoopbackPair {
 
 class RawFrameServer {
 public:
-  explicit RawFrameServer(std::vector<std::vector<uint8_t>> frames)
-      : frames_(std::move(frames)) {}
+  explicit RawFrameServer(std::vector<std::vector<uint8_t>> frames,
+                          bool truncate_last_frame = false)
+      : frames_(std::move(frames)),
+        truncate_last_frame_(truncate_last_frame) {}
 
   bool start(uint16_t port, bool wait_for_signal = false) {
     wait_for_signal_ = wait_for_signal;
@@ -258,8 +260,16 @@ private:
     }
 
     bool sent = true;
-    for (const auto& frame : frames_) {
-      sent = send_frame(client, frame) && sent;
+    for (size_t i = 0; i < frames_.size(); ++i) {
+      const auto& frame = frames_[i];
+      if (truncate_last_frame_ && i + 1u == frames_.size()) {
+        std::vector<uint8_t> len;
+        write_u32(len, static_cast<uint32_t>(frame.size() + 4u));
+        sent = send_all_raw(client, len.data(), len.size()) && sent;
+        sent = send_all_raw(client, frame.data(), frame.size()) && sent;
+      } else {
+        sent = send_frame(client, frame) && sent;
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 
@@ -274,6 +284,7 @@ private:
   }
 
   std::vector<std::vector<uint8_t>> frames_;
+  bool truncate_last_frame_ = false;
   std::thread thread_;
   bool wait_for_signal_ = false;
   std::atomic<bool> ready_{false};
@@ -380,6 +391,30 @@ TEST(PclSocketFaults, RecvThreadDropsMalformedPublishResponseAndUnknownFrames) {
   pcl_executor_destroy(e);
   server.join();
   EXPECT_TRUE(server.ok());
+  restore_logs();
+}
+
+///< REQ_PCL_412: a frame whose declared payload length exceeds the bytes sent
+///< is discarded when the peer closes mid-frame. PCL.033.
+TEST(PclSocketFaults, RecvThreadDropsTruncatedPayload) {
+  silence_logs();
+  uint16_t port = pick_free_tcp_port();
+  ASSERT_NE(port, 0);
+
+  RawFrameServer server({{0u}}, true);
+  ASSERT_TRUE(server.start(port));
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  auto* client = pcl_socket_transport_create_client("127.0.0.1", port, e);
+  ASSERT_NE(client, nullptr);
+
+  server.join();
+  EXPECT_TRUE(server.ok());
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+  pcl_socket_transport_destroy(client);
+  pcl_executor_destroy(e);
   restore_logs();
 }
 

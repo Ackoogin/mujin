@@ -441,7 +441,8 @@ TEST(PclUdpTransport, MalformedDatagramsIncreaseReceivedCounter) {
   // PUBLISH with a valid topic but truncated type-name length field.
   // [type=0][sequence=0][topic_len=1]['t'][type_len=0x0040]
   const uint8_t truncated_type[] = {
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 't', 0x00, 0x40};
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 't',
+      0x00, 0x40, 0x00, 0x00, 0x00, 0x00};
   send_raw(truncated_type, sizeof(truncated_type));
 
   // PUBLISH with valid topic and type but data_len larger than the datagram.

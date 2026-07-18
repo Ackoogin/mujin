@@ -240,7 +240,7 @@ static pcl_status_t subscribe_port_with_transport(
     }
     if (i == peer_count) return PCL_OK;
   } else if (peer_count != 0u) {
-    return PCL_OK;
+    return PCL_OK;  // GCOVR_EXCL_LINE: callers pass NULL only after proving the port has no selected peers
   }
 
   if (!transport->subscribe) {

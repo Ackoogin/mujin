@@ -492,21 +492,21 @@ Destroying an executor with queued response callbacks (including those with data
 ### REQ_PCL_164 - Invoke Async Routes Through Transport
 `pcl_executor_invoke_async()` shall route the service request through the transport adapter's `invoke_async` function pointer when a transport is set.
 
-**Traces**: PCL.011a, PCL.030a
+**Traces**: PCL.085, PCL.088
 
 **Verification**: `test_pcl_robustness.cpp::InvokeAsyncRoutesViaTransport`.
 
 ### REQ_PCL_165 - Invoke Async Intra-Process Fallback
 `pcl_executor_invoke_async()` shall fall back to intra-process synchronous dispatch when no transport is set or when the transport's `invoke_async` is NULL. The service handler shall be invoked immediately and the callback fired before returning.
 
-**Traces**: PCL.011a, PCL.022, PCL.030a
+**Traces**: PCL.085, PCL.022, PCL.088
 
 **Verification**: `test_pcl_robustness.cpp::InvokeAsyncIntraProcessFallback`.
 
 ### REQ_PCL_166 - Invoke Async Null Arguments
 `pcl_executor_invoke_async()` shall return `PCL_ERR_INVALID` when the executor, service name, request, or callback is NULL.
 
-**Traces**: PCL.030a, PCL.045
+**Traces**: PCL.088, PCL.045
 
 **Verification**: `test_pcl_robustness.cpp::InvokeAsyncNullArgsReturnsInvalid`.
 
@@ -749,129 +749,6 @@ Multiple containers at different tick rates shall each be ticked at approximatel
 
 ---
 
-## 17. Service Bindings (Proto/Generated)
-
-### REQ_PCL_094 - Provided Service Wire Names
-The provided service binding constants shall match the proto-defined wire names for matching_objects, object_of_interest, and specific_object_detail services.
-
-**Traces**: PCL.050
-
-**Verification**: `test_pcl_proto_bindings.cpp::WireNames` (ProtoBindingsProvided).
-
-### REQ_PCL_095 - Provided Topic Names
-The provided topic constants shall match: `standard.entity_matches` and `standard.evidence_requirements`.
-
-**Traces**: PCL.051
-
-**Verification**: `test_pcl_proto_bindings.cpp::TopicNames` (ProtoBindingsProvided).
-
-### REQ_PCL_096 - Consumed Service Wire Names
-The consumed service binding constants shall match the proto-defined wire names for object_evidence, object_solution_evidence, and object_source_capability services.
-
-**Traces**: PCL.050
-
-**Verification**: `test_pcl_proto_bindings.cpp::WireNames` (ProtoBindingsConsumed).
-
-### REQ_PCL_097 - Consumed Topic Names
-The consumed topic constant shall match: `standard.object_evidence`.
-
-**Traces**: PCL.051
-
-**Verification**: `test_pcl_proto_bindings.cpp::TopicNames` (ProtoBindingsConsumed).
-
-### REQ_PCL_098 - Provided msgToString Utility
-The provided binding's `msgToString()` shall convert a data/size pair to a std::string.
-
-**Traces**: PCL.053
-
-**Verification**: `test_pcl_proto_bindings.cpp::MsgToString` and `MsgToStringEmpty` (ProtoBindingsProvided).
-
-### REQ_PCL_099 - Consumed msgToString Utility
-The consumed binding's `msgToString()` shall convert a data/size pair to a std::string.
-
-**Traces**: PCL.053
-
-**Verification**: `test_pcl_proto_bindings.cpp::MsgToString` (ProtoBindingsConsumed).
-
-### REQ_PCL_100 - Build Standard Requirement JSON
-`buildStandardRequirementJson()` shall produce valid JSON with policy, identity, dimension, and lat/lon bounds fields.
-
-**Traces**: PCL.053
-
-**Verification**: `test_pcl_proto_bindings.cpp::BuildRequirementJsonKeys` and `BuildRequirementJsonNoDimension`.
-
-### REQ_PCL_101 - Build Standard Evidence JSON
-`buildStandardEvidenceJson()` shall produce valid JSON with identity, dimension, lat/lon, confidence, and observed_at fields.
-
-**Traces**: PCL.053
-
-**Verification**: `test_pcl_proto_bindings.cpp::BuildEvidenceJsonKeys` and `BuildEvidenceJsonDefaultObservedAt`.
-
-### REQ_PCL_102 - Provided Service Handler Stubs
-The provided `ServiceHandler` default stubs shall return empty collections or success acknowledgements.
-
-**Traces**: PCL.052
-
-**Verification**: `test_pcl_proto_bindings.cpp::HandlerStubsReturnEmpty` (ProtoBindingsProvided).
-
-### REQ_PCL_103 - Consumed Service Handler Stubs
-The consumed `ServiceHandler` default stubs shall return empty collections or success acknowledgements.
-
-**Traces**: PCL.052
-
-**Verification**: `test_pcl_proto_bindings.cpp::HandlerStubsReturnEmpty` (ProtoBindingsConsumed).
-
-### REQ_PCL_104 - Provided Subscribe Registration
-`subscribeEntityMatches()` and `subscribeEvidenceRequirements()` shall register PCL subscriber ports successfully during on_configure.
-
-**Traces**: PCL.054
-
-**Verification**: `test_pcl_proto_bindings.cpp::SubscribeRegistrationSucceeds` (ProtoBindingsProvided).
-
-### REQ_PCL_105 - Consumed Subscribe Registration
-`subscribeObjectEvidence()` shall register a PCL subscriber port successfully during on_configure.
-
-**Traces**: PCL.054
-
-**Verification**: `test_pcl_proto_bindings.cpp::SubscribeRegistrationSucceeds` (ProtoBindingsConsumed).
-
-### REQ_PCL_106 - Consumed Publish When Inactive
-`publishObjectEvidence()` shall return a non-OK status when the container is not ACTIVE.
-
-**Traces**: PCL.009
-
-**Verification**: `test_pcl_proto_bindings.cpp::PublishReturnsBadStatusWhenInactive`.
-
-### REQ_PCL_107 - Consumed Publish When Active
-`publishObjectEvidence()` shall succeed when the container is ACTIVE.
-
-**Traces**: PCL.009
-
-**Verification**: `test_pcl_proto_bindings.cpp::PublishSucceedsWhenActive`.
-
-### REQ_PCL_108 - Provided Dispatch All Channels
-The provided binding's `dispatch()` function shall handle all `ServiceChannel` enum values without crashing.
-
-**Traces**: PCL.055
-
-**Verification**: `test_pcl_proto_bindings.cpp::DispatchAllChannelsNoCrash` (ProtoBindingsProvided).
-
-### REQ_PCL_109 - Consumed Dispatch All Channels
-The consumed binding's `dispatch()` function shall handle all `ServiceChannel` enum values without crashing.
-
-**Traces**: PCL.055
-
-**Verification**: `test_pcl_proto_bindings.cpp::DispatchAllChannelsNoCrash` (ProtoBindingsConsumed).
-
-### REQ_PCL_110 - Domain Type Constants
-The Ack constants (`kAckOk`, `kAckFail`) shall have correct success values. Query, Identifier, and ObjectDetail types shall have sensible defaults.
-
-**Traces**: PCL.052
-
-**Verification**: `test_pcl_proto_bindings.cpp::AckConstants`, `QueryDefault`, `IdentifierIsString`, `ObjectDetailDefaults`.
-
----
-
 ## 18. Null Safety (API-Wide)
 
 ### REQ_PCL_111 - Container Null Handle Safety
@@ -1063,112 +940,112 @@ When the gateway receives a service request for which no handler is registered, 
 ### REQ_PCL_190 - Client Extended Create With Null Opts Preserves Single-Shot Semantics
 `pcl_socket_transport_create_client_ex()` with all-zero `pcl_socket_client_opts_t` (or NULL) shall perform a single connection attempt and return NULL immediately when the server is not listening, matching legacy `create_client` behaviour.
 
-**Traces**: PCL.032, PCL.036e
+**Traces**: PCL.032, PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::ClientExSingleShotFailsFast`.
 
 ### REQ_PCL_191 - Client Extended Create Retries Connect With Backoff
 `pcl_socket_transport_create_client_ex()` shall retry the TCP connect with exponential backoff (starting at 100 ms, doubling up to a 2 s cap) until it succeeds, `max_retries` is exceeded, or `connect_timeout_ms` elapses. A server that starts after the client begins connecting shall be reachable within the deadline.
 
-**Traces**: PCL.032, PCL.036e
+**Traces**: PCL.032, PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::ClientExRetryConnectsToDelayedServer`.
 
 ### REQ_PCL_192 - Client Extended Create Honours Connect Timeout
 When `connect_timeout_ms` is set and no server responds, `pcl_socket_transport_create_client_ex()` shall return NULL within a bounded window close to the configured deadline and fire the state callback with `DISCONNECTED`.
 
-**Traces**: PCL.032, PCL.036e, PCL.045
+**Traces**: PCL.032, PCL.096, PCL.045
 
 **Verification**: `test_pcl_socket_transport.cpp::ClientExRetryHonoursTimeout`.
 
 ### REQ_PCL_193 - Connection State Accessor
 `pcl_socket_transport_get_state()` shall return the current `pcl_socket_state_t` of a live transport and `PCL_SOCKET_STATE_DISCONNECTED` for a NULL handle.
 
-**Traces**: PCL.031, PCL.032, PCL.036e, PCL.045
+**Traces**: PCL.031, PCL.032, PCL.096, PCL.045
 
 **Verification**: `test_pcl_socket_transport.cpp::GetStateReportsConnected`.
 
 ### REQ_PCL_194 - State Callback Fires On Initial Connect
 When `pcl_socket_client_opts_t::state_cb` is non-NULL, it shall be invoked with `CONNECTING` before the first connect attempt and with `CONNECTED` after a successful attempt.
 
-**Traces**: PCL.032, PCL.036e
+**Traces**: PCL.032, PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::StateCallbackFiresOnInitialConnect`.
 
 ### REQ_PCL_195 - Client Auto-Reconnects After Server Restart
 When `pcl_socket_client_opts_t::auto_reconnect` is non-zero, the receive thread shall detect a dropped connection, fire the state callback with `DISCONNECTED`, then attempt to reconnect with the same backoff policy. A server restarted on the same port shall cause `get_state()` to return `CONNECTED` again without the caller re-creating the transport.
 
-**Traces**: PCL.031, PCL.032, PCL.036e
+**Traces**: PCL.031, PCL.032, PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::AutoReconnectAfterServerRestart`.
 
 ### REQ_PCL_196 - Client Resolves Hosts Via getaddrinfo
 `pcl_socket_transport_create_client_ex()` shall resolve the `host` argument via `getaddrinfo` (thread-safe, IPv6-aware) and attempt each returned address in order until one succeeds.
 
-**Traces**: PCL.032, PCL.036e
+**Traces**: PCL.032, PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::ClientCreationAndDestroy` and `test_pcl_socket_transport.cpp::ClientExRetryConnectsToDelayedServer` exercise the getaddrinfo resolution path against `"127.0.0.1"`.
 
 ### REQ_PCL_197 - TCP Keepalive Enabled On Connected Sockets
 Every connected TCP socket (client-connect and server-accept) shall have `SO_KEEPALIVE` enabled. On Linux, `TCP_KEEPIDLE`, `TCP_KEEPINTVL`, and `TCP_KEEPCNT` shall be tuned so silent peer death is detected within approximately eight seconds.
 
-**Traces**: PCL.031, PCL.032, PCL.036e
+**Traces**: PCL.031, PCL.032, PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::AutoReconnectAfterServerRestart` depends on timely peer-death detection via the keepalive settings.
 
 ### REQ_PCL_198 - UDP Transport Creation
 `pcl_udp_transport_create(local_port, remote_host, remote_port, executor)` shall bind a UDP socket on `local_port` (0 = ephemeral), resolve `remote_host:remote_port`, spawn a receive thread, and expose a `pcl_transport_t` vtable with `publish`, `subscribe`, and `shutdown` populated. It shall return NULL for NULL `remote_host` or NULL `executor`.
 
-**Traces**: PCL.036f, PCL.045
+**Traces**: PCL.097, PCL.045
 
 **Verification**: `test_pcl_udp_transport.cpp::CreateAndDestroy`, `NullArgsReturnNull`, `DestroyNullIsNoOp`.
 
 ### REQ_PCL_199 - UDP Transport Peer Identity Configurable
 `pcl_udp_transport_set_peer_id()` shall set the logical peer ID used when posting inbound datagrams to the executor. It shall reject NULL or empty peer IDs with `PCL_ERR_INVALID`.
 
-**Traces**: PCL.036f, PCL.036a
+**Traces**: PCL.097, PCL.092
 
 **Verification**: `test_pcl_udp_transport.cpp::SetPeerIdRoundTrip`.
 
 ### REQ_PCL_200 - UDP Publish Round-Trip Delivers Message To Subscriber
 When the sender's transport publishes a `pcl_msg_t`, the receiver's subscriber (with `PCL_ROUTE_REMOTE` and the sender's peer ID in its allow list) shall receive the message with byte-identical payload and topic after at most a few publish attempts (UDP is best-effort).
 
-**Traces**: PCL.036f
+**Traces**: PCL.097
 
 **Verification**: `test_pcl_udp_transport.cpp::PublishDeliveredToSubscriber`.
 
 ### REQ_PCL_201 - UDP Subscriber Peer Allow-List Enforced
 Inbound datagrams shall be posted via `pcl_executor_post_remote_incoming()` with the configured peer ID, so subscriber peer allow-lists drop traffic from foreign peers.
 
-**Traces**: PCL.036f, PCL.030d
+**Traces**: PCL.097, PCL.091
 
 **Verification**: `test_pcl_udp_transport.cpp::SubscriberPeerFilterDropsForeignIngress`.
 
 ### REQ_PCL_202 - UDP Publish Rejects Oversized Payloads
 Publishing a message whose serialised payload exceeds `PCL_UDP_MAX_PAYLOAD` (1400 bytes) shall return `PCL_ERR_NOMEM` without sending a datagram, preventing silent truncation or IP-layer fragmentation.
 
-**Traces**: PCL.036f
+**Traces**: PCL.097
 
 **Verification**: `test_pcl_udp_transport.cpp::OversizedPublishReturnsNomem`.
 
 ### REQ_PCL_203 - UDP Transport Does Not Expose Service RPC Or Streaming Vtable Entries
 The UDP transport's `pcl_transport_t` shall leave `invoke_async`, `respond`, `serve`, and `invoke_stream` NULL so the executor returns `PCL_ERR_NOT_FOUND` for unsupported request/reply or streaming calls rather than silently accepting unreliable RPC.
 
-**Traces**: PCL.036f
+**Traces**: PCL.097
 
 **Verification**: `test_pcl_udp_transport.cpp::NoServiceRpcSupport`.
 
 ### REQ_PCL_204 - Non-Reconnecting Client Reports Disconnected After Peer Drop
 When a TCP client created with `auto_reconnect == 0` observes its peer closing the socket, `pcl_socket_transport_get_state()` shall transition to `PCL_SOCKET_STATE_DISCONNECTED` and the registered state callback shall fire with that value, regardless of whether the transport will attempt to re-establish the connection.
 
-**Traces**: PCL.036e
+**Traces**: PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::NonReconnectingClientReportsDisconnectedAfterServerClose`.
 
 ### REQ_PCL_205 - Connect Attempts Bounded By Connect Timeout Budget
 Each TCP connect attempt performed by `pcl_socket_transport_create_client_ex()` shall be bounded by the remaining `connect_timeout_ms` budget (or a 2-second slice when no total timeout is set), so a single SYN to a blackholed host cannot exceed the caller's deadline by more than one per-attempt slice. When the total budget is exhausted the function shall return NULL.
 
-**Traces**: PCL.036e
+**Traces**: PCL.096
 
 **Verification**: `test_pcl_socket_transport.cpp::ClientExRespectsTimeoutOnBlackholedHost`.
 
@@ -1468,23 +1345,6 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 | 091 | 018 | test_pcl_robustness |
 | 092 | 015 | test_pcl_robustness |
 | 093 | 018 | test_pcl_robustness |
-| 094 | 050 | test_pcl_proto_bindings |
-| 095 | 051 | test_pcl_proto_bindings |
-| 096 | 050 | test_pcl_proto_bindings |
-| 097 | 051 | test_pcl_proto_bindings |
-| 098 | 053 | test_pcl_proto_bindings |
-| 099 | 053 | test_pcl_proto_bindings |
-| 100 | 053 | test_pcl_proto_bindings |
-| 101 | 053 | test_pcl_proto_bindings |
-| 102 | 052 | test_pcl_proto_bindings |
-| 103 | 052 | test_pcl_proto_bindings |
-| 104 | 054 | test_pcl_proto_bindings |
-| 105 | 054 | test_pcl_proto_bindings |
-| 106 | 009 | test_pcl_proto_bindings |
-| 107 | 009 | test_pcl_proto_bindings |
-| 108 | 055 | test_pcl_proto_bindings |
-| 109 | 055 | test_pcl_proto_bindings |
-| 110 | 052 | test_pcl_proto_bindings |
 | 111 | 045 | test_pcl_lifecycle |
 | 112 | 045 | test_pcl_executor |
 | 113 | 045 | test_pcl_robustness |
@@ -1723,49 +1583,49 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 ### REQ_PCL_173 - Remote Ingress Honors Subscriber Peer Route
 `pcl_executor_post_remote_incoming()` shall deliver a queued remote message only to subscriber ports whose route allows remote delivery and whose configured peer allow-list matches the source peer.
 
-**Traces**: PCL.030b, PCL.030d
+**Traces**: PCL.089, PCL.091
 
 **Verification**: `test_pcl_executor.cpp::RemoteIngressHonorsSubscriberPeerRoute`.
 
 ### REQ_PCL_174 - Publisher Route Can Fan Out Local And Remote
 `pcl_port_publish()` on a publisher configured for local-plus-remote routing shall dispatch to matching local subscribers and publish to each configured remote peer transport.
 
-**Traces**: PCL.030b, PCL.030c
+**Traces**: PCL.089, PCL.090
 
 **Verification**: `test_pcl_executor.cpp::PublisherRouteCanBeLocalAndRemote`.
 
 ### REQ_PCL_175 - Consumed Service Route Uses Named Peer Transport
 `pcl_executor_invoke_async()` shall use the named peer transport selected by a consumed-service endpoint route when the route is configured as remote.
 
-**Traces**: PCL.030b, PCL.030c
+**Traces**: PCL.089, PCL.090
 
 **Verification**: `test_pcl_executor.cpp::ConsumedServiceRouteUsesNamedPeerTransport`.
 
 ### REQ_PCL_176 - Socket Publish Uses Peer Identity For Remote Delivery
 The socket transport shall tag inbound published messages with its configured peer identity so remote subscriber routes can be filtered by peer.
 
-**Traces**: PCL.033, PCL.036a
+**Traces**: PCL.033, PCL.092
 
 **Verification**: `test_pcl_socket_transport.cpp::PublishServerToClientDelivered`, `test_pcl_socket_transport.cpp::PublishClientToServerDelivered`.
 
 ### REQ_PCL_177 - Remote Service Round Trip Respects Peer Routes
 The socket transport gateway shall dispatch inbound service requests through remote-aware executor service lookup so that remote provided-service routes and peer allow-lists are enforced.
 
-**Traces**: PCL.034, PCL.036, PCL.036a
+**Traces**: PCL.034, PCL.036, PCL.092
 
 **Verification**: `test_pcl_socket_transport.cpp::AsyncRemoteServiceRoundTrip`.
 
 ### REQ_PCL_178 - Named Transport Registration Selects Correct Peer
 `pcl_executor_register_transport()` shall register a transport under a peer id and make that transport available to endpoint route resolution for remote publish and invoke operations.
 
-**Traces**: PCL.030c
+**Traces**: PCL.090
 
 **Verification**: `test_pcl_executor.cpp::PublisherRouteCanBeLocalAndRemote`, `test_pcl_executor.cpp::ConsumedServiceRouteUsesNamedPeerTransport`.
 
 ### REQ_PCL_179 - Socket Transport Peer Identifier Is Configurable
 `pcl_socket_transport_set_peer_id()` shall store a logical peer identifier used for remote ingress and remote service dispatch decisions.
 
-**Traces**: PCL.036a, PCL.056
+**Traces**: PCL.092, PCL.056
 
 **Verification**: `test_pcl_socket_transport.cpp::PublishServerToClientDelivered`, `test_pcl_socket_transport.cpp::PublishClientToServerDelivered`, `test_pcl_socket_transport.cpp::AsyncRemoteServiceRoundTrip`.
 
@@ -1776,42 +1636,42 @@ The socket transport gateway shall dispatch inbound service requests through rem
 ### REQ_PCL_186 - Inter-Process Publish Parent To Child Delivered
 The shared-memory transport shall deliver a published message from one process to a subscriber hosted in a different process on the same named bus.
 
-**Traces**: PCL.036b, PCL.036c
+**Traces**: PCL.093, PCL.094
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessPublishParentToChildDelivered`.
 
 ### REQ_PCL_187 - Inter-Process Publish Child To Parent Delivered
 The shared-memory transport shall deliver a published message from a helper child process to a subscriber hosted in the parent test process, preserving the source participant identity for peer filtering.
 
-**Traces**: PCL.036b, PCL.036c
+**Traces**: PCL.093, PCL.094
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessPublishChildToParentDelivered`.
 
 ### REQ_PCL_188 - Inter-Process Async Service Round Trip
 The shared-memory transport shall route an async remote service request across processes to the unique advertised provider and deliver the response callback on the caller's executor thread.
 
-**Traces**: PCL.036b, PCL.036d
+**Traces**: PCL.093, PCL.095
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessAsyncServiceRoundTrip`.
 
 ### REQ_PCL_189 - Shared Memory Invoke Async Without Provider Returns Not Found
 `pcl_executor_invoke_async()` shall return `PCL_ERR_NOT_FOUND` when the shared-memory bus does not advertise any provider for the requested remote service.
 
-**Traces**: PCL.036d, PCL.045
+**Traces**: PCL.095, PCL.045
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InvokeAsyncReturnsNotFoundWithoutProvider`.
 
 ### REQ_PCL_211 - Shared Memory Publish Fan-Out Is Atomic
 When a shared-memory publish targets multiple participants, the transport shall pre-check capacity in every target mailbox while holding the bus lock. If any target mailbox is full, the publish shall return an error and shall not enqueue that frame to any target mailbox.
 
-**Traces**: PCL.036c, PCL.036g
+**Traces**: PCL.094, PCL.098
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PublishFanoutIsAtomicWhenAnyMailboxIsFull`.
 
 ### REQ_PCL_212 - Shared Memory Topic Backpressure Waits For Capacity
 `pcl_shared_memory_transport_set_topic_backpressure()` shall configure a per-topic bounded wait policy. Publishes on configured topics shall wait for all target mailboxes to have capacity until the timeout expires, while topics without a policy shall remain on the generic non-blocking output path. The API shall reject NULL transport handles or NULL/empty topic names.
 
-**Traces**: PCL.036g, PCL.045
+**Traces**: PCL.103, PCL.045
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::TopicBackpressureWaitsForMailboxCapacity`.
 
@@ -1822,42 +1682,42 @@ When a shared-memory publish targets multiple participants, the transport shall 
 ### REQ_PCL_167 - Streaming Service Send and End
 `pcl_stream_send()` shall deliver messages to the client callback with `end=false`. `pcl_stream_end()` shall deliver a final callback with `end=true` and `status=PCL_OK`.
 
-**Traces**: PCL.011c
+**Traces**: PCL.087
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.BasicStreamingSendEnd`, `PclStreaming.TransportStreamSendEnd`, `PclStreaming.TransportInvokeStream`.
 
 ### REQ_PCL_168 - Client Stream Cancellation
 `pcl_stream_cancel()` shall set the cancelled flag. `pcl_stream_is_cancelled()` shall return true after cancellation. `pcl_stream_send()` shall return `PCL_ERR_CANCELLED` when cancelled.
 
-**Traces**: PCL.011c
+**Traces**: PCL.087
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.ClientCancellation`, `PclStreaming.TransportStreamCancel`.
 
 ### REQ_PCL_169 - Server Stream Abort
 `pcl_stream_abort()` shall deliver a final callback with `end=true` and the specified error status.
 
-**Traces**: PCL.011c
+**Traces**: PCL.087
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.ServerAbort`, `PclStreaming.TransportStreamAbort`.
 
 ### REQ_PCL_170 - Stream Service Not Found
 `pcl_executor_invoke_stream()` shall return `PCL_ERR_NOT_FOUND` when no streaming service matches the name.
 
-**Traces**: PCL.011c, PCL.045
+**Traces**: PCL.087, PCL.045
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.StreamNotFound`, `PclStreaming.HandlerReturnsError`.
 
 ### REQ_PCL_171 - Stream API Null Safety
 All streaming API functions shall return `PCL_ERR_INVALID` or safe defaults when passed NULL arguments.
 
-**Traces**: PCL.011c
+**Traces**: PCL.087
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.StreamNullSafety`.
 
 ### REQ_PCL_172 - Add Stream Service During Configure
 `pcl_container_add_stream_service()` shall create a streaming service port during `on_configure` and return a non-NULL port handle.
 
-**Traces**: PCL.011c
+**Traces**: PCL.087
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.AddStreamServiceDuringConfigure`.
 
@@ -2073,28 +1933,28 @@ Malformed inbound APOS messages -- zero-length, an unrecognised frame kind, trun
 ### REQ_PCL_301 - Udp Subscribe And Shutdown Vtable
 The UDP transport's `subscribe` vtable entry shall return `PCL_OK` as a no-op; `shutdown` shall stop the receive thread and be NULL-safe.
 
-**Traces**: PCL.036f
+**Traces**: PCL.097
 
 **Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.SubscribeAndShutdownVtable`.
 
 ### REQ_PCL_302 - Unresolvable Remote Host Returns Null
 `pcl_udp_transport_create()` shall return NULL when the remote host cannot be resolved.
 
-**Traces**: PCL.036f, PCL.045
+**Traces**: PCL.097, PCL.045
 
 **Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.UnresolvableRemoteHostReturnsNull`.
 
 ### REQ_PCL_303 - Malformed Datagrams Dropped
 Malformed inbound datagrams -- an unrecognised message type, or a topic/type/payload length exceeding the datagram size -- shall be dropped by the receive thread without crashing or wedging.
 
-**Traces**: PCL.036f
+**Traces**: PCL.097
 
 **Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.MalformedDatagramsDropped`.
 
 ### REQ_PCL_304 - Destroy Clears Default Transport Slot When Self
 Destroying a UDP transport installed as the executor's default transport shall clear the default slot.
 
-**Traces**: PCL.036f
+**Traces**: PCL.097
 
 **Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.DestroyClearsDefaultTransportWhenSelf`.
 
@@ -2105,98 +1965,98 @@ Destroying a UDP transport installed as the executor's default transport shall c
 ### REQ_PCL_305 - Shm Subscribe And Shutdown Vtable Are No-Ops
 The shared-memory transport's `subscribe` and `shutdown` vtable entries shall be no-ops, since bus interest and teardown are managed through the bus region itself.
 
-**Traces**: PCL.036b
+**Traces**: PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.SubscribeAndShutdownVtableAreNoOps`.
 
 ### REQ_PCL_306 - Remote Service Request From Disallowed Peer Yields Empty Response
 A remote unary service request from a peer outside the provider's route allow-list shall be answered with an empty response instead of dispatching the service handler.
 
-**Traces**: PCL.030d, PCL.036b
+**Traces**: PCL.091, PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServicePeerFilterYieldsEmptyResponse`.
 
 ### REQ_PCL_307 - Remote Service Handler Error Yields Empty Response
 When a remote unary service handler returns a non-OK, non-pending status, the gateway shall send an empty response rather than leaving the caller waiting.
 
-**Traces**: PCL.036b
+**Traces**: PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServiceHandlerErrorYieldsEmptyResponse`.
 
 ### REQ_PCL_308 - Ambiguous Provider Fails Closed
 When two participants advertise the same service name, both unary invocation (`pcl_executor_invoke_async()`) and streaming invocation (`invoke_stream`) shall fail closed with `PCL_ERR_INVALID` rather than picking an arbitrary provider.
 
-**Traces**: PCL.036d
+**Traces**: PCL.095
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.AmbiguousProviderFailsClosed`.
 
 ### REQ_PCL_309 - Destroy With Pending Requests Cancels Them
 Destroying a participant with un-answered unary and stream requests shall free the pending unary correlation entries and shall fire the stream callback with `end=true, status=PCL_ERR_CANCELLED` for any pending stream.
 
-**Traces**: PCL.036d, PCL.046
+**Traces**: PCL.095, PCL.046
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.DestroyWithPendingRequestsCancelsThem`.
 
 ### REQ_PCL_310 - Participant Slots Exhausted
 The shared-memory bus shall support at most 8 participants; `pcl_shared_memory_transport_create()` shall return NULL when the bus is full.
 
-**Traces**: PCL.036b, PCL.046
+**Traces**: PCL.093, PCL.046
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ParticipantSlotsExhausted`.
 
 ### REQ_PCL_311 - Stream Request From Disallowed Peer Ends With Error
 A streaming service request from a peer outside the provider's route allow-list shall be terminated with an error END frame instead of dispatching the stream handler.
 
-**Traces**: PCL.030d, PCL.011c
+**Traces**: PCL.091, PCL.087
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.StreamPeerFilterEndsWithError`.
 
 ### REQ_PCL_312 - Stream Handler Error Ends Stream
 When a stream handler returns an error instead of `PCL_STREAMING`, the gateway shall send an END frame carrying that error status.
 
-**Traces**: PCL.011c
+**Traces**: PCL.087
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.StreamHandlerErrorEndsStream`.
 
 ### REQ_PCL_313 - Service Advertisement Table Dedupes And Caps
 The per-participant service advertisement table shall deduplicate repeated service names and cap at 16 entries; a local-only service shall never be advertised.
 
-**Traces**: PCL.036b
+**Traces**: PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServiceTableDedupesAndCaps`.
 
 ### REQ_PCL_314 - Stale Advertisement Refused At Dispatch
 A request that arrives after the provider re-routed its service to local-only shall be refused at dispatch time: unary requests receive an empty response, stream requests receive an error END frame, and the handler is never invoked.
 
-**Traces**: PCL.030d, PCL.036b
+**Traces**: PCL.091, PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.StaleAdvertisementRefusedAtDispatch`.
 
 ### REQ_PCL_315 - Service Without Route Uses Default Modes
 A service port with no explicit route configuration shall fall back to the legacy default (advertised remotely when a default transport is attached), and the round trip shall complete normally.
 
-**Traces**: PCL.036b
+**Traces**: PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServiceWithoutRouteUsesDefaultModes`.
 
 ### REQ_PCL_316 - Service Without Route Or Transport Stays Local
 A service port with no explicit route and no default transport attached shall stay local-only and never be advertised on the bus.
 
-**Traces**: PCL.036b
+**Traces**: PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServiceWithoutRouteOrTransportStaysLocal`.
 
 ### REQ_PCL_326 - Publisher Without Route Uses Default Modes
 A publisher port with no explicit endpoint route shall fall back to the legacy default routing mode when publishing through the shared-memory transport.
 
-**Traces**: PCL.036b
+**Traces**: PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.PublishWithoutRoutesUsesDefaultModes`.
 
 ### REQ_PCL_327 - Remote Ingress Default Route Modes
 A subscriber port with no explicit route shall accept remote ingress when a default transport is attached to its executor, exercising the legacy route-mode fallback alongside an unrelated route-table entry.
 
-**Traces**: PCL.030d, PCL.036b
+**Traces**: PCL.091, PCL.093
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.RemoteIngressDefaultRouteModes`.
 
@@ -2790,14 +2650,14 @@ The client receive thread shall handle an allocation failure while decoding a se
 ### REQ_PCL_414 - Client Retry Covers Bad Host And Backoff Sleep
 `pcl_socket_transport_create_client_ex()` with bounded retries shall exercise the exponential backoff sleep path and fail closed (return NULL) against an unresolvable host and against a refused connection on a live loopback port.
 
-**Traces**: PCL.036e
+**Traces**: PCL.096
 
 **Verification**: `test_pcl_socket_faults.cpp::PclSocketFaults.ClientRetryCoversBadHostAndBackoffSleep`.
 
 ### REQ_PCL_415 - Auto-Reconnect Backoff Runs While Server Stays Down
 With `auto_reconnect` enabled, the client's reconnect backoff loop shall continue running while the server remains down, and `pcl_socket_transport_get_state()` shall report a non-CONNECTED state throughout.
 
-**Traces**: PCL.036e
+**Traces**: PCL.096
 
 **Verification**: `test_pcl_socket_faults.cpp::PclSocketFaults.AutoReconnectBackoffRunsWhileServerStaysDown`.
 
@@ -2966,7 +2826,7 @@ An inbound PUBLISH frame whose `type_name` is NULL shall be normalised to an emp
 ### REQ_PCL_438 - Remote Svc Req Honours Local-Only Exposure
 An inbound SVC_REQ frame for a service configured local-only shall be dispatched through the remote-aware executor ingress path: the handler shall never be invoked, and the remote caller shall still receive an empty response rather than being left waiting.
 
-**Traces**: PCL.071, PCL.030d
+**Traces**: PCL.071, PCL.091
 
 **Verification**: `test_pcl_template_transport.cpp::PclTransportTemplate.RemoteSvcReqHonoursLocalOnlyExposure`.
 
@@ -3117,7 +2977,7 @@ With the template send hook wedged, `invoke_async` shall register correlation st
 ### REQ_PCL_457 - Backpressured Shared-Memory Publish Does Not Block Executor
 When a shared-memory topic has a non-zero backpressure budget, the executor-facing `publish` shall copy and enqueue the frame to the egress worker and return promptly; the mailbox-capacity wait shall be owned by the worker, not the executor thread.
 
-**Traces**: PCL.075, PCL.076, PCL.036g
+**Traces**: PCL.075, PCL.076, PCL.103
 
 **Verification**: `test_pcl_transport_threading.cpp::PclTransportThreading.SharedMemoryPublishDoesNotSleepForBackpressure`.
 
@@ -3133,21 +2993,21 @@ With a frame queued behind a wedged send hook, `pcl_transport_template_destroy()
 ### REQ_PCL_459 - Deferred Service Response Round Trip
 A service handler may save its `pcl_svc_context_t` and return `PCL_PENDING`; a later call to `pcl_service_respond()` with that context shall deliver the response to the original caller's callback.
 
-**Traces**: PCL.011b
+**Traces**: PCL.086
 
 **Verification**: `test_pcl_robustness.cpp::DeferredServiceResponse`, `test_pcl_executor.cpp::InvokeAsyncIntraProcessPendingResponse`.
 
 ### REQ_PCL_460 - Deferred Response Null Safety And Context Release
 `pcl_service_respond()` shall return `PCL_ERR_INVALID` for a NULL context or NULL response, and the saved service context shall be releasable without leaking when the handler never responds.
 
-**Traces**: PCL.011b, PCL.045
+**Traces**: PCL.086, PCL.045
 
 **Verification**: `test_pcl_robustness.cpp::ServiceRespondNullArgs`, `test_pcl_robustness.cpp::ServiceContextFree`.
 
 ### REQ_PCL_461 - Deferred Response Through Transport
 When the request arrived through a transport with a `respond` vtable slot, `pcl_service_respond()` shall route the deferred response back through that transport.
 
-**Traces**: PCL.011b
+**Traces**: PCL.086
 
 **Verification**: `test_pcl_robustness.cpp::ServiceRespondWithTransport`.
 
@@ -3245,28 +3105,28 @@ routing the earlier manifest requirements exercise.
 
 **Traces**: PCL.078
 
-**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingInvokeDispatchesThroughRoutedTransport`. Also exercised end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (run1: request leg AND requirement leg both rpc-realized, cross-process over shared memory, JSON and FlatBuffers).
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingInvokeDispatchesThroughRoutedTransport`.
 
 ### REQ_PCL_472 - Stream-Consumed Routes Require RPC_STREAM Capability
 A manifest `route` line of kind `stream_consumed` shall fail closed with `PCL_ERR_STATE` and a diagnostic naming `RPC_STREAM` when routed to a transport that does not declare `PCL_CAP_RPC_STREAM`, even when that transport declares `PCL_CAP_RPC_UNARY` (i.e. is unary-rpc-capable but not streaming-capable) -- `stream_consumed` and `consumed` are distinct endpoint kinds precisely so `pcl_endpoint_required_caps()` can require the correct capability for each, rather than a streaming client route being satisfied by `PCL_CAP_RPC_UNARY` alone and only failing once actually invoked.
 
-**Traces**: PCL.078
+**Traces**: PCL.099
 
-**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingRouteRejectsStreamIncapableTransport` (routes against the unary-only `pcl_transport_nocaps_plugin` -- publish + invoke_async only, no invoke_stream); `PclCapabilities.EndpointRequiredCaps` (`PCL_ENDPOINT_STREAM_CONSUMED` maps to `PCL_CAP_RPC_STREAM`, not `PCL_CAP_RPC_UNARY`). Downstream consumers of the `PCL_ENDPOINT_STREAM_CONSUMED` kind (the generated `ConsumedService` route helpers and Ada `Configure_Consumed_Transport` select it for server-streaming rpcs; `contract_routing_manifest.py` emits `stream_consumed` route lines with the endpoint's reliability floor) are pinned by `pim/test_stream_consumed_routing.py`.
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.StreamingRouteRejectsStreamIncapableTransport`; `test_pcl_capabilities.cpp::PclCapabilities.EndpointRequiredCaps`.
 
 ### REQ_PCL_473 - Explicit Local Route Bypasses Legacy Transport Fallback
 An endpoint with an explicit `PCL_ROUTE_LOCAL` route entry shall be dispatched intra-process by `pcl_executor_invoke_async()`/`pcl_executor_invoke_stream()` without ever consulting the legacy single executor-wide transport (`e->has_transport`/`e->transport`), even when such a default transport is also registered on the executor. A `PCL_ROUTE_LOCAL` route is a deliberate override, not merely the absence of a remote route, so it must not fall through to a fallback that exists only for endpoints with no route table entry at all.
 
-**Traces**: PCL.078
+**Traces**: PCL.089
 
 **Verification**: `test_pcl_executor.cpp::PclExecutor.InvokeAsyncExplicitLocalRouteBypassesDefaultTransport`, `test_pcl_streaming.cpp::PclStreaming.InvokeStreamExplicitLocalRouteBypassesDefaultTransport`. Implementation note: both `pcl_executor_invoke_async()` and `pcl_executor_invoke_stream()` gate the legacy transport fallback on the route not forcing `PCL_ROUTE_LOCAL`.
 
 ### REQ_PCL_471 - Routing-Manifest Gateway Container Discovery
 `pcl_transport_routing_get_gateway(routing, peer_id, out_gateway)` shall return `PCL_OK` with the named peer's transport's gateway container (if its plugin exports one of the known optional gateway-accessor symbols) or `PCL_OK` with `*out_gateway = NULL` (if it exports none -- not an error), and `PCL_ERR_NOT_FOUND` when no transport was loaded for `peer_id`. The routing manifest loader itself shall not add this container to the executor; a component providing a `provided`/`stream_provided` endpoint over such a transport is responsible for retrieving, configuring, activating, and adding it.
 
-**Traces**: PCL.078
+**Traces**: PCL.100
 
-**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.GetGatewayReturnsUsableContainerForShmPeer`, `.GetGatewayReturnsNullForPluginWithoutGateway`, `.GetGatewayFailsClosedOnUnknownPeerAndBadArgs`. Also exercised for real end-to-end at `pim/test_harness/agra_seam_interchange_test.cpp` (the provider/MA role of every rpc-realized-request-leg scenario: run1 and run3, JSON and FlatBuffers) -- before this fix, inbound `SVC_REQ`/`STREAM_REQ` frames arriving over the shared-memory bus at a manifest-routed provider were silently dropped (nothing was registered to receive the internal gateway-subscriber topic those frames are re-posted to), so the provider process never observed the command at all and the consumer's pending RPC call hung until timeout.
+**Verification**: `test_pcl_transport_routing.cpp::PclTransportRouting.GetGatewayReturnsUsableContainerForShmPeer`, `.GetGatewayReturnsNullForPluginWithoutGateway`, `.GetGatewayFailsClosedOnUnknownPeerAndBadArgs`.
 
 ## 39. Standalone Process Runtime
 
@@ -3320,7 +3180,7 @@ After a deployment manifest loads, `pcl_process_runtime_load_ports_file()` shall
 **Verification**: `test_pcl_process_runtime.cpp::PclProcessRuntime.RejectsMoreThanMaximumPeers`.
 
 ### REQ_PCL_483 - Endpoint Descriptor Validation
-`pcl_process_runtime_load_ports_file()` shall validate every generated endpoint descriptor before writing it to a temporary routing manifest. A null endpoint name or an endpoint kind outside the supported publisher, subscriber, provided, consumed, stream-provided, and stream-consumed kinds shall return `PCL_ERR_INVALID` with a diagnostic instead of dereferencing or formatting the invalid value.
+`pcl_process_runtime_load_ports_file()` shall validate every supplied endpoint descriptor before writing it to a temporary routing manifest. A null endpoint name or an endpoint kind outside the supported publisher, subscriber, provided, consumed, stream-provided, and stream-consumed kinds shall return `PCL_ERR_INVALID` with a diagnostic instead of dereferencing or formatting the invalid value.
 
 **Traces**: PCL.079
 
@@ -3450,7 +3310,7 @@ The shared-memory transport `subscribe` operation shall record a valid topic onc
 ### REQ_PCL_501 - Shared-Memory Unary Service Congestion
 When a discovered unary service provider's mailbox is full, the shared-memory egress worker shall retry enqueueing the request for no longer than its configured bounded retry interval. If retry succeeds, the normal response shall be delivered; otherwise the pending call shall complete on the executor thread with an empty terminal response.
 
-**Traces**: PCL.082, PCL.075
+**Traces**: PCL.101, PCL.075
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.UnaryServiceCongestionRetriesThenCompletesEmpty`.
 
@@ -3478,6 +3338,6 @@ The reliable socket transport shall reject an outbound frame with `PCL_ERR_NOMEM
 ### REQ_PCL_505 - UDP Per-Source Sequence-Gap Counter
 For each source address and port, the UDP transport shall establish a sequence baseline from the first valid publish datagram and add each later forward sequence gap to `pcl_udp_transport_dropped_datagrams()`. Duplicate, reordered, or stale sequence values shall not increase the count. The getter shall return zero for a null transport.
 
-**Traces**: PCL.084
+**Traces**: PCL.102
 
 **Verification**: `test_pcl_udp_transport.cpp::PclUdpTransport.SequenceGapsAreCountedPerSource`.

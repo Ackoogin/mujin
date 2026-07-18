@@ -614,7 +614,7 @@ TEST(PclTransportThreading, TemplateInvokeQueuesWhenSendBlocks) {
 }
 
 ///< REQ_PCL_457: a backpressure-configured shared-memory publish copies/enqueues to
-///< the egress worker and returns promptly; the worker owns the wait (PCL.075/076 group B, PCL.036g).
+///< the egress worker and returns promptly; the worker owns the wait (PCL.075/076 group B, PCL.098).
 TEST(PclTransportThreading, SharedMemoryPublishDoesNotSleepForBackpressure) {
   silence_logs();
   auto* exec = pcl_executor_create();

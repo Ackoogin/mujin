@@ -552,7 +552,7 @@ static bool publish_until_mailbox_full(BusNode& filler,
   return false;
 }
 
-///< REQ_PCL_211: Shared-memory publish fan-out is all-or-nothing. PCL.036c, PCL.036g.
+///< REQ_PCL_211: Shared-memory publish fan-out is all-or-nothing. PCL.094, PCL.098.
 TEST(PclSharedMemoryTransport, PublishFanoutIsAtomicWhenAnyMailboxIsFull) {
   silence_logs();
 
@@ -774,7 +774,7 @@ TEST(PclSharedMemoryTransport, AsyncDeferredServiceRoundTrip) {
   restore_logs();
 }
 
-///< REQ_PCL_186: Inter-process publish parent to child delivered. PCL.036b, PCL.036c.
+///< REQ_PCL_186: Inter-process publish parent to child delivered. PCL.093, PCL.094.
 TEST(PclSharedMemoryTransport, InterProcessPublishParentToChildDelivered) {
   silence_logs();
 
@@ -817,7 +817,7 @@ TEST(PclSharedMemoryTransport, InterProcessPublishParentToChildDelivered) {
   restore_logs();
 }
 
-///< REQ_PCL_187: Inter-process publish child to parent delivered. PCL.036b, PCL.036c.
+///< REQ_PCL_187: Inter-process publish child to parent delivered. PCL.093, PCL.094.
 TEST(PclSharedMemoryTransport, InterProcessPublishChildToParentDelivered) {
   silence_logs();
 
@@ -880,7 +880,7 @@ TEST(PclSharedMemoryTransport, InterProcessPublishChildToParentDelivered) {
   restore_logs();
 }
 
-///< REQ_PCL_188: Inter-process async service round trip succeeds. PCL.036b, PCL.036d.
+///< REQ_PCL_188: Inter-process async service round trip succeeds. PCL.093, PCL.095.
 TEST(PclSharedMemoryTransport, InterProcessAsyncServiceRoundTrip) {
   silence_logs();
 
@@ -966,7 +966,7 @@ TEST(PclSharedMemoryTransport, InterProcessAsyncServiceRoundTrip) {
 
 ///< REQ_PCL_189: Shared-memory invoke async without a provider returns promptly
 ///< and the worker delivers a terminal (empty) response on the executor thread
-///< rather than blocking the caller on discovery. PCL.036d, PCL.045.
+///< rather than blocking the caller on discovery. PCL.095, PCL.045.
 TEST(PclSharedMemoryTransport, InvokeAsyncReturnsNotFoundWithoutProvider) {
   silence_logs();
 

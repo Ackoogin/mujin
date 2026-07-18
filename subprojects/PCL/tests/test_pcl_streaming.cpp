@@ -1,7 +1,7 @@
 /// \file test_pcl_streaming.cpp
 /// \brief Tests for PCL streaming services.
 ///
-/// Covers REQ_PCL_167-REQ_PCL_172 (tracing to HLR PCL.011c).
+/// Covers REQ_PCL_167-REQ_PCL_172 (tracing to HLR PCL.087).
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -18,7 +18,7 @@ extern "C" {
 // Streaming service tests
 // =======================================================================
 
-///< REQ_PCL_167: Streaming service send and end. PCL.011c.
+///< REQ_PCL_167: Streaming service send and end. PCL.087.
 TEST(PclStreaming, BasicStreamingSendEnd) {
   // Test basic streaming: handler sends 3 messages then ends
   struct Ctx {
@@ -92,7 +92,7 @@ TEST(PclStreaming, BasicStreamingSendEnd) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_168: Client stream cancellation. PCL.011c.
+///< REQ_PCL_168: Client stream cancellation. PCL.087.
 TEST(PclStreaming, ClientCancellation) {
   // Test client cancellation mid-stream
   struct Ctx {
@@ -146,7 +146,7 @@ TEST(PclStreaming, ClientCancellation) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_169: Server stream abort. PCL.011c.
+///< REQ_PCL_169: Server stream abort. PCL.087.
 TEST(PclStreaming, ServerAbort) {
   // Test server aborting stream with error
   struct Ctx {
@@ -193,7 +193,7 @@ TEST(PclStreaming, ServerAbort) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_170: Stream service not found. PCL.011c, PCL.045.
+///< REQ_PCL_170: Stream service not found. PCL.087, PCL.045.
 TEST(PclStreaming, StreamNotFound) {
   auto* e = pcl_executor_create();
 
@@ -207,7 +207,7 @@ TEST(PclStreaming, StreamNotFound) {
   pcl_executor_destroy(e);
 }
 
-///< REQ_PCL_171: Stream API null safety. PCL.011c.
+///< REQ_PCL_171: Stream API null safety. PCL.087.
 TEST(PclStreaming, StreamNullSafety) {
   pcl_msg_t msg = {};
   msg.type_name = "Msg";
@@ -240,7 +240,7 @@ TEST(PclStreaming, StreamNullSafety) {
   pcl_executor_destroy(e);
 }
 
-///< REQ_PCL_172: Add stream service during configure. PCL.011c.
+///< REQ_PCL_172: Add stream service during configure. PCL.087.
 TEST(PclStreaming, AddStreamServiceDuringConfigure) {
   pcl_callbacks_t cbs = {};
   bool port_added = false;
@@ -265,7 +265,7 @@ TEST(PclStreaming, AddStreamServiceDuringConfigure) {
 // Transport streaming vtable tests
 // =======================================================================
 
-///< REQ_PCL_167: Streaming with transport vtable. PCL.011c.
+///< REQ_PCL_167: Streaming with transport vtable. PCL.087.
 TEST(PclStreaming, TransportStreamSendEnd) {
   struct TransportCtx {
     bool stream_send_called = false;
@@ -398,7 +398,7 @@ TEST(PclStreaming, InvokeStreamExplicitLocalRouteBypassesDefaultTransport) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_169: Streaming abort with transport. PCL.011c.
+///< REQ_PCL_169: Streaming abort with transport. PCL.087.
 TEST(PclStreaming, TransportStreamAbort) {
   struct TransportCtx {
     bool stream_end_called = false;
@@ -453,7 +453,7 @@ TEST(PclStreaming, TransportStreamAbort) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_168: Stream cancel with transport. PCL.011c.
+///< REQ_PCL_168: Stream cancel with transport. PCL.087.
 TEST(PclStreaming, TransportStreamCancel) {
   struct TransportCtx {
     bool stream_cancel_called = false;
@@ -508,7 +508,7 @@ TEST(PclStreaming, TransportStreamCancel) {
   pcl_container_destroy(c);
 }
 
-///< REQ_PCL_167: Transport invoke_stream path. PCL.011c.
+///< REQ_PCL_167: Transport invoke_stream path. PCL.087.
 TEST(PclStreaming, TransportInvokeStream) {
   struct TransportCtx {
     bool invoke_stream_called = false;
@@ -630,7 +630,7 @@ TEST(PclStreaming, DirectTransportContextSendEndAbortCancel) {
   EXPECT_EQ(tctx.last_handle, reinterpret_cast<void*>(0x1004));
 }
 
-///< REQ_PCL_170: Handler returns error. PCL.011c.
+///< REQ_PCL_170: Handler returns error. PCL.087.
 TEST(PclStreaming, HandlerReturnsError) {
   pcl_callbacks_t cbs = {};
   cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
@@ -659,4 +659,74 @@ TEST(PclStreaming, HandlerReturnsError) {
 
   pcl_executor_destroy(e);
   pcl_container_destroy(c);
+}
+
+///< REQ_PCL_167, REQ_PCL_470: remote stream routes fail closed when
+///< ambiguous or unsupported, use the default transport when unbound, and
+///< reject invalid route modes. PCL.087, PCL.078.
+TEST(PclStreaming, RemoteRouteValidationAndDefaultDispatch) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  struct InvokeState {
+    int calls = 0;
+  } state;
+  pcl_transport_t default_transport = {};
+  default_transport.adapter_ctx = &state;
+  default_transport.invoke_stream =
+      [](void* adapter_ctx, const char*, const pcl_msg_t*,
+         pcl_stream_msg_fn_t, void*, void**) -> pcl_status_t {
+        static_cast<InvokeState*>(adapter_ctx)->calls++;
+        return PCL_OK;
+      };
+  ASSERT_EQ(pcl_executor_set_transport(e, &default_transport), PCL_OK);
+
+  pcl_msg_t request = {};
+  request.type_name = "Request";
+  auto callback = [](const pcl_msg_t*, bool, pcl_status_t, void*) {};
+
+  const char* two_peers[] = {"peer_a", "peer_b"};
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "ambiguous.stream";
+  route.endpoint_kind = PCL_ENDPOINT_STREAM_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = two_peers;
+  route.peer_count = 2u;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+  EXPECT_EQ(pcl_executor_invoke_stream(
+                e, route.endpoint_name, &request, callback, nullptr, nullptr),
+            PCL_ERR_INVALID);
+
+  route.endpoint_name = "default.stream";
+  route.peer_ids = nullptr;
+  route.peer_count = 0u;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+  EXPECT_EQ(pcl_executor_invoke_stream(
+                e, route.endpoint_name, &request, callback, nullptr, nullptr),
+            PCL_OK);
+  EXPECT_EQ(state.calls, 1);
+
+  pcl_transport_t unsupported_transport = {};
+  ASSERT_EQ(pcl_executor_register_transport(
+                e, "unsupported_peer", &unsupported_transport),
+            PCL_OK);
+  const char* unsupported_peer[] = {"unsupported_peer"};
+  route.endpoint_name = "unsupported.stream";
+  route.peer_ids = unsupported_peer;
+  route.peer_count = 1u;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+  EXPECT_EQ(pcl_executor_invoke_stream(
+                e, route.endpoint_name, &request, callback, nullptr, nullptr),
+            PCL_ERR_NOT_FOUND);
+
+  route.endpoint_name = "invalid.stream";
+  route.route_mode = 4u;
+  route.peer_ids = nullptr;
+  route.peer_count = 0u;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+  EXPECT_EQ(pcl_executor_invoke_stream(
+                e, route.endpoint_name, &request, callback, nullptr, nullptr),
+            PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
 }
