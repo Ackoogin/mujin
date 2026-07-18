@@ -118,6 +118,7 @@ static char* pcl_strdup_local(const char* src) {
   return copy;
 }
 
+/* Implements: REQ_PCL_052. */
 static void free_pending_msg(pcl_pending_msg_t* pending) {
   if (!pending) return;
   pcl_free(pending->topic);
@@ -176,6 +177,7 @@ static const pcl_endpoint_route_entry_t* find_endpoint_route_entry_const(
   return find_endpoint_route_entry((pcl_executor_t*)e, endpoint_name, endpoint_kind);
 }
 
+/* Implements: REQ_PCL_315, REQ_PCL_316, REQ_PCL_326, REQ_PCL_327. */
 static uint32_t port_route_mode(const pcl_executor_t* e, const pcl_port_t* port) {
   const pcl_endpoint_route_entry_t* entry;
 
@@ -219,6 +221,7 @@ static const char* port_peer_id_at(const pcl_executor_t* e,
   return (index < port->peer_count) ? port->peer_ids[index] : NULL;
 }
 
+/* Implements: REQ_PCL_495, REQ_PCL_497. */
 static pcl_status_t subscribe_port_with_transport(
     const pcl_executor_t* e,
     const pcl_port_t*     port,
@@ -254,6 +257,7 @@ static pcl_status_t subscribe_port_with_transport(
                               port->type_name);
 }
 
+/* Implements: REQ_PCL_495, REQ_PCL_236. */
 static pcl_status_t subscribe_container_ports(pcl_executor_t* e,
                                               pcl_container_t* c) {
   uint32_t pi;
@@ -288,6 +292,7 @@ static pcl_status_t subscribe_container_ports(pcl_executor_t* e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_496, REQ_PCL_229. */
 static pcl_status_t subscribe_existing_ports(pcl_executor_t* e,
                                              const char* peer_id,
                                              const pcl_transport_t* transport) {
@@ -305,11 +310,13 @@ static pcl_status_t subscribe_existing_ports(pcl_executor_t* e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_173. */
 static int route_accepts(uint32_t route_mode,
                          uint32_t source_route_mode) {
   return (route_mode & source_route_mode) != 0u;
 }
 
+/* Implements: REQ_PCL_173. */
 static int peer_is_allowed(const pcl_executor_t* e,
                            const pcl_port_t*     port,
                            const char*           peer_id) {
@@ -330,6 +337,7 @@ static int peer_is_allowed(const pcl_executor_t* e,
 
 // -- Create / destroy ----------------------------------------------------
 
+/* Implements: REQ_PCL_031. */
 pcl_executor_t* pcl_executor_create(void) {
   pcl_executor_t* e = (pcl_executor_t*)pcl_calloc(1, sizeof(pcl_executor_t));
   if (!e) return NULL;
@@ -344,16 +352,23 @@ pcl_executor_t* pcl_executor_create(void) {
   return e;
 }
 
+/* No LLR: internal cross-translation-unit locking primitive documented in
+   pcl_internal.h, not a requirement-bearing API of its own; its correctness
+   is exercised through the concurrency requirements it protects (see
+   REQ_PCL_053 and the threading-model conformance suite, section 34 of
+   LLR.md). */
 void pcl_executor_containers_lock(pcl_executor_t* e) {
   if (!e) return;
   pcl_mutex_lock(&e->containers_lock);
 }
 
+/* No LLR: see pcl_executor_containers_lock() above. */
 void pcl_executor_containers_unlock(pcl_executor_t* e) {
   if (!e) return;
   pcl_mutex_unlock(&e->containers_lock);
 }
 
+/* Implements: REQ_PCL_094, REQ_PCL_052, REQ_PCL_061, REQ_PCL_185. */
 void pcl_executor_destroy(pcl_executor_t* e) {
   pcl_pending_msg_t* pending;
   uint32_t i;
@@ -430,6 +445,8 @@ void pcl_executor_destroy(pcl_executor_t* e) {
 
 // -- Container management ------------------------------------------------
 
+/* Implements: REQ_PCL_038, REQ_PCL_037, REQ_PCL_495, REQ_PCL_236,
+   REQ_PCL_230. */
 pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c) {
   pcl_status_t rc;
   if (!e || !c) return PCL_ERR_INVALID;
@@ -450,6 +467,7 @@ pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c) {
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_039. */
 pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c) {
   uint32_t i;
   if (!e || !c) return PCL_ERR_INVALID;
@@ -470,6 +488,7 @@ pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c) {
 
 // -- Intra-process dispatch ----------------------------------------------
 
+/* Implements: REQ_PCL_044, REQ_PCL_045, REQ_PCL_046, REQ_PCL_173. */
 static pcl_status_t dispatch_incoming_now(pcl_executor_t*  e,
                                           const char*      topic,
                                           const pcl_msg_t* msg,
@@ -509,6 +528,7 @@ static pcl_status_t dispatch_incoming_now(pcl_executor_t*  e,
   return delivered ? PCL_OK : PCL_ERR_NOT_FOUND;
 }
 
+/* Implements: REQ_PCL_057, REQ_PCL_058, REQ_PCL_059. */
 static uint32_t drain_resp_cb_queue(pcl_executor_t* e) {
   uint32_t drained = 0u;
   for (;;) {
@@ -540,6 +560,7 @@ static uint32_t drain_resp_cb_queue(pcl_executor_t* e) {
   return drained;
 }
 
+/* Implements: REQ_PCL_054. */
 static pcl_status_t drain_incoming_queue(pcl_executor_t* e,
                                          uint32_t*        drained_count) {
   pcl_pending_msg_t* pending;
@@ -601,6 +622,7 @@ static struct pcl_port_t* find_service(pcl_executor_t* e,
 // If the service is not found, the callback is still fired with an empty
 // message so the caller is never silently abandoned.
 
+/* Implements: REQ_PCL_181, REQ_PCL_182, REQ_PCL_183, REQ_PCL_459. */
 static uint32_t drain_svc_req_queue(pcl_executor_t* e) {
   uint32_t drained = 0u;
   for (;;) {
@@ -675,6 +697,7 @@ static uint32_t drain_svc_req_queue(pcl_executor_t* e) {
 
 // -- Tick one container --------------------------------------------------
 
+/* Implements: REQ_PCL_032, REQ_PCL_033, REQ_PCL_034. */
 static void tick_container(pcl_container_t* c, double dt) {
   double tick_period;
   double actual_dt;
@@ -696,6 +719,7 @@ static void tick_container(pcl_container_t* c, double dt) {
 
 // -- Spin ----------------------------------------------------------------
 
+/* Implements: REQ_PCL_035, REQ_PCL_055. */
 pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
   double fastest_hz;
   double base_period;
@@ -748,6 +772,8 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_032, REQ_PCL_043, REQ_PCL_091, REQ_PCL_092,
+   REQ_PCL_093. */
 pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
   double t_now;
   double dt;
@@ -785,10 +811,12 @@ pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
 
 // -- Shutdown ------------------------------------------------------------
 
+/* Implements: REQ_PCL_035, REQ_PCL_113. */
 void pcl_executor_request_shutdown(pcl_executor_t* e) {
   if (e) e->shutdown_requested = 1;
 }
 
+/* Implements: REQ_PCL_036, REQ_PCL_041, REQ_PCL_042. */
 pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
                                             uint32_t        timeout_ms) {
   double deadline;
@@ -823,6 +851,8 @@ pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
 
 // -- Transport -----------------------------------------------------------
 
+/* Implements: REQ_PCL_062, REQ_PCL_063, REQ_PCL_384, REQ_PCL_229,
+   REQ_PCL_230. */
 pcl_status_t pcl_executor_set_transport_caps(pcl_executor_t*        e,
                                              const pcl_transport_t* transport,
                                              pcl_transport_caps_t   caps) {
@@ -842,23 +872,30 @@ pcl_status_t pcl_executor_set_transport_caps(pcl_executor_t*        e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_062, REQ_PCL_063, REQ_PCL_384. */
 pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
                                         const pcl_transport_t* transport) {
   return pcl_executor_set_transport_caps(
       e, transport, pcl_transport_caps_from_vtable(transport));
 }
 
+/* No LLR: plain accessor for the default transport slot with no dedicated
+   requirement; exercised implicitly wherever tests install a transport via
+   pcl_executor_set_transport() (REQ_PCL_062) and then act on it. */
 const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e) {
   if (!e || !e->has_transport) return NULL;
   return &e->transport;
 }
 
+/* No LLR: plain accessor delegating to find_named_transport(); no
+   requirement names it directly. */
 const pcl_transport_t* pcl_executor_get_transport_for_peer(
     const pcl_executor_t* e,
     const char*           peer_id) {
   return find_named_transport(e, peer_id);
 }
 
+/* Implements: REQ_PCL_178, REQ_PCL_496, REQ_PCL_425, REQ_PCL_230. */
 pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
                                                   const char*            peer_id,
                                                   const pcl_transport_t* transport,
@@ -910,6 +947,7 @@ pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_178, REQ_PCL_496, REQ_PCL_425, REQ_PCL_230. */
 pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
                                              const char*            peer_id,
                                              const pcl_transport_t* transport) {
@@ -917,12 +955,14 @@ pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
       e, peer_id, transport, pcl_transport_caps_from_vtable(transport));
 }
 
+/* Implements: REQ_PCL_377. */
 pcl_status_t pcl_executor_set_transport_qos(pcl_executor_t* e, pcl_qos_t qos) {
   if (!e) return PCL_ERR_INVALID;
   e->transport_qos = qos;
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_378. */
 pcl_status_t pcl_executor_register_transport_qos(pcl_executor_t* e,
                                                  const char*     peer_id,
                                                  pcl_qos_t       qos) {
@@ -951,6 +991,8 @@ static const char* caps_name(pcl_transport_caps_t cap) {
   }
 }
 
+/* Implements: REQ_PCL_365, REQ_PCL_366, REQ_PCL_367, REQ_PCL_371,
+   REQ_PCL_372, REQ_PCL_373, REQ_PCL_374. */
 static pcl_status_t validate_one_transport(pcl_transport_caps_t have,
                                            int                  found,
                                            pcl_transport_caps_t required,
@@ -991,6 +1033,9 @@ static pcl_status_t validate_one_transport(pcl_transport_caps_t have,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_365, REQ_PCL_366, REQ_PCL_367, REQ_PCL_368,
+   REQ_PCL_369, REQ_PCL_371, REQ_PCL_372, REQ_PCL_373, REQ_PCL_374,
+   REQ_PCL_379, REQ_PCL_380. */
 pcl_status_t pcl_executor_validate_endpoint_route(
     const pcl_executor_t*       e,
     const pcl_endpoint_route_t* route,
@@ -1065,6 +1110,11 @@ pcl_status_t pcl_executor_validate_endpoint_route(
   return PCL_OK;
 }
 
+/* No LLR: argument-validation and storage primitive for the executor's
+   endpoint route table with no requirement of its own; its port-level twin
+   pcl_port_set_route() carries the analogous REQ_PCL_235, and this
+   function's effect is exercised through the manifest-routing
+   requirements (e.g. REQ_PCL_416-REQ_PCL_428) that call it internally. */
 pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
                                              const pcl_endpoint_route_t* route) {
   pcl_endpoint_route_entry_t* entry;
@@ -1139,6 +1189,9 @@ pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
   return PCL_OK;
 }
 
+/* No LLR: plain query accessor for a single route-kind lookup with no
+   requirement of its own; pcl_executor_endpoint_route_exists_any_kind()
+   below is the kind-agnostic query the exclusivity requirements name. */
 int pcl_executor_endpoint_route_exists(const pcl_executor_t* e,
                                        const char*           endpoint_name,
                                        pcl_endpoint_kind_t   endpoint_kind) {
@@ -1146,6 +1199,7 @@ int pcl_executor_endpoint_route_exists(const pcl_executor_t* e,
   return find_endpoint_route_entry_const(e, endpoint_name, endpoint_kind) != NULL;
 }
 
+/* Implements: REQ_PCL_474, REQ_PCL_475. */
 int pcl_executor_endpoint_route_exists_any_kind(const pcl_executor_t* e,
                                                 const char*           endpoint_name) {
   uint32_t i;
@@ -1177,6 +1231,9 @@ int pcl_executor_endpoint_route_exists_any_kind(const pcl_executor_t* e,
   return 0;
 }
 
+/* No LLR: route-table removal primitive with no requirement of its own;
+   used internally by manifest-routing rollback (e.g. REQ_PCL_421,
+   REQ_PCL_468) to undo a partially-installed route set. */
 pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
                                                const char*         endpoint_name,
                                                pcl_endpoint_kind_t endpoint_kind) {
@@ -1196,6 +1253,7 @@ pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_044, REQ_PCL_046. */
 pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
                                             const char*      topic,
                                             const pcl_msg_t* msg) {
@@ -1203,6 +1261,7 @@ pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
   return dispatch_incoming_now(e, topic, msg, PCL_ROUTE_LOCAL, NULL);
 }
 
+/* Implements: REQ_PCL_040, REQ_PCL_173. */
 static struct pcl_port_t* find_service(pcl_executor_t* e,
                                        const char*     name,
                                        uint32_t        source_route_mode,
@@ -1231,6 +1290,7 @@ static struct pcl_port_t* find_service(pcl_executor_t* e,
   return NULL;
 }
 
+/* Implements: REQ_PCL_170. */
 static struct pcl_port_t* find_stream_service(pcl_executor_t* e, const char* name) {
   uint32_t ci, pi;
   for (ci = 0; ci < e->container_count; ++ci) {
@@ -1247,6 +1307,7 @@ static struct pcl_port_t* find_stream_service(pcl_executor_t* e, const char* nam
   return NULL;
 }
 
+/* Implements: REQ_PCL_040. */
 pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
                                          const char*      service_name,
                                          const pcl_msg_t* request,
@@ -1263,6 +1324,7 @@ pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
   return port->svc_handler(port->owner, request, response, &ctx, port->svc_user_data);
 }
 
+/* Implements: REQ_PCL_177, REQ_PCL_163. */
 pcl_status_t pcl_executor_invoke_service_remote(pcl_executor_t*  e,
                                                 const char*      peer_id,
                                                 const char*      service_name,
@@ -1290,6 +1352,7 @@ pcl_status_t pcl_executor_invoke_service_remote(pcl_executor_t*  e,
   return port->svc_handler(port->owner, request, response, &ctx, port->svc_user_data);
 }
 
+/* Implements: REQ_PCL_027, REQ_PCL_174. */
 pcl_status_t pcl_executor_publish_port(pcl_executor_t*   e,
                                        const pcl_port_t* port,
                                        const pcl_msg_t*  msg) {
@@ -1332,6 +1395,7 @@ pcl_status_t pcl_executor_publish_port(pcl_executor_t*   e,
   return delivered ? PCL_OK : rc;
 }
 
+/* Implements: REQ_PCL_047, REQ_PCL_048. */
 pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
                                   const char*      topic,
                                   const pcl_msg_t* msg) {
@@ -1342,6 +1406,8 @@ pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
   return dispatch_incoming_now(e, topic, msg, PCL_ROUTE_LOCAL, NULL);
 }
 
+/* Implements: REQ_PCL_164, REQ_PCL_165, REQ_PCL_166, REQ_PCL_175,
+   REQ_PCL_473. */
 pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
                                        const char*      service_name,
                                        const pcl_msg_t* request,
@@ -1436,6 +1502,7 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
   }
 }
 
+/* Implements: REQ_PCL_170, REQ_PCL_470, REQ_PCL_473. */
 pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
                                         const char*            service_name,
                                         const pcl_msg_t*       request,
@@ -1572,6 +1639,7 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
   }
 }
 
+/* Implements: REQ_PCL_057, REQ_PCL_058. */
 pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,
                                            pcl_resp_cb_fn_t cb,
                                            void*            user_data,
@@ -1586,6 +1654,7 @@ pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,
   return pcl_executor_post_response_msg(e, cb, user_data, &msg);
 }
 
+/* Implements: REQ_PCL_057, REQ_PCL_058, REQ_PCL_060, REQ_PCL_090. */
 pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
                                             pcl_resp_cb_fn_t cb,
                                             void*            user_data,
@@ -1631,6 +1700,8 @@ pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_049, REQ_PCL_050, REQ_PCL_051, REQ_PCL_085,
+   REQ_PCL_086, REQ_PCL_087, REQ_PCL_088, REQ_PCL_231, REQ_PCL_232. */
 static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
                                              const char*      topic,
                                              const pcl_msg_t* msg,
@@ -1691,6 +1762,7 @@ static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_498. */
 pcl_status_t pcl_executor_set_incoming_queue_limit(pcl_executor_t* e,
                                                     uint32_t        limit) {
   if (!e) return PCL_ERR_INVALID;
@@ -1700,6 +1772,7 @@ pcl_status_t pcl_executor_set_incoming_queue_limit(pcl_executor_t* e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_499. */
 uint32_t pcl_executor_get_incoming_queue_depth(pcl_executor_t* e) {
   uint32_t count;
   if (!e) return 0u;
@@ -1709,12 +1782,15 @@ uint32_t pcl_executor_get_incoming_queue_depth(pcl_executor_t* e) {
   return count;
 }
 
+/* Implements: REQ_PCL_049, REQ_PCL_050, REQ_PCL_051, REQ_PCL_053,
+   REQ_PCL_056, REQ_PCL_095. */
 pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
                                         const char*      topic,
                                         const pcl_msg_t* msg) {
   return enqueue_incoming_message(e, topic, msg, PCL_ROUTE_LOCAL, NULL);
 }
 
+/* Implements: REQ_PCL_173, REQ_PCL_201, REQ_PCL_327. */
 pcl_status_t pcl_executor_post_remote_incoming(pcl_executor_t*  e,
                                                const char*      peer_id,
                                                const char*      topic,
@@ -1727,6 +1803,7 @@ pcl_status_t pcl_executor_post_remote_incoming(pcl_executor_t*  e,
  * post_service_request_remote.  When source_peer_id is non-NULL, the
  * drained request is dispatched with PCL_ROUTE_REMOTE filtering so
  * remote-exposure rules apply. */
+/* Implements: REQ_PCL_180, REQ_PCL_184. */
 static pcl_status_t enqueue_svc_req(pcl_executor_t*  e,
                                     const char*      service_name,
                                     const pcl_msg_t* request,
@@ -1792,6 +1869,7 @@ static pcl_status_t enqueue_svc_req(pcl_executor_t*  e,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_180, REQ_PCL_183, REQ_PCL_184. */
 pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
                                                const char*      service_name,
                                                const pcl_msg_t* request,
@@ -1800,6 +1878,7 @@ pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
   return enqueue_svc_req(e, service_name, request, callback, user_data, NULL);
 }
 
+/* Implements: REQ_PCL_438. */
 pcl_status_t pcl_executor_post_service_request_remote(pcl_executor_t*  e,
                                                       const char*      source_peer_id,
                                                       const char*      service_name,

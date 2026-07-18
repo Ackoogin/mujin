@@ -23,6 +23,7 @@ static pcl_param_t* find_param(const pcl_container_t* c, const char* key) {
   return NULL;
 }
 
+/* Implements: REQ_PCL_016. */
 static pcl_param_t* find_or_add_param(pcl_container_t* c, const char* key) {
   pcl_param_t* p = find_param(c, key);
   if (p) return p;
@@ -32,6 +33,7 @@ static pcl_param_t* find_or_add_param(pcl_container_t* c, const char* key) {
   return p;
 }
 
+/* Implements: REQ_PCL_020, REQ_PCL_021, REQ_PCL_022. */
 static int validate_port_definition(pcl_container_t* c,
                                     const char*      endpoint_name,
                                     const char*      content_type,
@@ -67,6 +69,7 @@ static int validate_port_definition(pcl_container_t* c,
   return 1;
 }
 
+/* Implements: REQ_PCL_235. */
 static pcl_status_t copy_route_config(pcl_port_t*              port,
                                       uint32_t                 route_mode,
                                       const char* const*       peer_ids,
@@ -124,6 +127,7 @@ static pcl_status_t copy_route_config(pcl_port_t*              port,
 
 // -- Create / destroy ----------------------------------------------------
 
+/* Implements: REQ_PCL_001, REQ_PCL_002, REQ_PCL_028, REQ_PCL_114. */
 pcl_container_t* pcl_container_create(const char*            name,
                                       const pcl_callbacks_t* callbacks,
                                       void*                  user_data) {
@@ -149,6 +153,7 @@ pcl_container_t* pcl_container_create(const char*            name,
   return c;
 }
 
+/* Implements: REQ_PCL_003, REQ_PCL_111. */
 void pcl_container_destroy(pcl_container_t* c) {
   if (!c) return;
   // Detach from the executor (if attached) before freeing the storage --
@@ -162,6 +167,7 @@ void pcl_container_destroy(pcl_container_t* c) {
 
 // -- Lifecycle transitions -----------------------------------------------
 
+/* Implements: REQ_PCL_004, REQ_PCL_005, REQ_PCL_007, REQ_PCL_008. */
 pcl_status_t pcl_container_configure(pcl_container_t* c) {
   pcl_status_t rc = PCL_OK;
   if (!c) return PCL_ERR_INVALID;
@@ -185,6 +191,7 @@ pcl_status_t pcl_container_configure(pcl_container_t* c) {
   return rc;
 }
 
+/* Implements: REQ_PCL_004, REQ_PCL_005, REQ_PCL_008, REQ_PCL_011. */
 pcl_status_t pcl_container_activate(pcl_container_t* c) {
   pcl_status_t rc = PCL_OK;
   if (!c) return PCL_ERR_INVALID;
@@ -206,6 +213,7 @@ pcl_status_t pcl_container_activate(pcl_container_t* c) {
   return rc;
 }
 
+/* Implements: REQ_PCL_004, REQ_PCL_005, REQ_PCL_008, REQ_PCL_009. */
 pcl_status_t pcl_container_deactivate(pcl_container_t* c) {
   pcl_status_t rc = PCL_OK;
   if (!c) return PCL_ERR_INVALID;
@@ -226,6 +234,8 @@ pcl_status_t pcl_container_deactivate(pcl_container_t* c) {
   return rc;
 }
 
+/* Implements: REQ_PCL_004, REQ_PCL_005, REQ_PCL_008, REQ_PCL_010,
+   REQ_PCL_012. */
 pcl_status_t pcl_container_cleanup(pcl_container_t* c) {
   pcl_status_t rc = PCL_OK;
   if (!c) return PCL_ERR_INVALID;
@@ -247,6 +257,7 @@ pcl_status_t pcl_container_cleanup(pcl_container_t* c) {
   return rc;
 }
 
+/* Implements: REQ_PCL_004, REQ_PCL_006. */
 pcl_status_t pcl_container_shutdown(pcl_container_t* c) {
   if (!c) return PCL_ERR_INVALID;
   if (c->state == PCL_STATE_FINALIZED) return PCL_ERR_STATE;
@@ -264,16 +275,19 @@ pcl_status_t pcl_container_shutdown(pcl_container_t* c) {
 
 // -- State query ---------------------------------------------------------
 
+/* Implements: REQ_PCL_111. */
 pcl_state_t pcl_container_state(const pcl_container_t* c) {
   return c ? c->state : PCL_STATE_FINALIZED;
 }
 
+/* Implements: REQ_PCL_111. */
 const char* pcl_container_name(const pcl_container_t* c) {
   return c ? c->name : "";
 }
 
 // -- Tick rate -----------------------------------------------------------
 
+/* Implements: REQ_PCL_029, REQ_PCL_030. */
 pcl_status_t pcl_container_set_tick_rate_hz(pcl_container_t* c, double hz) {
   if (!c) return PCL_ERR_INVALID;
   if (hz <= 0.0) return PCL_ERR_INVALID;
@@ -281,12 +295,14 @@ pcl_status_t pcl_container_set_tick_rate_hz(pcl_container_t* c, double hz) {
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_029, REQ_PCL_111. */
 double pcl_container_get_tick_rate_hz(const pcl_container_t* c) {
   return c ? c->tick_rate_hz : 0.0;
 }
 
 // -- Parameters ----------------------------------------------------------
 
+/* Implements: REQ_PCL_013, REQ_PCL_015, REQ_PCL_018. */
 pcl_status_t pcl_container_set_param_str(pcl_container_t* c,
                                          const char* key, const char* value) {
   pcl_param_t* p;
@@ -298,6 +314,7 @@ pcl_status_t pcl_container_set_param_str(pcl_container_t* c,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_014, REQ_PCL_015, REQ_PCL_018. */
 pcl_status_t pcl_container_set_param_f64(pcl_container_t* c,
                                          const char* key, double value) {
   pcl_param_t* p;
@@ -309,6 +326,7 @@ pcl_status_t pcl_container_set_param_f64(pcl_container_t* c,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_014, REQ_PCL_015, REQ_PCL_018. */
 pcl_status_t pcl_container_set_param_i64(pcl_container_t* c,
                                          const char* key, int64_t value) {
   pcl_param_t* p;
@@ -320,6 +338,7 @@ pcl_status_t pcl_container_set_param_i64(pcl_container_t* c,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_014, REQ_PCL_015, REQ_PCL_018. */
 pcl_status_t pcl_container_set_param_bool(pcl_container_t* c,
                                           const char* key, bool value) {
   pcl_param_t* p;
@@ -331,6 +350,7 @@ pcl_status_t pcl_container_set_param_bool(pcl_container_t* c,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_013, REQ_PCL_017, REQ_PCL_018. */
 const char* pcl_container_get_param_str(const pcl_container_t* c,
                                         const char* key,
                                         const char* default_val) {
@@ -341,6 +361,7 @@ const char* pcl_container_get_param_str(const pcl_container_t* c,
   return p->u.str_val;
 }
 
+/* Implements: REQ_PCL_014, REQ_PCL_017, REQ_PCL_018. */
 double pcl_container_get_param_f64(const pcl_container_t* c,
                                    const char* key, double default_val) {
   const pcl_param_t* p;
@@ -350,6 +371,7 @@ double pcl_container_get_param_f64(const pcl_container_t* c,
   return p->u.f64_val;
 }
 
+/* Implements: REQ_PCL_014, REQ_PCL_017, REQ_PCL_018. */
 int64_t pcl_container_get_param_i64(const pcl_container_t* c,
                                     const char* key, int64_t default_val) {
   const pcl_param_t* p;
@@ -359,6 +381,7 @@ int64_t pcl_container_get_param_i64(const pcl_container_t* c,
   return p->u.i64_val;
 }
 
+/* Implements: REQ_PCL_014, REQ_PCL_017, REQ_PCL_018. */
 bool pcl_container_get_param_bool(const pcl_container_t* c,
                                   const char* key, bool default_val) {
   const pcl_param_t* p;
@@ -370,6 +393,7 @@ bool pcl_container_get_param_bool(const pcl_container_t* c,
 
 // -- Port creation -------------------------------------------------------
 
+/* Implements: REQ_PCL_019, REQ_PCL_020, REQ_PCL_021, REQ_PCL_022. */
 pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
                                         const char*      topic,
                                         const char*      type_name) {
@@ -386,6 +410,7 @@ pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
   return p;
 }
 
+/* Implements: REQ_PCL_019, REQ_PCL_020, REQ_PCL_021, REQ_PCL_022. */
 pcl_port_t* pcl_container_add_subscriber(pcl_container_t* c,
                                          const char*         topic,
                                          const char*         type_name,
@@ -411,6 +436,7 @@ pcl_port_t* pcl_container_add_subscriber(pcl_container_t* c,
   return p;
 }
 
+/* Implements: REQ_PCL_019, REQ_PCL_020, REQ_PCL_021, REQ_PCL_022. */
 pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
                                       const char*           service_name,
                                       const char*           type_name,
@@ -438,6 +464,8 @@ pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
 
 // -- Publishing ----------------------------------------------------------
 
+/* Implements: REQ_PCL_023, REQ_PCL_024, REQ_PCL_025, REQ_PCL_026,
+   REQ_PCL_027, REQ_PCL_174. */
 pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg) {
   if (!port || !msg) return PCL_ERR_INVALID;
   if (port->type != PCL_PORT_PUBLISHER) return PCL_ERR_INVALID;
@@ -450,6 +478,9 @@ pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg) {
   return PCL_OK;
 }
 
+/* No LLR: thin convenience wrapper with no dedicated requirement of its
+   own; it forwards to pcl_executor_invoke_async(), whose behaviour is
+   covered by REQ_PCL_164, REQ_PCL_165, and REQ_PCL_166. */
 pcl_status_t pcl_container_invoke_async(pcl_container_t* c,
                                         const char*      service_name,
                                         const pcl_msg_t* request,
@@ -461,6 +492,7 @@ pcl_status_t pcl_container_invoke_async(pcl_container_t* c,
                                    callback, user_data);
 }
 
+/* Implements: REQ_PCL_459, REQ_PCL_460, REQ_PCL_461. */
 pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
                                  const pcl_msg_t*   response) {
   if (!ctx || !response) return PCL_ERR_INVALID;
@@ -489,12 +521,14 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_223. */
 void pcl_service_context_free(pcl_svc_context_t* ctx) {
   pcl_free(ctx);
 }
 
 // -- Streaming service API ------------------------------------------------
 
+/* Implements: REQ_PCL_172. */
 pcl_port_t* pcl_container_add_stream_service(pcl_container_t*     c,
                                              const char*          service_name,
                                              const char*          type_name,
@@ -522,6 +556,7 @@ pcl_port_t* pcl_container_add_stream_service(pcl_container_t*     c,
   return p;
 }
 
+/* Implements: REQ_PCL_235. */
 pcl_status_t pcl_port_set_route(pcl_port_t*              port,
                                 uint32_t                 route_mode,
                                 const char* const*       peer_ids,
@@ -529,6 +564,7 @@ pcl_status_t pcl_port_set_route(pcl_port_t*              port,
   return copy_route_config(port, route_mode, peer_ids, peer_count);
 }
 
+/* Implements: REQ_PCL_167, REQ_PCL_098, REQ_PCL_171. */
 pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg) {
   if (!ctx || !msg) return PCL_ERR_INVALID;
   if (ctx->ended) return PCL_ERR_STATE;
@@ -553,6 +589,7 @@ pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg) {
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_097, REQ_PCL_171. */
 pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx) {
   if (!ctx) return PCL_ERR_INVALID;
   if (ctx->ended) return PCL_ERR_STATE;
@@ -584,6 +621,7 @@ pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx) {
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_169, REQ_PCL_171. */
 pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code) {
   if (!ctx) return PCL_ERR_INVALID;
   if (ctx->ended) return PCL_ERR_STATE;
@@ -615,11 +653,13 @@ pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_168, REQ_PCL_171. */
 bool pcl_stream_is_cancelled(const pcl_stream_context_t* ctx) {
   if (!ctx) return false;
   return ctx->cancelled != 0;
 }
 
+/* Implements: REQ_PCL_168, REQ_PCL_171. */
 pcl_status_t pcl_stream_cancel(pcl_stream_context_t* ctx) {
   if (!ctx) return PCL_ERR_INVALID;
   if (ctx->ended) return PCL_ERR_STATE;

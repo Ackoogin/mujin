@@ -107,6 +107,7 @@ private:
 /// needed in user code.
 class Component {
 public:
+  /* Implements: REQ_PCL_131. */
   explicit Component(std::string_view name) {
     pcl_callbacks_t cbs = {};
     cbs.on_configure  = trampoline_configure;
@@ -119,6 +120,7 @@ public:
     handle_ = pcl_container_create(std::string(name).c_str(), &cbs, this);
   }
 
+  /* Implements: REQ_PCL_132. */
   virtual ~Component() {
     if (handle_) pcl_container_destroy(handle_);
   }
@@ -127,10 +129,12 @@ public:
   Component(const Component&) = delete;
   Component& operator=(const Component&) = delete;
 
+  /* Implements: REQ_PCL_143. */
   Component(Component&& other) noexcept : handle_(other.handle_) {
     other.handle_ = nullptr;
   }
 
+  /* Implements: REQ_PCL_144. */
   Component& operator=(Component&& other) noexcept {
     if (this != &other) {
       if (handle_) pcl_container_destroy(handle_);
@@ -153,56 +157,68 @@ public:
 
   // -- Tick rate -------------------------------------------------------
 
+  /* Implements: REQ_PCL_141. */
   void setTickRateHz(double hz) {
     pcl_container_set_tick_rate_hz(handle_, hz);
   }
 
+  /* Implements: REQ_PCL_141. */
   double tickRateHz() const {
     return pcl_container_get_tick_rate_hz(handle_);
   }
 
   // -- Parameters ------------------------------------------------------
 
+  /* Implements: REQ_PCL_137. */
   void setParam(const char* key, const char* value) {
     pcl_container_set_param_str(handle_, key, value);
   }
 
+  /* Implements: REQ_PCL_138. */
   void setParam(const char* key, double value) {
     pcl_container_set_param_f64(handle_, key, value);
   }
 
+  /* Implements: REQ_PCL_139. */
   void setParam(const char* key, int64_t value) {
     pcl_container_set_param_i64(handle_, key, value);
   }
 
+  /* Implements: REQ_PCL_140. */
   void setParam(const char* key, bool value) {
     pcl_container_set_param_bool(handle_, key, value);
   }
 
+  /* Implements: REQ_PCL_137. */
   std::string paramStr(const char* key,
                        const char* default_val = "") const {
     return pcl_container_get_param_str(handle_, key, default_val);
   }
 
+  /* Implements: REQ_PCL_138. */
   double paramF64(const char* key, double default_val = 0.0) const {
     return pcl_container_get_param_f64(handle_, key, default_val);
   }
 
+  /* Implements: REQ_PCL_139. */
   int64_t paramI64(const char* key, int64_t default_val = 0) const {
     return pcl_container_get_param_i64(handle_, key, default_val);
   }
 
+  /* Implements: REQ_PCL_140. */
   bool paramBool(const char* key, bool default_val = false) const {
     return pcl_container_get_param_bool(handle_, key, default_val);
   }
 
   // -- Port creation (call during on_configure) ------------------------
 
+  /* Implements: REQ_PCL_134. */
   Port addPublisher(const char* topic, const char* type_name) {
     return Port(pcl_container_add_publisher(handle_, topic, type_name),
                 type_name ? type_name : "");
   }
 
+  /* Implements: REQ_PCL_135. */
   Port addSubscriber(const char* topic, const char* type_name,
                      pcl_sub_callback_t cb, void* user_data) {
     return Port(pcl_container_add_subscriber(handle_, topic, type_name,
@@ -210,6 +226,7 @@ public:
                 type_name ? type_name : "");
   }
 
+  /* Implements: REQ_PCL_136. */
   Port addService(const char* service_name, const char* type_name,
                   pcl_service_handler_t handler, void* user_data) {
     return Port(pcl_container_add_service(handle_, service_name, type_name,
@@ -240,6 +257,7 @@ public:
 
   // -- Logging ---------------------------------------------------------
 
+  /* Implements: REQ_PCL_142. */
   void logDebug(const char* fmt, ...) const {
     va_list args;
     va_start(args, fmt);
@@ -247,6 +265,7 @@ public:
     va_end(args);
   }
 
+  /* Implements: REQ_PCL_142. */
   void logInfo(const char* fmt, ...) const {
     va_list args;
     va_start(args, fmt);
@@ -254,6 +273,7 @@ public:
     va_end(args);
   }
 
+  /* Implements: REQ_PCL_142. */
   void logWarn(const char* fmt, ...) const {
     va_list args;
     va_start(args, fmt);
@@ -261,6 +281,7 @@ public:
     va_end(args);
   }
 
+  /* Implements: REQ_PCL_142. */
   void logError(const char* fmt, ...) const {
     va_list args;
     va_start(args, fmt);
@@ -276,10 +297,15 @@ public:
 protected:
   // -- Override these --------------------------------------------------
 
+  /* Implements: REQ_PCL_217. */
   virtual pcl_status_t on_configure()        { return PCL_OK; }
+  /* Implements: REQ_PCL_217. */
   virtual pcl_status_t on_activate()         { return PCL_OK; }
+  /* Implements: REQ_PCL_217. */
   virtual pcl_status_t on_deactivate()       { return PCL_OK; }
+  /* Implements: REQ_PCL_217. */
   virtual pcl_status_t on_cleanup()          { return PCL_OK; }
+  /* Implements: REQ_PCL_217. */
   virtual pcl_status_t on_shutdown()         { return PCL_OK; }
   virtual pcl_status_t on_tick(double dt)    { (void)dt; return PCL_OK; }
 
@@ -288,18 +314,23 @@ private:
 
   // -- C → C++ trampolines ---------------------------------------------
 
+  /* Implements: REQ_PCL_133. */
   static pcl_status_t trampoline_configure(pcl_container_t*, void* ud) {
     return static_cast<Component*>(ud)->on_configure();
   }
+  /* Implements: REQ_PCL_133. */
   static pcl_status_t trampoline_activate(pcl_container_t*, void* ud) {
     return static_cast<Component*>(ud)->on_activate();
   }
+  /* Implements: REQ_PCL_133. */
   static pcl_status_t trampoline_deactivate(pcl_container_t*, void* ud) {
     return static_cast<Component*>(ud)->on_deactivate();
   }
+  /* Implements: REQ_PCL_133. */
   static pcl_status_t trampoline_cleanup(pcl_container_t*, void* ud) {
     return static_cast<Component*>(ud)->on_cleanup();
   }
+  /* Implements: REQ_PCL_133. */
   static pcl_status_t trampoline_shutdown(pcl_container_t*, void* ud) {
     return static_cast<Component*>(ud)->on_shutdown();
   }

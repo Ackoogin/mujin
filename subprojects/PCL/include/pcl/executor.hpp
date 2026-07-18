@@ -20,12 +20,14 @@ namespace pcl {
 /// \brief C++ wrapper for pcl_executor_t.
 class Executor {
 public:
+  /* Implements: REQ_PCL_145. */
   Executor() : handle_(pcl_executor_create()), owns_handle_(true) {}
 
   /// \brief Wrap an existing executor, optionally taking ownership.
   explicit Executor(pcl_executor_t* handle, bool take_ownership = false)
       : handle_(handle), owns_handle_(take_ownership) {}
 
+  /* Implements: REQ_PCL_146. */
   ~Executor() {
     if (handle_ && owns_handle_) pcl_executor_destroy(handle_);
   }
@@ -34,12 +36,14 @@ public:
   Executor(const Executor&) = delete;
   Executor& operator=(const Executor&) = delete;
 
+  /* Implements: REQ_PCL_155. */
   Executor(Executor&& other) noexcept
       : handle_(other.handle_), owns_handle_(other.owns_handle_) {
     other.handle_ = nullptr;
     other.owns_handle_ = false;
   }
 
+  /* Implements: REQ_PCL_156. */
   Executor& operator=(Executor&& other) noexcept {
     if (this != &other) {
       if (handle_ && owns_handle_) pcl_executor_destroy(handle_);
@@ -52,11 +56,13 @@ public:
   }
 
   /// \brief Add a Component to the executor.
+  /* Implements: REQ_PCL_147, REQ_PCL_157. */
   pcl_status_t add(Component& component) {
     return pcl_executor_add(handle_, component.handle());
   }
 
   /// \brief Add a raw container handle to the executor.
+  /* Implements: REQ_PCL_148. */
   pcl_status_t add(pcl_container_t* c) {
     return pcl_executor_add(handle_, c);
   }
@@ -77,21 +83,25 @@ public:
   }
 
   /// \brief Process one round of pending work then return.
+  /* Implements: REQ_PCL_149. */
   pcl_status_t spinOnce(uint32_t timeout_ms = 0) {
     return pcl_executor_spin_once(handle_, timeout_ms);
   }
 
   /// \brief Signal-safe shutdown request.
+  /* Implements: REQ_PCL_150. */
   void requestShutdown() {
     pcl_executor_request_shutdown(handle_);
   }
 
   /// \brief Graceful shutdown with deadline.
+  /* Implements: REQ_PCL_151. */
   pcl_status_t shutdownGraceful(uint32_t timeout_ms = 5000) {
     return pcl_executor_shutdown_graceful(handle_, timeout_ms);
   }
 
   /// \brief Set a custom transport adapter.
+  /* Implements: REQ_PCL_152. */
   pcl_status_t setTransport(const pcl_transport_t* transport) {
     return pcl_executor_set_transport(handle_, transport);
   }
@@ -104,11 +114,13 @@ public:
   }
 
   /// \brief Dispatch an incoming message (for custom transport adapters).
+  /* Implements: REQ_PCL_153. */
   pcl_status_t dispatchIncoming(const char* topic, const pcl_msg_t* msg) {
     return pcl_executor_dispatch_incoming(handle_, topic, msg);
   }
 
   /// \brief Queue an incoming message from an external I/O thread.
+  /* Implements: REQ_PCL_154. */
   pcl_status_t postIncoming(const char* topic, const pcl_msg_t* msg) {
     return pcl_executor_post_incoming(handle_, topic, msg);
   }

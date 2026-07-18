@@ -2,6 +2,8 @@
 /// \brief Derivation of transport capabilities from a vtable.
 #include "pcl/pcl_capabilities.h"
 
+/* Implements: REQ_PCL_347, REQ_PCL_348, REQ_PCL_349, REQ_PCL_350,
+   REQ_PCL_351, REQ_PCL_352. */
 pcl_transport_caps_t pcl_transport_caps_from_vtable(
     const pcl_transport_t* transport) {
   pcl_transport_caps_t caps = PCL_CAP_NONE;
@@ -22,6 +24,7 @@ pcl_transport_caps_t pcl_transport_caps_from_vtable(
   return caps;
 }
 
+/* Implements: REQ_PCL_363, REQ_PCL_375. */
 pcl_transport_caps_t pcl_endpoint_required_caps(pcl_endpoint_kind_t kind) {
   switch (kind) {
     case PCL_ENDPOINT_PUBLISHER:
@@ -38,17 +41,20 @@ pcl_transport_caps_t pcl_endpoint_required_caps(pcl_endpoint_kind_t kind) {
   }
 }
 
+/* Implements: REQ_PCL_364. */
 int pcl_transport_caps_supports(pcl_transport_caps_t have,
                                 pcl_transport_caps_t required) {
   return (have & required) == required;
 }
 
+/* Implements: REQ_PCL_370. */
 int pcl_qos_satisfies(pcl_qos_t offered, pcl_qos_t floor) {
   /* Reliability is ordered, so "meets the floor" is offered >= floor. Extend
      this conjunction as further QoS dimensions are added. */
   return (int)offered.reliability >= (int)floor.reliability;
 }
 
+/* Implements: REQ_PCL_376. */
 const char* pcl_qos_reliability_name(pcl_qos_reliability_t r) {
   switch (r) {
     case PCL_QOS_RELIABILITY_BEST_EFFORT: return "best_effort";

@@ -82,6 +82,14 @@ over the existing baseline is the largest open Phase 1 work item.
 without parent HLR, LLR without test evidence, test tag naming an unknown
 LLR. It runs on demand today; wiring it into CI is an SCMP item.
 
+`scripts/gen_code_trace.py --check` verifies the code-to-LLR direction: it
+fails on a source tag naming an unknown LLR, a non-static production
+function with neither an `Implements:` tag nor a reviewed `No LLR:`
+justification, or an LLR with no implementing function and no
+`**Implementation**:` exemption marker in `LLR.md`. Run without `--check`
+it regenerates the reviewable matrix `doc/reports/PCL/CODE_TO_LLR.md`. The
+same CI wiring item applies.
+
 ## 6. Analyses
 
 Required analyses not yet performed (all open items):

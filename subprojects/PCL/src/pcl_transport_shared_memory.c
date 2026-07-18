@@ -774,6 +774,7 @@ static int pcl_shm_peer_is_allowed(const pcl_executor_t* e,
   return 0;
 }
 
+/* Implements: REQ_PCL_306, REQ_PCL_314. */
 static pcl_port_t* pcl_shm_find_remote_service(pcl_executor_t* e,
                                                const char*     name,
                                                const char*     source_peer_id) {
@@ -817,6 +818,7 @@ static pcl_port_t* pcl_shm_find_remote_service(pcl_executor_t* e,
   return match;
 }
 
+/* Implements: REQ_PCL_311, REQ_PCL_314. */
 static pcl_port_t* pcl_shm_find_remote_stream_service(pcl_executor_t* e,
                                                       const char*     name,
                                                       const char*     source_peer_id) {
@@ -869,6 +871,7 @@ static int pcl_shm_service_list_contains(char services[PCL_SHM_MAX_SERVICES][PCL
   return 0;
 }
 
+/* Implements: REQ_PCL_208, REQ_PCL_313. */
 static void pcl_shm_collect_local_services(
     pcl_shared_memory_transport_t* ctx,
     char                           services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME],
@@ -1006,6 +1009,7 @@ static pcl_status_t pcl_shm_pending_remove(pcl_shared_memory_transport_t* ctx,
 }
 // GCOVR_EXCL_STOP
 
+/* Implements: REQ_PCL_309. */
 static void pcl_shm_pending_clear(pcl_shared_memory_transport_t* ctx) {
   pcl_shm_pending_request_t* node;
 
@@ -1126,6 +1130,7 @@ static int pcl_shm_pending_stream_provider(
  * with end=true status=PCL_ERR_CANCELLED so generated holders (futures,
  * accumulators, push-mode state) are released even if the peer never sent
  * STREAM_END. Called from destroy after the recv thread has stopped. */
+/* Implements: REQ_PCL_207. */
 static void pcl_shm_pending_stream_clear(pcl_shared_memory_transport_t* ctx) {
   pcl_shm_pending_stream_t* node;
   if (!ctx) return;
@@ -1352,6 +1357,7 @@ static int pcl_shm_slot_is_interested_locked(const pcl_shm_slot_t* slot,
   return 0;
 }
 
+/* Implements: REQ_PCL_211, REQ_PCL_233. */
 static pcl_status_t pcl_shm_publish_once_locked(
     pcl_shared_memory_transport_t* ctx,
     const char*                    topic,
@@ -1438,6 +1444,7 @@ static int pcl_shm_egress_should_stop(pcl_shared_memory_transport_t* ctx) {
   return should_stop;
 }
 
+/* Implements: REQ_PCL_457. */
 static pcl_status_t pcl_shm_publish_with_worker_backpressure(
     pcl_shared_memory_transport_t* ctx,
     const pcl_shm_egress_item_t*   item) {
@@ -1574,6 +1581,7 @@ static pcl_status_t pcl_shm_enqueue_egress(
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_308. */
 static int pcl_shm_find_provider_slot_locked(pcl_shared_memory_transport_t* ctx,
                                              const char*                    service_name,
                                              uint32_t*                      slot_index) {
@@ -1620,6 +1628,7 @@ static int pcl_shm_worker_discover(pcl_shared_memory_transport_t* ctx,
 /* Worker side of invoke_async: discover the provider, send the request frame,
  * and on any failure deliver a terminal (empty) response so the client callback
  * fires on the executor thread rather than blocking the caller. */
+/* Implements: REQ_PCL_188, REQ_PCL_189, REQ_PCL_501. */
 static void pcl_shm_worker_svc_req(pcl_shared_memory_transport_t* ctx,
                                    pcl_shm_egress_item_t*         item) {
   uint32_t provider_slot = 0u;
@@ -1676,6 +1685,7 @@ static void pcl_shm_worker_svc_req(pcl_shared_memory_transport_t* ctx,
 /* Worker side of invoke_stream: discover the provider, record it on the pending
  * node (so cancel can find it), and send the open request. On failure, complete
  * the pending stream with a terminal error delivered on the executor thread. */
+/* Implements: REQ_PCL_308. */
 static void pcl_shm_worker_stream_open(pcl_shared_memory_transport_t* ctx,
                                        pcl_shm_egress_item_t*         item) {
   uint32_t     provider_slot = 0u;
@@ -1727,6 +1737,7 @@ static void pcl_shm_egress_process_item(pcl_shared_memory_transport_t* ctx,
   }
 }
 
+/* Implements: REQ_PCL_186, REQ_PCL_212. */
 static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
                                     const char*      topic,
                                     const pcl_msg_t* msg) {
@@ -1752,6 +1763,7 @@ static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
   return rc;
 }
 
+/* Implements: REQ_PCL_500. */
 static pcl_status_t pcl_shm_subscribe(void*       adapter_ctx,
                                       const char* topic,
                                       const char* type_name) {
@@ -1839,6 +1851,7 @@ static pcl_status_t pcl_shm_respond(void*              adapter_ctx,
   return rc;
 }
 
+/* Implements: REQ_PCL_453. */
 static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
                                          const char*      service_name,
                                          const pcl_msg_t* request,
@@ -2059,10 +2072,12 @@ static pcl_status_t pcl_shm_stream_cancel(void* adapter_ctx,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_305. */
 static void pcl_shm_shutdown(void* adapter_ctx) {
   (void)adapter_ctx;
 }
 
+/* Implements: REQ_PCL_306, REQ_PCL_307. */
 static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
                                    const pcl_msg_t* msg,
                                    void*            user_data) {
@@ -2196,6 +2211,7 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
   pcl_free(service_name);
 }
 
+/* Implements: REQ_PCL_311, REQ_PCL_312. */
 static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
                                           const pcl_msg_t* msg,
                                           void*            user_data) {
@@ -2352,6 +2368,7 @@ static pcl_status_t pcl_shm_gateway_on_configure(pcl_container_t* c, void* ud) {
   return pcl_port_set_route(port, PCL_ROUTE_REMOTE, NULL, 0);
 }
 
+/* Implements: REQ_PCL_187, REQ_PCL_449. */
 static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                          const pcl_shm_frame_t*         frame) {
   if (!ctx || !frame) return PCL_ERR_INVALID;
@@ -2627,6 +2644,7 @@ static void* pcl_shm_recv_thread_main(void* arg)
 #endif
 }
 
+/* Implements: REQ_PCL_310. */
 pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
     const char*      bus_name,
     const char*      participant_id,
@@ -2816,18 +2834,26 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   return ctx;
 }
 
+/* No LLR: plain accessor returning the composed vtable; each vtable entry's
+   behaviour carries its own requirement (see the tags on the pcl_shm_*
+   callbacks above). */
 const pcl_transport_t* pcl_shared_memory_transport_get_transport(
     pcl_shared_memory_transport_t* ctx) {
   if (!ctx) return NULL;
   return &ctx->transport;
 }
 
+/* No LLR: plain accessor for the gateway container created by
+   pcl_shared_memory_transport_create(); the gateway's dispatch behaviour is
+   covered by REQ_PCL_306, REQ_PCL_307, REQ_PCL_311, and REQ_PCL_312 on its
+   subscriber callbacks. */
 pcl_container_t* pcl_shared_memory_transport_gateway_container(
     pcl_shared_memory_transport_t* ctx) {
   if (!ctx) return NULL;
   return ctx->gateway;
 }
 
+/* Implements: REQ_PCL_101, REQ_PCL_102, REQ_PCL_103, REQ_PCL_212. */
 pcl_status_t pcl_shared_memory_transport_set_topic_backpressure(
     pcl_shared_memory_transport_t* ctx,
     const char*                    topic,
@@ -2877,6 +2903,7 @@ pcl_status_t pcl_shared_memory_transport_set_topic_backpressure(
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_207, REQ_PCL_309. */
 void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {
   int unlink_objects = 0;
 

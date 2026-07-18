@@ -194,6 +194,7 @@ static uint64_t pcl_now_ms(void) {
 /// On Linux we tune the probe timers so silent peer death is detected
 /// within ~8 s; Windows uses the system defaults (~2 h idle, but still
 /// detects dead peers eventually) unless SIO_KEEPALIVE_VALS is configured.
+/* Implements: REQ_PCL_197. */
 static void enable_keepalive(PCL_SOCKET_T sock) {
   int on = 1;
   if (sock == PCL_INVALID_SOCKET) return;
@@ -228,6 +229,7 @@ static int set_nonblocking(PCL_SOCKET_T sock, int nonblocking) {
 ///
 /// Returns 0 on success, -1 on failure or timeout. On success the socket is
 /// left in blocking mode so subsequent recv/send behave normally.
+/* Implements: REQ_PCL_205. */
 static int connect_with_timeout(PCL_SOCKET_T           sock,
                                 const struct sockaddr* addr,
                                 size_t                 addrlen,
@@ -282,6 +284,7 @@ static int connect_with_timeout(PCL_SOCKET_T           sock,
 /// attempt is bounded by the remaining slice of \p total_timeout_ms so
 /// a stalled SYN on one address cannot exhaust the whole budget. Pass
 /// \p total_timeout_ms == 0 for the legacy blocking behaviour.
+/* Implements: REQ_PCL_196, REQ_PCL_205. */
 static PCL_SOCKET_T try_connect_addrinfo(const char* host,
                                          uint16_t    port,
                                          uint32_t    total_timeout_ms) {
@@ -333,6 +336,7 @@ static PCL_SOCKET_T try_connect_addrinfo(const char* host,
   return sock;
 }
 
+/* Implements: REQ_PCL_194. */
 static void fire_state_cb(struct pcl_socket_transport_t* ctx,
                           pcl_socket_state_t             state) {
   if (ctx && ctx->state_cb) ctx->state_cb(state, ctx->state_cb_data);
@@ -373,6 +377,7 @@ static int send_all(PCL_SOCKET_T sock, const void* buf, size_t len) {
 // Called from ANY thread (PCL main, recv_thread, application).
 // The send_thread is the ONLY thread that calls send_all().
 
+/* Implements: REQ_PCL_502, REQ_PCL_125. */
 static pcl_status_t enqueue_outbound_frame(struct pcl_socket_transport_t* ctx,
                                            const uint8_t*                 data,
                                            uint32_t                       size) {
@@ -431,6 +436,7 @@ static pcl_status_t enqueue_outbound_frame(struct pcl_socket_transport_t* ctx,
 // -- Send thread ----------------------------------------------------------
 // Sole writer to client_sock.
 
+/* Implements: REQ_PCL_125, REQ_PCL_503, REQ_PCL_161. */
 #ifdef _WIN32
 static DWORD WINAPI send_thread_main(LPVOID arg)
 #else
@@ -488,6 +494,7 @@ static void* send_thread_main(void* arg)
 
 // -- Transport vtable: publish (called on PCL main thread) ----------------
 
+/* Implements: REQ_PCL_125. */
 static pcl_status_t socket_publish(void*            adapter_ctx,
                                    const char*      topic,
                                    const pcl_msg_t* msg) {
@@ -532,6 +539,7 @@ static pcl_status_t socket_publish(void*            adapter_ctx,
   return rc;
 }
 
+/* Implements: REQ_PCL_164, REQ_PCL_454. */
 static pcl_status_t socket_invoke_async(void*            adapter_ctx,
                                         const char*      service_name,
                                         const pcl_msg_t* request,
@@ -550,6 +558,7 @@ static pcl_status_t socket_invoke_async(void*            adapter_ctx,
 // synchronously (fine — runs on executor thread), then enqueues the response
 // to send_thread (non-blocking).
 
+/* Implements: REQ_PCL_163, REQ_PCL_177. */
 static void gateway_sub_cb(pcl_container_t* c,
                            const pcl_msg_t* msg,
                            void*            user_data) {
@@ -630,6 +639,7 @@ static void gateway_sub_cb(pcl_container_t* c,
 
 // -- Transport vtable: subscribe / shutdown -------------------------------
 
+/* Implements: REQ_PCL_158. */
 static pcl_status_t socket_subscribe(void*       adapter_ctx,
                                      const char* topic,
                                      const char* type_name) {
@@ -637,6 +647,7 @@ static pcl_status_t socket_subscribe(void*       adapter_ctx,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_159. */
 static void socket_shutdown(void* adapter_ctx) {
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)adapter_ctx;
   if (!ctx) return;
@@ -647,6 +658,9 @@ static void socket_shutdown(void* adapter_ctx) {
 // recv_thread only calls pcl_executor_post_incoming and
 // pcl_executor_post_response_cb — both are non-blocking enqueues.
 
+/* Implements: REQ_PCL_120, REQ_PCL_121, REQ_PCL_126, REQ_PCL_163,
+   REQ_PCL_176, REQ_PCL_195, REQ_PCL_204, REQ_PCL_412, REQ_PCL_413,
+   REQ_PCL_415, REQ_PCL_451. */
 #ifdef _WIN32
 static DWORD WINAPI recv_thread_main(LPVOID arg)
 #else
@@ -900,6 +914,7 @@ static void* recv_thread_main(void* arg)
 
 // -- Gateway container setup ----------------------------------------------
 
+/* Implements: REQ_PCL_122, REQ_PCL_409. */
 static pcl_status_t gateway_on_configure(pcl_container_t* c, void* ud) {
   struct pcl_socket_transport_t* t = (struct pcl_socket_transport_t*)ud;
   if (!pcl_container_add_subscriber(c,
@@ -913,6 +928,7 @@ static pcl_status_t gateway_on_configure(pcl_container_t* c, void* ud) {
 
 // -- Common initialisation ------------------------------------------------
 
+/* Implements: REQ_PCL_115, REQ_PCL_117. */
 static int socket_transport_create_common(struct pcl_socket_transport_t* ctx,
                                           pcl_executor_t*               executor) {
   memset(&ctx->transport, 0, sizeof(ctx->transport));
@@ -959,6 +975,7 @@ static int socket_transport_create_common(struct pcl_socket_transport_t* ctx,
 
 // -- Public create: server ------------------------------------------------
 
+/* Implements: REQ_PCL_115, REQ_PCL_116, REQ_PCL_197. */
 pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
     uint16_t           port,
     pcl_executor_t*    executor,
@@ -1070,11 +1087,13 @@ pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
   return (pcl_socket_transport_t*)ctx;
 }
 
+/* Implements: REQ_PCL_115, REQ_PCL_116. */
 pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
                                                            pcl_executor_t* executor) {
   return pcl_socket_transport_create_server_ex(port, executor, NULL);
 }
 
+/* No LLR: plain accessor with no dedicated requirement. */
 uint16_t pcl_socket_transport_get_port(const pcl_socket_transport_t* ctx) {
   if (!ctx) return 0;
   return ctx->port;
@@ -1082,6 +1101,8 @@ uint16_t pcl_socket_transport_get_port(const pcl_socket_transport_t* ctx) {
 
 // -- Public create: client ------------------------------------------------
 
+/* Implements: REQ_PCL_117, REQ_PCL_118, REQ_PCL_119, REQ_PCL_190,
+   REQ_PCL_191, REQ_PCL_192, REQ_PCL_194, REQ_PCL_205, REQ_PCL_414. */
 pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
     const char*                     host,
     uint16_t                        port,
@@ -1199,6 +1220,7 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
   return (pcl_socket_transport_t*)ctx;
 }
 
+/* Implements: REQ_PCL_117, REQ_PCL_118, REQ_PCL_119. */
 pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host,
                                                            uint16_t         port,
                                                            pcl_executor_t*  executor) {
@@ -1207,11 +1229,13 @@ pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host
 
 // -- Accessors ------------------------------------------------------------
 
+/* Implements: REQ_PCL_129. */
 const pcl_transport_t* pcl_socket_transport_get_transport(pcl_socket_transport_t* ctx) {
   if (!ctx) return NULL;
   return &ctx->transport;
 }
 
+/* Implements: REQ_PCL_179. */
 pcl_status_t pcl_socket_transport_set_peer_id(pcl_socket_transport_t* ctx,
                                               const char*             peer_id) {
   if (!ctx || !peer_id || !peer_id[0]) return PCL_ERR_INVALID;
@@ -1219,16 +1243,19 @@ pcl_status_t pcl_socket_transport_set_peer_id(pcl_socket_transport_t* ctx,
   return PCL_OK;
 }
 
+/* Implements: REQ_PCL_122, REQ_PCL_123, REQ_PCL_124. */
 pcl_container_t* pcl_socket_transport_gateway_container(pcl_socket_transport_t* ctx) {
   if (!ctx) return NULL;
   return ctx->gateway;
 }
 
+/* Implements: REQ_PCL_193. */
 pcl_socket_state_t pcl_socket_transport_get_state(const pcl_socket_transport_t* ctx) {
   if (!ctx) return PCL_SOCKET_STATE_DISCONNECTED;
   return (pcl_socket_state_t)ctx->conn_state;
 }
 
+/* Implements: REQ_PCL_502, REQ_PCL_234. */
 uint64_t pcl_socket_transport_dropped_publishes(const pcl_socket_transport_t* ctx_opaque) {
   const struct pcl_socket_transport_t* ctx =
       (const struct pcl_socket_transport_t*)ctx_opaque;
@@ -1240,6 +1267,8 @@ uint64_t pcl_socket_transport_dropped_publishes(const pcl_socket_transport_t* ct
 
 // -- Async service invocation (client only) -------------------------------
 
+/* Implements: REQ_PCL_126, REQ_PCL_127, REQ_PCL_128, REQ_PCL_162,
+   REQ_PCL_410, REQ_PCL_411. */
 pcl_status_t pcl_socket_transport_invoke_remote_async(
     pcl_socket_transport_t* ctx_opaque,
     const char*             service_name,
@@ -1349,6 +1378,7 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
 
 // -- Destroy --------------------------------------------------------------
 
+/* Implements: REQ_PCL_130, REQ_PCL_160, REQ_PCL_161, REQ_PCL_503. */
 void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)ctx_opaque;
   if (!ctx) return;

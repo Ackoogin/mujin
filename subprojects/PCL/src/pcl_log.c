@@ -26,6 +26,7 @@ static const char* level_str(pcl_log_level_t level) {
   }
 }
 
+/* Implements: REQ_PCL_073, REQ_PCL_074. */
 static void default_handler(pcl_log_level_t level,
                             const char*     container_name,
                             const char*     message,
@@ -40,15 +41,19 @@ static void default_handler(pcl_log_level_t level,
 
 // -- Public API ----------------------------------------------------------
 
+/* Implements: REQ_PCL_068, REQ_PCL_072. */
 void pcl_log_set_handler(pcl_log_handler_t handler, void* user_data) {
   g_handler   = handler;
   g_user_data = user_data;
 }
 
+/* Implements: REQ_PCL_066, REQ_PCL_070. */
 void pcl_log_set_level(pcl_log_level_t min_level) {
   g_min_level = min_level;
 }
 
+/* Implements: REQ_PCL_064, REQ_PCL_065, REQ_PCL_066, REQ_PCL_067,
+   REQ_PCL_069, REQ_PCL_070, REQ_PCL_071. */
 void pcl_log(const pcl_container_t* c,
              pcl_log_level_t        level,
              const char*            fmt, ...) {

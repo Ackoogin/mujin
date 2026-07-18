@@ -82,9 +82,27 @@ Phase 1 open item; until then section 6 is the deviation register.
 5.4. Two-space indentation, braces on the statement line, pointer `*` bound
      to the type in declarations (`void* ptr`).
 5.5. Comments state contracts and invariants, not restatements of the code.
-5.6. Test requirement tags: `///< REQ_PCL_NNN: description. PCL.0XX.` in
-     tests; *(to adopt)* function-level LLR tags in production sources for
-     code-to-LLR trace (GAP-C-08).
+5.6. Requirement trace tags. Tests carry
+     `///< REQ_PCL_NNN: description. PCL.0XX.` tags. Production sources
+     carry a function-level trace comment on the line(s) immediately before
+     each function definition, in one of two forms:
+
+     ```c
+     /* Implements: REQ_PCL_012, REQ_PCL_094. */
+     /* No LLR: <justification naming the requirements that cover it>. */
+     ```
+
+     Every non-static (externally visible) function must carry one of the
+     two forms. A static helper is tagged only when it carries requirement
+     behaviour of its own; an untagged static helper inherits the trace of
+     its callers. A single tag comment placed before an `#ifdef` platform
+     pair governs both definitions. The tag set lists the requirements
+     that specify the function's observable behaviour, not every
+     requirement that mentions its subsystem. The gate is
+     `python3 subprojects/PCL/scripts/gen_code_trace.py --check`, which
+     also regenerates the reviewable matrix
+     `doc/reports/PCL/CODE_TO_LLR.md` when run without `--check`
+     (GAP-C-08).
 
 ## 6. Deviation Register
 

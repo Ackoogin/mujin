@@ -695,6 +695,8 @@ A graph of 5 philosopher containers, 5 bridges, and 1 monitor container shall ex
 
 **Traces**: PCL.018, PCL.042
 
+**Implementation**: test-only — an end-to-end integration property of the executor, container, and bridge working together; no single implementation unit carries it, so it is verified by the integration test alone.
+
 **Verification**: `test_pcl_dining.cpp::FivePhilosophersWithBridges` asserts no mutual exclusion violation and that each philosopher completes >= 3 meals.
 
 ---
@@ -783,6 +785,8 @@ All container API functions shall return appropriate error codes or safe default
 All executor API functions shall return appropriate error codes when passed NULL handles.
 
 **Traces**: PCL.045
+
+**Implementation**: test-only — a cross-cutting robustness property implemented by the argument guard at the top of every executor API function; tagging every function with this identifier would drown the per-function trace, so it is verified by the dedicated null-safety test instead.
 
 **Verification**: `test_pcl_executor.cpp::NullSafety`.
 
@@ -1372,8 +1376,8 @@ The shared-memory transport shall route an async remote service request across p
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessAsyncServiceRoundTrip`.
 
-### REQ_PCL_189 - Shared Memory Invoke Async Without Provider Returns Not Found
-`pcl_executor_invoke_async()` shall return `PCL_ERR_NOT_FOUND` when the shared-memory bus does not advertise any provider for the requested remote service.
+### REQ_PCL_189 - Shared Memory Invoke Async Without Provider Completes Empty
+When the shared-memory bus does not advertise any provider for a requested remote service, the transport shall complete the call by delivering a terminal empty response to the caller's callback on the caller's executor thread, returning promptly from the invoking call instead of blocking it on provider discovery.
 
 **Traces**: PCL.095, PCL.045
 
@@ -1778,8 +1782,8 @@ Destroying a UDP transport installed as the executor's default transport shall c
 
 ## 25. Shared Memory Transport Edge Cases
 
-### REQ_PCL_305 - Shm Subscribe And Shutdown Vtable Are No-Ops
-The shared-memory transport's `subscribe` and `shutdown` vtable entries shall be no-ops, since bus interest and teardown are managed through the bus region itself.
+### REQ_PCL_305 - Shm Shutdown Vtable Entry Is A No-Op
+The shared-memory transport's `shutdown` vtable entry shall be a safe no-op, since participant teardown is managed through the bus region when the transport is destroyed. (Topic interest is recorded by the `subscribe` entry; see REQ_PCL_500.)
 
 **Traces**: PCL.093
 
@@ -1800,7 +1804,7 @@ When a remote unary service handler returns a non-OK, non-pending status, the ga
 **Verification**: `test_pcl_shared_memory_transport.cpp::PclSharedMemoryTransport.ServiceHandlerErrorYieldsEmptyResponse`.
 
 ### REQ_PCL_308 - Ambiguous Provider Fails Closed
-When two participants advertise the same service name, both unary invocation (`pcl_executor_invoke_async()`) and streaming invocation (`invoke_stream`) shall fail closed with `PCL_ERR_INVALID` rather than picking an arbitrary provider.
+When two participants advertise the same service name, the shared-memory transport shall fail the invocation closed rather than picking an arbitrary provider, completing a unary call with a terminal empty response and ending a streaming call with `PCL_ERR_INVALID`, in both cases delivered on the caller's executor thread.
 
 **Traces**: PCL.095
 
@@ -2021,6 +2025,8 @@ Re-registering the identical codec vtable pointer shall be rejected with `PCL_ER
 A codec vtable's `encode`/`decode`/`free_msg` functions shall round-trip a typed value through a `pcl_msg_t` and release the encoded message via `free_msg`.
 
 **Traces**: PCL.058
+
+**Implementation**: test-only — a contract on codec plugin vtables supplied from outside the PCL core; no production codec ships inside `subprojects/PCL/src`, so the contract is demonstrated against the stub codec plugin in the test suite.
 
 **Verification**: `test_pcl_codec_registry.cpp::PclCodecRegistry.RoundTripEncodeDecodeFreeMsgThroughStubCodec`.
 
@@ -2892,6 +2898,8 @@ When the request arrived through a transport with a `respond` vtable slot, `pcl_
 Each documented status code shall be returned by at least one exercised public API path: `PCL_OK` (any successful call), `PCL_ERR_INVALID` (NULL/invalid arguments), `PCL_ERR_STATE` (invalid lifecycle transition), `PCL_ERR_TIMEOUT` (graceful-shutdown timeout), `PCL_ERR_CALLBACK` (lifecycle callback failure), `PCL_ERR_NOMEM` (allocation failure or capacity overflow), `PCL_ERR_NOT_FOUND` (unknown topic/service/peer), and `PCL_ERR_PORT_CLOSED` (publish while inactive).
 
 **Traces**: PCL.047
+
+**Implementation**: test-only — a cross-cutting property of the status-code vocabulary exercised across the whole public API; each individual return path is traced through the requirement of the function that returns it.
 
 **Verification**: `test_pcl_lifecycle.cpp::InvalidTransitionsRejected` (ERR_STATE), `test_pcl_robustness.cpp::PublishOnInactiveContainerReturnsClosed` (ERR_PORT_CLOSED), `test_pcl_robustness.cpp::ParamOverflowReturnsNomem` (ERR_NOMEM), `test_pcl_robustness.cpp::DispatchToUnknownTopicReturnsNotFound` (ERR_NOT_FOUND), `test_pcl_robustness.cpp::GracefulShutdownTimeout` (ERR_TIMEOUT), `test_pcl_lifecycle.cpp::CallbackFailureAbortsTransition` (ERR_CALLBACK), `test_pcl_lifecycle.cpp::NullHandlesReturnError` (ERR_INVALID).
 

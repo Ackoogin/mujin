@@ -117,3 +117,29 @@ identifiers or other systems for context without failing the gate.
 Quality failures are listed under "Quality Checks" in the generated
 `doc/reports/PCL/HLR_COVERAGE.md` and printed to the console; `--check`
 exits non-zero when any are present, exactly as it does for trace gaps.
+
+## 7. Code-to-LLR Traceability
+
+Every LLR must be implemented by at least one tagged production function,
+and every non-static production function must name the LLRs it implements
+(or carry a reviewed justification for having none). The source annotation
+convention is defined in the C coding standard, rule 5.6. The gate is
+`python3 subprojects/PCL/scripts/gen_code_trace.py --check`, which verifies
+the code-to-LLR trace in both directions and regenerates the reviewable
+matrix `doc/reports/PCL/CODE_TO_LLR.md` when run without `--check`.
+
+An LLR that no single implementation unit can carry is marked with an
+`**Implementation**:` line placed between its `**Traces**` and
+`**Verification**` fields. Two marker values are recognised:
+
+- `test-only` — a cross-cutting or integration property (for example, a
+  property of the whole public API, or of several components working
+  together) that is verified by test evidence rather than traced to one
+  function. The marker line must explain, after an em dash, why no single
+  unit carries the requirement.
+- `documentation-only` — a requirement satisfied by controlled
+  documentation rather than executable code.
+
+The marker is an exemption that must survive review: prefer a function tag
+whenever a specific function's observable behaviour is what the LLR
+specifies.
