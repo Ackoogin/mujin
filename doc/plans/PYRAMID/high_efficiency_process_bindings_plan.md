@@ -215,28 +215,70 @@ adds the native path behind an explicit opt-in.
   route for each of the four paths above (publish, request, response, stream
   frame); the same messages on a local route still deliver.
 
+### N2b. Inbound provenance — a native sentinel a trampoline sees must be locally originated — **S/M**
+
+This is a PCL-side prerequisite for N3a/N4, not a generator task, and the
+plan cannot leave the same-executor guard to the generator alone. The
+subscriber callback ABI does not carry provenance: `dispatch_incoming_now()`
+knows `source_route_mode` / `source_peer_id` and filters on them
+(`subprojects/PCL/src/pcl_executor.c`), but `pcl_sub_callback_t`
+(`subprojects/PCL/include/pcl/pcl_container.h`) receives only
+`(container, msg, user_data)`. A generated trampoline therefore cannot tell a
+same-executor borrowed object from a remote frame that arrived through
+`pcl_executor_post_remote_incoming()` and merely carries the native sentinel
+in `msg->type_name`; casting on the sentinel alone would reinterpret remote
+bytes as a live C++ object.
+
+- Pick one of two mechanisms and implement it in PCL:
+  - **(a) Reject at ingress.** `pcl_executor_post_remote_incoming()` (and any
+    transport ingress) refuses a message tagged with the native sentinel, so
+    any native sentinel that reaches a subscriber is guaranteed local origin.
+    Simplest; makes the trampoline cast sound by construction.
+  - **(b) Pass provenance to the callback.** Extend the subscriber callback (or
+    a side channel) so the trampoline can check "same-executor, borrowed"
+    before it casts. More invasive to the ABI; only needed if a native
+    sentinel must legitimately travel over ingress (it should not for Tier A).
+- **Accept:** a remote/native-tagged frame delivered via
+  `pcl_executor_post_remote_incoming()` never reaches a native-casting
+  trampoline as a live object (asan/stress proves no reinterpretation);
+  same-executor native delivery is unaffected.
+
 ### N3a. Generator: Tier-A native fast path for topic pub/sub (same executor) — **M**
 
 - In `components_gen.py` / `service_impl_gen.py`, emit an opt-in native
   publish that sets `msg.data = &payload`, `msg.size = sizeof/0`, and
   `msg.type_name = <native sentinel>`, plus a subscriber trampoline that,
   on the native sentinel, casts `msg->data` back to the typed pointer and
-  calls the callback with no decode. Guard both so the native branch is taken
-  only on a proven same-executor route; otherwise the existing encode/decode
-  runs.
+  calls the callback with no decode.
+- **Depends on N2b.** The trampoline may cast on the native sentinel only
+  because N2b guarantees such a sentinel is locally originated; the guard is
+  not implementable in the generator alone (the callback ABI carries no
+  provenance). Where N2b is not yet in place, the native branch must stay off.
 - **Accept:** default (serialized) generated output unchanged by `diff -qr`;
   the Tier-A path compiles and delivers the correct typed value with zero
-  copies on one executor.
+  copies on one executor; N2b's ingress guard is in place.
 
 ### N3b. Tier-B native transfer across executors (same process) — **M/L**
 
+- **First close a routing gap: PCL has no named in-process sibling executor.**
+  Local dispatch only visits containers on the *calling* executor
+  (`dispatch_incoming_now()` loops `e->containers`), local service lookup
+  searches that same executor, and `pcl_executor_set_endpoint_route()` rejects
+  a peer id unless the route includes `PCL_ROUTE_REMOTE`
+  (`subprojects/PCL/include/pcl/pcl_transport.h`). So today a message to a
+  second executor in the same process has nowhere to go except a
+  remote-style transport/bridge, which serializes. Tier B needs a new
+  **in-process sibling-executor route** (name a sibling executor as a local
+  peer, or an in-process bridge that carries native objects) before there is a
+  destination to send to. This is the substance of the item, not a detail.
 - Add a PCL cross-thread ingress variant that carries a native object by the
   ownership mechanism chosen in N1 instead of deep-copying wire bytes
-  (`pcl_executor_post_incoming` deep-copies today — see Claim 1). Emit the
-  matching generated publish/subscribe so a Tier-B route moves/shares the
-  native struct into the receiving executor's queue with no wire encode.
-- **Accept:** a two-executor, single-process test delivers the correct typed
-  value across threads with no codec calls and no use-after-free under a
+  (`pcl_executor_post_incoming` deep-copies today — see Claim 1), and route it
+  over the sibling-executor path above so the native struct is moved/shared
+  into the receiving executor's queue with no wire encode.
+- **Accept:** two executors in one process can be wired as native local peers;
+  a single-process test delivers the correct typed value across the two
+  executor threads with no codec calls and no use-after-free under a
   stress/asan run; default output still unchanged.
 
 ### N4. Generator: native fast path for services (unary + streaming) — **M**
@@ -245,6 +287,9 @@ adds the native path behind an explicit opt-in.
   response, and stream-frame trampolines: skip encode/decode when both ends
   are local and native is selected. Keep stream-end and cancellation
   semantics identical to the serialized path.
+- **Depends on N2b** for the same reason as N3a: the request/response/frame
+  trampolines cast on the native sentinel, which is only sound once inbound
+  provenance guarantees the sentinel is locally originated.
 - **Accept:** the `examples/cpp` Tactical Objects showcase runs unchanged
   under serialized routing and, under native routing, produces identical
   results with no codec calls (verify by codec-registry call count or a
@@ -269,7 +314,10 @@ adds the native path behind an explicit opt-in.
   document the decision. Default remains serialized either way.
 - The component asks for `native`; the runtime picks Tier A or Tier B by
   whether the peer shares the executor. The deployment surface should not make
-  the author choose the tier by hand.
+  the author choose the tier by hand. Note this automatic selection depends on
+  N3b's sibling-executor route existing — until it does, `native` can only be
+  honoured for a same-executor (Tier A) peer, and a sibling-executor peer must
+  fall back to serialized rather than silently failing to route.
 - **Accept:** a component can request native locally without editing business
   logic; handler signatures unchanged; the same request works whether the peer
   is same-executor or a sibling executor.
@@ -307,6 +355,7 @@ adds the native path behind an explicit opt-in.
 |------|-------|
 | PCL direct dispatch / envelope (Tier A) | `subprojects/PCL/include/pcl/pcl_executor.h`, `subprojects/PCL/include/pcl/pcl_types.h` (`pcl_msg_t`), `subprojects/PCL/doc/requirements/HLR.md` (PCL.022) |
 | PCL cross-thread ingress (Tier B) | `subprojects/PCL/include/pcl/pcl_executor.h` (`pcl_executor_post_incoming`, lines 111-144), `subprojects/PCL/doc/requirements/HLR.md` (PCL.025 / PCL.026) |
+| Subscriber callback ABI + dispatch provenance (N2b) | `subprojects/PCL/include/pcl/pcl_container.h` (`pcl_sub_callback_t`), `subprojects/PCL/src/pcl_executor.c` (`dispatch_incoming_now`, `route_accepts`), `subprojects/PCL/include/pcl/pcl_transport.h` (`pcl_executor_post_remote_incoming`, `pcl_executor_set_endpoint_route`) |
 | PCL capability/route model | `subprojects/PCL/include/pcl/pcl_capabilities.h`, `subprojects/PCL/include/pcl/pcl_transport_routing.h` |
 | Generated topic pub/sub + routing | `subprojects/PYRAMID/pim/cpp/components_gen.py` (publish/subscribe helpers, `routeAll*Local`, trampolines) |
 | Generated encode/decode/publish primitives | `subprojects/PYRAMID/pim/cpp/service_impl_gen.py` (`encode*`, `decode*`, `publish*`) |
