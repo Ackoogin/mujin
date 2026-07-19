@@ -204,8 +204,16 @@ adds the native path behind an explicit opt-in.
   any route that would reach a transport adapter, returning a clear error
   rather than transmitting a pointer. Reuse or extend the transport
   capability model (`pcl_capabilities.h`, `PCL_CAP_*`).
-- **Accept:** a test that publishing a native-tagged message on a remote
-  route fails closed; local route still delivers.
+- The guard must cover **every** path that can hand a `pcl_msg_t` to a
+  transport hook, not just publish: pub/sub publish, service **request**
+  (`pcl_executor_invoke_async` / `pcl_executor_invoke_stream`,
+  `pcl_transport.h`), service **response** (`pcl_service_respond`), and
+  **stream frame** (`pcl_stream_send`, `pcl_container.h`). A native-tagged
+  request, response, or stream frame on a remote RPC route can otherwise leak
+  a raw pointer onto the wire.
+- **Accept:** fail-closed tests exercise a native-tagged message on a remote
+  route for each of the four paths above (publish, request, response, stream
+  frame); the same messages on a local route still deliver.
 
 ### N3a. Generator: Tier-A native fast path for topic pub/sub (same executor) — **M**
 
@@ -248,9 +256,17 @@ adds the native path behind an explicit opt-in.
   native selection (for example `{"transport":"local","payload":"native"}`),
   and thread an equivalent choice through the interaction facade so
   realization-independent components can opt in.
-- Decide whether the `.ports` file gains a payload column or whether native
-  is inferred whenever a route is local and both ends share the same compiled
-  ABI; document the decision. Default remains serialized.
+- Native payloads are **strictly opt-in**; the default stays serialized so the
+  regression baseline (constraint 7) and the new lifetime rules never apply
+  without a deliberate choice. Do **not** infer native purely from "route is
+  local and ABI matches" — that would silently switch existing local
+  deployments from serialized buffers to borrowed/owned native objects. If a
+  convenience shorthand is wanted (for example a project-wide "prefer native
+  where possible" switch), it is itself an explicit opt-in flag, and any
+  inference happens only underneath that flag.
+- Decide whether the opt-in is a new `.ports` payload column or a field on the
+  existing route JSON (for example `{"transport":"local","payload":"native"}`);
+  document the decision. Default remains serialized either way.
 - The component asks for `native`; the runtime picks Tier A or Tier B by
   whether the peer shares the executor. The deployment surface should not make
   the author choose the tier by hand.
