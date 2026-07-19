@@ -229,19 +229,30 @@ same-executor borrowed object from a remote frame that arrived through
 in `msg->type_name`; casting on the sentinel alone would reinterpret remote
 bytes as a live C++ object.
 
-- Pick one of two mechanisms and implement it in PCL:
-  - **(a) Reject at ingress.** `pcl_executor_post_remote_incoming()` (and any
-    transport ingress) refuses a message tagged with the native sentinel, so
-    any native sentinel that reaches a subscriber is guaranteed local origin.
-    Simplest; makes the trampoline cast sound by construction.
-  - **(b) Pass provenance to the callback.** Extend the subscriber callback (or
-    a side channel) so the trampoline can check "same-executor, borrowed"
-    before it casts. More invasive to the ABI; only needed if a native
-    sentinel must legitimately travel over ingress (it should not for Tier A).
-- **Accept:** a remote/native-tagged frame delivered via
-  `pcl_executor_post_remote_incoming()` never reaches a native-casting
-  trampoline as a live object (asan/stress proves no reinterpretation);
-  same-executor native delivery is unaffected.
+- The same hole exists on the **service** ingress paths, not just pub/sub.
+  N4 enables native request / response / stream-frame trampolines, and their
+  generated callbacks also see only a `pcl_msg_t`. Remote service requests
+  enter through `pcl_executor_post_service_request_remote()` and remote
+  responses through `pcl_executor_post_response_msg()`
+  (`subprojects/PCL/include/pcl/pcl_executor.h`). The guard must cover **all**
+  remote ingress entry points, or a native-tagged RPC payload can be cast as a
+  live object even once pub/sub ingress is safe.
+- Pick one of two mechanisms and implement it in PCL, across every remote
+  ingress entry point (`pcl_executor_post_remote_incoming`,
+  `pcl_executor_post_service_request_remote`, `pcl_executor_post_response_msg`):
+  - **(a) Reject at ingress.** Each of those refuses a message tagged with the
+    native sentinel, so any native sentinel that reaches a subscriber, service
+    handler, or response trampoline is guaranteed local origin. Simplest;
+    makes the trampoline cast sound by construction.
+  - **(b) Pass provenance to the callback.** Extend the subscriber/handler/
+    response callbacks (or a side channel) so the trampoline can check
+    "same-executor, borrowed" before it casts. More invasive to the ABI; only
+    needed if a native sentinel must legitimately travel over ingress (it
+    should not for Tier A).
+- **Accept:** a remote/native-tagged message delivered via **each** remote
+  ingress entry point above — pub/sub frame, service request, and response —
+  never reaches a native-casting trampoline as a live object (asan/stress
+  proves no reinterpretation); same-executor native delivery is unaffected.
 
 ### N3a. Generator: Tier-A native fast path for topic pub/sub (same executor) — **M**
 
@@ -271,15 +282,26 @@ bytes as a live C++ object.
   **in-process sibling-executor route** (name a sibling executor as a local
   peer, or an in-process bridge that carries native objects) before there is a
   destination to send to. This is the substance of the item, not a detail.
-- Add a PCL cross-thread ingress variant that carries a native object by the
-  ownership mechanism chosen in N1 instead of deep-copying wire bytes
-  (`pcl_executor_post_incoming` deep-copies today — see Claim 1), and route it
-  over the sibling-executor path above so the native struct is moved/shared
-  into the receiving executor's queue with no wire encode.
+- Add PCL cross-thread queue variants that carry a native object by the
+  ownership mechanism chosen in N1 instead of deep-copying wire bytes, and
+  route them over the sibling-executor path above so the native struct is
+  moved/shared into the receiving executor's queue with no wire encode. This
+  must cover **all** cross-thread queues PCL uses, not only pub/sub: today
+  `pcl_executor_post_incoming` (pub/sub), `pcl_executor_post_service_request` /
+  `_remote` (RPC request), and `pcl_executor_post_response_msg` (RPC response
+  and stream frames) each deep-copy bytes
+  (`subprojects/PCL/include/pcl/pcl_executor.h`). If only the pub/sub queue
+  gets a native variant, the RPC half stays serialized and N4/N5's
+  "same native request works for a sibling executor" cannot be met.
+- **Decision to record:** either provide native-owned request/response/stream
+  queue variants as above, or explicitly scope Tier-B **native services** out
+  of the first cut (Tier-B native pub/sub only; sibling-executor services fall
+  back to serialized) so N4/N5 do not promise something N3b does not deliver.
 - **Accept:** two executors in one process can be wired as native local peers;
   a single-process test delivers the correct typed value across the two
-  executor threads with no codec calls and no use-after-free under a
-  stress/asan run; default output still unchanged.
+  executor threads for every interaction the decision keeps in scope (pub/sub,
+  and RPC request/response/stream if not scoped out) with no codec calls and no
+  use-after-free under a stress/asan run; default output still unchanged.
 
 ### N4. Generator: native fast path for services (unary + streaming) — **M**
 
@@ -290,6 +312,10 @@ bytes as a live C++ object.
 - **Depends on N2b** for the same reason as N3a: the request/response/frame
   trampolines cast on the native sentinel, which is only sound once inbound
   provenance guarantees the sentinel is locally originated.
+- **Same-executor (Tier A) always; sibling-executor (Tier B) only if N3b keeps
+  native services in scope.** For a Tier-B peer, native services work only when
+  N3b provides the native request/response/stream queue variants; if N3b scopes
+  them out, a sibling-executor service call falls back to serialized.
 - **Accept:** the `examples/cpp` Tactical Objects showcase runs unchanged
   under serialized routing and, under native routing, produces identical
   results with no codec calls (verify by codec-registry call count or a
@@ -354,7 +380,7 @@ bytes as a live C++ object.
 | Area | Files |
 |------|-------|
 | PCL direct dispatch / envelope (Tier A) | `subprojects/PCL/include/pcl/pcl_executor.h`, `subprojects/PCL/include/pcl/pcl_types.h` (`pcl_msg_t`), `subprojects/PCL/doc/requirements/HLR.md` (PCL.022) |
-| PCL cross-thread ingress (Tier B) | `subprojects/PCL/include/pcl/pcl_executor.h` (`pcl_executor_post_incoming`, lines 111-144), `subprojects/PCL/doc/requirements/HLR.md` (PCL.025 / PCL.026) |
+| PCL cross-thread queues (Tier B) | `subprojects/PCL/include/pcl/pcl_executor.h` — pub/sub `pcl_executor_post_incoming` (lines 111-144), RPC request `pcl_executor_post_service_request` / `_remote`, RPC response/frame `pcl_executor_post_response_msg`; `subprojects/PCL/doc/requirements/HLR.md` (PCL.025 / PCL.026) |
 | Subscriber callback ABI + dispatch provenance (N2b) | `subprojects/PCL/include/pcl/pcl_container.h` (`pcl_sub_callback_t`), `subprojects/PCL/src/pcl_executor.c` (`dispatch_incoming_now`, `route_accepts`), `subprojects/PCL/include/pcl/pcl_transport.h` (`pcl_executor_post_remote_incoming`, `pcl_executor_set_endpoint_route`) |
 | PCL capability/route model | `subprojects/PCL/include/pcl/pcl_capabilities.h`, `subprojects/PCL/include/pcl/pcl_transport_routing.h` |
 | Generated topic pub/sub + routing | `subprojects/PYRAMID/pim/cpp/components_gen.py` (publish/subscribe helpers, `routeAll*Local`, trampolines) |
