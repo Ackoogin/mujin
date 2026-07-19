@@ -175,10 +175,17 @@ and cross-executor cases must not be conflated:
    that needs to mutate or keep the value must copy it itself. Under Tier B's
    shared-ownership option this also means no in-place mutation of a value
    others still hold.
-4. **Fail closed if it could reach the wire.** A native pointer must never be
-   handed to a transport adapter — that would ship a raw address off-box. The
-   runtime must reject a native-tagged message on any non-local route rather
-   than sending garbage.
+4. **Fail closed if it could reach the wire — and early enough.** A native
+   pointer must never be handed to a transport adapter — that would ship a raw
+   address off-box. The runtime must reject a native-tagged message on any
+   non-local route rather than sending garbage. Crucially, the rejection must
+   sit **before any local dispatch**, not at the transport hook: for a mixed
+   `PCL_ROUTE_LOCAL|PCL_ROUTE_REMOTE` route, `pcl_executor_publish_port`
+   delivers the local leg *first* and only then invokes remote transports
+   (`subprojects/PCL/src/pcl_executor.c`). A guard that fires at the transport
+   hook runs after the native local leg has already produced side effects, so a
+   native publish on a mixed route must be refused up front (or the N6
+   split/compose-time policy must already be in force).
 5. **Mixed local + remote fan-out.** If one topic has both an in-process
    native subscriber and a remote subscriber, the message cannot be
    *only* a native pointer. Either the publish encodes for the remote leg and
@@ -293,11 +300,13 @@ bytes as a live C++ object.
     ingress path with transport traffic.
 - **Accept:** a wire/transport-originated native-tagged message never reaches a
   native-casting trampoline as a live object (asan/stress proves no
-  reinterpretation) — exercised for pub/sub frame, service request, and
-  response, and **including a shared-memory gateway RPC path** to prove the
-  guard is not tied to the generic `post_*` helpers; same-executor (origin 1)
-  and, once N3b lands, sibling-executor owned-native (origin 2) delivery both
-  still cast and deliver.
+  reinterpretation) — exercised for pub/sub frame, service request, unary
+  response, and **server-stream response frame** (delivered via
+  `pcl_executor_post_response_msg` into `StreamPushState::trampoline`, so it is
+  a cast path too), and **including a shared-memory gateway RPC path** to prove
+  the guard is not tied to the generic `post_*` helpers; same-executor
+  (origin 1) and, once N3b lands, sibling-executor owned-native (origin 2)
+  delivery both still cast and deliver.
 
 ### N3a. Generator: Tier-A native fast path for topic pub/sub (same executor) — **M**
 
@@ -422,11 +431,18 @@ bytes as a live C++ object.
 - Implement (or explicitly forbid at compose time) a topic that has both a
   native local subscriber and a remote subscriber: encode once for the remote
   leg, hand the native object to the local leg.
+- **Order matters (see constraint 4).** Because `pcl_executor_publish_port`
+  dispatches the local leg before the remote leg, a native publish on a mixed
+  route cannot rely on the transport-hook guard to stop it — the local delivery
+  has already happened by then. Either this compose-time policy must be in
+  force before native pub/sub is enabled on a mixed route, or the native
+  publish must be rejected before the local dispatch runs.
 - Define how durable/retained topics back their snapshot when the live path
   is native (retain an encoded or owned copy).
 - **Accept:** compose-time validation covers the mixed case per the decision;
-  a durable topic with a late joiner still delivers the last value under
-  native routing.
+  a **mixed-route native publish is rejected before any local delivery occurs**
+  (no local side effect leaks past the guard); a durable topic with a late
+  joiner still delivers the last value under native routing.
 
 ### N7. Benchmarks, correctness parity, and cross-language boundary — **M**
 
@@ -456,4 +472,5 @@ bytes as a live C++ object.
 | Generated topic pub/sub + routing + bind codec check | `subprojects/PYRAMID/pim/cpp/components_gen.py` (publish/subscribe helpers, `routeAll*Local`, trampolines, `supportsContentType` bind check ~L265), `subprojects/PYRAMID/pim/cpp/interaction_facade_gen.py` |
 | Generated encode/decode/publish primitives | `subprojects/PYRAMID/pim/cpp/service_impl_gen.py` (`encode*`, `decode*`, `publish*`) |
 | Component-authoring surface | `subprojects/PYRAMID/doc/architecture/cpp_component_authoring.md`, `subprojects/PYRAMID/doc/architecture/component_skeletons.md` |
+| Publish dispatch ordering (local-before-remote, N6/constraint 4) | `subprojects/PCL/src/pcl_executor.c` (`pcl_executor_publish_port`, local leg lines ~1367-1371 then remote ~1373-1394) |
 | Interaction realization model | `subprojects/PYRAMID/doc/architecture/pyramid_interaction_semantics.md`, `subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md` |
