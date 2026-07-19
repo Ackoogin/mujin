@@ -4,22 +4,38 @@
 
 ## What this is about
 
-When two PYRAMID components run in the **same operating-system process** on
-the same PCL executor, they can in principle exchange a message by passing a
-pointer to the native typed object (the generated C++ struct) straight from
-the publisher to the subscriber. No serialization, no byte buffer, no
-allocation on the hot path. This document calls that path **high-efficiency
-in-process binding**: the sender hands over the live object and the receiver
-reads it in place.
-
-PCL already supports this at the runtime level. The generated **port-style
-bindings** (the typed publish/subscribe and service facades described in
+When two PYRAMID components run in the **same operating-system process**, they
+can exchange a message as the native typed object (the generated C++ struct)
+without ever serializing it to a wire format. This document calls that
+**high-efficiency in-process binding**. The generated **port-style bindings**
+(the typed publish/subscribe and service facades described in
 [`cpp_component_authoring.md`](../../../subprojects/PYRAMID/doc/architecture/cpp_component_authoring.md)
 and [`component_skeletons.md`](../../../subprojects/PYRAMID/doc/architecture/component_skeletons.md))
-do not. Even when a port is routed entirely in-process, the generated code
-encodes the typed value into a serialized buffer on the way out and decodes
-it again on the way in. This document explains the gap precisely and lists
-the work needed to close it.
+do not offer this: even when a port is routed entirely in-process, the
+generated code encodes the typed value into a serialized buffer on the way out
+and decodes it again on the way in. This document explains the gap precisely
+and lists the work needed to close it.
+
+### "In-process" is not one case — it is two
+
+An important distinction, easy to lose: two components in the same process may
+or may not share the same PCL executor (executor = one worker thread that ticks
+components and runs their callbacks). The efficient path is different in each
+case, and a solution has to handle both:
+
+| Tier | Where | What is possible | What is still needed |
+|------|-------|------------------|----------------------|
+| **A — same executor** | Same process, **same executor thread** | True **zero-copy**: hand the subscriber a pointer to the live object, synchronously, on the one thread. No copy, no queue, no serialization. | Nothing beyond a borrow that lasts the dispatch call. This is PCL.022 direct dispatch. |
+| **B — different executor, same process** | Same process, **different executor threads** | No **wire serialization** — the data stays in-process memory. But the two threads do not share a call stack. | A cross-thread **queue** and a thread-safe **ownership transfer** (a native struct copy or move, or shared ownership) — a "minimal data change", not zero-copy, and not synchronous. |
+| **C — different process / host** | Separate processes or machines | — | Full serialization + a transport adapter. Out of scope here; this is what the bindings already do. |
+
+Tier A is the headline win (zero-copy). Tier B still avoids the encode/decode
+CPU and the wire-format round trip; it trades the *pointer* handoff for a
+*native-object* handoff across the executor's ingress queue. Both are "high
+efficiency" relative to today's always-serialize behaviour; only Tier A is
+literally zero-copy. The plan below keeps them as separate acceptance cases so
+Tier B's threading and lifetime rules are not smuggled in under Tier A's
+simpler borrow contract.
 
 A note on the term: "high efficiency" is used here as a plain description of
 the zero-serialization local path, not as a formal term from the PYRAMID
@@ -35,24 +51,37 @@ serialization entirely.
 Yes. The PCL runtime is deliberately format-agnostic and already carries a
 raw object pointer through a port:
 
-- **Direct dispatch.** With no transport adapter set, the executor routes a
-  published message straight to matching subscribers by pointer, on the
-  single executor thread. This is requirement **PCL.022 — Intra-Process
-  Direct Dispatch** ("zero-copy pointer handoff",
+- **Tier A — direct dispatch (same executor).** With no transport adapter
+  set, the executor routes a published message straight to matching
+  subscribers by pointer, on the single executor thread. This is requirement
+  **PCL.022 — Intra-Process Direct Dispatch** ("zero-copy pointer handoff",
   [`subprojects/PCL/doc/requirements/HLR.md`](../../../subprojects/PCL/doc/requirements/HLR.md)),
   and design principle **P5 — Zero-copy where possible**
   ([`component_container_design.md`](../../../subprojects/PCL/doc/architecture/component_container_design.md)).
+- **Tier B — cross-thread ingress (different executor, same process).** An
+  external thread hands a message to an executor with
+  `pcl_executor_post_incoming()` (requirements **PCL.025 / PCL.026**); the
+  executor dispatches it to subscriber callbacks on its own thread during the
+  next spin cycle. This is the substrate for two executors in one process
+  talking to each other. **Caveat that shapes the work below:** this function
+  today *deep-copies the topic, type name, and payload bytes* before
+  returning (`subprojects/PCL/include/pcl/pcl_executor.h`, lines 127-144), so
+  a native Tier-B path needs a variant that copies or moves the **native
+  struct** rather than re-serializing it — the copy is unavoidable across the
+  thread boundary, but the wire encode/decode is not.
 - **The message envelope already allows a raw struct.** `pcl_msg_t`
   (`subprojects/PCL/include/pcl/pcl_types.h`) is `{ const void* data;
   uint32_t size; const char* type_name; }`. The `data` field's own comment
   reads "serialized (or raw struct) payload" and `type_name` is a free-form
   string. Nothing in PCL inspects the bytes; a publisher may legitimately set
   `data` to the address of a live C++ object and `type_name` to a chosen
-  native tag, and the executor will hand that pointer to each local
-  subscriber unchanged.
+  native tag. On Tier A the executor hands that pointer to each local
+  subscriber unchanged; on Tier B the object must instead be owned by / copied
+  into the ingress queue because the publisher's stack object will be gone by
+  the time the receiving executor drains the queue.
 
-So the substrate is present. What is missing is a **generated binding** that
-uses it.
+So the substrate is present for both tiers. What is missing is a **generated
+binding** that uses it.
 
 ### Claim 2 — the port-style bindings do not use it; they always serialize
 
@@ -101,28 +130,38 @@ value that selects a native, non-serializing in-process handoff.
 - **Co-location is a first-class deployment.** The skeleton model is
   one-component-per-process today, but single-process multi-component
   executors are explicitly supported (`routeAllLocal`, the in-process
-  showcase, and AME's combined ROS2 executor all rely on it). Those
+  showcase, and AME's combined ROS2 executor all rely on it) — both the
+  same-executor (Tier A) and sibling-executor (Tier B) shapes. Those
   deployments get none of the efficiency PCL can offer through the typed
   bindings.
 
 ## Design constraints a native path must respect
 
-A native pointer handoff is only safe under conditions the serialized path
-does not have to worry about. Any solution has to enforce these, not assume
-them:
+A native handoff is only safe under conditions the serialized path does not
+have to worry about. Any solution has to enforce these, not assume them. Note
+that constraint 2 (lifetime) differs by tier — this is where the same-executor
+and cross-executor cases must not be conflated:
 
 1. **Same process, same compiled types.** Publisher and subscriber must share
    the identical struct layout (same generated headers, same build /
    ABI). Cross-process and cross-language (C++ ↔ Ada) handoff cannot use a
    raw pointer; those legs must fall back to serialization.
-2. **Borrow semantics / lifetime.** `pcl_msg_t` pointers are borrowed for the
-   duration of the call (see the type's own doc comment). The native object
-   must outlive the synchronous dispatch and the subscriber must not retain
-   the pointer past its callback. This matches the existing single-threaded
-   executor contract but must be stated and enforced.
+2. **Lifetime — different rule per tier.**
+   - *Tier A (same executor):* `pcl_msg_t` pointers are borrowed for the
+     duration of the synchronous dispatch call (see the type's own doc
+     comment). The native object outlives the call and the subscriber must not
+     retain the pointer past its callback. A borrow is enough.
+   - *Tier B (different executor):* dispatch is asynchronous — the publisher
+     runs on past the publish call, so a borrow of its stack object is a
+     use-after-free by the time the receiving executor drains its queue. Tier
+     B must **transfer ownership** into the queue: move the native object in,
+     or hold it by shared ownership (for example a reference-counted handle)
+     that keeps it alive until every subscriber on that executor has run.
 3. **Read-only sharing.** One publish fans out to several subscribers sharing
-   one `const` pointer. The receiver must treat the object as immutable; a
-   subscriber that needs to mutate or keep the value must copy it itself.
+   one `const` object. The receiver must treat it as immutable; a subscriber
+   that needs to mutate or keep the value must copy it itself. Under Tier B's
+   shared-ownership option this also means no in-place mutation of a value
+   others still hold.
 4. **Fail closed if it could reach the wire.** A native pointer must never be
    handed to a transport adapter — that would ship a raw address off-box. The
    runtime must reject a native-tagged message on any non-local route rather
@@ -150,8 +189,11 @@ adds the native path behind an explicit opt-in.
 
 - Define a native content-type sentinel, e.g. `application/x-pcl-native`
   carrying the schema short-name, distinct from any wire content type.
-- Write the borrow/lifetime, read-only, and same-ABI rules from the section
-  above as the normative contract for the native path.
+- Write the same-ABI, read-only, and **per-tier lifetime** rules from the
+  section above as the normative contract for the native path — explicitly
+  the Tier-A borrow versus the Tier-B ownership transfer.
+- Decide the Tier-B ownership mechanism (move into the ingress queue vs. a
+  reference-counted handle) so N3b/N4/N5 build against one model.
 - **Accept:** a short spec section (add to
   [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
   or a new architecture page) that N2–N7 implement against.
@@ -165,16 +207,29 @@ adds the native path behind an explicit opt-in.
 - **Accept:** a test that publishing a native-tagged message on a remote
   route fails closed; local route still delivers.
 
-### N3. Generator: native fast path for topic pub/sub — **M**
+### N3a. Generator: Tier-A native fast path for topic pub/sub (same executor) — **M**
 
 - In `components_gen.py` / `service_impl_gen.py`, emit an opt-in native
   publish that sets `msg.data = &payload`, `msg.size = sizeof/0`, and
   `msg.type_name = <native sentinel>`, plus a subscriber trampoline that,
   on the native sentinel, casts `msg->data` back to the typed pointer and
   calls the callback with no decode. Guard both so the native branch is taken
-  only on a proven-local route; otherwise the existing encode/decode runs.
+  only on a proven same-executor route; otherwise the existing encode/decode
+  runs.
 - **Accept:** default (serialized) generated output unchanged by `diff -qr`;
-  the native path compiles and delivers the correct typed value in-process.
+  the Tier-A path compiles and delivers the correct typed value with zero
+  copies on one executor.
+
+### N3b. Tier-B native transfer across executors (same process) — **M/L**
+
+- Add a PCL cross-thread ingress variant that carries a native object by the
+  ownership mechanism chosen in N1 instead of deep-copying wire bytes
+  (`pcl_executor_post_incoming` deep-copies today — see Claim 1). Emit the
+  matching generated publish/subscribe so a Tier-B route moves/shares the
+  native struct into the receiving executor's queue with no wire encode.
+- **Accept:** a two-executor, single-process test delivers the correct typed
+  value across threads with no codec calls and no use-after-free under a
+  stress/asan run; default output still unchanged.
 
 ### N4. Generator: native fast path for services (unary + streaming) — **M**
 
@@ -196,8 +251,12 @@ adds the native path behind an explicit opt-in.
 - Decide whether the `.ports` file gains a payload column or whether native
   is inferred whenever a route is local and both ends share the same compiled
   ABI; document the decision. Default remains serialized.
+- The component asks for `native`; the runtime picks Tier A or Tier B by
+  whether the peer shares the executor. The deployment surface should not make
+  the author choose the tier by hand.
 - **Accept:** a component can request native locally without editing business
-  logic; handler signatures unchanged.
+  logic; handler signatures unchanged; the same request works whether the peer
+  is same-executor or a sibling executor.
 
 ### N6. Mixed local/remote fan-out and durability policy — **M**
 
@@ -212,8 +271,11 @@ adds the native path behind an explicit opt-in.
 
 ### N7. Benchmarks, correctness parity, and cross-language boundary — **M**
 
-- Microbenchmark: native vs. serialized local publish/echo, reporting
-  encode/decode elimination and allocations avoided.
+- Microbenchmark all three payload paths on a local publish/echo: serialized,
+  Tier-A native (zero copy), and Tier-B native (one struct copy/move, no wire
+  encode), reporting encode/decode elimination and allocations avoided for
+  each. The point is to show Tier B still beats serialized even though it is
+  not zero-copy.
 - Parity test: native and serialized paths deliver equal typed values for the
   same inputs across the showcase RPCs and topics.
 - Scope the cross-language (C++ ↔ Ada in one process) question: start
@@ -227,7 +289,8 @@ adds the native path behind an explicit opt-in.
 
 | Area | Files |
 |------|-------|
-| PCL direct dispatch / envelope | `subprojects/PCL/include/pcl/pcl_executor.h`, `subprojects/PCL/include/pcl/pcl_types.h` (`pcl_msg_t`), `subprojects/PCL/doc/requirements/HLR.md` (PCL.022) |
+| PCL direct dispatch / envelope (Tier A) | `subprojects/PCL/include/pcl/pcl_executor.h`, `subprojects/PCL/include/pcl/pcl_types.h` (`pcl_msg_t`), `subprojects/PCL/doc/requirements/HLR.md` (PCL.022) |
+| PCL cross-thread ingress (Tier B) | `subprojects/PCL/include/pcl/pcl_executor.h` (`pcl_executor_post_incoming`, lines 111-144), `subprojects/PCL/doc/requirements/HLR.md` (PCL.025 / PCL.026) |
 | PCL capability/route model | `subprojects/PCL/include/pcl/pcl_capabilities.h`, `subprojects/PCL/include/pcl/pcl_transport_routing.h` |
 | Generated topic pub/sub + routing | `subprojects/PYRAMID/pim/cpp/components_gen.py` (publish/subscribe helpers, `routeAll*Local`, trampolines) |
 | Generated encode/decode/publish primitives | `subprojects/PYRAMID/pim/cpp/service_impl_gen.py` (`encode*`, `decode*`, `publish*`) |
