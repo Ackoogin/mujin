@@ -245,9 +245,21 @@ bytes as a live C++ object.
 - The same hole exists on the **service** paths, not just pub/sub. N4 enables
   native request / response / stream-frame trampolines, and their generated
   callbacks also see only a `pcl_msg_t`.
-- **State the guard as a property, not a list of entry points.** The required
-  invariant is: *no message that originated outside this executor may reach a
-  native-casting trampoline carrying the native sentinel.* An enumerated list
+- **State the guard as a property over three provenance states, not two.** The
+  native sentinel alone is not enough to decide safety, because there are
+  *three* origins, not just "same executor" versus "everything else":
+  1. **same-executor borrowed** (Tier A) — safe to cast;
+  2. **trusted in-process owned-native from a sibling executor** (Tier B, once
+     N3b exists) — also safe to cast, and it deliberately crosses executors, so
+     a blanket "reject anything not same-executor" would reject exactly the
+     case the plan is adding;
+  3. **wire/transport-originated** — must be rejected; its bytes are not a live
+     object.
+  So the invariant is: *a native-casting trampoline only ever runs on origin 1
+  or 2; origin 3 never reaches it carrying the native sentinel.* Origins 1 and
+  2 need a distinct trusted-provenance marker on the in-process owned-native
+  queue entry that transport ingress cannot forge.
+- **State it as a property, not a list of entry points.** An enumerated list
   of ingress functions is fragile because transport-specific gateways call
   handlers directly, bypassing the generic `post_*` helpers. Two examples
   already in the tree:
@@ -264,21 +276,28 @@ bytes as a live C++ object.
   A future transport will add more such paths, so the guard should live at a
   single choke point (or a shared provenanced/rejecting helper every transport
   ingress must route through), not a hand-maintained list.
-- Pick one of two mechanisms and implement it in PCL at that choke point:
-  - **(a) Reject on entry from any transport.** A transport-originated message
-    tagged with the native sentinel is refused, so any native sentinel that
-    reaches a subscriber, service handler, or response trampoline is guaranteed
-    local origin. Simplest; makes the trampoline cast sound by construction.
+- Pick one of two mechanisms and implement it in PCL at that choke point. Both
+  must reject origin 3 while still admitting origins 1 and 2:
+  - **(a) Reject on entry from any transport; trust the in-process queue.** A
+    transport-originated message tagged with the native sentinel is refused at
+    ingress. Same-executor dispatch (origin 1) and the Tier-B in-process
+    owned-native queue (origin 2) do not pass through transport ingress, so a
+    native sentinel reaching a trampoline is guaranteed to be a live object.
+    Simplest; the trusted-provenance boundary is "did this come from a
+    transport or from the in-process path".
   - **(b) Pass provenance to the callback.** Extend the subscriber/handler/
-    response callbacks (or a side channel) so the trampoline can check
-    "same-executor, borrowed" before it casts. More invasive to the ABI; only
-    needed if a native sentinel must legitimately travel over ingress (it
-    should not for Tier A).
-- **Accept:** a remote/native-tagged message never reaches a native-casting
-  trampoline as a live object (asan/stress proves no reinterpretation) —
-  exercised for pub/sub frame, service request, and response, and **including a
-  shared-memory gateway RPC path** to prove the guard is not tied to the
-  generic `post_*` helpers; same-executor native delivery is unaffected.
+    response callbacks (or a side channel) with a provenance tag the trampoline
+    checks before it casts — distinguishing same-executor borrowed and
+    in-process owned-native (cast) from transport-originated (never cast). More
+    invasive to the ABI; needed if a native sentinel must legitimately share an
+    ingress path with transport traffic.
+- **Accept:** a wire/transport-originated native-tagged message never reaches a
+  native-casting trampoline as a live object (asan/stress proves no
+  reinterpretation) — exercised for pub/sub frame, service request, and
+  response, and **including a shared-memory gateway RPC path** to prove the
+  guard is not tied to the generic `post_*` helpers; same-executor (origin 1)
+  and, once N3b lands, sibling-executor owned-native (origin 2) delivery both
+  still cast and deliver.
 
 ### N3a. Generator: Tier-A native fast path for topic pub/sub (same executor) — **M**
 
@@ -341,6 +360,22 @@ bytes as a live C++ object.
   path a per-channel owned response slot (the analogue of the serialized
   `response_storage`), covering both the immediate `PCL_OK` reply and the
   deferred `PCL_PENDING` / `pcl_service_respond` reply.
+- **Keep deferred local replies off the transport.** `pcl_service_respond()`
+  checks `ctx->executor->transport.respond` *before* the saved local callback
+  (`subprojects/PCL/src/pcl_container.c`), so on an executor that also has a
+  default transport installed, a native local deferred (`PCL_PENDING`) reply
+  would be handed to that transport — and then rejected by N2b's fail-closed
+  guard — instead of returning to the local caller. The service context must
+  carry local/native provenance and route a deferred native reply straight to
+  the saved callback, bypassing the executor-default transport. Owned response
+  storage alone does not fix this.
+- **Bypass the bind-time codec check on native/local routes.** Generated
+  `bind()` calls `supportsContentType(content_type_)` and returns
+  `PCL_ERR_INVALID` when the codec registry is empty
+  (`components_gen.py`, `interaction_facade_gen.py`). A native/local route uses
+  no codec, so that check must be skipped or deferred for it — otherwise the
+  "no codec registered, still succeeds locally" acceptance below can never
+  pass even when every trampoline skips encode/decode.
 - **Depends on N2b** for the same reason as N3a: the request/response/frame
   trampolines cast on the native sentinel, which is only sound once inbound
   provenance guarantees the sentinel is locally originated.
@@ -417,7 +452,8 @@ bytes as a live C++ object.
 | PCL cross-thread queues (Tier B) | `subprojects/PCL/include/pcl/pcl_executor.h` — pub/sub `pcl_executor_post_incoming` (lines 111-144), RPC request `pcl_executor_post_service_request` / `_remote`, RPC response/frame `pcl_executor_post_response_msg`; `subprojects/PCL/doc/requirements/HLR.md` (PCL.025 / PCL.026) |
 | Subscriber callback ABI + dispatch provenance (N2b) | `subprojects/PCL/include/pcl/pcl_container.h` (`pcl_sub_callback_t`), `subprojects/PCL/src/pcl_executor.c` (`dispatch_incoming_now`, `route_accepts`, `pcl_executor_invoke_async` response order), `subprojects/PCL/include/pcl/pcl_transport.h` (`pcl_executor_post_remote_incoming`, `pcl_executor_set_endpoint_route`), `subprojects/PCL/src/pcl_transport_shared_memory.c` (`pcl_shm_gateway_svc_sub_cb` / `pcl_shm_gateway_stream_sub_cb` direct handler dispatch) |
 | PCL capability/route model | `subprojects/PCL/include/pcl/pcl_capabilities.h`, `subprojects/PCL/include/pcl/pcl_transport_routing.h` |
-| Generated topic pub/sub + routing | `subprojects/PYRAMID/pim/cpp/components_gen.py` (publish/subscribe helpers, `routeAll*Local`, trampolines) |
+| Native service response lifetime + deferred routing (N4) | `subprojects/PCL/src/pcl_container.c` (`pcl_service_respond` transport-before-callback order), `subprojects/PCL/src/pcl_executor.c` (`pcl_executor_invoke_async` immediate-reply order) |
+| Generated topic pub/sub + routing + bind codec check | `subprojects/PYRAMID/pim/cpp/components_gen.py` (publish/subscribe helpers, `routeAll*Local`, trampolines, `supportsContentType` bind check ~L265), `subprojects/PYRAMID/pim/cpp/interaction_facade_gen.py` |
 | Generated encode/decode/publish primitives | `subprojects/PYRAMID/pim/cpp/service_impl_gen.py` (`encode*`, `decode*`, `publish*`) |
 | Component-authoring surface | `subprojects/PYRAMID/doc/architecture/cpp_component_authoring.md`, `subprojects/PYRAMID/doc/architecture/component_skeletons.md` |
 | Interaction realization model | `subprojects/PYRAMID/doc/architecture/pyramid_interaction_semantics.md`, `subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md` |
