@@ -150,13 +150,26 @@ and cross-executor cases must not be conflated:
    - *Tier A (same executor):* `pcl_msg_t` pointers are borrowed for the
      duration of the synchronous dispatch call (see the type's own doc
      comment). The native object outlives the call and the subscriber must not
-     retain the pointer past its callback. A borrow is enough.
+     retain the pointer past its callback. A borrow is enough — **with one
+     exception, the unary service response** (next point).
    - *Tier B (different executor):* dispatch is asynchronous — the publisher
      runs on past the publish call, so a borrow of its stack object is a
      use-after-free by the time the receiving executor drains its queue. Tier
      B must **transfer ownership** into the queue: move the native object in,
      or hold it by shared ownership (for example a reference-counted handle)
      that keeps it alive until every subscriber on that executor has run.
+   - *Unary service response, even on Tier A:* the response is **not** consumed
+     inside the handler's stack frame. PCL calls the service handler, and only
+     after it returns does it invoke the client response callback
+     (`pcl_executor_invoke_async` fills a local `response`, the handler returns
+     `PCL_OK`, then `callback(&response, ...)` runs —
+     `subprojects/PCL/src/pcl_executor.c`). A native response whose `data`
+     points at an object local to the generated dispatch would dangle by the
+     time that callback casts it. The native path therefore needs an **owned
+     response slot** whose lifetime spans past the handler return until the
+     response callback runs — the analogue of the serialized path's per-channel
+     `response_storage`. The same applies to a deferred (`PCL_PENDING`) reply
+     completed later via `pcl_service_respond`.
 3. **Read-only sharing.** One publish fans out to several subscribers sharing
    one `const` object. The receiver must treat it as immutable; a subscriber
    that needs to mutate or keep the value must copy it itself. Under Tier B's
@@ -229,30 +242,43 @@ same-executor borrowed object from a remote frame that arrived through
 in `msg->type_name`; casting on the sentinel alone would reinterpret remote
 bytes as a live C++ object.
 
-- The same hole exists on the **service** ingress paths, not just pub/sub.
-  N4 enables native request / response / stream-frame trampolines, and their
-  generated callbacks also see only a `pcl_msg_t`. Remote service requests
-  enter through `pcl_executor_post_service_request_remote()` and remote
-  responses through `pcl_executor_post_response_msg()`
-  (`subprojects/PCL/include/pcl/pcl_executor.h`). The guard must cover **all**
-  remote ingress entry points, or a native-tagged RPC payload can be cast as a
-  live object even once pub/sub ingress is safe.
-- Pick one of two mechanisms and implement it in PCL, across every remote
-  ingress entry point (`pcl_executor_post_remote_incoming`,
-  `pcl_executor_post_service_request_remote`, `pcl_executor_post_response_msg`):
-  - **(a) Reject at ingress.** Each of those refuses a message tagged with the
-    native sentinel, so any native sentinel that reaches a subscriber, service
-    handler, or response trampoline is guaranteed local origin. Simplest;
-    makes the trampoline cast sound by construction.
+- The same hole exists on the **service** paths, not just pub/sub. N4 enables
+  native request / response / stream-frame trampolines, and their generated
+  callbacks also see only a `pcl_msg_t`.
+- **State the guard as a property, not a list of entry points.** The required
+  invariant is: *no message that originated outside this executor may reach a
+  native-casting trampoline carrying the native sentinel.* An enumerated list
+  of ingress functions is fragile because transport-specific gateways call
+  handlers directly, bypassing the generic `post_*` helpers. Two examples
+  already in the tree:
+  - the generic cross-thread helpers `pcl_executor_post_remote_incoming`
+    (pub/sub), `pcl_executor_post_service_request_remote` (RPC request), and
+    `pcl_executor_post_response_msg` (RPC response/frame)
+    (`subprojects/PCL/include/pcl/pcl_executor.h`); **and**
+  - the shared-memory gateway, which unpacks the frame and calls
+    `service_port->svc_handler(...)` / `stream_port->stream_handler(...)`
+    **directly** (`pcl_shm_gateway_svc_sub_cb` /
+    `pcl_shm_gateway_stream_sub_cb`,
+    `subprojects/PCL/src/pcl_transport_shared_memory.c`), never touching the
+    `post_*` helpers above.
+  A future transport will add more such paths, so the guard should live at a
+  single choke point (or a shared provenanced/rejecting helper every transport
+  ingress must route through), not a hand-maintained list.
+- Pick one of two mechanisms and implement it in PCL at that choke point:
+  - **(a) Reject on entry from any transport.** A transport-originated message
+    tagged with the native sentinel is refused, so any native sentinel that
+    reaches a subscriber, service handler, or response trampoline is guaranteed
+    local origin. Simplest; makes the trampoline cast sound by construction.
   - **(b) Pass provenance to the callback.** Extend the subscriber/handler/
     response callbacks (or a side channel) so the trampoline can check
     "same-executor, borrowed" before it casts. More invasive to the ABI; only
     needed if a native sentinel must legitimately travel over ingress (it
     should not for Tier A).
-- **Accept:** a remote/native-tagged message delivered via **each** remote
-  ingress entry point above — pub/sub frame, service request, and response —
-  never reaches a native-casting trampoline as a live object (asan/stress
-  proves no reinterpretation); same-executor native delivery is unaffected.
+- **Accept:** a remote/native-tagged message never reaches a native-casting
+  trampoline as a live object (asan/stress proves no reinterpretation) —
+  exercised for pub/sub frame, service request, and response, and **including a
+  shared-memory gateway RPC path** to prove the guard is not tied to the
+  generic `post_*` helpers; same-executor native delivery is unaffected.
 
 ### N3a. Generator: Tier-A native fast path for topic pub/sub (same executor) — **M**
 
@@ -309,6 +335,12 @@ bytes as a live C++ object.
   response, and stream-frame trampolines: skip encode/decode when both ends
   are local and native is selected. Keep stream-end and cancellation
   semantics identical to the serialized path.
+- **Own the response past the handler return.** Per constraint 2, a native
+  unary response cannot borrow an object local to the generated dispatch —
+  PCL invokes the client callback *after* the handler returns. Give the native
+  path a per-channel owned response slot (the analogue of the serialized
+  `response_storage`), covering both the immediate `PCL_OK` reply and the
+  deferred `PCL_PENDING` / `pcl_service_respond` reply.
 - **Depends on N2b** for the same reason as N3a: the request/response/frame
   trampolines cast on the native sentinel, which is only sound once inbound
   provenance guarantees the sentinel is locally originated.
@@ -319,7 +351,9 @@ bytes as a live C++ object.
 - **Accept:** the `examples/cpp` Tactical Objects showcase runs unchanged
   under serialized routing and, under native routing, produces identical
   results with no codec calls (verify by codec-registry call count or a
-  no-codec-registered run that still succeeds locally).
+  no-codec-registered run that still succeeds locally); a unary-response
+  lifetime test (handler-scope object destroyed after return) passes under
+  asan, proving the owned response slot.
 
 ### N5. Deployment surface — selecting the native realization — **S/M**
 
@@ -381,7 +415,7 @@ bytes as a live C++ object.
 |------|-------|
 | PCL direct dispatch / envelope (Tier A) | `subprojects/PCL/include/pcl/pcl_executor.h`, `subprojects/PCL/include/pcl/pcl_types.h` (`pcl_msg_t`), `subprojects/PCL/doc/requirements/HLR.md` (PCL.022) |
 | PCL cross-thread queues (Tier B) | `subprojects/PCL/include/pcl/pcl_executor.h` — pub/sub `pcl_executor_post_incoming` (lines 111-144), RPC request `pcl_executor_post_service_request` / `_remote`, RPC response/frame `pcl_executor_post_response_msg`; `subprojects/PCL/doc/requirements/HLR.md` (PCL.025 / PCL.026) |
-| Subscriber callback ABI + dispatch provenance (N2b) | `subprojects/PCL/include/pcl/pcl_container.h` (`pcl_sub_callback_t`), `subprojects/PCL/src/pcl_executor.c` (`dispatch_incoming_now`, `route_accepts`), `subprojects/PCL/include/pcl/pcl_transport.h` (`pcl_executor_post_remote_incoming`, `pcl_executor_set_endpoint_route`) |
+| Subscriber callback ABI + dispatch provenance (N2b) | `subprojects/PCL/include/pcl/pcl_container.h` (`pcl_sub_callback_t`), `subprojects/PCL/src/pcl_executor.c` (`dispatch_incoming_now`, `route_accepts`, `pcl_executor_invoke_async` response order), `subprojects/PCL/include/pcl/pcl_transport.h` (`pcl_executor_post_remote_incoming`, `pcl_executor_set_endpoint_route`), `subprojects/PCL/src/pcl_transport_shared_memory.c` (`pcl_shm_gateway_svc_sub_cb` / `pcl_shm_gateway_stream_sub_cb` direct handler dispatch) |
 | PCL capability/route model | `subprojects/PCL/include/pcl/pcl_capabilities.h`, `subprojects/PCL/include/pcl/pcl_transport_routing.h` |
 | Generated topic pub/sub + routing | `subprojects/PYRAMID/pim/cpp/components_gen.py` (publish/subscribe helpers, `routeAll*Local`, trampolines) |
 | Generated encode/decode/publish primitives | `subprojects/PYRAMID/pim/cpp/service_impl_gen.py` (`encode*`, `decode*`, `publish*`) |
