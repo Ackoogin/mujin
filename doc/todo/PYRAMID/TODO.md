@@ -13,6 +13,7 @@ Live companion documents:
 | Document | Role |
 |----------|------|
 | [`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md) | **Live plan (2026-07-17, proposed):** coordinated breaking rename of the Request-port result/update role, wrapper, topic, manifest leg, and generated APIs from `Requirement` to `Entity`, while retaining legitimate domain requirements |
+| [`high_efficiency_process_bindings_plan.md`](../../plans/PYRAMID/high_efficiency_process_bindings_plan.md) | **Live plan (2026-07-19, proposed):** gap analysis + TODO for a native in-process payload path in the generated port bindings — distinguishes Tier A (same executor, zero-copy pointer handoff, PCL.022) from Tier B (sibling executor, native transfer over cross-thread ingress, PCL.025/026); the typed facades serialize even on local routes today |
 | [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **Live plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
 | [`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md) | **Live plan:** XSD-to-proto profile ladder; Phase 3/P1 is live-proven, while Phase 4/P2 supplies the detailed background for WS-G below |
 | [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) | Current support boundary and evidence for UCI 2.5/AMS-GRA versus formal A-GRA |
