@@ -30142,3 +30142,6993 @@ std::string toJson(const CapabilityCommandTemporalConstraintsType& msg) {
     if (msg.start_time_window.has_value()) {
         obj["start_time_window"] = nlohmann::json::parse(toJson(msg.start_time_window.value()));
     }
+    if (msg.window_on_first_only.has_value()) {
+        obj["window_on_first_only"] = msg.window_on_first_only.value();
+    }
+    if (msg.end_time_window.has_value()) {
+        obj["end_time_window"] = nlohmann::json::parse(toJson(msg.end_time_window.value()));
+    }
+    return obj.dump();
+}
+
+CapabilityCommandTemporalConstraintsType fromJson(const std::string& s, CapabilityCommandTemporalConstraintsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CapabilityCommandTemporalConstraintsType msg;
+    if (j.contains("temporal_criticality")) {
+        msg.temporal_criticality = schedulingCriticalityEnumFromString(j["temporal_criticality"].get<std::string>());
+    }
+    if (j.contains("start_time_window")) {
+        msg.start_time_window = fromJson(j["start_time_window"].dump(), static_cast<DateTimeRangeType*>(nullptr));
+    }
+    if (j.contains("window_on_first_only")) {
+        msg.window_on_first_only = j["window_on_first_only"].get<bool>();
+    }
+    if (j.contains("end_time_window")) {
+        msg.end_time_window = fromJson(j["end_time_window"].dump(), static_cast<DateTimeRangeType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const RequirementGenerationDependencyType& msg) {
+    nlohmann::json obj;
+    obj["dependency_type"] = toString(msg.dependency_type);
+    obj["dependency_extent"] = toString(msg.dependency_extent);
+    obj["earliest_time"] = msg.earliest_time;
+    obj["latest_time"] = msg.latest_time;
+    obj["reference_requirement_index"] = msg.reference_requirement_index;
+    return obj.dump();
+}
+
+RequirementGenerationDependencyType fromJson(const std::string& s, RequirementGenerationDependencyType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RequirementGenerationDependencyType msg;
+    if (j.contains("dependency_type")) msg.dependency_type = requirementDependencyEnumFromString(j["dependency_type"].get<std::string>());
+    if (j.contains("dependency_extent")) msg.dependency_extent = opConstraintTypeEnumFromString(j["dependency_extent"].get<std::string>());
+    if (j.contains("earliest_time")) msg.earliest_time = j["earliest_time"].get<std::string>();
+    if (j.contains("latest_time")) msg.latest_time = j["latest_time"].get<std::string>();
+    if (j.contains("reference_requirement_index")) msg.reference_requirement_index = j["reference_requirement_index"].get<uint32_t>();
+    return msg;
+}
+
+std::string toJson(const MA_TaskMT& msg) {
+    nlohmann::json obj;
+    obj["security_information"] = nlohmann::json::parse(toJson(msg.security_information));
+    obj["message_header"] = nlohmann::json::parse(toJson(msg.message_header));
+    if (msg.object_state.has_value()) {
+        obj["object_state"] = toString(msg.object_state.value());
+    }
+    obj["message_data"] = nlohmann::json::parse(toJson(msg.message_data));
+    return obj.dump();
+}
+
+MA_TaskMT fromJson(const std::string& s, MA_TaskMT* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_TaskMT msg;
+    if (j.contains("security_information")) msg.security_information = fromJson(j["security_information"].dump(), static_cast<SecurityInformationType*>(nullptr));
+    if (j.contains("message_header")) msg.message_header = fromJson(j["message_header"].dump(), static_cast<HeaderType*>(nullptr));
+    if (j.contains("object_state")) {
+        msg.object_state = objectStateEnumFromString(j["object_state"].get<std::string>());
+    }
+    if (j.contains("message_data")) msg.message_data = fromJson(j["message_data"].dump(), static_cast<MA_TaskMDT*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_TaskMDT& msg) {
+    nlohmann::json obj;
+    obj["task_id"] = nlohmann::json::parse(toJson(msg.task_id));
+    obj["task_type"] = nlohmann::json::parse(toJson(msg.task_type));
+    obj["task_plurality"] = toString(msg.task_plurality);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.constraint_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["constraint_id"] = arr;
+    }
+    if (msg.task_constraints.has_value()) {
+        obj["task_constraints"] = nlohmann::json::parse(toJson(msg.task_constraints.value()));
+    }
+    if (msg.task_guidance.has_value()) {
+        obj["task_guidance"] = nlohmann::json::parse(toJson(msg.task_guidance.value()));
+    }
+    if (msg.metadata.has_value()) {
+        obj["metadata"] = nlohmann::json::parse(toJson(msg.metadata.value()));
+    }
+    return obj.dump();
+}
+
+MA_TaskMDT fromJson(const std::string& s, MA_TaskMDT* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_TaskMDT msg;
+    if (j.contains("task_id")) msg.task_id = fromJson(j["task_id"].dump(), static_cast<TaskID_Type*>(nullptr));
+    if (j.contains("task_type")) msg.task_type = fromJson(j["task_type"].dump(), static_cast<MA_TaskType*>(nullptr));
+    if (j.contains("task_plurality")) msg.task_plurality = mA_TaskPluralityEnumFromString(j["task_plurality"].get<std::string>());
+    if (j.contains("constraint_id")) {
+        for (const auto& v : j["constraint_id"]) {
+            msg.constraint_id.push_back(fromJson(v.dump(), static_cast<MA_ConstraintID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("task_constraints")) {
+        msg.task_constraints = fromJson(j["task_constraints"].dump(), static_cast<MA_RequirementConstraintsType*>(nullptr));
+    }
+    if (j.contains("task_guidance")) {
+        msg.task_guidance = fromJson(j["task_guidance"].dump(), static_cast<RequirementGuidanceType*>(nullptr));
+    }
+    if (j.contains("metadata")) {
+        msg.metadata = fromJson(j["metadata"].dump(), static_cast<RequirementMetadataType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_TaskType& msg) {
+    nlohmann::json obj;
+    if (msg.air_sample.has_value()) {
+        obj["air_sample"] = nlohmann::json::parse(toJson(msg.air_sample.value()));
+    }
+    if (msg.amti.has_value()) {
+        obj["amti"] = nlohmann::json::parse(toJson(msg.amti.value()));
+    }
+    if (msg.ao.has_value()) {
+        obj["ao"] = nlohmann::json::parse(toJson(msg.ao.value()));
+    }
+    if (msg.cap.has_value()) {
+        obj["cap"] = nlohmann::json::parse(toJson(msg.cap.value()));
+    }
+    if (msg.cargo_delivery.has_value()) {
+        obj["cargo_delivery"] = nlohmann::json::parse(toJson(msg.cargo_delivery.value()));
+    }
+    if (msg.comint.has_value()) {
+        obj["comint"] = nlohmann::json::parse(toJson(msg.comint.value()));
+    }
+    if (msg.comm_relay.has_value()) {
+        obj["comm_relay"] = nlohmann::json::parse(toJson(msg.comm_relay.value()));
+    }
+    if (msg.counter_space.has_value()) {
+        obj["counter_space"] = nlohmann::json::parse(toJson(msg.counter_space.value()));
+    }
+    if (msg.escort.has_value()) {
+        obj["escort"] = nlohmann::json::parse(toJson(msg.escort.value()));
+    }
+    if (msg.ea.has_value()) {
+        obj["ea"] = nlohmann::json::parse(toJson(msg.ea.value()));
+    }
+    if (msg.esm.has_value()) {
+        obj["esm"] = nlohmann::json::parse(toJson(msg.esm.value()));
+    }
+    if (msg.flight.has_value()) {
+        obj["flight"] = nlohmann::json::parse(toJson(msg.flight.value()));
+    }
+    if (msg.jettison.has_value()) {
+        obj["jettison"] = nlohmann::json::parse(toJson(msg.jettison.value()));
+    }
+    if (msg.orbit_change.has_value()) {
+        obj["orbit_change"] = nlohmann::json::parse(toJson(msg.orbit_change.value()));
+    }
+    if (msg.orbital_surveillance.has_value()) {
+        obj["orbital_surveillance"] = nlohmann::json::parse(toJson(msg.orbital_surveillance.value()));
+    }
+    if (msg.orbital_surveillance_sensor.has_value()) {
+        obj["orbital_surveillance_sensor"] = nlohmann::json::parse(toJson(msg.orbital_surveillance_sensor.value()));
+    }
+    if (msg.po.has_value()) {
+        obj["po"] = nlohmann::json::parse(toJson(msg.po.value()));
+    }
+    if (msg.refuel.has_value()) {
+        obj["refuel"] = nlohmann::json::parse(toJson(msg.refuel.value()));
+    }
+    if (msg.sar.has_value()) {
+        obj["sar"] = nlohmann::json::parse(toJson(msg.sar.value()));
+    }
+    if (msg.smti.has_value()) {
+        obj["smti"] = nlohmann::json::parse(toJson(msg.smti.value()));
+    }
+    if (msg.strike.has_value()) {
+        obj["strike"] = nlohmann::json::parse(toJson(msg.strike.value()));
+    }
+    if (msg.system_deployment.has_value()) {
+        obj["system_deployment"] = nlohmann::json::parse(toJson(msg.system_deployment.value()));
+    }
+    if (msg.tactical_order.has_value()) {
+        obj["tactical_order"] = nlohmann::json::parse(toJson(msg.tactical_order.value()));
+    }
+    if (msg.weather_radar.has_value()) {
+        obj["weather_radar"] = nlohmann::json::parse(toJson(msg.weather_radar.value()));
+    }
+    return obj.dump();
+}
+
+MA_TaskType fromJson(const std::string& s, MA_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_TaskType msg;
+    if (j.contains("air_sample")) {
+        msg.air_sample = fromJson(j["air_sample"].dump(), static_cast<AirSampleTaskType*>(nullptr));
+    }
+    if (j.contains("amti")) {
+        msg.amti = fromJson(j["amti"].dump(), static_cast<AMTI_TaskType*>(nullptr));
+    }
+    if (j.contains("ao")) {
+        msg.ao = fromJson(j["ao"].dump(), static_cast<AO_TaskType*>(nullptr));
+    }
+    if (j.contains("cap")) {
+        msg.cap = fromJson(j["cap"].dump(), static_cast<MA_CAP_TaskType*>(nullptr));
+    }
+    if (j.contains("cargo_delivery")) {
+        msg.cargo_delivery = fromJson(j["cargo_delivery"].dump(), static_cast<CargoDeliveryTaskType*>(nullptr));
+    }
+    if (j.contains("comint")) {
+        msg.comint = fromJson(j["comint"].dump(), static_cast<COMINT_TaskType*>(nullptr));
+    }
+    if (j.contains("comm_relay")) {
+        msg.comm_relay = fromJson(j["comm_relay"].dump(), static_cast<CommRelayTaskType*>(nullptr));
+    }
+    if (j.contains("counter_space")) {
+        msg.counter_space = fromJson(j["counter_space"].dump(), static_cast<CounterSpaceTaskType*>(nullptr));
+    }
+    if (j.contains("escort")) {
+        msg.escort = fromJson(j["escort"].dump(), static_cast<MA_EscortTaskType*>(nullptr));
+    }
+    if (j.contains("ea")) {
+        msg.ea = fromJson(j["ea"].dump(), static_cast<EA_TaskType*>(nullptr));
+    }
+    if (j.contains("esm")) {
+        msg.esm = fromJson(j["esm"].dump(), static_cast<ESM_TaskType*>(nullptr));
+    }
+    if (j.contains("flight")) {
+        msg.flight = fromJson(j["flight"].dump(), static_cast<MA_FlightTaskType*>(nullptr));
+    }
+    if (j.contains("jettison")) {
+        msg.jettison = fromJson(j["jettison"].dump(), static_cast<MA_JettisonTaskType*>(nullptr));
+    }
+    if (j.contains("orbit_change")) {
+        msg.orbit_change = fromJson(j["orbit_change"].dump(), static_cast<OrbitChangeTaskType*>(nullptr));
+    }
+    if (j.contains("orbital_surveillance")) {
+        msg.orbital_surveillance = fromJson(j["orbital_surveillance"].dump(), static_cast<OrbitalSurveillanceTaskType*>(nullptr));
+    }
+    if (j.contains("orbital_surveillance_sensor")) {
+        msg.orbital_surveillance_sensor = fromJson(j["orbital_surveillance_sensor"].dump(), static_cast<OrbitalSurveillanceSensorTaskType*>(nullptr));
+    }
+    if (j.contains("po")) {
+        msg.po = fromJson(j["po"].dump(), static_cast<PO_TaskType*>(nullptr));
+    }
+    if (j.contains("refuel")) {
+        msg.refuel = fromJson(j["refuel"].dump(), static_cast<RefuelTaskType*>(nullptr));
+    }
+    if (j.contains("sar")) {
+        msg.sar = fromJson(j["sar"].dump(), static_cast<SAR_TaskType*>(nullptr));
+    }
+    if (j.contains("smti")) {
+        msg.smti = fromJson(j["smti"].dump(), static_cast<SMTI_TaskType*>(nullptr));
+    }
+    if (j.contains("strike")) {
+        msg.strike = fromJson(j["strike"].dump(), static_cast<StrikeTaskType*>(nullptr));
+    }
+    if (j.contains("system_deployment")) {
+        msg.system_deployment = fromJson(j["system_deployment"].dump(), static_cast<SystemDeploymentTaskType*>(nullptr));
+    }
+    if (j.contains("tactical_order")) {
+        msg.tactical_order = fromJson(j["tactical_order"].dump(), static_cast<TacticalOrderTaskType*>(nullptr));
+    }
+    if (j.contains("weather_radar")) {
+        msg.weather_radar = fromJson(j["weather_radar"].dump(), static_cast<WeatherRadarTaskType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const AirSampleTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    return obj.dump();
+}
+
+AirSampleTaskType fromJson(const std::string& s, AirSampleTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AirSampleTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = airSampleCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<ProductOutputCommandBasicType*>(nullptr)));
+        }
+    }
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<TargetType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const AMTI_TaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.sub_capability_type) {
+            arr.push_back(toString(v));
+        }
+        obj["sub_capability_type"] = arr;
+    }
+    if (msg.collection_policy.has_value()) {
+        obj["collection_policy"] = toString(msg.collection_policy.value());
+    }
+    if (msg.collection_constraints.has_value()) {
+        obj["collection_constraints"] = nlohmann::json::parse(toJson(msg.collection_constraints.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.target) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["target"] = arr;
+    }
+    return obj.dump();
+}
+
+AMTI_TaskType fromJson(const std::string& s, AMTI_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AMTI_TaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = aMTI_CapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("sub_capability_type")) {
+        for (const auto& v : j["sub_capability_type"]) {
+            msg.sub_capability_type.push_back(aMTI_SubCapabilityEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("collection_policy")) {
+        msg.collection_policy = collectionPolicyEnumFromString(j["collection_policy"].get<std::string>());
+    }
+    if (j.contains("collection_constraints")) {
+        msg.collection_constraints = fromJson(j["collection_constraints"].dump(), static_cast<AMTI_CollectionConstraintsType*>(nullptr));
+    }
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<ProductOutputCommandBasicType*>(nullptr)));
+        }
+    }
+    if (j.contains("target")) {
+        for (const auto& v : j["target"]) {
+            msg.target.push_back(fromJson(v.dump(), static_cast<AMTI_TargetType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const AMTI_TargetType& msg) {
+    nlohmann::json obj;
+    if (msg.air_volume_sensor_referenced.has_value()) {
+        obj["air_volume_sensor_referenced"] = nlohmann::json::parse(toJson(msg.air_volume_sensor_referenced.value()));
+    }
+    if (msg.air_volume_location.has_value()) {
+        obj["air_volume_location"] = nlohmann::json::parse(toJson(msg.air_volume_location.value()));
+    }
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    return obj.dump();
+}
+
+AMTI_TargetType fromJson(const std::string& s, AMTI_TargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AMTI_TargetType msg;
+    if (j.contains("air_volume_sensor_referenced")) {
+        msg.air_volume_sensor_referenced = fromJson(j["air_volume_sensor_referenced"].dump(), static_cast<AirVolumeSensorReferencedType*>(nullptr));
+    }
+    if (j.contains("air_volume_location")) {
+        msg.air_volume_location = fromJson(j["air_volume_location"].dump(), static_cast<ZoneType*>(nullptr));
+    }
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const AO_TaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    if (msg.supported_code.has_value()) {
+        obj["supported_code"] = nlohmann::json::parse(toJson(msg.supported_code.value()));
+    }
+    if (msg.emission_constraints.has_value()) {
+        obj["emission_constraints"] = nlohmann::json::parse(toJson(msg.emission_constraints.value()));
+    }
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    return obj.dump();
+}
+
+AO_TaskType fromJson(const std::string& s, AO_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AO_TaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = aO_CapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("supported_code")) {
+        msg.supported_code = fromJson(j["supported_code"].dump(), static_cast<AO_CodeType*>(nullptr));
+    }
+    if (j.contains("emission_constraints")) {
+        msg.emission_constraints = fromJson(j["emission_constraints"].dump(), static_cast<OpticalCollectionConstraintsType*>(nullptr));
+    }
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<TargetType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_CAP_TaskType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.orbits) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["orbits"] = arr;
+    }
+    if (msg.assets_per_orbit.has_value()) {
+        obj["assets_per_orbit"] = msg.assets_per_orbit.value();
+    }
+    if (msg.optimization_strategy.has_value()) {
+        obj["optimization_strategy"] = toString(msg.optimization_strategy.value());
+    }
+    if (msg.synchronization_strategy.has_value()) {
+        obj["synchronization_strategy"] = nlohmann::json::parse(toJson(msg.synchronization_strategy.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.keepin_zone_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["keepin_zone_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.hostile_zone_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["hostile_zone_id"] = arr;
+    }
+    if (msg.cap_speed.has_value()) {
+        obj["cap_speed"] = nlohmann::json::parse(toJson(msg.cap_speed.value()));
+    }
+    return obj.dump();
+}
+
+MA_CAP_TaskType fromJson(const std::string& s, MA_CAP_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CAP_TaskType msg;
+    if (j.contains("orbits")) {
+        for (const auto& v : j["orbits"]) {
+            msg.orbits.push_back(fromJson(v.dump(), static_cast<MA_OrbitType*>(nullptr)));
+        }
+    }
+    if (j.contains("assets_per_orbit")) {
+        msg.assets_per_orbit = j["assets_per_orbit"].get<uint32_t>();
+    }
+    if (j.contains("optimization_strategy")) {
+        msg.optimization_strategy = mA_CAPOptimizationEnumFromString(j["optimization_strategy"].get<std::string>());
+    }
+    if (j.contains("synchronization_strategy")) {
+        msg.synchronization_strategy = fromJson(j["synchronization_strategy"].dump(), static_cast<MA_SynchronizationChoiceType*>(nullptr));
+    }
+    if (j.contains("keepin_zone_id")) {
+        for (const auto& v : j["keepin_zone_id"]) {
+            msg.keepin_zone_id.push_back(fromJson(v.dump(), static_cast<OpZoneID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("hostile_zone_id")) {
+        for (const auto& v : j["hostile_zone_id"]) {
+            msg.hostile_zone_id.push_back(fromJson(v.dump(), static_cast<OpZoneID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("cap_speed")) {
+        msg.cap_speed = fromJson(j["cap_speed"].dump(), static_cast<PathSegmentSpeedType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_OrbitType& msg) {
+    nlohmann::json obj;
+    obj["orbit_shape"] = nlohmann::json::parse(toJson(msg.orbit_shape));
+    if (msg.duration.has_value()) {
+        obj["duration"] = nlohmann::json::parse(toJson(msg.duration.value()));
+    }
+    if (msg.entry_point.has_value()) {
+        obj["entry_point"] = nlohmann::json::parse(toJson(msg.entry_point.value()));
+    }
+    if (msg.exit_point.has_value()) {
+        obj["exit_point"] = nlohmann::json::parse(toJson(msg.exit_point.value()));
+    }
+    return obj.dump();
+}
+
+MA_OrbitType fromJson(const std::string& s, MA_OrbitType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_OrbitType msg;
+    if (j.contains("orbit_shape")) msg.orbit_shape = fromJson(j["orbit_shape"].dump(), static_cast<MA_OrbitShapeType*>(nullptr));
+    if (j.contains("duration")) {
+        msg.duration = fromJson(j["duration"].dump(), static_cast<OrbitDurationType*>(nullptr));
+    }
+    if (j.contains("entry_point")) {
+        msg.entry_point = fromJson(j["entry_point"].dump(), static_cast<PointChoiceType*>(nullptr));
+    }
+    if (j.contains("exit_point")) {
+        msg.exit_point = fromJson(j["exit_point"].dump(), static_cast<PointChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_OrbitShapeType& msg) {
+    nlohmann::json obj;
+    if (msg.fix_point.has_value()) {
+        obj["fix_point"] = nlohmann::json::parse(toJson(msg.fix_point.value()));
+    }
+    if (msg.circle.has_value()) {
+        obj["circle"] = nlohmann::json::parse(toJson(msg.circle.value()));
+    }
+    return obj.dump();
+}
+
+MA_OrbitShapeType fromJson(const std::string& s, MA_OrbitShapeType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_OrbitShapeType msg;
+    if (j.contains("fix_point")) {
+        msg.fix_point = fromJson(j["fix_point"].dump(), static_cast<MA_FixOrbitType*>(nullptr));
+    }
+    if (j.contains("circle")) {
+        msg.circle = fromJson(j["circle"].dump(), static_cast<MA_CircleOrbitType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_FixOrbitType& msg) {
+    nlohmann::json obj;
+    obj["point"] = nlohmann::json::parse(toJson(msg.point));
+    obj["inbound_direction"] = nlohmann::json::parse(toJson(msg.inbound_direction));
+    obj["leg_length"] = nlohmann::json::parse(toJson(msg.leg_length));
+    obj["turn_geometry"] = nlohmann::json::parse(toJson(msg.turn_geometry));
+    obj["turn_direction"] = toString(msg.turn_direction);
+    return obj.dump();
+}
+
+MA_FixOrbitType fromJson(const std::string& s, MA_FixOrbitType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_FixOrbitType msg;
+    if (j.contains("point")) msg.point = fromJson(j["point"].dump(), static_cast<PointChoiceType*>(nullptr));
+    if (j.contains("inbound_direction")) msg.inbound_direction = fromJson(j["inbound_direction"].dump(), static_cast<MA_DirectionChoiceType*>(nullptr));
+    if (j.contains("leg_length")) msg.leg_length = fromJson(j["leg_length"].dump(), static_cast<IntervalChoiceType*>(nullptr));
+    if (j.contains("turn_geometry")) msg.turn_geometry = fromJson(j["turn_geometry"].dump(), static_cast<TurnGeometryChoiceType*>(nullptr));
+    if (j.contains("turn_direction")) msg.turn_direction = relativeDirectionEnumFromString(j["turn_direction"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const MA_DirectionChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.heading.has_value()) {
+        obj["heading"] = nlohmann::json::parse(toJson(msg.heading.value()));
+    }
+    if (msg.course.has_value()) {
+        obj["course"] = nlohmann::json::parse(toJson(msg.course.value()));
+    }
+    return obj.dump();
+}
+
+MA_DirectionChoiceType fromJson(const std::string& s, MA_DirectionChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_DirectionChoiceType msg;
+    if (j.contains("heading")) {
+        msg.heading = fromJson(j["heading"].dump(), static_cast<MA_DirectionReferenceType*>(nullptr));
+    }
+    if (j.contains("course")) {
+        msg.course = fromJson(j["course"].dump(), static_cast<MA_DirectionReferenceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_DirectionReferenceType& msg) {
+    nlohmann::json obj;
+    obj["value"] = msg.value;
+    obj["reference"] = toString(msg.reference);
+    return obj.dump();
+}
+
+MA_DirectionReferenceType fromJson(const std::string& s, MA_DirectionReferenceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_DirectionReferenceType msg;
+    if (j.contains("value")) msg.value = j["value"].get<double>();
+    if (j.contains("reference")) msg.reference = mA_HeadingReferenceEnumFromString(j["reference"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const IntervalChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.distance.has_value()) {
+        obj["distance"] = msg.distance.value();
+    }
+    if (msg.duration.has_value()) {
+        obj["duration"] = msg.duration.value();
+    }
+    return obj.dump();
+}
+
+IntervalChoiceType fromJson(const std::string& s, IntervalChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    IntervalChoiceType msg;
+    if (j.contains("distance")) {
+        msg.distance = j["distance"].get<double>();
+    }
+    if (j.contains("duration")) {
+        msg.duration = j["duration"].get<std::string>();
+    }
+    return msg;
+}
+
+std::string toJson(const TurnGeometryChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.turn_radius.has_value()) {
+        obj["turn_radius"] = msg.turn_radius.value();
+    }
+    if (msg.bank_angle.has_value()) {
+        obj["bank_angle"] = msg.bank_angle.value();
+    }
+    return obj.dump();
+}
+
+TurnGeometryChoiceType fromJson(const std::string& s, TurnGeometryChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    TurnGeometryChoiceType msg;
+    if (j.contains("turn_radius")) {
+        msg.turn_radius = j["turn_radius"].get<double>();
+    }
+    if (j.contains("bank_angle")) {
+        msg.bank_angle = j["bank_angle"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const MA_CircleOrbitType& msg) {
+    nlohmann::json obj;
+    obj["orbit_type"] = toString(msg.orbit_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.circle) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["circle"] = arr;
+    }
+    obj["turn_direction"] = toString(msg.turn_direction);
+    return obj.dump();
+}
+
+MA_CircleOrbitType fromJson(const std::string& s, MA_CircleOrbitType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CircleOrbitType msg;
+    if (j.contains("orbit_type")) msg.orbit_type = orbitEnumFromString(j["orbit_type"].get<std::string>());
+    if (j.contains("circle")) {
+        for (const auto& v : j["circle"]) {
+            msg.circle.push_back(fromJson(v.dump(), static_cast<CircleType*>(nullptr)));
+        }
+    }
+    if (j.contains("turn_direction")) msg.turn_direction = relativeDirectionEnumFromString(j["turn_direction"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const CircleType& msg) {
+    nlohmann::json obj;
+    obj["point_choice"] = nlohmann::json::parse(toJson(msg.point_choice));
+    obj["radius"] = msg.radius;
+    return obj.dump();
+}
+
+CircleType fromJson(const std::string& s, CircleType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CircleType msg;
+    if (j.contains("point_choice")) msg.point_choice = fromJson(j["point_choice"].dump(), static_cast<PointChoiceType*>(nullptr));
+    if (j.contains("radius")) msg.radius = j["radius"].get<double>();
+    return msg;
+}
+
+std::string toJson(const OrbitDurationType& msg) {
+    nlohmann::json obj;
+    if (msg.time.has_value()) {
+        obj["time"] = msg.time.value();
+    }
+    if (msg.number_of_orbits.has_value()) {
+        obj["number_of_orbits"] = msg.number_of_orbits.value();
+    }
+    return obj.dump();
+}
+
+OrbitDurationType fromJson(const std::string& s, OrbitDurationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitDurationType msg;
+    if (j.contains("time")) {
+        msg.time = j["time"].get<std::string>();
+    }
+    if (j.contains("number_of_orbits")) {
+        msg.number_of_orbits = j["number_of_orbits"].get<uint32_t>();
+    }
+    return msg;
+}
+
+std::string toJson(const MA_SynchronizationChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.strategy.has_value()) {
+        obj["strategy"] = toString(msg.strategy.value());
+    }
+    if (msg.relative_positioning.has_value()) {
+        obj["relative_positioning"] = nlohmann::json::parse(toJson(msg.relative_positioning.value()));
+    }
+    return obj.dump();
+}
+
+MA_SynchronizationChoiceType fromJson(const std::string& s, MA_SynchronizationChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_SynchronizationChoiceType msg;
+    if (j.contains("strategy")) {
+        msg.strategy = mA_CAPSynchronizationTypeEnumFromString(j["strategy"].get<std::string>());
+    }
+    if (j.contains("relative_positioning")) {
+        msg.relative_positioning = fromJson(j["relative_positioning"].dump(), static_cast<MA_SynchronizationChoiceType_RelativePositioning_List*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_CAPRelativePositionType& msg) {
+    nlohmann::json obj;
+    obj["asset_id"] = nlohmann::json::parse(toJson(msg.asset_id));
+    obj["reference_id"] = nlohmann::json::parse(toJson(msg.reference_id));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.reference_point) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["reference_point"] = arr;
+    }
+    return obj.dump();
+}
+
+MA_CAPRelativePositionType fromJson(const std::string& s, MA_CAPRelativePositionType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CAPRelativePositionType msg;
+    if (j.contains("asset_id")) msg.asset_id = fromJson(j["asset_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("reference_id")) msg.reference_id = fromJson(j["reference_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("reference_point")) {
+        for (const auto& v : j["reference_point"]) {
+            msg.reference_point.push_back(fromJson(v.dump(), static_cast<MA_CAPReferencePointType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const MA_CAPReferencePointType& msg) {
+    nlohmann::json obj;
+    obj["leg_index"] = toString(msg.leg_index);
+    obj["arrival_offset"] = nlohmann::json::parse(toJson(msg.arrival_offset));
+    return obj.dump();
+}
+
+MA_CAPReferencePointType fromJson(const std::string& s, MA_CAPReferencePointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CAPReferencePointType msg;
+    if (j.contains("leg_index")) msg.leg_index = mA_CAP_LegIndexEnumFromString(j["leg_index"].get<std::string>());
+    if (j.contains("arrival_offset")) msg.arrival_offset = fromJson(j["arrival_offset"].dump(), static_cast<MA_CAPOffsetType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_CAPOffsetType& msg) {
+    nlohmann::json obj;
+    if (msg.time.has_value()) {
+        obj["time"] = nlohmann::json::parse(toJson(msg.time.value()));
+    }
+    if (msg.distance.has_value()) {
+        obj["distance"] = msg.distance.value();
+    }
+    if (msg.percentof_pattern.has_value()) {
+        obj["percentof_pattern"] = msg.percentof_pattern.value();
+    }
+    return obj.dump();
+}
+
+MA_CAPOffsetType fromJson(const std::string& s, MA_CAPOffsetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CAPOffsetType msg;
+    if (j.contains("time")) {
+        msg.time = fromJson(j["time"].dump(), static_cast<DurationRangeType*>(nullptr));
+    }
+    if (j.contains("distance")) {
+        msg.distance = j["distance"].get<double>();
+    }
+    if (j.contains("percentof_pattern")) {
+        msg.percentof_pattern = j["percentof_pattern"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const MA_SynchronizationChoiceType_RelativePositioning_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+MA_SynchronizationChoiceType_RelativePositioning_List fromJson(const std::string& s, MA_SynchronizationChoiceType_RelativePositioning_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_SynchronizationChoiceType_RelativePositioning_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<MA_CAPRelativePositionType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const PathSegmentSpeedType& msg) {
+    nlohmann::json obj;
+    if (msg.speed_choice.has_value()) {
+        obj["speed_choice"] = nlohmann::json::parse(toJson(msg.speed_choice.value()));
+    }
+    if (msg.speed_optimization.has_value()) {
+        obj["speed_optimization"] = toString(msg.speed_optimization.value());
+    }
+    return obj.dump();
+}
+
+PathSegmentSpeedType fromJson(const std::string& s, PathSegmentSpeedType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PathSegmentSpeedType msg;
+    if (j.contains("speed_choice")) {
+        msg.speed_choice = fromJson(j["speed_choice"].dump(), static_cast<PathSegmentSpeedChoiceType*>(nullptr));
+    }
+    if (j.contains("speed_optimization")) {
+        msg.speed_optimization = speedOptimizationEnumFromString(j["speed_optimization"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const PathSegmentSpeedChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.speed_value.has_value()) {
+        obj["speed_value"] = nlohmann::json::parse(toJson(msg.speed_value.value()));
+    }
+    if (msg.mach_value.has_value()) {
+        obj["mach_value"] = msg.mach_value.value();
+    }
+    return obj.dump();
+}
+
+PathSegmentSpeedChoiceType fromJson(const std::string& s, PathSegmentSpeedChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PathSegmentSpeedChoiceType msg;
+    if (j.contains("speed_value")) {
+        msg.speed_value = fromJson(j["speed_value"].dump(), static_cast<PathSegmentSpeedValueType*>(nullptr));
+    }
+    if (j.contains("mach_value")) {
+        msg.mach_value = j["mach_value"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const PathSegmentSpeedValueType& msg) {
+    nlohmann::json obj;
+    obj["value"] = msg.value;
+    obj["reference"] = toString(msg.reference);
+    return obj.dump();
+}
+
+PathSegmentSpeedValueType fromJson(const std::string& s, PathSegmentSpeedValueType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PathSegmentSpeedValueType msg;
+    if (j.contains("value")) msg.value = j["value"].get<double>();
+    if (j.contains("reference")) msg.reference = speedReferenceEnumFromString(j["reference"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const CargoDeliveryTaskType& msg) {
+    nlohmann::json obj;
+    if (msg.pickup.has_value()) {
+        obj["pickup"] = nlohmann::json::parse(toJson(msg.pickup.value()));
+    }
+    if (msg.dropoff.has_value()) {
+        obj["dropoff"] = nlohmann::json::parse(toJson(msg.dropoff.value()));
+    }
+    return obj.dump();
+}
+
+CargoDeliveryTaskType fromJson(const std::string& s, CargoDeliveryTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CargoDeliveryTaskType msg;
+    if (j.contains("pickup")) {
+        msg.pickup = fromJson(j["pickup"].dump(), static_cast<CargoTransitionType*>(nullptr));
+    }
+    if (j.contains("dropoff")) {
+        msg.dropoff = fromJson(j["dropoff"].dump(), static_cast<CargoDeliveryTaskType_Dropoff_List*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const CargoTransitionType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.cargo_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["cargo_id"] = arr;
+    }
+    obj["vehicle_control_strategy"] = toString(msg.vehicle_control_strategy);
+    obj["load_unload_strategy"] = toString(msg.load_unload_strategy);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.transition_location) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["transition_location"] = arr;
+    }
+    if (msg.egress_constraint.has_value()) {
+        obj["egress_constraint"] = nlohmann::json::parse(toJson(msg.egress_constraint.value()));
+    }
+    if (msg.ingress_constraint.has_value()) {
+        obj["ingress_constraint"] = nlohmann::json::parse(toJson(msg.ingress_constraint.value()));
+    }
+    return obj.dump();
+}
+
+CargoTransitionType fromJson(const std::string& s, CargoTransitionType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CargoTransitionType msg;
+    if (j.contains("cargo_id")) {
+        for (const auto& v : j["cargo_id"]) {
+            msg.cargo_id.push_back(fromJson(v.dump(), static_cast<CargoID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("vehicle_control_strategy")) msg.vehicle_control_strategy = vehicleControlStrategyEnumFromString(j["vehicle_control_strategy"].get<std::string>());
+    if (j.contains("load_unload_strategy")) msg.load_unload_strategy = cargoDeliverySubCapabilityEnumFromString(j["load_unload_strategy"].get<std::string>());
+    if (j.contains("transition_location")) {
+        for (const auto& v : j["transition_location"]) {
+            msg.transition_location.push_back(fromJson(v.dump(), static_cast<Point3D_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("egress_constraint")) {
+        msg.egress_constraint = fromJson(j["egress_constraint"].dump(), static_cast<SectorType*>(nullptr));
+    }
+    if (j.contains("ingress_constraint")) {
+        msg.ingress_constraint = fromJson(j["ingress_constraint"].dump(), static_cast<SectorType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const CargoID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+CargoID_Type fromJson(const std::string& s, CargoID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CargoID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const SectorType& msg) {
+    nlohmann::json obj;
+    obj["min"] = msg.min;
+    obj["max"] = msg.max;
+    obj["range"] = msg.range;
+    return obj.dump();
+}
+
+SectorType fromJson(const std::string& s, SectorType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SectorType msg;
+    if (j.contains("min")) msg.min = j["min"].get<double>();
+    if (j.contains("max")) msg.max = j["max"].get<double>();
+    if (j.contains("range")) msg.range = j["range"].get<double>();
+    return msg;
+}
+
+std::string toJson(const CargoDeliveryTaskType_Dropoff_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+CargoDeliveryTaskType_Dropoff_List fromJson(const std::string& s, CargoDeliveryTaskType_Dropoff_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CargoDeliveryTaskType_Dropoff_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<CargoTransitionType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_TaskType& msg) {
+    nlohmann::json obj;
+    obj["sub_capability_type"] = toString(msg.sub_capability_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    obj["sub_capability_details"] = nlohmann::json::parse(toJson(msg.sub_capability_details));
+    return obj.dump();
+}
+
+COMINT_TaskType fromJson(const std::string& s, COMINT_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_TaskType msg;
+    if (j.contains("sub_capability_type")) msg.sub_capability_type = cOMINT_SubCapabilityEnumFromString(j["sub_capability_type"].get<std::string>());
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<ProductOutputCommandBasicType*>(nullptr)));
+        }
+    }
+    if (j.contains("sub_capability_details")) msg.sub_capability_details = fromJson(j["sub_capability_details"].dump(), static_cast<COMINT_SubcapabilityChoiceType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const COMINT_SubcapabilityChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.acquisition.has_value()) {
+        obj["acquisition"] = nlohmann::json::parse(toJson(msg.acquisition.value()));
+    }
+    if (msg.identification.has_value()) {
+        obj["identification"] = nlohmann::json::parse(toJson(msg.identification.value()));
+    }
+    if (msg.geolocation.has_value()) {
+        obj["geolocation"] = nlohmann::json::parse(toJson(msg.geolocation.value()));
+    }
+    if (msg.measurement.has_value()) {
+        obj["measurement"] = nlohmann::json::parse(toJson(msg.measurement.value()));
+    }
+    if (msg.data_collect.has_value()) {
+        obj["data_collect"] = nlohmann::json::parse(toJson(msg.data_collect.value()));
+    }
+    return obj.dump();
+}
+
+COMINT_SubcapabilityChoiceType fromJson(const std::string& s, COMINT_SubcapabilityChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_SubcapabilityChoiceType msg;
+    if (j.contains("acquisition")) {
+        msg.acquisition = fromJson(j["acquisition"].dump(), static_cast<COMINT_SubcapabilityAcquisitionType*>(nullptr));
+    }
+    if (j.contains("identification")) {
+        msg.identification = fromJson(j["identification"].dump(), static_cast<COMINT_SubcapabilityIdentificationType*>(nullptr));
+    }
+    if (j.contains("geolocation")) {
+        msg.geolocation = fromJson(j["geolocation"].dump(), static_cast<COMINT_SubcapabilityGeolocationType*>(nullptr));
+    }
+    if (j.contains("measurement")) {
+        msg.measurement = fromJson(j["measurement"].dump(), static_cast<COMINT_SubcapabilityMeasurementType*>(nullptr));
+    }
+    if (j.contains("data_collect")) {
+        msg.data_collect = fromJson(j["data_collect"].dump(), static_cast<COMINT_SubcapabilityDataCollectType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_SubcapabilityAcquisitionType& msg) {
+    nlohmann::json obj;
+    if (msg.target_emitter_data.has_value()) {
+        obj["target_emitter_data"] = nlohmann::json::parse(toJson(msg.target_emitter_data.value()));
+    }
+    if (msg.target_location_data.has_value()) {
+        obj["target_location_data"] = nlohmann::json::parse(toJson(msg.target_location_data.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.frequency_restriction) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["frequency_restriction"] = arr;
+    }
+    return obj.dump();
+}
+
+COMINT_SubcapabilityAcquisitionType fromJson(const std::string& s, COMINT_SubcapabilityAcquisitionType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_SubcapabilityAcquisitionType msg;
+    if (j.contains("target_emitter_data")) {
+        msg.target_emitter_data = fromJson(j["target_emitter_data"].dump(), static_cast<COMINT_AcquisitionTargetType*>(nullptr));
+    }
+    if (j.contains("target_location_data")) {
+        msg.target_location_data = fromJson(j["target_location_data"].dump(), static_cast<COMINT_SubcapabilityTargetLocationDataType*>(nullptr));
+    }
+    if (j.contains("frequency_restriction")) {
+        for (const auto& v : j["frequency_restriction"]) {
+            msg.frequency_restriction.push_back(fromJson(v.dump(), static_cast<FrequencyRangeType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_AcquisitionTargetType& msg) {
+    nlohmann::json obj;
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    if (msg.priority.has_value()) {
+        obj["priority"] = nlohmann::json::parse(toJson(msg.priority.value()));
+    }
+    return obj.dump();
+}
+
+COMINT_AcquisitionTargetType fromJson(const std::string& s, COMINT_AcquisitionTargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_AcquisitionTargetType msg;
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<COMINT_TargetType*>(nullptr));
+    if (j.contains("priority")) {
+        msg.priority = fromJson(j["priority"].dump(), static_cast<ComparableRankingType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_TargetType& msg) {
+    nlohmann::json obj;
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    if (msg.emitter_type.has_value()) {
+        obj["emitter_type"] = nlohmann::json::parse(toJson(msg.emitter_type.value()));
+    }
+    if (msg.specific_emitter.has_value()) {
+        obj["specific_emitter"] = nlohmann::json::parse(toJson(msg.specific_emitter.value()));
+    }
+    if (msg.signal_description.has_value()) {
+        obj["signal_description"] = nlohmann::json::parse(toJson(msg.signal_description.value()));
+    }
+    if (msg.signal_id.has_value()) {
+        obj["signal_id"] = nlohmann::json::parse(toJson(msg.signal_id.value()));
+    }
+    if (msg.target_class.has_value()) {
+        obj["target_class"] = nlohmann::json::parse(toJson(msg.target_class.value()));
+    }
+    return obj.dump();
+}
+
+COMINT_TargetType fromJson(const std::string& s, COMINT_TargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_TargetType msg;
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    if (j.contains("emitter_type")) {
+        msg.emitter_type = fromJson(j["emitter_type"].dump(), static_cast<EmitterIdentityType*>(nullptr));
+    }
+    if (j.contains("specific_emitter")) {
+        msg.specific_emitter = fromJson(j["specific_emitter"].dump(), static_cast<SpecificEmitterIdentityType*>(nullptr));
+    }
+    if (j.contains("signal_description")) {
+        msg.signal_description = fromJson(j["signal_description"].dump(), static_cast<SignalSummaryType*>(nullptr));
+    }
+    if (j.contains("signal_id")) {
+        msg.signal_id = fromJson(j["signal_id"].dump(), static_cast<SignalID_Type*>(nullptr));
+    }
+    if (j.contains("target_class")) {
+        msg.target_class = fromJson(j["target_class"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_SubcapabilityTargetLocationDataType& msg) {
+    nlohmann::json obj;
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    if (msg.dwell_fov.has_value()) {
+        obj["dwell_fov"] = nlohmann::json::parse(toJson(msg.dwell_fov.value()));
+    }
+    if (msg.point_target.has_value()) {
+        obj["point_target"] = nlohmann::json::parse(toJson(msg.point_target.value()));
+    }
+    return obj.dump();
+}
+
+COMINT_SubcapabilityTargetLocationDataType fromJson(const std::string& s, COMINT_SubcapabilityTargetLocationDataType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_SubcapabilityTargetLocationDataType msg;
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    if (j.contains("dwell_fov")) {
+        msg.dwell_fov = fromJson(j["dwell_fov"].dump(), static_cast<NED_ConeType*>(nullptr));
+    }
+    if (j.contains("point_target")) {
+        msg.point_target = fromJson(j["point_target"].dump(), static_cast<PointTargetType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const NED_ConeType& msg) {
+    nlohmann::json obj;
+    obj["ned_los"] = nlohmann::json::parse(toJson(msg.ned_los));
+    obj["azimuth_extents"] = msg.azimuth_extents;
+    obj["elevation_extents"] = msg.elevation_extents;
+    return obj.dump();
+}
+
+NED_ConeType fromJson(const std::string& s, NED_ConeType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    NED_ConeType msg;
+    if (j.contains("ned_los")) msg.ned_los = fromJson(j["ned_los"].dump(), static_cast<NED_LOS_Type*>(nullptr));
+    if (j.contains("azimuth_extents")) msg.azimuth_extents = j["azimuth_extents"].get<double>();
+    if (j.contains("elevation_extents")) msg.elevation_extents = j["elevation_extents"].get<double>();
+    return msg;
+}
+
+std::string toJson(const NED_LOS_Type& msg) {
+    nlohmann::json obj;
+    obj["bearing"] = msg.bearing;
+    obj["elevation"] = msg.elevation;
+    if (msg.slant_range.has_value()) {
+        obj["slant_range"] = msg.slant_range.value();
+    }
+    return obj.dump();
+}
+
+NED_LOS_Type fromJson(const std::string& s, NED_LOS_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    NED_LOS_Type msg;
+    if (j.contains("bearing")) msg.bearing = j["bearing"].get<double>();
+    if (j.contains("elevation")) msg.elevation = j["elevation"].get<double>();
+    if (j.contains("slant_range")) {
+        msg.slant_range = j["slant_range"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_SubcapabilityIdentificationType& msg) {
+    nlohmann::json obj;
+    obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id));
+    return obj.dump();
+}
+
+COMINT_SubcapabilityIdentificationType fromJson(const std::string& s, COMINT_SubcapabilityIdentificationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_SubcapabilityIdentificationType msg;
+    if (j.contains("entity_id")) msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const COMINT_SubcapabilityGeolocationType& msg) {
+    nlohmann::json obj;
+    obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id));
+    obj["geolocation_state"] = toString(msg.geolocation_state);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.geolocation_type) {
+            arr.push_back(toString(v));
+        }
+        obj["geolocation_type"] = arr;
+    }
+    return obj.dump();
+}
+
+COMINT_SubcapabilityGeolocationType fromJson(const std::string& s, COMINT_SubcapabilityGeolocationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_SubcapabilityGeolocationType msg;
+    if (j.contains("entity_id")) msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    if (j.contains("geolocation_state")) msg.geolocation_state = signalGeolocationControlEnumFromString(j["geolocation_state"].get<std::string>());
+    if (j.contains("geolocation_type")) {
+        for (const auto& v : j["geolocation_type"]) {
+            msg.geolocation_type.push_back(signalGeolocationMethodEnumFromString(v.get<std::string>()));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_SubcapabilityMeasurementType& msg) {
+    nlohmann::json obj;
+    obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id));
+    return obj.dump();
+}
+
+COMINT_SubcapabilityMeasurementType fromJson(const std::string& s, COMINT_SubcapabilityMeasurementType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_SubcapabilityMeasurementType msg;
+    if (j.contains("entity_id")) msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const COMINT_SubcapabilityDataCollectType& msg) {
+    nlohmann::json obj;
+    obj["collection"] = nlohmann::json::parse(toJson(msg.collection));
+    if (msg.target.has_value()) {
+        obj["target"] = nlohmann::json::parse(toJson(msg.target.value()));
+    }
+    return obj.dump();
+}
+
+COMINT_SubcapabilityDataCollectType fromJson(const std::string& s, COMINT_SubcapabilityDataCollectType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_SubcapabilityDataCollectType msg;
+    if (j.contains("collection")) msg.collection = fromJson(j["collection"].dump(), static_cast<COMINT_DataCollectCommandType*>(nullptr));
+    if (j.contains("target")) {
+        msg.target = fromJson(j["target"].dump(), static_cast<COMINT_SubcapabilityTargetLocationDataType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_DataCollectCommandType& msg) {
+    nlohmann::json obj;
+    obj["collection_frequency"] = nlohmann::json::parse(toJson(msg.collection_frequency));
+    obj["start_time"] = msg.start_time;
+    obj["dwell_duration"] = msg.dwell_duration;
+    if (msg.dwells.has_value()) {
+        obj["dwells"] = msg.dwells.value();
+    }
+    obj["repetition_interval"] = msg.repetition_interval;
+    if (msg.signal_bandwidth.has_value()) {
+        obj["signal_bandwidth"] = nlohmann::json::parse(toJson(msg.signal_bandwidth.value()));
+    }
+    if (msg.modulation.has_value()) {
+        obj["modulation"] = toString(msg.modulation.value());
+    }
+    if (msg.data_collect_type.has_value()) {
+        obj["data_collect_type"] = toString(msg.data_collect_type.value());
+    }
+    if (msg.sample_rate.has_value()) {
+        obj["sample_rate"] = msg.sample_rate.value();
+    }
+    if (msg.fft_points_per_sample.has_value()) {
+        obj["fft_points_per_sample"] = msg.fft_points_per_sample.value();
+    }
+    if (msg.comint_interactive.has_value()) {
+        obj["comint_interactive"] = nlohmann::json::parse(toJson(msg.comint_interactive.value()));
+    }
+    return obj.dump();
+}
+
+COMINT_DataCollectCommandType fromJson(const std::string& s, COMINT_DataCollectCommandType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_DataCollectCommandType msg;
+    if (j.contains("collection_frequency")) msg.collection_frequency = fromJson(j["collection_frequency"].dump(), static_cast<CollectionFrequencyType*>(nullptr));
+    if (j.contains("start_time")) msg.start_time = j["start_time"].get<std::string>();
+    if (j.contains("dwell_duration")) msg.dwell_duration = j["dwell_duration"].get<std::string>();
+    if (j.contains("dwells")) {
+        msg.dwells = j["dwells"].get<uint32_t>();
+    }
+    if (j.contains("repetition_interval")) msg.repetition_interval = j["repetition_interval"].get<std::string>();
+    if (j.contains("signal_bandwidth")) {
+        msg.signal_bandwidth = fromJson(j["signal_bandwidth"].dump(), static_cast<FrequencyRangeType*>(nullptr));
+    }
+    if (j.contains("modulation")) {
+        msg.modulation = modulationEnumFromString(j["modulation"].get<std::string>());
+    }
+    if (j.contains("data_collect_type")) {
+        msg.data_collect_type = signalTypeEnumFromString(j["data_collect_type"].get<std::string>());
+    }
+    if (j.contains("sample_rate")) {
+        msg.sample_rate = j["sample_rate"].get<float>();
+    }
+    if (j.contains("fft_points_per_sample")) {
+        msg.fft_points_per_sample = j["fft_points_per_sample"].get<int32_t>();
+    }
+    if (j.contains("comint_interactive")) {
+        msg.comint_interactive = fromJson(j["comint_interactive"].dump(), static_cast<COMINT_InteractiveType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const CollectionFrequencyType& msg) {
+    nlohmann::json obj;
+    obj["tune_frequency"] = msg.tune_frequency;
+    if (msg.range.has_value()) {
+        obj["range"] = nlohmann::json::parse(toJson(msg.range.value()));
+    }
+    return obj.dump();
+}
+
+CollectionFrequencyType fromJson(const std::string& s, CollectionFrequencyType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CollectionFrequencyType msg;
+    if (j.contains("tune_frequency")) msg.tune_frequency = j["tune_frequency"].get<double>();
+    if (j.contains("range")) {
+        msg.range = fromJson(j["range"].dump(), static_cast<FrequencyRangeType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const COMINT_InteractiveType& msg) {
+    nlohmann::json obj;
+    if (msg.threshold.has_value()) {
+        obj["threshold"] = msg.threshold.value();
+    }
+    if (msg.noise_adaptive_threshold_status.has_value()) {
+        obj["noise_adaptive_threshold_status"] = toString(msg.noise_adaptive_threshold_status.value());
+    }
+    if (msg.gain_control_method.has_value()) {
+        obj["gain_control_method"] = toString(msg.gain_control_method.value());
+    }
+    if (msg.gain.has_value()) {
+        obj["gain"] = msg.gain.value();
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.center_frequency) {
+            arr.push_back(v);
+        }
+        obj["center_frequency"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.scan_range) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["scan_range"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.scan_lockout) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["scan_lockout"] = arr;
+    }
+    if (msg.dwell_target.has_value()) {
+        obj["dwell_target"] = nlohmann::json::parse(toJson(msg.dwell_target.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.ignore_target) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["ignore_target"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.technique_in_use) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["technique_in_use"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.technique_parameters) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["technique_parameters"] = arr;
+    }
+    if (msg.audio_enable.has_value()) {
+        obj["audio_enable"] = msg.audio_enable.value();
+    }
+    if (msg.iq_enable.has_value()) {
+        obj["iq_enable"] = msg.iq_enable.value();
+    }
+    return obj.dump();
+}
+
+COMINT_InteractiveType fromJson(const std::string& s, COMINT_InteractiveType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COMINT_InteractiveType msg;
+    if (j.contains("threshold")) {
+        msg.threshold = j["threshold"].get<double>();
+    }
+    if (j.contains("noise_adaptive_threshold_status")) {
+        msg.noise_adaptive_threshold_status = noiseAdaptiveThresholdStatusEnumFromString(j["noise_adaptive_threshold_status"].get<std::string>());
+    }
+    if (j.contains("gain_control_method")) {
+        msg.gain_control_method = gainControlMethodEnumFromString(j["gain_control_method"].get<std::string>());
+    }
+    if (j.contains("gain")) {
+        msg.gain = j["gain"].get<double>();
+    }
+    if (j.contains("center_frequency")) {
+        for (const auto& v : j["center_frequency"]) {
+            msg.center_frequency.push_back(v.get<double>());
+        }
+    }
+    if (j.contains("scan_range")) {
+        for (const auto& v : j["scan_range"]) {
+            msg.scan_range.push_back(fromJson(v.dump(), static_cast<FrequencyRangeType*>(nullptr)));
+        }
+    }
+    if (j.contains("scan_lockout")) {
+        for (const auto& v : j["scan_lockout"]) {
+            msg.scan_lockout.push_back(fromJson(v.dump(), static_cast<FrequencyRangeType*>(nullptr)));
+        }
+    }
+    if (j.contains("dwell_target")) {
+        msg.dwell_target = fromJson(j["dwell_target"].dump(), static_cast<COMINT_AcquisitionTargetType*>(nullptr));
+    }
+    if (j.contains("ignore_target")) {
+        for (const auto& v : j["ignore_target"]) {
+            msg.ignore_target.push_back(fromJson(v.dump(), static_cast<COMINT_AcquisitionTargetType*>(nullptr)));
+        }
+    }
+    if (j.contains("technique_in_use")) {
+        for (const auto& v : j["technique_in_use"]) {
+            msg.technique_in_use.push_back(fromJson(v.dump(), static_cast<ForeignKeyType*>(nullptr)));
+        }
+    }
+    if (j.contains("technique_parameters")) {
+        for (const auto& v : j["technique_parameters"]) {
+            msg.technique_parameters.push_back(fromJson(v.dump(), static_cast<ForeignKeyType*>(nullptr)));
+        }
+    }
+    if (j.contains("audio_enable")) {
+        msg.audio_enable = j["audio_enable"].get<bool>();
+    }
+    if (j.contains("iq_enable")) {
+        msg.iq_enable = j["iq_enable"].get<bool>();
+    }
+    return msg;
+}
+
+std::string toJson(const CommRelayTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.frequency_set) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["frequency_set"] = arr;
+    }
+    if (msg.location.has_value()) {
+        obj["location"] = nlohmann::json::parse(toJson(msg.location.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.relay_node) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["relay_node"] = arr;
+    }
+    return obj.dump();
+}
+
+CommRelayTaskType fromJson(const std::string& s, CommRelayTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CommRelayTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = commCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("frequency_set")) {
+        for (const auto& v : j["frequency_set"]) {
+            msg.frequency_set.push_back(fromJson(v.dump(), static_cast<FrequencySetType*>(nullptr)));
+        }
+    }
+    if (j.contains("location")) {
+        msg.location = fromJson(j["location"].dump(), static_cast<LocationType*>(nullptr));
+    }
+    if (j.contains("relay_node")) {
+        for (const auto& v : j["relay_node"]) {
+            msg.relay_node.push_back(fromJson(v.dump(), static_cast<AssetType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const LocationType& msg) {
+    nlohmann::json obj;
+    if (msg.path.has_value()) {
+        obj["path"] = nlohmann::json::parse(toJson(msg.path.value()));
+    }
+    if (msg.loiter.has_value()) {
+        obj["loiter"] = nlohmann::json::parse(toJson(msg.loiter.value()));
+    }
+    if (msg.zone.has_value()) {
+        obj["zone"] = nlohmann::json::parse(toJson(msg.zone.value()));
+    }
+    return obj.dump();
+}
+
+LocationType fromJson(const std::string& s, LocationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    LocationType msg;
+    if (j.contains("path")) {
+        msg.path = fromJson(j["path"].dump(), static_cast<PathType*>(nullptr));
+    }
+    if (j.contains("loiter")) {
+        msg.loiter = fromJson(j["loiter"].dump(), static_cast<LoiterType*>(nullptr));
+    }
+    if (j.contains("zone")) {
+        msg.zone = fromJson(j["zone"].dump(), static_cast<ZoneType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const PathType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.segment_vertex) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["segment_vertex"] = arr;
+    }
+    obj["line_projection"] = toString(msg.line_projection);
+    return obj.dump();
+}
+
+PathType fromJson(const std::string& s, PathType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PathType msg;
+    if (j.contains("segment_vertex")) {
+        for (const auto& v : j["segment_vertex"]) {
+            msg.segment_vertex.push_back(fromJson(v.dump(), static_cast<Point2D_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("line_projection")) msg.line_projection = lineProjectionEnumFromString(j["line_projection"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const LoiterType& msg) {
+    nlohmann::json obj;
+    if (msg.orbit.has_value()) {
+        obj["orbit"] = nlohmann::json::parse(toJson(msg.orbit.value()));
+    }
+    if (msg.hover.has_value()) {
+        obj["hover"] = nlohmann::json::parse(toJson(msg.hover.value()));
+    }
+    return obj.dump();
+}
+
+LoiterType fromJson(const std::string& s, LoiterType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    LoiterType msg;
+    if (j.contains("orbit")) {
+        msg.orbit = fromJson(j["orbit"].dump(), static_cast<OrbitType*>(nullptr));
+    }
+    if (j.contains("hover")) {
+        msg.hover = fromJson(j["hover"].dump(), static_cast<HoverType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitType& msg) {
+    nlohmann::json obj;
+    obj["orbit_type"] = toString(msg.orbit_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.circle) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["circle"] = arr;
+    }
+    obj["turn_direction"] = toString(msg.turn_direction);
+    obj["duration"] = nlohmann::json::parse(toJson(msg.duration));
+    return obj.dump();
+}
+
+OrbitType fromJson(const std::string& s, OrbitType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitType msg;
+    if (j.contains("orbit_type")) msg.orbit_type = orbitEnumFromString(j["orbit_type"].get<std::string>());
+    if (j.contains("circle")) {
+        for (const auto& v : j["circle"]) {
+            msg.circle.push_back(fromJson(v.dump(), static_cast<CircleType*>(nullptr)));
+        }
+    }
+    if (j.contains("turn_direction")) msg.turn_direction = relativeDirectionEnumFromString(j["turn_direction"].get<std::string>());
+    if (j.contains("duration")) msg.duration = fromJson(j["duration"].dump(), static_cast<OrbitDurationType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const HoverType& msg) {
+    nlohmann::json obj;
+    obj["point3_d"] = nlohmann::json::parse(toJson(msg.point3_d));
+    obj["duration"] = msg.duration;
+    return obj.dump();
+}
+
+HoverType fromJson(const std::string& s, HoverType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    HoverType msg;
+    if (j.contains("point3_d")) msg.point3_d = fromJson(j["point3_d"].dump(), static_cast<PointChoice3D_Type*>(nullptr));
+    if (j.contains("duration")) msg.duration = j["duration"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const PointChoice3D_Type& msg) {
+    nlohmann::json obj;
+    if (msg.absolute_point.has_value()) {
+        obj["absolute_point"] = nlohmann::json::parse(toJson(msg.absolute_point.value()));
+    }
+    if (msg.relative_point.has_value()) {
+        obj["relative_point"] = nlohmann::json::parse(toJson(msg.relative_point.value()));
+    }
+    return obj.dump();
+}
+
+PointChoice3D_Type fromJson(const std::string& s, PointChoice3D_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PointChoice3D_Type msg;
+    if (j.contains("absolute_point")) {
+        msg.absolute_point = fromJson(j["absolute_point"].dump(), static_cast<Point3D_Type*>(nullptr));
+    }
+    if (j.contains("relative_point")) {
+        msg.relative_point = fromJson(j["relative_point"].dump(), static_cast<Point3D_RelativeType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const Point3D_RelativeType& msg) {
+    nlohmann::json obj;
+    obj["reference_frame_id"] = nlohmann::json::parse(toJson(msg.reference_frame_id));
+    if (msg.relative_offset.has_value()) {
+        obj["relative_offset"] = nlohmann::json::parse(toJson(msg.relative_offset.value()));
+    }
+    return obj.dump();
+}
+
+Point3D_RelativeType fromJson(const std::string& s, Point3D_RelativeType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    Point3D_RelativeType msg;
+    if (j.contains("reference_frame_id")) msg.reference_frame_id = fromJson(j["reference_frame_id"].dump(), static_cast<ReferenceFrameID_Type*>(nullptr));
+    if (j.contains("relative_offset")) {
+        msg.relative_offset = fromJson(j["relative_offset"].dump(), static_cast<RelativeOffset3D_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const CounterSpaceTaskType& msg) {
+    nlohmann::json obj;
+    if (msg.force_name.has_value()) {
+        obj["force_name"] = nlohmann::json::parse(toJson(msg.force_name.value()));
+    }
+    obj["engagement_data"] = nlohmann::json::parse(toJson(msg.engagement_data));
+    return obj.dump();
+}
+
+CounterSpaceTaskType fromJson(const std::string& s, CounterSpaceTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CounterSpaceTaskType msg;
+    if (j.contains("force_name")) {
+        msg.force_name = fromJson(j["force_name"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    }
+    if (j.contains("engagement_data")) msg.engagement_data = fromJson(j["engagement_data"].dump(), static_cast<CS_EngagementDataType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const CS_EngagementDataType& msg) {
+    nlohmann::json obj;
+    obj["seno"] = msg.seno;
+    obj["system_id"] = nlohmann::json::parse(toJson(msg.system_id));
+    obj["satellite"] = nlohmann::json::parse(toJson(msg.satellite));
+    obj["transponder"] = nlohmann::json::parse(toJson(msg.transponder));
+    obj["tactic"] = nlohmann::json::parse(toJson(msg.tactic));
+    if (msg.comment_id.has_value()) {
+        obj["comment_id"] = nlohmann::json::parse(toJson(msg.comment_id.value()));
+    }
+    obj["detail_data"] = nlohmann::json::parse(toJson(msg.detail_data));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.signals) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["signals"] = arr;
+    }
+    return obj.dump();
+}
+
+CS_EngagementDataType fromJson(const std::string& s, CS_EngagementDataType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CS_EngagementDataType msg;
+    if (j.contains("seno")) msg.seno = j["seno"].get<std::string>();
+    if (j.contains("system_id")) msg.system_id = fromJson(j["system_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("satellite")) msg.satellite = fromJson(j["satellite"].dump(), static_cast<SatelliteIdentifierType*>(nullptr));
+    if (j.contains("transponder")) msg.transponder = fromJson(j["transponder"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    if (j.contains("tactic")) msg.tactic = fromJson(j["tactic"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    if (j.contains("comment_id")) {
+        msg.comment_id = fromJson(j["comment_id"].dump(), static_cast<FileLocationID_Type*>(nullptr));
+    }
+    if (j.contains("detail_data")) msg.detail_data = fromJson(j["detail_data"].dump(), static_cast<CS_DetailDataType*>(nullptr));
+    if (j.contains("signals")) {
+        for (const auto& v : j["signals"]) {
+            msg.signals.push_back(fromJson(v.dump(), static_cast<CS_SignalType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const CS_DetailDataType& msg) {
+    nlohmann::json obj;
+    obj["name"] = msg.name;
+    if (msg.details_id.has_value()) {
+        obj["details_id"] = nlohmann::json::parse(toJson(msg.details_id.value()));
+    }
+    if (msg.signal.has_value()) {
+        obj["signal"] = nlohmann::json::parse(toJson(msg.signal.value()));
+    }
+    if (msg.uplink_frequency.has_value()) {
+        obj["uplink_frequency"] = msg.uplink_frequency.value();
+    }
+    if (msg.uplink_polarization.has_value()) {
+        obj["uplink_polarization"] = toString(msg.uplink_polarization.value());
+    }
+    if (msg.downlink_frequency.has_value()) {
+        obj["downlink_frequency"] = msg.downlink_frequency.value();
+    }
+    if (msg.downlink_polarization.has_value()) {
+        obj["downlink_polarization"] = toString(msg.downlink_polarization.value());
+    }
+    if (msg.modulation.has_value()) {
+        obj["modulation"] = toString(msg.modulation.value());
+    }
+    if (msg.bandwidth.has_value()) {
+        obj["bandwidth"] = msg.bandwidth.value();
+    }
+    if (msg.attributes_id.has_value()) {
+        obj["attributes_id"] = nlohmann::json::parse(toJson(msg.attributes_id.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.sub_detail_data) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["sub_detail_data"] = arr;
+    }
+    return obj.dump();
+}
+
+CS_DetailDataType fromJson(const std::string& s, CS_DetailDataType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CS_DetailDataType msg;
+    if (j.contains("name")) msg.name = j["name"].get<std::string>();
+    if (j.contains("details_id")) {
+        msg.details_id = fromJson(j["details_id"].dump(), static_cast<FileLocationID_Type*>(nullptr));
+    }
+    if (j.contains("signal")) {
+        msg.signal = fromJson(j["signal"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    }
+    if (j.contains("uplink_frequency")) {
+        msg.uplink_frequency = j["uplink_frequency"].get<double>();
+    }
+    if (j.contains("uplink_polarization")) {
+        msg.uplink_polarization = polarizationEnumFromString(j["uplink_polarization"].get<std::string>());
+    }
+    if (j.contains("downlink_frequency")) {
+        msg.downlink_frequency = j["downlink_frequency"].get<double>();
+    }
+    if (j.contains("downlink_polarization")) {
+        msg.downlink_polarization = polarizationEnumFromString(j["downlink_polarization"].get<std::string>());
+    }
+    if (j.contains("modulation")) {
+        msg.modulation = modulationEnumFromString(j["modulation"].get<std::string>());
+    }
+    if (j.contains("bandwidth")) {
+        msg.bandwidth = j["bandwidth"].get<double>();
+    }
+    if (j.contains("attributes_id")) {
+        msg.attributes_id = fromJson(j["attributes_id"].dump(), static_cast<FileLocationID_Type*>(nullptr));
+    }
+    if (j.contains("sub_detail_data")) {
+        for (const auto& v : j["sub_detail_data"]) {
+            msg.sub_detail_data.push_back(fromJson(v.dump(), static_cast<CS_SubDetailDataType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const CS_SubDetailDataType& msg) {
+    nlohmann::json obj;
+    obj["sub_detail_identifier"] = nlohmann::json::parse(toJson(msg.sub_detail_identifier));
+    obj["sub_detail_data_file_id"] = nlohmann::json::parse(toJson(msg.sub_detail_data_file_id));
+    return obj.dump();
+}
+
+CS_SubDetailDataType fromJson(const std::string& s, CS_SubDetailDataType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CS_SubDetailDataType msg;
+    if (j.contains("sub_detail_identifier")) msg.sub_detail_identifier = fromJson(j["sub_detail_identifier"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    if (j.contains("sub_detail_data_file_id")) msg.sub_detail_data_file_id = fromJson(j["sub_detail_data_file_id"].dump(), static_cast<FileLocationID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const CS_SignalType& msg) {
+    nlohmann::json obj;
+    obj["signal"] = nlohmann::json::parse(toJson(msg.signal));
+    obj["uplink_frequency"] = nlohmann::json::parse(toJson(msg.uplink_frequency));
+    obj["uplink_polarization"] = toString(msg.uplink_polarization);
+    obj["downlink_frequency"] = nlohmann::json::parse(toJson(msg.downlink_frequency));
+    obj["downlink_polarization"] = toString(msg.downlink_polarization);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.existing_signal) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["existing_signal"] = arr;
+    }
+    return obj.dump();
+}
+
+CS_SignalType fromJson(const std::string& s, CS_SignalType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CS_SignalType msg;
+    if (j.contains("signal")) msg.signal = fromJson(j["signal"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    if (j.contains("uplink_frequency")) msg.uplink_frequency = fromJson(j["uplink_frequency"].dump(), static_cast<FrequencyRangeType*>(nullptr));
+    if (j.contains("uplink_polarization")) msg.uplink_polarization = polarizationEnumFromString(j["uplink_polarization"].get<std::string>());
+    if (j.contains("downlink_frequency")) msg.downlink_frequency = fromJson(j["downlink_frequency"].dump(), static_cast<FrequencyRangeType*>(nullptr));
+    if (j.contains("downlink_polarization")) msg.downlink_polarization = polarizationEnumFromString(j["downlink_polarization"].get<std::string>());
+    if (j.contains("existing_signal")) {
+        for (const auto& v : j["existing_signal"]) {
+            msg.existing_signal.push_back(fromJson(v.dump(), static_cast<ForeignKeyType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const MA_EscortTaskType& msg) {
+    nlohmann::json obj;
+    obj["escort_asset"] = nlohmann::json::parse(toJson(msg.escort_asset));
+    obj["reference"] = nlohmann::json::parse(toJson(msg.reference));
+    return obj.dump();
+}
+
+MA_EscortTaskType fromJson(const std::string& s, MA_EscortTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_EscortTaskType msg;
+    if (j.contains("escort_asset")) msg.escort_asset = fromJson(j["escort_asset"].dump(), static_cast<MA_EscortAssetType*>(nullptr));
+    if (j.contains("reference")) msg.reference = fromJson(j["reference"].dump(), static_cast<MA_EscortReferenceType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_EscortAssetType& msg) {
+    nlohmann::json obj;
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    if (msg.system_id.has_value()) {
+        obj["system_id"] = nlohmann::json::parse(toJson(msg.system_id.value()));
+    }
+    return obj.dump();
+}
+
+MA_EscortAssetType fromJson(const std::string& s, MA_EscortAssetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_EscortAssetType msg;
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    if (j.contains("system_id")) {
+        msg.system_id = fromJson(j["system_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_EscortReferenceType& msg) {
+    nlohmann::json obj;
+    if (msg.follow_path.has_value()) {
+        obj["follow_path"] = nlohmann::json::parse(toJson(msg.follow_path.value()));
+    }
+    if (msg.geographic_reference.has_value()) {
+        obj["geographic_reference"] = nlohmann::json::parse(toJson(msg.geographic_reference.value()));
+    }
+    if (msg.body_reference.has_value()) {
+        obj["body_reference"] = nlohmann::json::parse(toJson(msg.body_reference.value()));
+    }
+    return obj.dump();
+}
+
+MA_EscortReferenceType fromJson(const std::string& s, MA_EscortReferenceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_EscortReferenceType msg;
+    if (j.contains("follow_path")) {
+        msg.follow_path = fromJson(j["follow_path"].dump(), static_cast<MA_EscortFollowPathType*>(nullptr));
+    }
+    if (j.contains("geographic_reference")) {
+        msg.geographic_reference = fromJson(j["geographic_reference"].dump(), static_cast<LOS_Type*>(nullptr));
+    }
+    if (j.contains("body_reference")) {
+        msg.body_reference = fromJson(j["body_reference"].dump(), static_cast<LOS_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_EscortFollowPathType& msg) {
+    nlohmann::json obj;
+    obj["separation"] = msg.separation;
+    if (msg.route_plan_id.has_value()) {
+        obj["route_plan_id"] = nlohmann::json::parse(toJson(msg.route_plan_id.value()));
+    }
+    return obj.dump();
+}
+
+MA_EscortFollowPathType fromJson(const std::string& s, MA_EscortFollowPathType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_EscortFollowPathType msg;
+    if (j.contains("separation")) msg.separation = j["separation"].get<double>();
+    if (j.contains("route_plan_id")) {
+        msg.route_plan_id = fromJson(j["route_plan_id"].dump(), static_cast<RoutePlanID_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const EA_TaskType& msg) {
+    nlohmann::json obj;
+    if (msg.route_requirements.has_value()) {
+        obj["route_requirements"] = nlohmann::json::parse(toJson(msg.route_requirements.value()));
+    }
+    obj["protected_assets"] = nlohmann::json::parse(toJson(msg.protected_assets));
+    obj["threats"] = nlohmann::json::parse(toJson(msg.threats));
+    return obj.dump();
+}
+
+EA_TaskType fromJson(const std::string& s, EA_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    EA_TaskType msg;
+    if (j.contains("route_requirements")) {
+        msg.route_requirements = fromJson(j["route_requirements"].dump(), static_cast<EA_TaskRouteRequirementsType*>(nullptr));
+    }
+    if (j.contains("protected_assets")) msg.protected_assets = fromJson(j["protected_assets"].dump(), static_cast<EA_TaskProtectedAssetsType*>(nullptr));
+    if (j.contains("threats")) msg.threats = fromJson(j["threats"].dump(), static_cast<EA_TaskThreatsType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const EA_TaskRouteRequirementsType& msg) {
+    nlohmann::json obj;
+    if (msg.path.has_value()) {
+        obj["path"] = nlohmann::json::parse(toJson(msg.path.value()));
+    }
+    if (msg.loiter.has_value()) {
+        obj["loiter"] = nlohmann::json::parse(toJson(msg.loiter.value()));
+    }
+    if (msg.escort.has_value()) {
+        obj["escort"] = nlohmann::json::parse(toJson(msg.escort.value()));
+    }
+    if (msg.zone_constraints.has_value()) {
+        obj["zone_constraints"] = nlohmann::json::parse(toJson(msg.zone_constraints.value()));
+    }
+    if (msg.volume_constraints.has_value()) {
+        obj["volume_constraints"] = nlohmann::json::parse(toJson(msg.volume_constraints.value()));
+    }
+    return obj.dump();
+}
+
+EA_TaskRouteRequirementsType fromJson(const std::string& s, EA_TaskRouteRequirementsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    EA_TaskRouteRequirementsType msg;
+    if (j.contains("path")) {
+        msg.path = fromJson(j["path"].dump(), static_cast<PathType*>(nullptr));
+    }
+    if (j.contains("loiter")) {
+        msg.loiter = fromJson(j["loiter"].dump(), static_cast<LoiterType*>(nullptr));
+    }
+    if (j.contains("escort")) {
+        msg.escort = fromJson(j["escort"].dump(), static_cast<EA_TaskEscortType*>(nullptr));
+    }
+    if (j.contains("zone_constraints")) {
+        msg.zone_constraints = fromJson(j["zone_constraints"].dump(), static_cast<ZoneChoiceType*>(nullptr));
+    }
+    if (j.contains("volume_constraints")) {
+        msg.volume_constraints = fromJson(j["volume_constraints"].dump(), static_cast<VolumeChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const ZoneChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.op_zone_id.has_value()) {
+        obj["op_zone_id"] = nlohmann::json::parse(toJson(msg.op_zone_id.value()));
+    }
+    if (msg.zone_target.has_value()) {
+        obj["zone_target"] = nlohmann::json::parse(toJson(msg.zone_target.value()));
+    }
+    return obj.dump();
+}
+
+ZoneChoiceType fromJson(const std::string& s, ZoneChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ZoneChoiceType msg;
+    if (j.contains("op_zone_id")) {
+        msg.op_zone_id = fromJson(j["op_zone_id"].dump(), static_cast<OpZoneID_Type*>(nullptr));
+    }
+    if (j.contains("zone_target")) {
+        msg.zone_target = fromJson(j["zone_target"].dump(), static_cast<ZoneExternalType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const VolumeChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.op_volume_id.has_value()) {
+        obj["op_volume_id"] = nlohmann::json::parse(toJson(msg.op_volume_id.value()));
+    }
+    if (msg.volume_target.has_value()) {
+        obj["volume_target"] = nlohmann::json::parse(toJson(msg.volume_target.value()));
+    }
+    return obj.dump();
+}
+
+VolumeChoiceType fromJson(const std::string& s, VolumeChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    VolumeChoiceType msg;
+    if (j.contains("op_volume_id")) {
+        msg.op_volume_id = fromJson(j["op_volume_id"].dump(), static_cast<OpVolumeID_Type*>(nullptr));
+    }
+    if (j.contains("volume_target")) {
+        msg.volume_target = fromJson(j["volume_target"].dump(), static_cast<OpVolumeType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const ESM_TaskType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.sub_capability_type) {
+            arr.push_back(toString(v));
+        }
+        obj["sub_capability_type"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    obj["sub_capability_details"] = nlohmann::json::parse(toJson(msg.sub_capability_details));
+    return obj.dump();
+}
+
+ESM_TaskType fromJson(const std::string& s, ESM_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ESM_TaskType msg;
+    if (j.contains("sub_capability_type")) {
+        for (const auto& v : j["sub_capability_type"]) {
+            msg.sub_capability_type.push_back(eSM_SubCapabilityEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<ProductOutputCommandBasicType*>(nullptr)));
+        }
+    }
+    if (j.contains("sub_capability_details")) msg.sub_capability_details = fromJson(j["sub_capability_details"].dump(), static_cast<SubCapabilityDetailsType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const SubCapabilityDetailsType& msg) {
+    nlohmann::json obj;
+    if (msg.select_antenna.has_value()) {
+        obj["select_antenna"] = nlohmann::json::parse(toJson(msg.select_antenna.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.frequency_restriction) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["frequency_restriction"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.target_emitter_data) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["target_emitter_data"] = arr;
+    }
+    if (msg.esm_location.has_value()) {
+        obj["esm_location"] = nlohmann::json::parse(toJson(msg.esm_location.value()));
+    }
+    if (msg.pulse_data_collection.has_value()) {
+        obj["pulse_data_collection"] = nlohmann::json::parse(toJson(msg.pulse_data_collection.value()));
+    }
+    if (msg.geolocation.has_value()) {
+        obj["geolocation"] = nlohmann::json::parse(toJson(msg.geolocation.value()));
+    }
+    return obj.dump();
+}
+
+SubCapabilityDetailsType fromJson(const std::string& s, SubCapabilityDetailsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SubCapabilityDetailsType msg;
+    if (j.contains("select_antenna")) {
+        msg.select_antenna = fromJson(j["select_antenna"].dump(), static_cast<SelectAntennaType*>(nullptr));
+    }
+    if (j.contains("frequency_restriction")) {
+        for (const auto& v : j["frequency_restriction"]) {
+            msg.frequency_restriction.push_back(fromJson(v.dump(), static_cast<FrequencyRangeType*>(nullptr)));
+        }
+    }
+    if (j.contains("target_emitter_data")) {
+        for (const auto& v : j["target_emitter_data"]) {
+            msg.target_emitter_data.push_back(fromJson(v.dump(), static_cast<ESM_TargetType*>(nullptr)));
+        }
+    }
+    if (j.contains("esm_location")) {
+        msg.esm_location = fromJson(j["esm_location"].dump(), static_cast<ESM_LocationType*>(nullptr));
+    }
+    if (j.contains("pulse_data_collection")) {
+        msg.pulse_data_collection = fromJson(j["pulse_data_collection"].dump(), static_cast<PulseDataCollectCommandType*>(nullptr));
+    }
+    if (j.contains("geolocation")) {
+        msg.geolocation = fromJson(j["geolocation"].dump(), static_cast<ESM_SubcapabilityGeolocationType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const SelectAntennaType& msg) {
+    nlohmann::json obj;
+    if (msg.support_capability_id.has_value()) {
+        obj["support_capability_id"] = nlohmann::json::parse(toJson(msg.support_capability_id.value()));
+    }
+    if (msg.antenna_resource_choice.has_value()) {
+        obj["antenna_resource_choice"] = nlohmann::json::parse(toJson(msg.antenna_resource_choice.value()));
+    }
+    return obj.dump();
+}
+
+SelectAntennaType fromJson(const std::string& s, SelectAntennaType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SelectAntennaType msg;
+    if (j.contains("support_capability_id")) {
+        msg.support_capability_id = fromJson(j["support_capability_id"].dump(), static_cast<SupportCapabilityID_Type*>(nullptr));
+    }
+    if (j.contains("antenna_resource_choice")) {
+        msg.antenna_resource_choice = fromJson(j["antenna_resource_choice"].dump(), static_cast<AntennaResourceChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const SupportCapabilityID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+SupportCapabilityID_Type fromJson(const std::string& s, SupportCapabilityID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SupportCapabilityID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const AntennaResourceChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.antenna_resource_type_id.has_value()) {
+        obj["antenna_resource_type_id"] = nlohmann::json::parse(toJson(msg.antenna_resource_type_id.value()));
+    }
+    if (msg.antenna_resource_instance_id.has_value()) {
+        obj["antenna_resource_instance_id"] = nlohmann::json::parse(toJson(msg.antenna_resource_instance_id.value()));
+    }
+    return obj.dump();
+}
+
+AntennaResourceChoiceType fromJson(const std::string& s, AntennaResourceChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AntennaResourceChoiceType msg;
+    if (j.contains("antenna_resource_type_id")) {
+        msg.antenna_resource_type_id = fromJson(j["antenna_resource_type_id"].dump(), static_cast<AntennaResourceID_Type*>(nullptr));
+    }
+    if (j.contains("antenna_resource_instance_id")) {
+        msg.antenna_resource_instance_id = fromJson(j["antenna_resource_instance_id"].dump(), static_cast<AntennaResourceID_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const AntennaResourceID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+AntennaResourceID_Type fromJson(const std::string& s, AntennaResourceID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AntennaResourceID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const ESM_TargetType& msg) {
+    nlohmann::json obj;
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    if (msg.emitter_type.has_value()) {
+        obj["emitter_type"] = nlohmann::json::parse(toJson(msg.emitter_type.value()));
+    }
+    if (msg.specific_emitter.has_value()) {
+        obj["specific_emitter"] = nlohmann::json::parse(toJson(msg.specific_emitter.value()));
+    }
+    if (msg.signal_description.has_value()) {
+        obj["signal_description"] = nlohmann::json::parse(toJson(msg.signal_description.value()));
+    }
+    if (msg.signal_id.has_value()) {
+        obj["signal_id"] = nlohmann::json::parse(toJson(msg.signal_id.value()));
+    }
+    if (msg.emitter_priority_bin.has_value()) {
+        obj["emitter_priority_bin"] = msg.emitter_priority_bin.value();
+    }
+    return obj.dump();
+}
+
+ESM_TargetType fromJson(const std::string& s, ESM_TargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ESM_TargetType msg;
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    if (j.contains("emitter_type")) {
+        msg.emitter_type = fromJson(j["emitter_type"].dump(), static_cast<EmitterIdentityType*>(nullptr));
+    }
+    if (j.contains("specific_emitter")) {
+        msg.specific_emitter = fromJson(j["specific_emitter"].dump(), static_cast<SpecificEmitterIdentityType*>(nullptr));
+    }
+    if (j.contains("signal_description")) {
+        msg.signal_description = fromJson(j["signal_description"].dump(), static_cast<SignalSummaryType*>(nullptr));
+    }
+    if (j.contains("signal_id")) {
+        msg.signal_id = fromJson(j["signal_id"].dump(), static_cast<SignalID_Type*>(nullptr));
+    }
+    if (j.contains("emitter_priority_bin")) {
+        msg.emitter_priority_bin = j["emitter_priority_bin"].get<uint32_t>();
+    }
+    return msg;
+}
+
+std::string toJson(const ESM_LocationType& msg) {
+    nlohmann::json obj;
+    if (msg.target_location_data.has_value()) {
+        obj["target_location_data"] = nlohmann::json::parse(toJson(msg.target_location_data.value()));
+    }
+    if (msg.esm_air_volume.has_value()) {
+        obj["esm_air_volume"] = nlohmann::json::parse(toJson(msg.esm_air_volume.value()));
+    }
+    return obj.dump();
+}
+
+ESM_LocationType fromJson(const std::string& s, ESM_LocationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ESM_LocationType msg;
+    if (j.contains("target_location_data")) {
+        msg.target_location_data = fromJson(j["target_location_data"].dump(), static_cast<ESM_SubcapabilityTargetLocationDataType*>(nullptr));
+    }
+    if (j.contains("esm_air_volume")) {
+        msg.esm_air_volume = fromJson(j["esm_air_volume"].dump(), static_cast<AirVolumeSensorReferencedType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const ESM_SubcapabilityTargetLocationDataType& msg) {
+    nlohmann::json obj;
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    if (msg.dwell_fov.has_value()) {
+        obj["dwell_fov"] = nlohmann::json::parse(toJson(msg.dwell_fov.value()));
+    }
+    if (msg.point_target.has_value()) {
+        obj["point_target"] = nlohmann::json::parse(toJson(msg.point_target.value()));
+    }
+    return obj.dump();
+}
+
+ESM_SubcapabilityTargetLocationDataType fromJson(const std::string& s, ESM_SubcapabilityTargetLocationDataType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ESM_SubcapabilityTargetLocationDataType msg;
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    if (j.contains("dwell_fov")) {
+        msg.dwell_fov = fromJson(j["dwell_fov"].dump(), static_cast<NED_ConeType*>(nullptr));
+    }
+    if (j.contains("point_target")) {
+        msg.point_target = fromJson(j["point_target"].dump(), static_cast<PointTargetType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const PulseDataCollectCommandType& msg) {
+    nlohmann::json obj;
+    obj["collection_frequency"] = nlohmann::json::parse(toJson(msg.collection_frequency));
+    obj["start_time"] = msg.start_time;
+    obj["dwell_duration"] = msg.dwell_duration;
+    if (msg.dwells.has_value()) {
+        obj["dwells"] = msg.dwells.value();
+    }
+    obj["repetition_interval"] = msg.repetition_interval;
+    obj["pulse_width"] = msg.pulse_width;
+    obj["pri"] = msg.pri;
+    if (msg.signal_bandwidth.has_value()) {
+        obj["signal_bandwidth"] = nlohmann::json::parse(toJson(msg.signal_bandwidth.value()));
+    }
+    if (msg.modulation.has_value()) {
+        obj["modulation"] = toString(msg.modulation.value());
+    }
+    if (msg.data_collect_type.has_value()) {
+        obj["data_collect_type"] = toString(msg.data_collect_type.value());
+    }
+    if (msg.sample_rate.has_value()) {
+        obj["sample_rate"] = msg.sample_rate.value();
+    }
+    if (msg.fft_points_per_sample.has_value()) {
+        obj["fft_points_per_sample"] = msg.fft_points_per_sample.value();
+    }
+    return obj.dump();
+}
+
+PulseDataCollectCommandType fromJson(const std::string& s, PulseDataCollectCommandType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PulseDataCollectCommandType msg;
+    if (j.contains("collection_frequency")) msg.collection_frequency = fromJson(j["collection_frequency"].dump(), static_cast<CollectionFrequencyType*>(nullptr));
+    if (j.contains("start_time")) msg.start_time = j["start_time"].get<std::string>();
+    if (j.contains("dwell_duration")) msg.dwell_duration = j["dwell_duration"].get<std::string>();
+    if (j.contains("dwells")) {
+        msg.dwells = j["dwells"].get<uint32_t>();
+    }
+    if (j.contains("repetition_interval")) msg.repetition_interval = j["repetition_interval"].get<std::string>();
+    if (j.contains("pulse_width")) msg.pulse_width = j["pulse_width"].get<std::string>();
+    if (j.contains("pri")) msg.pri = j["pri"].get<std::string>();
+    if (j.contains("signal_bandwidth")) {
+        msg.signal_bandwidth = fromJson(j["signal_bandwidth"].dump(), static_cast<FrequencyRangeType*>(nullptr));
+    }
+    if (j.contains("modulation")) {
+        msg.modulation = modulationEnumFromString(j["modulation"].get<std::string>());
+    }
+    if (j.contains("data_collect_type")) {
+        msg.data_collect_type = signalTypeEnumFromString(j["data_collect_type"].get<std::string>());
+    }
+    if (j.contains("sample_rate")) {
+        msg.sample_rate = j["sample_rate"].get<float>();
+    }
+    if (j.contains("fft_points_per_sample")) {
+        msg.fft_points_per_sample = j["fft_points_per_sample"].get<int32_t>();
+    }
+    return msg;
+}
+
+std::string toJson(const ESM_SubcapabilityGeolocationType& msg) {
+    nlohmann::json obj;
+    obj["geolocation_state"] = toString(msg.geolocation_state);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.geolocation_type) {
+            arr.push_back(toString(v));
+        }
+        obj["geolocation_type"] = arr;
+    }
+    return obj.dump();
+}
+
+ESM_SubcapabilityGeolocationType fromJson(const std::string& s, ESM_SubcapabilityGeolocationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ESM_SubcapabilityGeolocationType msg;
+    if (j.contains("geolocation_state")) msg.geolocation_state = signalGeolocationControlEnumFromString(j["geolocation_state"].get<std::string>());
+    if (j.contains("geolocation_type")) {
+        for (const auto& v : j["geolocation_type"]) {
+            msg.geolocation_type.push_back(signalGeolocationMethodEnumFromString(v.get<std::string>()));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const MA_FlightTaskType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.capability_type) {
+            arr.push_back(toString(v));
+        }
+        obj["capability_type"] = arr;
+    }
+    if (msg.loiter.has_value()) {
+        obj["loiter"] = nlohmann::json::parse(toJson(msg.loiter.value()));
+    }
+    if (msg.must_fly.has_value()) {
+        obj["must_fly"] = nlohmann::json::parse(toJson(msg.must_fly.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.formation) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["formation"] = arr;
+    }
+    if (msg.altitude_stacked_marshall.has_value()) {
+        obj["altitude_stacked_marshall"] = nlohmann::json::parse(toJson(msg.altitude_stacked_marshall.value()));
+    }
+    if (msg.flight_control_mode.has_value()) {
+        obj["flight_control_mode"] = nlohmann::json::parse(toJson(msg.flight_control_mode.value()));
+    }
+    if (msg.launch.has_value()) {
+        obj["launch"] = nlohmann::json::parse(toJson(msg.launch.value()));
+    }
+    if (msg.recovery.has_value()) {
+        obj["recovery"] = nlohmann::json::parse(toJson(msg.recovery.value()));
+    }
+    return obj.dump();
+}
+
+MA_FlightTaskType fromJson(const std::string& s, MA_FlightTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_FlightTaskType msg;
+    if (j.contains("capability_type")) {
+        for (const auto& v : j["capability_type"]) {
+            msg.capability_type.push_back(mA_FlightCapabilityEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("loiter")) {
+        msg.loiter = fromJson(j["loiter"].dump(), static_cast<MA_LoiterType*>(nullptr));
+    }
+    if (j.contains("must_fly")) {
+        msg.must_fly = fromJson(j["must_fly"].dump(), static_cast<MustFlyType*>(nullptr));
+    }
+    if (j.contains("formation")) {
+        for (const auto& v : j["formation"]) {
+            msg.formation.push_back(fromJson(v.dump(), static_cast<MA_FormationType*>(nullptr)));
+        }
+    }
+    if (j.contains("altitude_stacked_marshall")) {
+        msg.altitude_stacked_marshall = fromJson(j["altitude_stacked_marshall"].dump(), static_cast<MA_AltitudeStackedMarshallType*>(nullptr));
+    }
+    if (j.contains("flight_control_mode")) {
+        msg.flight_control_mode = fromJson(j["flight_control_mode"].dump(), static_cast<MA_FlightControlModesChoiceType*>(nullptr));
+    }
+    if (j.contains("launch")) {
+        msg.launch = fromJson(j["launch"].dump(), static_cast<MA_LaunchType*>(nullptr));
+    }
+    if (j.contains("recovery")) {
+        msg.recovery = fromJson(j["recovery"].dump(), static_cast<MA_RecoveryType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_FlightTaskBaseType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.capability_type) {
+            arr.push_back(toString(v));
+        }
+        obj["capability_type"] = arr;
+    }
+    return obj.dump();
+}
+
+MA_FlightTaskBaseType fromJson(const std::string& s, MA_FlightTaskBaseType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_FlightTaskBaseType msg;
+    if (j.contains("capability_type")) {
+        for (const auto& v : j["capability_type"]) {
+            msg.capability_type.push_back(mA_FlightCapabilityEnumFromString(v.get<std::string>()));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const MA_LoiterType& msg) {
+    nlohmann::json obj;
+    if (msg.orbit.has_value()) {
+        obj["orbit"] = nlohmann::json::parse(toJson(msg.orbit.value()));
+    }
+    if (msg.hover.has_value()) {
+        obj["hover"] = nlohmann::json::parse(toJson(msg.hover.value()));
+    }
+    if (msg.hold.has_value()) {
+        obj["hold"] = nlohmann::json::parse(toJson(msg.hold.value()));
+    }
+    return obj.dump();
+}
+
+MA_LoiterType fromJson(const std::string& s, MA_LoiterType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_LoiterType msg;
+    if (j.contains("orbit")) {
+        msg.orbit = fromJson(j["orbit"].dump(), static_cast<MA_OrbitType*>(nullptr));
+    }
+    if (j.contains("hover")) {
+        msg.hover = fromJson(j["hover"].dump(), static_cast<HoverType*>(nullptr));
+    }
+    if (j.contains("hold")) {
+        msg.hold = fromJson(j["hold"].dump(), static_cast<MA_HoldType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_HoldType& msg) {
+    nlohmann::json obj;
+    obj["anchor_point"] = nlohmann::json::parse(toJson(msg.anchor_point));
+    if (msg.hold_context.has_value()) {
+        obj["hold_context"] = toString(msg.hold_context.value());
+    }
+    if (msg.speed.has_value()) {
+        obj["speed"] = nlohmann::json::parse(toJson(msg.speed.value()));
+    }
+    if (msg.orientation.has_value()) {
+        obj["orientation"] = msg.orientation.value();
+    }
+    if (msg.turn_direction.has_value()) {
+        obj["turn_direction"] = toString(msg.turn_direction.value());
+    }
+    obj["leg_specification"] = nlohmann::json::parse(toJson(msg.leg_specification));
+    obj["turn_specification"] = nlohmann::json::parse(toJson(msg.turn_specification));
+    obj["duration"] = nlohmann::json::parse(toJson(msg.duration));
+    obj["entry_type"] = toString(msg.entry_type);
+    return obj.dump();
+}
+
+MA_HoldType fromJson(const std::string& s, MA_HoldType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_HoldType msg;
+    if (j.contains("anchor_point")) msg.anchor_point = fromJson(j["anchor_point"].dump(), static_cast<Point2D_Type*>(nullptr));
+    if (j.contains("hold_context")) {
+        msg.hold_context = mA_HoldContextEnumFromString(j["hold_context"].get<std::string>());
+    }
+    if (j.contains("speed")) {
+        msg.speed = fromJson(j["speed"].dump(), static_cast<PathSegmentSpeedType*>(nullptr));
+    }
+    if (j.contains("orientation")) {
+        msg.orientation = j["orientation"].get<double>();
+    }
+    if (j.contains("turn_direction")) {
+        msg.turn_direction = relativeDirectionEnumFromString(j["turn_direction"].get<std::string>());
+    }
+    if (j.contains("leg_specification")) msg.leg_specification = fromJson(j["leg_specification"].dump(), static_cast<MA_HoldLegSpecificationType*>(nullptr));
+    if (j.contains("turn_specification")) msg.turn_specification = fromJson(j["turn_specification"].dump(), static_cast<MA_HoldTurnSpecificationType*>(nullptr));
+    if (j.contains("duration")) msg.duration = fromJson(j["duration"].dump(), static_cast<MA_OrbitDurationType*>(nullptr));
+    if (j.contains("entry_type")) msg.entry_type = mA_HoldEntryTypeEnumFromString(j["entry_type"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const MA_HoldLegSpecificationType& msg) {
+    nlohmann::json obj;
+    if (msg.leg_time.has_value()) {
+        obj["leg_time"] = msg.leg_time.value();
+    }
+    if (msg.leg_length.has_value()) {
+        obj["leg_length"] = msg.leg_length.value();
+    }
+    return obj.dump();
+}
+
+MA_HoldLegSpecificationType fromJson(const std::string& s, MA_HoldLegSpecificationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_HoldLegSpecificationType msg;
+    if (j.contains("leg_time")) {
+        msg.leg_time = j["leg_time"].get<std::string>();
+    }
+    if (j.contains("leg_length")) {
+        msg.leg_length = j["leg_length"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const MA_HoldTurnSpecificationType& msg) {
+    nlohmann::json obj;
+    if (msg.turn_radius.has_value()) {
+        obj["turn_radius"] = msg.turn_radius.value();
+    }
+    if (msg.turn_rate.has_value()) {
+        obj["turn_rate"] = msg.turn_rate.value();
+    }
+    if (msg.turn_type.has_value()) {
+        obj["turn_type"] = toString(msg.turn_type.value());
+    }
+    return obj.dump();
+}
+
+MA_HoldTurnSpecificationType fromJson(const std::string& s, MA_HoldTurnSpecificationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_HoldTurnSpecificationType msg;
+    if (j.contains("turn_radius")) {
+        msg.turn_radius = j["turn_radius"].get<double>();
+    }
+    if (j.contains("turn_rate")) {
+        msg.turn_rate = j["turn_rate"].get<double>();
+    }
+    if (j.contains("turn_type")) {
+        msg.turn_type = mA_HoldTurnTypeEnumFromString(j["turn_type"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const MA_OrbitDurationType& msg) {
+    nlohmann::json obj;
+    if (msg.time.has_value()) {
+        obj["time"] = msg.time.value();
+    }
+    if (msg.number_of_orbits.has_value()) {
+        obj["number_of_orbits"] = msg.number_of_orbits.value();
+    }
+    if (msg.entry_exit_time.has_value()) {
+        obj["entry_exit_time"] = nlohmann::json::parse(toJson(msg.entry_exit_time.value()));
+    }
+    return obj.dump();
+}
+
+MA_OrbitDurationType fromJson(const std::string& s, MA_OrbitDurationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_OrbitDurationType msg;
+    if (j.contains("time")) {
+        msg.time = j["time"].get<std::string>();
+    }
+    if (j.contains("number_of_orbits")) {
+        msg.number_of_orbits = j["number_of_orbits"].get<uint32_t>();
+    }
+    if (j.contains("entry_exit_time")) {
+        msg.entry_exit_time = fromJson(j["entry_exit_time"].dump(), static_cast<DateTimeRangeType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MustFlyType& msg) {
+    nlohmann::json obj;
+    obj["location"] = nlohmann::json::parse(toJson(msg.location));
+    if (msg.ingress_constraint.has_value()) {
+        obj["ingress_constraint"] = nlohmann::json::parse(toJson(msg.ingress_constraint.value()));
+    }
+    return obj.dump();
+}
+
+MustFlyType fromJson(const std::string& s, MustFlyType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MustFlyType msg;
+    if (j.contains("location")) msg.location = fromJson(j["location"].dump(), static_cast<MustFlyLocationType*>(nullptr));
+    if (j.contains("ingress_constraint")) {
+        msg.ingress_constraint = fromJson(j["ingress_constraint"].dump(), static_cast<AnglePairType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MustFlyLocationType& msg) {
+    nlohmann::json obj;
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    if (msg.op_point_id.has_value()) {
+        obj["op_point_id"] = nlohmann::json::parse(toJson(msg.op_point_id.value()));
+    }
+    if (msg.op_line_id.has_value()) {
+        obj["op_line_id"] = nlohmann::json::parse(toJson(msg.op_line_id.value()));
+    }
+    if (msg.op_zone_id.has_value()) {
+        obj["op_zone_id"] = nlohmann::json::parse(toJson(msg.op_zone_id.value()));
+    }
+    if (msg.op_volume_id.has_value()) {
+        obj["op_volume_id"] = nlohmann::json::parse(toJson(msg.op_volume_id.value()));
+    }
+    if (msg.point.has_value()) {
+        obj["point"] = nlohmann::json::parse(toJson(msg.point.value()));
+    }
+    if (msg.zone_target.has_value()) {
+        obj["zone_target"] = nlohmann::json::parse(toJson(msg.zone_target.value()));
+    }
+    if (msg.line_target.has_value()) {
+        obj["line_target"] = nlohmann::json::parse(toJson(msg.line_target.value()));
+    }
+    if (msg.volume_target.has_value()) {
+        obj["volume_target"] = nlohmann::json::parse(toJson(msg.volume_target.value()));
+    }
+    return obj.dump();
+}
+
+MustFlyLocationType fromJson(const std::string& s, MustFlyLocationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MustFlyLocationType msg;
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    if (j.contains("op_point_id")) {
+        msg.op_point_id = fromJson(j["op_point_id"].dump(), static_cast<OpPointID_Type*>(nullptr));
+    }
+    if (j.contains("op_line_id")) {
+        msg.op_line_id = fromJson(j["op_line_id"].dump(), static_cast<OpLineID_Type*>(nullptr));
+    }
+    if (j.contains("op_zone_id")) {
+        msg.op_zone_id = fromJson(j["op_zone_id"].dump(), static_cast<OpZoneID_Type*>(nullptr));
+    }
+    if (j.contains("op_volume_id")) {
+        msg.op_volume_id = fromJson(j["op_volume_id"].dump(), static_cast<OpVolumeID_Type*>(nullptr));
+    }
+    if (j.contains("point")) {
+        msg.point = fromJson(j["point"].dump(), static_cast<Point3D_Type*>(nullptr));
+    }
+    if (j.contains("zone_target")) {
+        msg.zone_target = fromJson(j["zone_target"].dump(), static_cast<ZoneExternalType*>(nullptr));
+    }
+    if (j.contains("line_target")) {
+        msg.line_target = fromJson(j["line_target"].dump(), static_cast<LineTargetType*>(nullptr));
+    }
+    if (j.contains("volume_target")) {
+        msg.volume_target = fromJson(j["volume_target"].dump(), static_cast<OpVolumeType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_FormationType& msg) {
+    nlohmann::json obj;
+    obj["formation_template"] = toString(msg.formation_template);
+    obj["formation_anchor"] = nlohmann::json::parse(toJson(msg.formation_anchor));
+    obj["formation_slot"] = msg.formation_slot;
+    obj["zone_target"] = nlohmann::json::parse(toJson(msg.zone_target));
+    return obj.dump();
+}
+
+MA_FormationType fromJson(const std::string& s, MA_FormationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_FormationType msg;
+    if (j.contains("formation_template")) msg.formation_template = mA_FormationTemplateEnumFromString(j["formation_template"].get<std::string>());
+    if (j.contains("formation_anchor")) msg.formation_anchor = fromJson(j["formation_anchor"].dump(), static_cast<MA_FormationAnchorType*>(nullptr));
+    if (j.contains("formation_slot")) msg.formation_slot = j["formation_slot"].get<int32_t>();
+    if (j.contains("zone_target")) msg.zone_target = fromJson(j["zone_target"].dump(), static_cast<ZoneExternalType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_FormationAnchorType& msg) {
+    nlohmann::json obj;
+    obj["reference_frame_id"] = nlohmann::json::parse(toJson(msg.reference_frame_id));
+    return obj.dump();
+}
+
+MA_FormationAnchorType fromJson(const std::string& s, MA_FormationAnchorType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_FormationAnchorType msg;
+    if (j.contains("reference_frame_id")) msg.reference_frame_id = fromJson(j["reference_frame_id"].dump(), static_cast<ReferenceFrameID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_AltitudeStackedMarshallType& msg) {
+    nlohmann::json obj;
+    obj["loiter_kinematics"] = nlohmann::json::parse(toJson(msg.loiter_kinematics));
+    obj["minimum_altitude"] = msg.minimum_altitude;
+    if (msg.maximum_altitude.has_value()) {
+        obj["maximum_altitude"] = msg.maximum_altitude.value();
+    }
+    if (msg.minimum_altitude_separation.has_value()) {
+        obj["minimum_altitude_separation"] = msg.minimum_altitude_separation.value();
+    }
+    return obj.dump();
+}
+
+MA_AltitudeStackedMarshallType fromJson(const std::string& s, MA_AltitudeStackedMarshallType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_AltitudeStackedMarshallType msg;
+    if (j.contains("loiter_kinematics")) msg.loiter_kinematics = fromJson(j["loiter_kinematics"].dump(), static_cast<LoiterType*>(nullptr));
+    if (j.contains("minimum_altitude")) msg.minimum_altitude = j["minimum_altitude"].get<double>();
+    if (j.contains("maximum_altitude")) {
+        msg.maximum_altitude = j["maximum_altitude"].get<double>();
+    }
+    if (j.contains("minimum_altitude_separation")) {
+        msg.minimum_altitude_separation = j["minimum_altitude_separation"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const MA_FlightControlModesChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.hsa_csa.has_value()) {
+        obj["hsa_csa"] = nlohmann::json::parse(toJson(msg.hsa_csa.value()));
+    }
+    if (msg.waypoint_following.has_value()) {
+        obj["waypoint_following"] = nlohmann::json::parse(toJson(msg.waypoint_following.value()));
+    }
+    if (msg.curve_following.has_value()) {
+        obj["curve_following"] = nlohmann::json::parse(toJson(msg.curve_following.value()));
+    }
+    return obj.dump();
+}
+
+MA_FlightControlModesChoiceType fromJson(const std::string& s, MA_FlightControlModesChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_FlightControlModesChoiceType msg;
+    if (j.contains("hsa_csa")) {
+        msg.hsa_csa = fromJson(j["hsa_csa"].dump(), static_cast<MA_HSA_CSA_Type*>(nullptr));
+    }
+    if (j.contains("waypoint_following")) {
+        msg.waypoint_following = fromJson(j["waypoint_following"].dump(), static_cast<MA_WaypointFollowingType*>(nullptr));
+    }
+    if (j.contains("curve_following")) {
+        msg.curve_following = fromJson(j["curve_following"].dump(), static_cast<MA_CurveControlType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_HSA_CSA_Type& msg) {
+    nlohmann::json obj;
+    if (msg.altitude.has_value()) {
+        obj["altitude"] = nlohmann::json::parse(toJson(msg.altitude.value()));
+    }
+    if (msg.speed.has_value()) {
+        obj["speed"] = nlohmann::json::parse(toJson(msg.speed.value()));
+    }
+    if (msg.direction.has_value()) {
+        obj["direction"] = nlohmann::json::parse(toJson(msg.direction.value()));
+    }
+    return obj.dump();
+}
+
+MA_HSA_CSA_Type fromJson(const std::string& s, MA_HSA_CSA_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_HSA_CSA_Type msg;
+    if (j.contains("altitude")) {
+        msg.altitude = fromJson(j["altitude"].dump(), static_cast<AltitudeReferenceType*>(nullptr));
+    }
+    if (j.contains("speed")) {
+        msg.speed = fromJson(j["speed"].dump(), static_cast<PathSegmentSpeedType*>(nullptr));
+    }
+    if (j.contains("direction")) {
+        msg.direction = fromJson(j["direction"].dump(), static_cast<MA_DirectionChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_WaypointFollowingType& msg) {
+    nlohmann::json obj;
+    obj["route"] = nlohmann::json::parse(toJson(msg.route));
+    return obj.dump();
+}
+
+MA_WaypointFollowingType fromJson(const std::string& s, MA_WaypointFollowingType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_WaypointFollowingType msg;
+    if (j.contains("route")) msg.route = fromJson(j["route"].dump(), static_cast<MA_RouteType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_RouteType& msg) {
+    nlohmann::json obj;
+    obj["detailed"] = msg.detailed;
+    obj["first_in_route_path_id"] = nlohmann::json::parse(toJson(msg.first_in_route_path_id));
+    obj["route_projection"] = toString(msg.route_projection);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.path) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["path"] = arr;
+    }
+    if (msg.remarks.has_value()) {
+        obj["remarks"] = nlohmann::json::parse(toJson(msg.remarks.value()));
+    }
+    return obj.dump();
+}
+
+MA_RouteType fromJson(const std::string& s, MA_RouteType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_RouteType msg;
+    if (j.contains("detailed")) msg.detailed = j["detailed"].get<bool>();
+    if (j.contains("first_in_route_path_id")) msg.first_in_route_path_id = fromJson(j["first_in_route_path_id"].dump(), static_cast<PathID_Type*>(nullptr));
+    if (j.contains("route_projection")) msg.route_projection = lineProjectionEnumFromString(j["route_projection"].get<std::string>());
+    if (j.contains("path")) {
+        for (const auto& v : j["path"]) {
+            msg.path.push_back(fromJson(v.dump(), static_cast<MA_RoutePathType*>(nullptr)));
+        }
+    }
+    if (j.contains("remarks")) {
+        msg.remarks = fromJson(j["remarks"].dump(), static_cast<RemarksType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_RoutePathType& msg) {
+    nlohmann::json obj;
+    obj["path_id"] = nlohmann::json::parse(toJson(msg.path_id));
+    obj["path_type"] = toString(msg.path_type);
+    obj["first_in_path_segment_id"] = nlohmann::json::parse(toJson(msg.first_in_path_segment_id));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.path_segment) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["path_segment"] = arr;
+    }
+    if (msg.initial_conditions.has_value()) {
+        obj["initial_conditions"] = nlohmann::json::parse(toJson(msg.initial_conditions.value()));
+    }
+    if (msg.airfield_id.has_value()) {
+        obj["airfield_id"] = nlohmann::json::parse(toJson(msg.airfield_id.value()));
+    }
+    if (msg.runway_id.has_value()) {
+        obj["runway_id"] = nlohmann::json::parse(toJson(msg.runway_id.value()));
+    }
+    if (msg.remarks.has_value()) {
+        obj["remarks"] = nlohmann::json::parse(toJson(msg.remarks.value()));
+    }
+    return obj.dump();
+}
+
+MA_RoutePathType fromJson(const std::string& s, MA_RoutePathType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_RoutePathType msg;
+    if (j.contains("path_id")) msg.path_id = fromJson(j["path_id"].dump(), static_cast<PathID_Type*>(nullptr));
+    if (j.contains("path_type")) msg.path_type = mA_PathTypeEnumFromString(j["path_type"].get<std::string>());
+    if (j.contains("first_in_path_segment_id")) msg.first_in_path_segment_id = fromJson(j["first_in_path_segment_id"].dump(), static_cast<SegmentID_Type*>(nullptr));
+    if (j.contains("path_segment")) {
+        for (const auto& v : j["path_segment"]) {
+            msg.path_segment.push_back(fromJson(v.dump(), static_cast<MA_PathSegmentType*>(nullptr)));
+        }
+    }
+    if (j.contains("initial_conditions")) {
+        msg.initial_conditions = fromJson(j["initial_conditions"].dump(), static_cast<PlanningLocationType*>(nullptr));
+    }
+    if (j.contains("airfield_id")) {
+        msg.airfield_id = fromJson(j["airfield_id"].dump(), static_cast<AirfieldID_Type*>(nullptr));
+    }
+    if (j.contains("runway_id")) {
+        msg.runway_id = fromJson(j["runway_id"].dump(), static_cast<RunwayID_Type*>(nullptr));
+    }
+    if (j.contains("remarks")) {
+        msg.remarks = fromJson(j["remarks"].dump(), static_cast<RemarksType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_PathSegmentType& msg) {
+    nlohmann::json obj;
+    obj["path_segment_id"] = nlohmann::json::parse(toJson(msg.path_segment_id));
+    obj["source"] = toString(msg.source);
+    obj["end_point"] = nlohmann::json::parse(toJson(msg.end_point));
+    if (msg.locked.has_value()) {
+        obj["locked"] = msg.locked.value();
+    }
+    if (msg.modified.has_value()) {
+        obj["modified"] = msg.modified.value();
+    }
+    if (msg.speed.has_value()) {
+        obj["speed"] = nlohmann::json::parse(toJson(msg.speed.value()));
+    }
+    if (msg.civil_path_terminator.has_value()) {
+        obj["civil_path_terminator"] = nlohmann::json::parse(toJson(msg.civil_path_terminator.value()));
+    }
+    if (msg.climb.has_value()) {
+        obj["climb"] = nlohmann::json::parse(toJson(msg.climb.value()));
+    }
+    if (msg.maximum_roll.has_value()) {
+        obj["maximum_roll"] = msg.maximum_roll.value();
+    }
+    if (msg.acceleration.has_value()) {
+        obj["acceleration"] = msg.acceleration.value();
+    }
+    if (msg.next_path_segment.has_value()) {
+        obj["next_path_segment"] = nlohmann::json::parse(toJson(msg.next_path_segment.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.conditional_path_segment) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["conditional_path_segment"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.inertial_state) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["inertial_state"] = arr;
+    }
+    if (msg.required_time_of_arrival.has_value()) {
+        obj["required_time_of_arrival"] = nlohmann::json::parse(toJson(msg.required_time_of_arrival.value()));
+    }
+    if (msg.remarks.has_value()) {
+        obj["remarks"] = nlohmann::json::parse(toJson(msg.remarks.value()));
+    }
+    if (msg.required_navigation_performance_in_meters.has_value()) {
+        obj["required_navigation_performance_in_meters"] = msg.required_navigation_performance_in_meters.value();
+    }
+    if (msg.fix_identifier.has_value()) {
+        obj["fix_identifier"] = nlohmann::json::parse(toJson(msg.fix_identifier.value()));
+    }
+    return obj.dump();
+}
+
+MA_PathSegmentType fromJson(const std::string& s, MA_PathSegmentType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_PathSegmentType msg;
+    if (j.contains("path_segment_id")) msg.path_segment_id = fromJson(j["path_segment_id"].dump(), static_cast<SegmentID_Type*>(nullptr));
+    if (j.contains("source")) msg.source = pathSegmentSourceEnumFromString(j["source"].get<std::string>());
+    if (j.contains("end_point")) msg.end_point = fromJson(j["end_point"].dump(), static_cast<MA_EndPointType*>(nullptr));
+    if (j.contains("locked")) {
+        msg.locked = j["locked"].get<bool>();
+    }
+    if (j.contains("modified")) {
+        msg.modified = j["modified"].get<bool>();
+    }
+    if (j.contains("speed")) {
+        msg.speed = fromJson(j["speed"].dump(), static_cast<PathSegmentSpeedType*>(nullptr));
+    }
+    if (j.contains("civil_path_terminator")) {
+        msg.civil_path_terminator = fromJson(j["civil_path_terminator"].dump(), static_cast<CivilPathTerminatorType*>(nullptr));
+    }
+    if (j.contains("climb")) {
+        msg.climb = fromJson(j["climb"].dump(), static_cast<ClimbType*>(nullptr));
+    }
+    if (j.contains("maximum_roll")) {
+        msg.maximum_roll = j["maximum_roll"].get<double>();
+    }
+    if (j.contains("acceleration")) {
+        msg.acceleration = j["acceleration"].get<double>();
+    }
+    if (j.contains("next_path_segment")) {
+        msg.next_path_segment = fromJson(j["next_path_segment"].dump(), static_cast<NextPathSegmentType*>(nullptr));
+    }
+    if (j.contains("conditional_path_segment")) {
+        for (const auto& v : j["conditional_path_segment"]) {
+            msg.conditional_path_segment.push_back(fromJson(v.dump(), static_cast<ConditionalPathSegmentType*>(nullptr)));
+        }
+    }
+    if (j.contains("inertial_state")) {
+        for (const auto& v : j["inertial_state"]) {
+            msg.inertial_state.push_back(fromJson(v.dump(), static_cast<InertialStateRelativeType*>(nullptr)));
+        }
+    }
+    if (j.contains("required_time_of_arrival")) {
+        msg.required_time_of_arrival = fromJson(j["required_time_of_arrival"].dump(), static_cast<TimeWindowType*>(nullptr));
+    }
+    if (j.contains("remarks")) {
+        msg.remarks = fromJson(j["remarks"].dump(), static_cast<RemarksType*>(nullptr));
+    }
+    if (j.contains("required_navigation_performance_in_meters")) {
+        msg.required_navigation_performance_in_meters = j["required_navigation_performance_in_meters"].get<double>();
+    }
+    if (j.contains("fix_identifier")) {
+        msg.fix_identifier = fromJson(j["fix_identifier"].dump(), static_cast<ForeignKeyType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_EndPointType& msg) {
+    nlohmann::json obj;
+    if (msg.way_point.has_value()) {
+        obj["way_point"] = nlohmann::json::parse(toJson(msg.way_point.value()));
+    }
+    if (msg.turn_point.has_value()) {
+        obj["turn_point"] = nlohmann::json::parse(toJson(msg.turn_point.value()));
+    }
+    if (msg.loiter_point.has_value()) {
+        obj["loiter_point"] = nlohmann::json::parse(toJson(msg.loiter_point.value()));
+    }
+    return obj.dump();
+}
+
+MA_EndPointType fromJson(const std::string& s, MA_EndPointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_EndPointType msg;
+    if (j.contains("way_point")) {
+        msg.way_point = fromJson(j["way_point"].dump(), static_cast<WayPointType*>(nullptr));
+    }
+    if (j.contains("turn_point")) {
+        msg.turn_point = fromJson(j["turn_point"].dump(), static_cast<TurnPointType*>(nullptr));
+    }
+    if (j.contains("loiter_point")) {
+        msg.loiter_point = fromJson(j["loiter_point"].dump(), static_cast<MA_LoiterPointType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const TurnPointType& msg) {
+    nlohmann::json obj;
+    obj["waypoint"] = nlohmann::json::parse(toJson(msg.waypoint));
+    obj["turn_point_type"] = toString(msg.turn_point_type);
+    if (msg.course.has_value()) {
+        obj["course"] = msg.course.value();
+    }
+    if (msg.turn_geometry.has_value()) {
+        obj["turn_geometry"] = nlohmann::json::parse(toJson(msg.turn_geometry.value()));
+    }
+    return obj.dump();
+}
+
+TurnPointType fromJson(const std::string& s, TurnPointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    TurnPointType msg;
+    if (j.contains("waypoint")) msg.waypoint = fromJson(j["waypoint"].dump(), static_cast<WayPointPointChoiceType*>(nullptr));
+    if (j.contains("turn_point_type")) msg.turn_point_type = turnPointTypeEnumFromString(j["turn_point_type"].get<std::string>());
+    if (j.contains("course")) {
+        msg.course = j["course"].get<double>();
+    }
+    if (j.contains("turn_geometry")) {
+        msg.turn_geometry = fromJson(j["turn_geometry"].dump(), static_cast<TurnGeometryChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_LoiterPointType& msg) {
+    nlohmann::json obj;
+    obj["loiter"] = nlohmann::json::parse(toJson(msg.loiter));
+    obj["end_time"] = msg.end_time;
+    return obj.dump();
+}
+
+MA_LoiterPointType fromJson(const std::string& s, MA_LoiterPointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_LoiterPointType msg;
+    if (j.contains("loiter")) msg.loiter = fromJson(j["loiter"].dump(), static_cast<MA_LoiterType*>(nullptr));
+    if (j.contains("end_time")) msg.end_time = j["end_time"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const CivilPathTerminatorType& msg) {
+    nlohmann::json obj;
+    if (msg.af_arc_to_fix.has_value()) {
+        obj["af_arc_to_fix"] = msg.af_arc_to_fix.value();
+    }
+    if (msg.ca_course_to_altitude.has_value()) {
+        obj["ca_course_to_altitude"] = msg.ca_course_to_altitude.value();
+    }
+    if (msg.cd_course_to_dme_distance.has_value()) {
+        obj["cd_course_to_dme_distance"] = msg.cd_course_to_dme_distance.value();
+    }
+    if (msg.cf_course_to_fix.has_value()) {
+        obj["cf_course_to_fix"] = nlohmann::json::parse(toJson(msg.cf_course_to_fix.value()));
+    }
+    if (msg.ci_course_to_intercept.has_value()) {
+        obj["ci_course_to_intercept"] = msg.ci_course_to_intercept.value();
+    }
+    if (msg.cr_course_to_radial.has_value()) {
+        obj["cr_course_to_radial"] = msg.cr_course_to_radial.value();
+    }
+    if (msg.df_direct_to_fix.has_value()) {
+        obj["df_direct_to_fix"] = msg.df_direct_to_fix.value();
+    }
+    if (msg.fa_track_to_altitude.has_value()) {
+        obj["fa_track_to_altitude"] = msg.fa_track_to_altitude.value();
+    }
+    if (msg.fc_track_from_fix_to_distance_along_track.has_value()) {
+        obj["fc_track_from_fix_to_distance_along_track"] = msg.fc_track_from_fix_to_distance_along_track.value();
+    }
+    if (msg.fd_track_from_fix_to_dme_distance.has_value()) {
+        obj["fd_track_from_fix_to_dme_distance"] = msg.fd_track_from_fix_to_dme_distance.value();
+    }
+    if (msg.fm_fix_to_manual_termination.has_value()) {
+        obj["fm_fix_to_manual_termination"] = msg.fm_fix_to_manual_termination.value();
+    }
+    if (msg.ha_holding_with_altitude_termination.has_value()) {
+        obj["ha_holding_with_altitude_termination"] = msg.ha_holding_with_altitude_termination.value();
+    }
+    if (msg.hf_holding_with_fix_termination.has_value()) {
+        obj["hf_holding_with_fix_termination"] = msg.hf_holding_with_fix_termination.value();
+    }
+    if (msg.hm_holding_with_manual_termination.has_value()) {
+        obj["hm_holding_with_manual_termination"] = msg.hm_holding_with_manual_termination.value();
+    }
+    if (msg.if_initial_fix.has_value()) {
+        obj["if_initial_fix"] = msg.if_initial_fix.value();
+    }
+    if (msg.pi_procedure_turn_to_intercept.has_value()) {
+        obj["pi_procedure_turn_to_intercept"] = msg.pi_procedure_turn_to_intercept.value();
+    }
+    if (msg.rf_radius_to_fix.has_value()) {
+        obj["rf_radius_to_fix"] = nlohmann::json::parse(toJson(msg.rf_radius_to_fix.value()));
+    }
+    if (msg.tf_track_to_fix.has_value()) {
+        obj["tf_track_to_fix"] = msg.tf_track_to_fix.value();
+    }
+    if (msg.va_heading_to_altitude.has_value()) {
+        obj["va_heading_to_altitude"] = msg.va_heading_to_altitude.value();
+    }
+    if (msg.vd_heading_to_dme_distance_termination.has_value()) {
+        obj["vd_heading_to_dme_distance_termination"] = msg.vd_heading_to_dme_distance_termination.value();
+    }
+    if (msg.vi_heading_to_intercept.has_value()) {
+        obj["vi_heading_to_intercept"] = msg.vi_heading_to_intercept.value();
+    }
+    if (msg.vm_heading_to_manual.has_value()) {
+        obj["vm_heading_to_manual"] = msg.vm_heading_to_manual.value();
+    }
+    if (msg.vr_heading_to_radial_termination.has_value()) {
+        obj["vr_heading_to_radial_termination"] = msg.vr_heading_to_radial_termination.value();
+    }
+    return obj.dump();
+}
+
+CivilPathTerminatorType fromJson(const std::string& s, CivilPathTerminatorType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CivilPathTerminatorType msg;
+    if (j.contains("af_arc_to_fix")) {
+        msg.af_arc_to_fix = j["af_arc_to_fix"].get<std::string>();
+    }
+    if (j.contains("ca_course_to_altitude")) {
+        msg.ca_course_to_altitude = j["ca_course_to_altitude"].get<std::string>();
+    }
+    if (j.contains("cd_course_to_dme_distance")) {
+        msg.cd_course_to_dme_distance = j["cd_course_to_dme_distance"].get<std::string>();
+    }
+    if (j.contains("cf_course_to_fix")) {
+        msg.cf_course_to_fix = fromJson(j["cf_course_to_fix"].dump(), static_cast<CF_CourseToFixType*>(nullptr));
+    }
+    if (j.contains("ci_course_to_intercept")) {
+        msg.ci_course_to_intercept = j["ci_course_to_intercept"].get<std::string>();
+    }
+    if (j.contains("cr_course_to_radial")) {
+        msg.cr_course_to_radial = j["cr_course_to_radial"].get<std::string>();
+    }
+    if (j.contains("df_direct_to_fix")) {
+        msg.df_direct_to_fix = j["df_direct_to_fix"].get<std::string>();
+    }
+    if (j.contains("fa_track_to_altitude")) {
+        msg.fa_track_to_altitude = j["fa_track_to_altitude"].get<std::string>();
+    }
+    if (j.contains("fc_track_from_fix_to_distance_along_track")) {
+        msg.fc_track_from_fix_to_distance_along_track = j["fc_track_from_fix_to_distance_along_track"].get<std::string>();
+    }
+    if (j.contains("fd_track_from_fix_to_dme_distance")) {
+        msg.fd_track_from_fix_to_dme_distance = j["fd_track_from_fix_to_dme_distance"].get<std::string>();
+    }
+    if (j.contains("fm_fix_to_manual_termination")) {
+        msg.fm_fix_to_manual_termination = j["fm_fix_to_manual_termination"].get<std::string>();
+    }
+    if (j.contains("ha_holding_with_altitude_termination")) {
+        msg.ha_holding_with_altitude_termination = j["ha_holding_with_altitude_termination"].get<std::string>();
+    }
+    if (j.contains("hf_holding_with_fix_termination")) {
+        msg.hf_holding_with_fix_termination = j["hf_holding_with_fix_termination"].get<std::string>();
+    }
+    if (j.contains("hm_holding_with_manual_termination")) {
+        msg.hm_holding_with_manual_termination = j["hm_holding_with_manual_termination"].get<std::string>();
+    }
+    if (j.contains("if_initial_fix")) {
+        msg.if_initial_fix = j["if_initial_fix"].get<std::string>();
+    }
+    if (j.contains("pi_procedure_turn_to_intercept")) {
+        msg.pi_procedure_turn_to_intercept = j["pi_procedure_turn_to_intercept"].get<std::string>();
+    }
+    if (j.contains("rf_radius_to_fix")) {
+        msg.rf_radius_to_fix = fromJson(j["rf_radius_to_fix"].dump(), static_cast<RF_RadiusToFixType*>(nullptr));
+    }
+    if (j.contains("tf_track_to_fix")) {
+        msg.tf_track_to_fix = j["tf_track_to_fix"].get<std::string>();
+    }
+    if (j.contains("va_heading_to_altitude")) {
+        msg.va_heading_to_altitude = j["va_heading_to_altitude"].get<std::string>();
+    }
+    if (j.contains("vd_heading_to_dme_distance_termination")) {
+        msg.vd_heading_to_dme_distance_termination = j["vd_heading_to_dme_distance_termination"].get<std::string>();
+    }
+    if (j.contains("vi_heading_to_intercept")) {
+        msg.vi_heading_to_intercept = j["vi_heading_to_intercept"].get<std::string>();
+    }
+    if (j.contains("vm_heading_to_manual")) {
+        msg.vm_heading_to_manual = j["vm_heading_to_manual"].get<std::string>();
+    }
+    if (j.contains("vr_heading_to_radial_termination")) {
+        msg.vr_heading_to_radial_termination = j["vr_heading_to_radial_termination"].get<std::string>();
+    }
+    return msg;
+}
+
+std::string toJson(const CF_CourseToFixType& msg) {
+    nlohmann::json obj;
+    obj["course"] = msg.course;
+    return obj.dump();
+}
+
+CF_CourseToFixType fromJson(const std::string& s, CF_CourseToFixType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CF_CourseToFixType msg;
+    if (j.contains("course")) msg.course = j["course"].get<double>();
+    return msg;
+}
+
+std::string toJson(const RF_RadiusToFixType& msg) {
+    nlohmann::json obj;
+    obj["radius_center_point"] = nlohmann::json::parse(toJson(msg.radius_center_point));
+    obj["turn_radius"] = msg.turn_radius;
+    obj["course_in"] = msg.course_in;
+    obj["course_out"] = msg.course_out;
+    obj["arc_initial_point"] = nlohmann::json::parse(toJson(msg.arc_initial_point));
+    obj["arc_end_point"] = nlohmann::json::parse(toJson(msg.arc_end_point));
+    obj["arc_distance"] = msg.arc_distance;
+    obj["arc_direct_distance"] = msg.arc_direct_distance;
+    obj["turn_direction"] = toString(msg.turn_direction);
+    return obj.dump();
+}
+
+RF_RadiusToFixType fromJson(const std::string& s, RF_RadiusToFixType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RF_RadiusToFixType msg;
+    if (j.contains("radius_center_point")) msg.radius_center_point = fromJson(j["radius_center_point"].dump(), static_cast<Point2D_Type*>(nullptr));
+    if (j.contains("turn_radius")) msg.turn_radius = j["turn_radius"].get<double>();
+    if (j.contains("course_in")) msg.course_in = j["course_in"].get<double>();
+    if (j.contains("course_out")) msg.course_out = j["course_out"].get<double>();
+    if (j.contains("arc_initial_point")) msg.arc_initial_point = fromJson(j["arc_initial_point"].dump(), static_cast<Point2D_Type*>(nullptr));
+    if (j.contains("arc_end_point")) msg.arc_end_point = fromJson(j["arc_end_point"].dump(), static_cast<Point2D_Type*>(nullptr));
+    if (j.contains("arc_distance")) msg.arc_distance = j["arc_distance"].get<double>();
+    if (j.contains("arc_direct_distance")) msg.arc_direct_distance = j["arc_direct_distance"].get<double>();
+    if (j.contains("turn_direction")) msg.turn_direction = relativeDirectionEnumFromString(j["turn_direction"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const ClimbType& msg) {
+    nlohmann::json obj;
+    if (msg.climb_rate.has_value()) {
+        obj["climb_rate"] = msg.climb_rate.value();
+    }
+    if (msg.climb_type.has_value()) {
+        obj["climb_type"] = toString(msg.climb_type.value());
+    }
+    return obj.dump();
+}
+
+ClimbType fromJson(const std::string& s, ClimbType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ClimbType msg;
+    if (j.contains("climb_rate")) {
+        msg.climb_rate = j["climb_rate"].get<double>();
+    }
+    if (j.contains("climb_type")) {
+        msg.climb_type = climbOptimizationEnumFromString(j["climb_type"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const NextPathSegmentType& msg) {
+    nlohmann::json obj;
+    if (msg.path_id.has_value()) {
+        obj["path_id"] = nlohmann::json::parse(toJson(msg.path_id.value()));
+    }
+    obj["path_segment_id"] = nlohmann::json::parse(toJson(msg.path_segment_id));
+    return obj.dump();
+}
+
+NextPathSegmentType fromJson(const std::string& s, NextPathSegmentType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    NextPathSegmentType msg;
+    if (j.contains("path_id")) {
+        msg.path_id = fromJson(j["path_id"].dump(), static_cast<PathID_Type*>(nullptr));
+    }
+    if (j.contains("path_segment_id")) msg.path_segment_id = fromJson(j["path_segment_id"].dump(), static_cast<SegmentID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const ConditionalPathSegmentType& msg) {
+    nlohmann::json obj;
+    if (msg.path_id.has_value()) {
+        obj["path_id"] = nlohmann::json::parse(toJson(msg.path_id.value()));
+    }
+    obj["path_segment_id"] = nlohmann::json::parse(toJson(msg.path_segment_id));
+    if (msg.condition.has_value()) {
+        obj["condition"] = nlohmann::json::parse(toJson(msg.condition.value()));
+    }
+    return obj.dump();
+}
+
+ConditionalPathSegmentType fromJson(const std::string& s, ConditionalPathSegmentType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ConditionalPathSegmentType msg;
+    if (j.contains("path_id")) {
+        msg.path_id = fromJson(j["path_id"].dump(), static_cast<PathID_Type*>(nullptr));
+    }
+    if (j.contains("path_segment_id")) msg.path_segment_id = fromJson(j["path_segment_id"].dump(), static_cast<SegmentID_Type*>(nullptr));
+    if (j.contains("condition")) {
+        msg.condition = fromJson(j["condition"].dump(), static_cast<PathSegmentConditionType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const PathSegmentConditionType& msg) {
+    nlohmann::json obj;
+    if (msg.altitude_range.has_value()) {
+        obj["altitude_range"] = nlohmann::json::parse(toJson(msg.altitude_range.value()));
+    }
+    if (msg.time_window.has_value()) {
+        obj["time_window"] = nlohmann::json::parse(toJson(msg.time_window.value()));
+    }
+    if (msg.segment_capture.has_value()) {
+        obj["segment_capture"] = nlohmann::json::parse(toJson(msg.segment_capture.value()));
+    }
+    if (msg.operator_input.has_value()) {
+        obj["operator_input"] = msg.operator_input.value();
+    }
+    if (msg.endurance.has_value()) {
+        obj["endurance"] = nlohmann::json::parse(toJson(msg.endurance.value()));
+    }
+    if (msg.contingency_level.has_value()) {
+        obj["contingency_level"] = toString(msg.contingency_level.value());
+    }
+    return obj.dump();
+}
+
+PathSegmentConditionType fromJson(const std::string& s, PathSegmentConditionType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PathSegmentConditionType msg;
+    if (j.contains("altitude_range")) {
+        msg.altitude_range = fromJson(j["altitude_range"].dump(), static_cast<AltitudeRangeType*>(nullptr));
+    }
+    if (j.contains("time_window")) {
+        msg.time_window = fromJson(j["time_window"].dump(), static_cast<DateTimeRangeType*>(nullptr));
+    }
+    if (j.contains("segment_capture")) {
+        msg.segment_capture = fromJson(j["segment_capture"].dump(), static_cast<SegmentCaptureType*>(nullptr));
+    }
+    if (j.contains("operator_input")) {
+        msg.operator_input = j["operator_input"].get<bool>();
+    }
+    if (j.contains("endurance")) {
+        msg.endurance = fromJson(j["endurance"].dump(), static_cast<EnduranceRemainingType*>(nullptr));
+    }
+    if (j.contains("contingency_level")) {
+        msg.contingency_level = systemContingencyLevelEnumFromString(j["contingency_level"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const SegmentCaptureType& msg) {
+    nlohmann::json obj;
+    obj["capture_count"] = msg.capture_count;
+    obj["logical_operator"] = toString(msg.logical_operator);
+    return obj.dump();
+}
+
+SegmentCaptureType fromJson(const std::string& s, SegmentCaptureType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SegmentCaptureType msg;
+    if (j.contains("capture_count")) msg.capture_count = j["capture_count"].get<uint32_t>();
+    if (j.contains("logical_operator")) msg.logical_operator = equalityExpressionEnumFromString(j["logical_operator"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const EnduranceRemainingType& msg) {
+    nlohmann::json obj;
+    obj["endurance_remaining"] = nlohmann::json::parse(toJson(msg.endurance_remaining));
+    obj["logical_operator"] = toString(msg.logical_operator);
+    return obj.dump();
+}
+
+EnduranceRemainingType fromJson(const std::string& s, EnduranceRemainingType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    EnduranceRemainingType msg;
+    if (j.contains("endurance_remaining")) msg.endurance_remaining = fromJson(j["endurance_remaining"].dump(), static_cast<EnduranceType*>(nullptr));
+    if (j.contains("logical_operator")) msg.logical_operator = equalityExpressionEnumFromString(j["logical_operator"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const AirfieldID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+AirfieldID_Type fromJson(const std::string& s, AirfieldID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AirfieldID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const RunwayID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+RunwayID_Type fromJson(const std::string& s, RunwayID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RunwayID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const MA_CurveControlType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.curve_segments) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["curve_segments"] = arr;
+    }
+    obj["append_curve"] = msg.append_curve;
+    if (msg.end_of_curve_behavior.has_value()) {
+        obj["end_of_curve_behavior"] = toString(msg.end_of_curve_behavior.value());
+    }
+    return obj.dump();
+}
+
+MA_CurveControlType fromJson(const std::string& s, MA_CurveControlType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CurveControlType msg;
+    if (j.contains("curve_segments")) {
+        for (const auto& v : j["curve_segments"]) {
+            msg.curve_segments.push_back(fromJson(v.dump(), static_cast<MA_NURBS_PointType*>(nullptr)));
+        }
+    }
+    if (j.contains("append_curve")) msg.append_curve = j["append_curve"].get<std::string>();
+    if (j.contains("end_of_curve_behavior")) {
+        msg.end_of_curve_behavior = mA_EndOfCurveBehaviorEnumFromString(j["end_of_curve_behavior"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const MA_NURBS_PointType& msg) {
+    nlohmann::json obj;
+    obj["center_reference"] = nlohmann::json::parse(toJson(msg.center_reference));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.control_points) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["control_points"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.knot_vector) {
+            arr.push_back(v);
+        }
+        obj["knot_vector"] = arr;
+    }
+    if (msg.curve_traversing_parameters.has_value()) {
+        obj["curve_traversing_parameters"] = nlohmann::json::parse(toJson(msg.curve_traversing_parameters.value()));
+    }
+    if (msg.curvature.has_value()) {
+        obj["curvature"] = msg.curvature.value();
+    }
+    if (msg.initial_control_point_index.has_value()) {
+        obj["initial_control_point_index"] = msg.initial_control_point_index.value();
+    }
+    if (msg.final_control_point_index.has_value()) {
+        obj["final_control_point_index"] = msg.final_control_point_index.value();
+    }
+    return obj.dump();
+}
+
+MA_NURBS_PointType fromJson(const std::string& s, MA_NURBS_PointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_NURBS_PointType msg;
+    if (j.contains("center_reference")) msg.center_reference = fromJson(j["center_reference"].dump(), static_cast<WayPointPointChoiceType*>(nullptr));
+    if (j.contains("control_points")) {
+        for (const auto& v : j["control_points"]) {
+            msg.control_points.push_back(fromJson(v.dump(), static_cast<MA_NURBS_ControlPointType*>(nullptr)));
+        }
+    }
+    if (j.contains("knot_vector")) {
+        for (const auto& v : j["knot_vector"]) {
+            msg.knot_vector.push_back(v.get<double>());
+        }
+    }
+    if (j.contains("curve_traversing_parameters")) {
+        msg.curve_traversing_parameters = fromJson(j["curve_traversing_parameters"].dump(), static_cast<MA_CurveTraversingType*>(nullptr));
+    }
+    if (j.contains("curvature")) {
+        msg.curvature = j["curvature"].get<double>();
+    }
+    if (j.contains("initial_control_point_index")) {
+        msg.initial_control_point_index = j["initial_control_point_index"].get<uint32_t>();
+    }
+    if (j.contains("final_control_point_index")) {
+        msg.final_control_point_index = j["final_control_point_index"].get<uint32_t>();
+    }
+    return msg;
+}
+
+std::string toJson(const MA_NURBS_ControlPointType& msg) {
+    nlohmann::json obj;
+    obj["control_point"] = nlohmann::json::parse(toJson(msg.control_point));
+    obj["weight"] = msg.weight;
+    return obj.dump();
+}
+
+MA_NURBS_ControlPointType fromJson(const std::string& s, MA_NURBS_ControlPointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_NURBS_ControlPointType msg;
+    if (j.contains("control_point")) msg.control_point = fromJson(j["control_point"].dump(), static_cast<Point2D_RelativeType*>(nullptr));
+    if (j.contains("weight")) msg.weight = j["weight"].get<double>();
+    return msg;
+}
+
+std::string toJson(const MA_CurveTraversingType& msg) {
+    nlohmann::json obj;
+    if (msg.speed_range.has_value()) {
+        obj["speed_range"] = nlohmann::json::parse(toJson(msg.speed_range.value()));
+    }
+    if (msg.duration.has_value()) {
+        obj["duration"] = msg.duration.value();
+    }
+    return obj.dump();
+}
+
+MA_CurveTraversingType fromJson(const std::string& s, MA_CurveTraversingType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CurveTraversingType msg;
+    if (j.contains("speed_range")) {
+        msg.speed_range = fromJson(j["speed_range"].dump(), static_cast<SpeedRangeType*>(nullptr));
+    }
+    if (j.contains("duration")) {
+        msg.duration = j["duration"].get<std::string>();
+    }
+    return msg;
+}
+
+std::string toJson(const MA_LaunchType& msg) {
+    nlohmann::json obj;
+    if (msg.carrier_launch.has_value()) {
+        obj["carrier_launch"] = nlohmann::json::parse(toJson(msg.carrier_launch.value()));
+    }
+    if (msg.airfield_takeoff.has_value()) {
+        obj["airfield_takeoff"] = nlohmann::json::parse(toJson(msg.airfield_takeoff.value()));
+    }
+    return obj.dump();
+}
+
+MA_LaunchType fromJson(const std::string& s, MA_LaunchType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_LaunchType msg;
+    if (j.contains("carrier_launch")) {
+        msg.carrier_launch = fromJson(j["carrier_launch"].dump(), static_cast<MA_CarrierLaunchType*>(nullptr));
+    }
+    if (j.contains("airfield_takeoff")) {
+        msg.airfield_takeoff = fromJson(j["airfield_takeoff"].dump(), static_cast<MA_AirfieldTakeoffType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_CarrierLaunchType& msg) {
+    nlohmann::json obj;
+    if (msg.case_designation.has_value()) {
+        obj["case_designation"] = toString(msg.case_designation.value());
+    }
+    obj["departure_radial_line_id"] = nlohmann::json::parse(toJson(msg.departure_radial_line_id));
+    obj["carrier_id"] = nlohmann::json::parse(toJson(msg.carrier_id));
+    obj["catapult_id"] = nlohmann::json::parse(toJson(msg.catapult_id));
+    return obj.dump();
+}
+
+MA_CarrierLaunchType fromJson(const std::string& s, MA_CarrierLaunchType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CarrierLaunchType msg;
+    if (j.contains("case_designation")) {
+        msg.case_designation = mA_CaseTypeEnumFromString(j["case_designation"].get<std::string>());
+    }
+    if (j.contains("departure_radial_line_id")) msg.departure_radial_line_id = fromJson(j["departure_radial_line_id"].dump(), static_cast<OpLineID_Type*>(nullptr));
+    if (j.contains("carrier_id")) msg.carrier_id = fromJson(j["carrier_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("catapult_id")) msg.catapult_id = fromJson(j["catapult_id"].dump(), static_cast<MA_CatapultID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_CatapultID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+MA_CatapultID_Type fromJson(const std::string& s, MA_CatapultID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CatapultID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const MA_AirfieldTakeoffType& msg) {
+    nlohmann::json obj;
+    obj["airfield_id"] = nlohmann::json::parse(toJson(msg.airfield_id));
+    obj["runway_id"] = nlohmann::json::parse(toJson(msg.runway_id));
+    return obj.dump();
+}
+
+MA_AirfieldTakeoffType fromJson(const std::string& s, MA_AirfieldTakeoffType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_AirfieldTakeoffType msg;
+    if (j.contains("airfield_id")) msg.airfield_id = fromJson(j["airfield_id"].dump(), static_cast<AirfieldID_Type*>(nullptr));
+    if (j.contains("runway_id")) msg.runway_id = fromJson(j["runway_id"].dump(), static_cast<RunwayID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_RecoveryType& msg) {
+    nlohmann::json obj;
+    if (msg.carrier_recovery.has_value()) {
+        obj["carrier_recovery"] = nlohmann::json::parse(toJson(msg.carrier_recovery.value()));
+    }
+    if (msg.airfield_land.has_value()) {
+        obj["airfield_land"] = nlohmann::json::parse(toJson(msg.airfield_land.value()));
+    }
+    return obj.dump();
+}
+
+MA_RecoveryType fromJson(const std::string& s, MA_RecoveryType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_RecoveryType msg;
+    if (j.contains("carrier_recovery")) {
+        msg.carrier_recovery = fromJson(j["carrier_recovery"].dump(), static_cast<MA_CarrierRecoveryChoiceType*>(nullptr));
+    }
+    if (j.contains("airfield_land")) {
+        msg.airfield_land = fromJson(j["airfield_land"].dump(), static_cast<MA_AirfieldLandType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_CarrierRecoveryChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.recovery.has_value()) {
+        obj["recovery"] = nlohmann::json::parse(toJson(msg.recovery.value()));
+    }
+    if (msg.delta.has_value()) {
+        obj["delta"] = nlohmann::json::parse(toJson(msg.delta.value()));
+    }
+    return obj.dump();
+}
+
+MA_CarrierRecoveryChoiceType fromJson(const std::string& s, MA_CarrierRecoveryChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CarrierRecoveryChoiceType msg;
+    if (j.contains("recovery")) {
+        msg.recovery = fromJson(j["recovery"].dump(), static_cast<MA_CarrierRecoveryType*>(nullptr));
+    }
+    if (j.contains("delta")) {
+        msg.delta = fromJson(j["delta"].dump(), static_cast<MA_DeltaType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_CarrierRecoveryType& msg) {
+    nlohmann::json obj;
+    if (msg.case_designation.has_value()) {
+        obj["case_designation"] = toString(msg.case_designation.value());
+    }
+    obj["final_bearing"] = msg.final_bearing;
+    obj["glideslope"] = msg.glideslope;
+    obj["relative_touch_down_point"] = nlohmann::json::parse(toJson(msg.relative_touch_down_point));
+    obj["carrier_id"] = nlohmann::json::parse(toJson(msg.carrier_id));
+    if (msg.carrier_playbox_id.has_value()) {
+        obj["carrier_playbox_id"] = nlohmann::json::parse(toJson(msg.carrier_playbox_id.value()));
+    }
+    obj["expected_arrival_time"] = msg.expected_arrival_time;
+    return obj.dump();
+}
+
+MA_CarrierRecoveryType fromJson(const std::string& s, MA_CarrierRecoveryType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_CarrierRecoveryType msg;
+    if (j.contains("case_designation")) {
+        msg.case_designation = mA_CaseTypeEnumFromString(j["case_designation"].get<std::string>());
+    }
+    if (j.contains("final_bearing")) msg.final_bearing = j["final_bearing"].get<double>();
+    if (j.contains("glideslope")) msg.glideslope = j["glideslope"].get<double>();
+    if (j.contains("relative_touch_down_point")) msg.relative_touch_down_point = fromJson(j["relative_touch_down_point"].dump(), static_cast<Point3D_RelativeType*>(nullptr));
+    if (j.contains("carrier_id")) msg.carrier_id = fromJson(j["carrier_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("carrier_playbox_id")) {
+        msg.carrier_playbox_id = fromJson(j["carrier_playbox_id"].dump(), static_cast<OpZoneID_Type*>(nullptr));
+    }
+    if (j.contains("expected_arrival_time")) msg.expected_arrival_time = j["expected_arrival_time"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const MA_DeltaType& msg) {
+    nlohmann::json obj;
+    obj["time_delta_seconds"] = msg.time_delta_seconds;
+    return obj.dump();
+}
+
+MA_DeltaType fromJson(const std::string& s, MA_DeltaType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_DeltaType msg;
+    if (j.contains("time_delta_seconds")) msg.time_delta_seconds = j["time_delta_seconds"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const MA_AirfieldLandType& msg) {
+    nlohmann::json obj;
+    obj["airfield_id"] = nlohmann::json::parse(toJson(msg.airfield_id));
+    obj["runway_id"] = nlohmann::json::parse(toJson(msg.runway_id));
+    return obj.dump();
+}
+
+MA_AirfieldLandType fromJson(const std::string& s, MA_AirfieldLandType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_AirfieldLandType msg;
+    if (j.contains("airfield_id")) msg.airfield_id = fromJson(j["airfield_id"].dump(), static_cast<AirfieldID_Type*>(nullptr));
+    if (j.contains("runway_id")) msg.runway_id = fromJson(j["runway_id"].dump(), static_cast<RunwayID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_JettisonTaskType& msg) {
+    nlohmann::json obj;
+    obj["jettison_store_selection"] = nlohmann::json::parse(toJson(msg.jettison_store_selection));
+    obj["store_jettison_type"] = toString(msg.store_jettison_type);
+    return obj.dump();
+}
+
+MA_JettisonTaskType fromJson(const std::string& s, MA_JettisonTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_JettisonTaskType msg;
+    if (j.contains("jettison_store_selection")) msg.jettison_store_selection = fromJson(j["jettison_store_selection"].dump(), static_cast<MA_JettisonStoreSelectionType*>(nullptr));
+    if (j.contains("store_jettison_type")) msg.store_jettison_type = mA_StoreJettisonTypeEnumFromString(j["store_jettison_type"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const MA_JettisonStoreSelectionType& msg) {
+    nlohmann::json obj;
+    if (msg.jettison_all_capable_weapons.has_value()) {
+        obj["jettison_all_capable_weapons"] = msg.jettison_all_capable_weapons.value();
+    }
+    if (msg.capability_id.has_value()) {
+        obj["capability_id"] = nlohmann::json::parse(toJson(msg.capability_id.value()));
+    }
+    return obj.dump();
+}
+
+MA_JettisonStoreSelectionType fromJson(const std::string& s, MA_JettisonStoreSelectionType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_JettisonStoreSelectionType msg;
+    if (j.contains("jettison_all_capable_weapons")) {
+        msg.jettison_all_capable_weapons = j["jettison_all_capable_weapons"].get<std::string>();
+    }
+    if (j.contains("capability_id")) {
+        msg.capability_id = fromJson(j["capability_id"].dump(), static_cast<MA_JettisonStoreSelectionType_CapabilityID_List*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MA_JettisonStoreSelectionType_CapabilityID_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+MA_JettisonStoreSelectionType_CapabilityID_List fromJson(const std::string& s, MA_JettisonStoreSelectionType_CapabilityID_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_JettisonStoreSelectionType_CapabilityID_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<CapabilityID_Type*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitChangeTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    obj["change_type"] = nlohmann::json::parse(toJson(msg.change_type));
+    if (msg.disposal_orbit.has_value()) {
+        obj["disposal_orbit"] = nlohmann::json::parse(toJson(msg.disposal_orbit.value()));
+    }
+    return obj.dump();
+}
+
+OrbitChangeTaskType fromJson(const std::string& s, OrbitChangeTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitChangeTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = orbitChangeCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("change_type")) msg.change_type = fromJson(j["change_type"].dump(), static_cast<OrbitChangeChoiceType*>(nullptr));
+    if (j.contains("disposal_orbit")) {
+        msg.disposal_orbit = fromJson(j["disposal_orbit"].dump(), static_cast<DisposalOrbitType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitChangeChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.specific_orbit.has_value()) {
+        obj["specific_orbit"] = nlohmann::json::parse(toJson(msg.specific_orbit.value()));
+    }
+    if (msg.specific_position.has_value()) {
+        obj["specific_position"] = nlohmann::json::parse(toJson(msg.specific_position.value()));
+    }
+    if (msg.rendezvous.has_value()) {
+        obj["rendezvous"] = nlohmann::json::parse(toJson(msg.rendezvous.value()));
+    }
+    if (msg.proximity_operations.has_value()) {
+        obj["proximity_operations"] = nlohmann::json::parse(toJson(msg.proximity_operations.value()));
+    }
+    if (msg.longitude.has_value()) {
+        obj["longitude"] = msg.longitude.value();
+    }
+    if (msg.semimajor_axis.has_value()) {
+        obj["semimajor_axis"] = msg.semimajor_axis.value();
+    }
+    if (msg.inclination.has_value()) {
+        obj["inclination"] = msg.inclination.value();
+    }
+    if (msg.eccentricity.has_value()) {
+        obj["eccentricity"] = msg.eccentricity.value();
+    }
+    if (msg.race_track.has_value()) {
+        obj["race_track"] = nlohmann::json::parse(toJson(msg.race_track.value()));
+    }
+    return obj.dump();
+}
+
+OrbitChangeChoiceType fromJson(const std::string& s, OrbitChangeChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitChangeChoiceType msg;
+    if (j.contains("specific_orbit")) {
+        msg.specific_orbit = fromJson(j["specific_orbit"].dump(), static_cast<COE_OrbitType*>(nullptr));
+    }
+    if (j.contains("specific_position")) {
+        msg.specific_position = fromJson(j["specific_position"].dump(), static_cast<OrbitalVolumeType*>(nullptr));
+    }
+    if (j.contains("rendezvous")) {
+        msg.rendezvous = fromJson(j["rendezvous"].dump(), static_cast<RSO_ApproachType*>(nullptr));
+    }
+    if (j.contains("proximity_operations")) {
+        msg.proximity_operations = fromJson(j["proximity_operations"].dump(), static_cast<ProximityOperationsType*>(nullptr));
+    }
+    if (j.contains("longitude")) {
+        msg.longitude = j["longitude"].get<double>();
+    }
+    if (j.contains("semimajor_axis")) {
+        msg.semimajor_axis = j["semimajor_axis"].get<double>();
+    }
+    if (j.contains("inclination")) {
+        msg.inclination = j["inclination"].get<double>();
+    }
+    if (j.contains("eccentricity")) {
+        msg.eccentricity = j["eccentricity"].get<double>();
+    }
+    if (j.contains("race_track")) {
+        msg.race_track = fromJson(j["race_track"].dump(), static_cast<RaceTrackOrbitType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const COE_OrbitType& msg) {
+    nlohmann::json obj;
+    obj["eccentricity"] = msg.eccentricity;
+    obj["inclination"] = msg.inclination;
+    obj["orientation"] = nlohmann::json::parse(toJson(msg.orientation));
+    obj["semimajor_axis"] = msg.semimajor_axis;
+    return obj.dump();
+}
+
+COE_OrbitType fromJson(const std::string& s, COE_OrbitType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    COE_OrbitType msg;
+    if (j.contains("eccentricity")) msg.eccentricity = j["eccentricity"].get<double>();
+    if (j.contains("inclination")) msg.inclination = j["inclination"].get<double>();
+    if (j.contains("orientation")) msg.orientation = fromJson(j["orientation"].dump(), static_cast<COE_OrientationType*>(nullptr));
+    if (j.contains("semimajor_axis")) msg.semimajor_axis = j["semimajor_axis"].get<double>();
+    return msg;
+}
+
+std::string toJson(const OrbitalVolumeType& msg) {
+    nlohmann::json obj;
+    obj["position"] = nlohmann::json::parse(toJson(msg.position));
+    obj["radius"] = msg.radius;
+    return obj.dump();
+}
+
+OrbitalVolumeType fromJson(const std::string& s, OrbitalVolumeType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalVolumeType msg;
+    if (j.contains("position")) msg.position = fromJson(j["position"].dump(), static_cast<OrbitalKinematicsChoiceType*>(nullptr));
+    if (j.contains("radius")) msg.radius = j["radius"].get<double>();
+    return msg;
+}
+
+std::string toJson(const RSO_ApproachType& msg) {
+    nlohmann::json obj;
+    obj["rso"] = nlohmann::json::parse(toJson(msg.rso));
+    if (msg.range.has_value()) {
+        obj["range"] = nlohmann::json::parse(toJson(msg.range.value()));
+    }
+    return obj.dump();
+}
+
+RSO_ApproachType fromJson(const std::string& s, RSO_ApproachType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RSO_ApproachType msg;
+    if (j.contains("rso")) msg.rso = fromJson(j["rso"].dump(), static_cast<AssetType*>(nullptr));
+    if (j.contains("range")) {
+        msg.range = fromJson(j["range"].dump(), static_cast<DistanceConstraintsType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const ProximityOperationsType& msg) {
+    nlohmann::json obj;
+    obj["rso"] = nlohmann::json::parse(toJson(msg.rso));
+    if (msg.range.has_value()) {
+        obj["range"] = nlohmann::json::parse(toJson(msg.range.value()));
+    }
+    if (msg.proximity_orbit.has_value()) {
+        obj["proximity_orbit"] = nlohmann::json::parse(toJson(msg.proximity_orbit.value()));
+    }
+    return obj.dump();
+}
+
+ProximityOperationsType fromJson(const std::string& s, ProximityOperationsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ProximityOperationsType msg;
+    if (j.contains("rso")) msg.rso = fromJson(j["rso"].dump(), static_cast<AssetType*>(nullptr));
+    if (j.contains("range")) {
+        msg.range = fromJson(j["range"].dump(), static_cast<DistanceConstraintsType*>(nullptr));
+    }
+    if (j.contains("proximity_orbit")) {
+        msg.proximity_orbit = fromJson(j["proximity_orbit"].dump(), static_cast<ProximityOrbitChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const ProximityOrbitChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.natural_motion.has_value()) {
+        obj["natural_motion"] = msg.natural_motion.value();
+    }
+    if (msg.forced_motion.has_value()) {
+        obj["forced_motion"] = msg.forced_motion.value();
+    }
+    if (msg.r_bar_perch.has_value()) {
+        obj["r_bar_perch"] = toString(msg.r_bar_perch.value());
+    }
+    if (msg.v_bar_perch.has_value()) {
+        obj["v_bar_perch"] = toString(msg.v_bar_perch.value());
+    }
+    if (msg.delta_orbital_plane_tolerance.has_value()) {
+        obj["delta_orbital_plane_tolerance"] = nlohmann::json::parse(toJson(msg.delta_orbital_plane_tolerance.value()));
+    }
+    return obj.dump();
+}
+
+ProximityOrbitChoiceType fromJson(const std::string& s, ProximityOrbitChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ProximityOrbitChoiceType msg;
+    if (j.contains("natural_motion")) {
+        msg.natural_motion = j["natural_motion"].get<std::string>();
+    }
+    if (j.contains("forced_motion")) {
+        msg.forced_motion = j["forced_motion"].get<std::string>();
+    }
+    if (j.contains("r_bar_perch")) {
+        msg.r_bar_perch = r_BarApproachEnumFromString(j["r_bar_perch"].get<std::string>());
+    }
+    if (j.contains("v_bar_perch")) {
+        msg.v_bar_perch = v_BarApproachEnumFromString(j["v_bar_perch"].get<std::string>());
+    }
+    if (j.contains("delta_orbital_plane_tolerance")) {
+        msg.delta_orbital_plane_tolerance = fromJson(j["delta_orbital_plane_tolerance"].dump(), static_cast<AngleHalfPairType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const RaceTrackOrbitType& msg) {
+    nlohmann::json obj;
+    obj["duration"] = msg.duration;
+    obj["start_longitude"] = msg.start_longitude;
+    obj["end_longitude"] = msg.end_longitude;
+    return obj.dump();
+}
+
+RaceTrackOrbitType fromJson(const std::string& s, RaceTrackOrbitType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RaceTrackOrbitType msg;
+    if (j.contains("duration")) msg.duration = j["duration"].get<std::string>();
+    if (j.contains("start_longitude")) msg.start_longitude = j["start_longitude"].get<double>();
+    if (j.contains("end_longitude")) msg.end_longitude = j["end_longitude"].get<double>();
+    return msg;
+}
+
+std::string toJson(const DisposalOrbitType& msg) {
+    nlohmann::json obj;
+    obj["passivate"] = msg.passivate;
+    return obj.dump();
+}
+
+DisposalOrbitType fromJson(const std::string& s, DisposalOrbitType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    DisposalOrbitType msg;
+    if (j.contains("passivate")) msg.passivate = j["passivate"].get<bool>();
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    obj["sub_capability_type"] = nlohmann::json::parse(toJson(msg.sub_capability_type));
+    if (msg.information_objective.has_value()) {
+        obj["information_objective"] = toString(msg.information_objective.value());
+    }
+    if (msg.min_size.has_value()) {
+        obj["min_size"] = msg.min_size.value();
+    }
+    obj["confirm_object_acquisition"] = msg.confirm_object_acquisition;
+    if (msg.product_needed_by.has_value()) {
+        obj["product_needed_by"] = nlohmann::json::parse(toJson(msg.product_needed_by.value()));
+    }
+    if (msg.sensor_constraints.has_value()) {
+        obj["sensor_constraints"] = nlohmann::json::parse(toJson(msg.sensor_constraints.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.sda_special_instructions) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["sda_special_instructions"] = arr;
+    }
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    return obj.dump();
+}
+
+OrbitalSurveillanceTaskType fromJson(const std::string& s, OrbitalSurveillanceTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = orbitalSurveillanceCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("sub_capability_type")) msg.sub_capability_type = fromJson(j["sub_capability_type"].dump(), static_cast<OrbitalSurveillanceSubCapabilityDetailsChoiceType*>(nullptr));
+    if (j.contains("information_objective")) {
+        msg.information_objective = orbitalSurveillanceSubCapabilityEnumFromString(j["information_objective"].get<std::string>());
+    }
+    if (j.contains("min_size")) {
+        msg.min_size = j["min_size"].get<double>();
+    }
+    if (j.contains("confirm_object_acquisition")) msg.confirm_object_acquisition = j["confirm_object_acquisition"].get<bool>();
+    if (j.contains("product_needed_by")) {
+        msg.product_needed_by = fromJson(j["product_needed_by"].dump(), static_cast<ProductNeededByType*>(nullptr));
+    }
+    if (j.contains("sensor_constraints")) {
+        msg.sensor_constraints = fromJson(j["sensor_constraints"].dump(), static_cast<AllowableSensorsType*>(nullptr));
+    }
+    if (j.contains("sda_special_instructions")) {
+        for (const auto& v : j["sda_special_instructions"]) {
+            msg.sda_special_instructions.push_back(fromJson(v.dump(), static_cast<SDA_SpecialInstructionsConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<OrbitalSurveillanceTargetType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceTargetType& msg) {
+    nlohmann::json obj;
+    if (msg.object_based.has_value()) {
+        obj["object_based"] = nlohmann::json::parse(toJson(msg.object_based.value()));
+    }
+    if (msg.location_based.has_value()) {
+        obj["location_based"] = nlohmann::json::parse(toJson(msg.location_based.value()));
+    }
+    if (msg.zone_based.has_value()) {
+        obj["zone_based"] = nlohmann::json::parse(toJson(msg.zone_based.value()));
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceTargetType fromJson(const std::string& s, OrbitalSurveillanceTargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceTargetType msg;
+    if (j.contains("object_based")) {
+        msg.object_based = fromJson(j["object_based"].dump(), static_cast<OrbitalSurveillanceObjectsType*>(nullptr));
+    }
+    if (j.contains("location_based")) {
+        msg.location_based = fromJson(j["location_based"].dump(), static_cast<OrbitalSurveillanceLocationTargetType*>(nullptr));
+    }
+    if (j.contains("zone_based")) {
+        msg.zone_based = fromJson(j["zone_based"].dump(), static_cast<OrbitalSurveillanceZoneTargetType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceObjectsType& msg) {
+    nlohmann::json obj;
+    obj["primary_object"] = nlohmann::json::parse(toJson(msg.primary_object));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.secondary_objects) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["secondary_objects"] = arr;
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceObjectsType fromJson(const std::string& s, OrbitalSurveillanceObjectsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceObjectsType msg;
+    if (j.contains("primary_object")) msg.primary_object = fromJson(j["primary_object"].dump(), static_cast<OrbitalSurveillanceObjectType*>(nullptr));
+    if (j.contains("secondary_objects")) {
+        for (const auto& v : j["secondary_objects"]) {
+            msg.secondary_objects.push_back(fromJson(v.dump(), static_cast<OrbitalSurveillanceObjectType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceObjectType& msg) {
+    nlohmann::json obj;
+    obj["satellite_identity"] = nlohmann::json::parse(toJson(msg.satellite_identity));
+    if (msg.kinematics_source.has_value()) {
+        obj["kinematics_source"] = toString(msg.kinematics_source.value());
+    }
+    if (msg.orbit_kinematics_override.has_value()) {
+        obj["orbit_kinematics_override"] = nlohmann::json::parse(toJson(msg.orbit_kinematics_override.value()));
+    }
+    if (msg.relative_search_volume.has_value()) {
+        obj["relative_search_volume"] = nlohmann::json::parse(toJson(msg.relative_search_volume.value()));
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceObjectType fromJson(const std::string& s, OrbitalSurveillanceObjectType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceObjectType msg;
+    if (j.contains("satellite_identity")) msg.satellite_identity = fromJson(j["satellite_identity"].dump(), static_cast<SatelliteIdentityChoiceType*>(nullptr));
+    if (j.contains("kinematics_source")) {
+        msg.kinematics_source = orbitalKinematicsSourceEnumFromString(j["kinematics_source"].get<std::string>());
+    }
+    if (j.contains("orbit_kinematics_override")) {
+        msg.orbit_kinematics_override = fromJson(j["orbit_kinematics_override"].dump(), static_cast<OrbitKinematicsType*>(nullptr));
+    }
+    if (j.contains("relative_search_volume")) {
+        msg.relative_search_volume = fromJson(j["relative_search_volume"].dump(), static_cast<Shape3D_ChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceObjectBaseType& msg) {
+    nlohmann::json obj;
+    obj["satellite_identity"] = nlohmann::json::parse(toJson(msg.satellite_identity));
+    if (msg.kinematics_source.has_value()) {
+        obj["kinematics_source"] = toString(msg.kinematics_source.value());
+    }
+    if (msg.orbit_kinematics_override.has_value()) {
+        obj["orbit_kinematics_override"] = nlohmann::json::parse(toJson(msg.orbit_kinematics_override.value()));
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceObjectBaseType fromJson(const std::string& s, OrbitalSurveillanceObjectBaseType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceObjectBaseType msg;
+    if (j.contains("satellite_identity")) msg.satellite_identity = fromJson(j["satellite_identity"].dump(), static_cast<SatelliteIdentityChoiceType*>(nullptr));
+    if (j.contains("kinematics_source")) {
+        msg.kinematics_source = orbitalKinematicsSourceEnumFromString(j["kinematics_source"].get<std::string>());
+    }
+    if (j.contains("orbit_kinematics_override")) {
+        msg.orbit_kinematics_override = fromJson(j["orbit_kinematics_override"].dump(), static_cast<OrbitKinematicsType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const SatelliteIdentityChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.by_instance.has_value()) {
+        obj["by_instance"] = nlohmann::json::parse(toJson(msg.by_instance.value()));
+    }
+    if (msg.by_type.has_value()) {
+        obj["by_type"] = nlohmann::json::parse(toJson(msg.by_type.value()));
+    }
+    return obj.dump();
+}
+
+SatelliteIdentityChoiceType fromJson(const std::string& s, SatelliteIdentityChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SatelliteIdentityChoiceType msg;
+    if (j.contains("by_instance")) {
+        msg.by_instance = fromJson(j["by_instance"].dump(), static_cast<AssetType*>(nullptr));
+    }
+    if (j.contains("by_type")) {
+        msg.by_type = fromJson(j["by_type"].dump(), static_cast<SatelliteIdentityType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const SatelliteIdentityType& msg) {
+    nlohmann::json obj;
+    if (msg.standard.has_value()) {
+        obj["standard"] = nlohmann::json::parse(toJson(msg.standard.value()));
+    }
+    if (msg.satellite.has_value()) {
+        obj["satellite"] = nlohmann::json::parse(toJson(msg.satellite.value()));
+    }
+    return obj.dump();
+}
+
+SatelliteIdentityType fromJson(const std::string& s, SatelliteIdentityType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SatelliteIdentityType msg;
+    if (j.contains("standard")) {
+        msg.standard = fromJson(j["standard"].dump(), static_cast<StandardIdentityType*>(nullptr));
+    }
+    if (j.contains("satellite")) {
+        msg.satellite = fromJson(j["satellite"].dump(), static_cast<SatelliteIdentifierType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceLocationTargetType& msg) {
+    nlohmann::json obj;
+    obj["orbital_kinematics"] = nlohmann::json::parse(toJson(msg.orbital_kinematics));
+    if (msg.relative_search_volume.has_value()) {
+        obj["relative_search_volume"] = nlohmann::json::parse(toJson(msg.relative_search_volume.value()));
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceLocationTargetType fromJson(const std::string& s, OrbitalSurveillanceLocationTargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceLocationTargetType msg;
+    if (j.contains("orbital_kinematics")) msg.orbital_kinematics = fromJson(j["orbital_kinematics"].dump(), static_cast<OrbitKinematicsType*>(nullptr));
+    if (j.contains("relative_search_volume")) {
+        msg.relative_search_volume = fromJson(j["relative_search_volume"].dump(), static_cast<Shape3D_ChoiceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceZoneTargetType& msg) {
+    nlohmann::json obj;
+    obj["geocentric_zone"] = nlohmann::json::parse(toJson(msg.geocentric_zone));
+    return obj.dump();
+}
+
+OrbitalSurveillanceZoneTargetType fromJson(const std::string& s, OrbitalSurveillanceZoneTargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceZoneTargetType msg;
+    if (j.contains("geocentric_zone")) msg.geocentric_zone = fromJson(j["geocentric_zone"].dump(), static_cast<GeocentricVolumeType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceSensorTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.collection_requirements) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["collection_requirements"] = arr;
+    }
+    obj["confirm_object_acquisition"] = msg.confirm_object_acquisition;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.information_objective) {
+            arr.push_back(toString(v));
+        }
+        obj["information_objective"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.reporting_requirements) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["reporting_requirements"] = arr;
+    }
+    obj["set_up_start_time"] = msg.set_up_start_time;
+    obj["post_collection_wrap_up"] = msg.post_collection_wrap_up;
+    if (msg.sensitivity_constraints.has_value()) {
+        obj["sensitivity_constraints"] = nlohmann::json::parse(toJson(msg.sensitivity_constraints.value()));
+    }
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    return obj.dump();
+}
+
+OrbitalSurveillanceSensorTaskType fromJson(const std::string& s, OrbitalSurveillanceSensorTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceSensorTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = orbitalSurveillanceSensorCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("collection_requirements")) {
+        for (const auto& v : j["collection_requirements"]) {
+            msg.collection_requirements.push_back(fromJson(v.dump(), static_cast<OrbitalSurveillanceCollectionRequirementsType*>(nullptr)));
+        }
+    }
+    if (j.contains("confirm_object_acquisition")) msg.confirm_object_acquisition = j["confirm_object_acquisition"].get<bool>();
+    if (j.contains("information_objective")) {
+        for (const auto& v : j["information_objective"]) {
+            msg.information_objective.push_back(orbitalSurveillanceSubCapabilityEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("reporting_requirements")) {
+        for (const auto& v : j["reporting_requirements"]) {
+            msg.reporting_requirements.push_back(fromJson(v.dump(), static_cast<OrbitalSurveillanceSensorReportingCategoriesType*>(nullptr)));
+        }
+    }
+    if (j.contains("set_up_start_time")) msg.set_up_start_time = j["set_up_start_time"].get<std::string>();
+    if (j.contains("post_collection_wrap_up")) msg.post_collection_wrap_up = j["post_collection_wrap_up"].get<std::string>();
+    if (j.contains("sensitivity_constraints")) {
+        msg.sensitivity_constraints = fromJson(j["sensitivity_constraints"].dump(), static_cast<OrbitalSurveillanceSensorSensitivityConstraintType*>(nullptr));
+    }
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<OrbitalSurveillanceSensorTargetType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceSensorTaskBaseType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.collection_requirements) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["collection_requirements"] = arr;
+    }
+    obj["confirm_object_acquisition"] = msg.confirm_object_acquisition;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.information_objective) {
+            arr.push_back(toString(v));
+        }
+        obj["information_objective"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.reporting_requirements) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["reporting_requirements"] = arr;
+    }
+    obj["set_up_start_time"] = msg.set_up_start_time;
+    obj["post_collection_wrap_up"] = msg.post_collection_wrap_up;
+    if (msg.sensitivity_constraints.has_value()) {
+        obj["sensitivity_constraints"] = nlohmann::json::parse(toJson(msg.sensitivity_constraints.value()));
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceSensorTaskBaseType fromJson(const std::string& s, OrbitalSurveillanceSensorTaskBaseType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceSensorTaskBaseType msg;
+    if (j.contains("capability_type")) msg.capability_type = orbitalSurveillanceSensorCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("collection_requirements")) {
+        for (const auto& v : j["collection_requirements"]) {
+            msg.collection_requirements.push_back(fromJson(v.dump(), static_cast<OrbitalSurveillanceCollectionRequirementsType*>(nullptr)));
+        }
+    }
+    if (j.contains("confirm_object_acquisition")) msg.confirm_object_acquisition = j["confirm_object_acquisition"].get<bool>();
+    if (j.contains("information_objective")) {
+        for (const auto& v : j["information_objective"]) {
+            msg.information_objective.push_back(orbitalSurveillanceSubCapabilityEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("reporting_requirements")) {
+        for (const auto& v : j["reporting_requirements"]) {
+            msg.reporting_requirements.push_back(fromJson(v.dump(), static_cast<OrbitalSurveillanceSensorReportingCategoriesType*>(nullptr)));
+        }
+    }
+    if (j.contains("set_up_start_time")) msg.set_up_start_time = j["set_up_start_time"].get<std::string>();
+    if (j.contains("post_collection_wrap_up")) msg.post_collection_wrap_up = j["post_collection_wrap_up"].get<std::string>();
+    if (j.contains("sensitivity_constraints")) {
+        msg.sensitivity_constraints = fromJson(j["sensitivity_constraints"].dump(), static_cast<OrbitalSurveillanceSensorSensitivityConstraintType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceCollectionRequirementsType& msg) {
+    nlohmann::json obj;
+    if (msg.metric_collection.has_value()) {
+        obj["metric_collection"] = nlohmann::json::parse(toJson(msg.metric_collection.value()));
+    }
+    if (msg.search.has_value()) {
+        obj["search"] = nlohmann::json::parse(toJson(msg.search.value()));
+    }
+    if (msg.orbit_determination.has_value()) {
+        obj["orbit_determination"] = nlohmann::json::parse(toJson(msg.orbit_determination.value()));
+    }
+    if (msg.characterization.has_value()) {
+        obj["characterization"] = nlohmann::json::parse(toJson(msg.characterization.value()));
+    }
+    if (msg.multi_object.has_value()) {
+        obj["multi_object"] = nlohmann::json::parse(toJson(msg.multi_object.value()));
+    }
+    if (msg.maneuver_detection.has_value()) {
+        obj["maneuver_detection"] = nlohmann::json::parse(toJson(msg.maneuver_detection.value()));
+    }
+    if (msg.deployment_detection.has_value()) {
+        obj["deployment_detection"] = nlohmann::json::parse(toJson(msg.deployment_detection.value()));
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceCollectionRequirementsType fromJson(const std::string& s, OrbitalSurveillanceCollectionRequirementsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceCollectionRequirementsType msg;
+    if (j.contains("metric_collection")) {
+        msg.metric_collection = fromJson(j["metric_collection"].dump(), static_cast<MetricCollectionType*>(nullptr));
+    }
+    if (j.contains("search")) {
+        msg.search = fromJson(j["search"].dump(), static_cast<SpeedRangeType*>(nullptr));
+    }
+    if (j.contains("orbit_determination")) {
+        msg.orbit_determination = fromJson(j["orbit_determination"].dump(), static_cast<OrbitAccuracyType*>(nullptr));
+    }
+    if (j.contains("characterization")) {
+        msg.characterization = fromJson(j["characterization"].dump(), static_cast<SensorCharacterizationChoiceType*>(nullptr));
+    }
+    if (j.contains("multi_object")) {
+        msg.multi_object = fromJson(j["multi_object"].dump(), static_cast<MultiObjectType*>(nullptr));
+    }
+    if (j.contains("maneuver_detection")) {
+        msg.maneuver_detection = fromJson(j["maneuver_detection"].dump(), static_cast<ManeuverDetectionType*>(nullptr));
+    }
+    if (j.contains("deployment_detection")) {
+        msg.deployment_detection = fromJson(j["deployment_detection"].dump(), static_cast<DeploymentDetectionType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const MetricCollectionType& msg) {
+    nlohmann::json obj;
+    obj["use_all_passes"] = msg.use_all_passes;
+    if (msg.number_of_observations.has_value()) {
+        obj["number_of_observations"] = nlohmann::json::parse(toJson(msg.number_of_observations.value()));
+    }
+    if (msg.centered_at_max_predicted_snr.has_value()) {
+        obj["centered_at_max_predicted_snr"] = msg.centered_at_max_predicted_snr.value();
+    }
+    if (msg.spacing_of_observations.has_value()) {
+        obj["spacing_of_observations"] = msg.spacing_of_observations.value();
+    }
+    if (msg.report_point_soi.has_value()) {
+        obj["report_point_soi"] = msg.report_point_soi.value();
+    }
+    if (msg.quality_of_obs.has_value()) {
+        obj["quality_of_obs"] = toString(msg.quality_of_obs.value());
+    }
+    return obj.dump();
+}
+
+MetricCollectionType fromJson(const std::string& s, MetricCollectionType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MetricCollectionType msg;
+    if (j.contains("use_all_passes")) msg.use_all_passes = j["use_all_passes"].get<bool>();
+    if (j.contains("number_of_observations")) {
+        msg.number_of_observations = fromJson(j["number_of_observations"].dump(), static_cast<ObservationsPerTrackLimitsType*>(nullptr));
+    }
+    if (j.contains("centered_at_max_predicted_snr")) {
+        msg.centered_at_max_predicted_snr = j["centered_at_max_predicted_snr"].get<bool>();
+    }
+    if (j.contains("spacing_of_observations")) {
+        msg.spacing_of_observations = j["spacing_of_observations"].get<int32_t>();
+    }
+    if (j.contains("report_point_soi")) {
+        msg.report_point_soi = j["report_point_soi"].get<bool>();
+    }
+    if (j.contains("quality_of_obs")) {
+        msg.quality_of_obs = qualityOfObsEnumFromString(j["quality_of_obs"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const ObservationsPerTrackLimitsType& msg) {
+    nlohmann::json obj;
+    obj["max"] = msg.max;
+    if (msg.min.has_value()) {
+        obj["min"] = msg.min.value();
+    }
+    return obj.dump();
+}
+
+ObservationsPerTrackLimitsType fromJson(const std::string& s, ObservationsPerTrackLimitsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ObservationsPerTrackLimitsType msg;
+    if (j.contains("max")) msg.max = j["max"].get<int32_t>();
+    if (j.contains("min")) {
+        msg.min = j["min"].get<int32_t>();
+    }
+    return msg;
+}
+
+std::string toJson(const SensorCharacterizationChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.phemonemology_specific.has_value()) {
+        obj["phemonemology_specific"] = nlohmann::json::parse(toJson(msg.phemonemology_specific.value()));
+    }
+    if (msg.stability_and_orientation_assessment.has_value()) {
+        obj["stability_and_orientation_assessment"] = nlohmann::json::parse(toJson(msg.stability_and_orientation_assessment.value()));
+    }
+    if (msg.structure_assessment.has_value()) {
+        obj["structure_assessment"] = nlohmann::json::parse(toJson(msg.structure_assessment.value()));
+    }
+    if (msg.identification_verification.has_value()) {
+        obj["identification_verification"] = nlohmann::json::parse(toJson(msg.identification_verification.value()));
+    }
+    if (msg.operations_changes.has_value()) {
+        obj["operations_changes"] = nlohmann::json::parse(toJson(msg.operations_changes.value()));
+    }
+    return obj.dump();
+}
+
+SensorCharacterizationChoiceType fromJson(const std::string& s, SensorCharacterizationChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SensorCharacterizationChoiceType msg;
+    if (j.contains("phemonemology_specific")) {
+        msg.phemonemology_specific = fromJson(j["phemonemology_specific"].dump(), static_cast<CharacterizationChoiceType*>(nullptr));
+    }
+    if (j.contains("stability_and_orientation_assessment")) {
+        msg.stability_and_orientation_assessment = fromJson(j["stability_and_orientation_assessment"].dump(), static_cast<StabilityCharacterizationType*>(nullptr));
+    }
+    if (j.contains("structure_assessment")) {
+        msg.structure_assessment = fromJson(j["structure_assessment"].dump(), static_cast<StructureAssessmentCharacterizationType*>(nullptr));
+    }
+    if (j.contains("identification_verification")) {
+        msg.identification_verification = fromJson(j["identification_verification"].dump(), static_cast<IdentificationVerificationCharacterizationType*>(nullptr));
+    }
+    if (j.contains("operations_changes")) {
+        msg.operations_changes = fromJson(j["operations_changes"].dump(), static_cast<SatelliteOperationsChangesCharacterizationType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const StructureAssessmentCharacterizationType& msg) {
+    nlohmann::json obj;
+    obj["size_estimation"] = nlohmann::json::parse(toJson(msg.size_estimation));
+    obj["resolved"] = nlohmann::json::parse(toJson(msg.resolved));
+    return obj.dump();
+}
+
+StructureAssessmentCharacterizationType fromJson(const std::string& s, StructureAssessmentCharacterizationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    StructureAssessmentCharacterizationType msg;
+    if (j.contains("size_estimation")) msg.size_estimation = fromJson(j["size_estimation"].dump(), static_cast<SizeEstimationCharacterizationType*>(nullptr));
+    if (j.contains("resolved")) msg.resolved = fromJson(j["resolved"].dump(), static_cast<ResolvedCharacterizationType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const SizeEstimationCharacterizationType& msg) {
+    nlohmann::json obj;
+    if (msg.min_collection.has_value()) {
+        obj["min_collection"] = nlohmann::json::parse(toJson(msg.min_collection.value()));
+    }
+    if (msg.size_data.has_value()) {
+        obj["size_data"] = toString(msg.size_data.value());
+    }
+    return obj.dump();
+}
+
+SizeEstimationCharacterizationType fromJson(const std::string& s, SizeEstimationCharacterizationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SizeEstimationCharacterizationType msg;
+    if (j.contains("min_collection")) {
+        msg.min_collection = fromJson(j["min_collection"].dump(), static_cast<OrbitalSurveillanceSensorMinimumCollectionRequirementsType*>(nullptr));
+    }
+    if (j.contains("size_data")) {
+        msg.size_data = orbitalSurveillanceSizeDataEnumFromString(j["size_data"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceSensorMinimumCollectionRequirementsType& msg) {
+    nlohmann::json obj;
+    if (msg.target_rotational_periods.has_value()) {
+        obj["target_rotational_periods"] = msg.target_rotational_periods.value();
+    }
+    if (msg.time.has_value()) {
+        obj["time"] = msg.time.value();
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceSensorMinimumCollectionRequirementsType fromJson(const std::string& s, OrbitalSurveillanceSensorMinimumCollectionRequirementsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceSensorMinimumCollectionRequirementsType msg;
+    if (j.contains("target_rotational_periods")) {
+        msg.target_rotational_periods = j["target_rotational_periods"].get<int32_t>();
+    }
+    if (j.contains("time")) {
+        msg.time = j["time"].get<std::string>();
+    }
+    return msg;
+}
+
+std::string toJson(const IdentificationVerificationCharacterizationType& msg) {
+    nlohmann::json obj;
+    obj["all"] = toString(msg.all);
+    obj["any"] = toString(msg.any);
+    return obj.dump();
+}
+
+IdentificationVerificationCharacterizationType fromJson(const std::string& s, IdentificationVerificationCharacterizationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    IdentificationVerificationCharacterizationType msg;
+    if (j.contains("all")) msg.all = characterizationProductTypeEnumFromString(j["all"].get<std::string>());
+    if (j.contains("any")) msg.any = characterizationProductTypeEnumFromString(j["any"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceSensorReportingCategoriesType& msg) {
+    nlohmann::json obj;
+    obj["sda_special_instructions"] = nlohmann::json::parse(toJson(msg.sda_special_instructions));
+    obj["relative_priority"] = nlohmann::json::parse(toJson(msg.relative_priority));
+    if (msg.product_needed_by.has_value()) {
+        obj["product_needed_by"] = nlohmann::json::parse(toJson(msg.product_needed_by.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.report_to) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["report_to"] = arr;
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceSensorReportingCategoriesType fromJson(const std::string& s, OrbitalSurveillanceSensorReportingCategoriesType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceSensorReportingCategoriesType msg;
+    if (j.contains("sda_special_instructions")) msg.sda_special_instructions = fromJson(j["sda_special_instructions"].dump(), static_cast<SDA_SpecialInstructionsConstraintType*>(nullptr));
+    if (j.contains("relative_priority")) msg.relative_priority = fromJson(j["relative_priority"].dump(), static_cast<ComparableRankingType*>(nullptr));
+    if (j.contains("product_needed_by")) {
+        msg.product_needed_by = fromJson(j["product_needed_by"].dump(), static_cast<ProductNeededByType*>(nullptr));
+    }
+    if (j.contains("report_to")) {
+        for (const auto& v : j["report_to"]) {
+            msg.report_to.push_back(fromJson(v.dump(), static_cast<ReportToType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const ReportToType& msg) {
+    nlohmann::json obj;
+    if (msg.applies_to.has_value()) {
+        obj["applies_to"] = nlohmann::json::parse(toJson(msg.applies_to.value()));
+    }
+    if (msg.contact_details.has_value()) {
+        obj["contact_details"] = nlohmann::json::parse(toJson(msg.contact_details.value()));
+    }
+    if (msg.unit.has_value()) {
+        obj["unit"] = nlohmann::json::parse(toJson(msg.unit.value()));
+    }
+    return obj.dump();
+}
+
+ReportToType fromJson(const std::string& s, ReportToType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ReportToType msg;
+    if (j.contains("applies_to")) {
+        msg.applies_to = fromJson(j["applies_to"].dump(), static_cast<AppliesToType*>(nullptr));
+    }
+    if (j.contains("contact_details")) {
+        msg.contact_details = fromJson(j["contact_details"].dump(), static_cast<ContactDetailsType*>(nullptr));
+    }
+    if (j.contains("unit")) {
+        msg.unit = fromJson(j["unit"].dump(), static_cast<UnitIdentityType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const AppliesToType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.system_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["system_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.subsystem_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["subsystem_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.service_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["service_id"] = arr;
+    }
+    return obj.dump();
+}
+
+AppliesToType fromJson(const std::string& s, AppliesToType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AppliesToType msg;
+    if (j.contains("system_id")) {
+        for (const auto& v : j["system_id"]) {
+            msg.system_id.push_back(fromJson(v.dump(), static_cast<SystemID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("subsystem_id")) {
+        for (const auto& v : j["subsystem_id"]) {
+            msg.subsystem_id.push_back(fromJson(v.dump(), static_cast<SubsystemID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("service_id")) {
+        for (const auto& v : j["service_id"]) {
+            msg.service_id.push_back(fromJson(v.dump(), static_cast<ServiceID_Type*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const ContactDetailsType& msg) {
+    nlohmann::json obj;
+    obj["operator_name"] = nlohmann::json::parse(toJson(msg.operator_name));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.phone_number) {
+            arr.push_back(v);
+        }
+        obj["phone_number"] = arr;
+    }
+    return obj.dump();
+}
+
+ContactDetailsType fromJson(const std::string& s, ContactDetailsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ContactDetailsType msg;
+    if (j.contains("operator_name")) msg.operator_name = fromJson(j["operator_name"].dump(), static_cast<OperatorNameType*>(nullptr));
+    if (j.contains("phone_number")) {
+        for (const auto& v : j["phone_number"]) {
+            msg.phone_number.push_back(v.get<std::string>());
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const OperatorNameType& msg) {
+    nlohmann::json obj;
+    obj["first_name"] = msg.first_name;
+    obj["last_name"] = msg.last_name;
+    return obj.dump();
+}
+
+OperatorNameType fromJson(const std::string& s, OperatorNameType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OperatorNameType msg;
+    if (j.contains("first_name")) msg.first_name = j["first_name"].get<std::string>();
+    if (j.contains("last_name")) msg.last_name = j["last_name"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const UnitIdentityType& msg) {
+    nlohmann::json obj;
+    obj["unit_uuid"] = nlohmann::json::parse(toJson(msg.unit_uuid));
+    obj["identifier"] = msg.identifier;
+    obj["name"] = msg.name;
+    obj["surrogate_key"] = msg.surrogate_key;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.ob_type) {
+            arr.push_back(toString(v));
+        }
+        obj["ob_type"] = arr;
+    }
+    obj["symbol_code"] = msg.symbol_code;
+    return obj.dump();
+}
+
+UnitIdentityType fromJson(const std::string& s, UnitIdentityType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    UnitIdentityType msg;
+    if (j.contains("unit_uuid")) msg.unit_uuid = fromJson(j["unit_uuid"].dump(), static_cast<UnitID_Type*>(nullptr));
+    if (j.contains("identifier")) msg.identifier = j["identifier"].get<std::string>();
+    if (j.contains("name")) msg.name = j["name"].get<std::string>();
+    if (j.contains("surrogate_key")) msg.surrogate_key = j["surrogate_key"].get<std::string>();
+    if (j.contains("ob_type")) {
+        for (const auto& v : j["ob_type"]) {
+            msg.ob_type.push_back(orderOfBattleEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("symbol_code")) msg.symbol_code = j["symbol_code"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const UnitID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+UnitID_Type fromJson(const std::string& s, UnitID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    UnitID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceSensorSensitivityConstraintType& msg) {
+    nlohmann::json obj;
+    if (msg.minimum_size.has_value()) {
+        obj["minimum_size"] = nlohmann::json::parse(toJson(msg.minimum_size.value()));
+    }
+    if (msg.minimum_signal_strength.has_value()) {
+        obj["minimum_signal_strength"] = msg.minimum_signal_strength.value();
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceSensorSensitivityConstraintType fromJson(const std::string& s, OrbitalSurveillanceSensorSensitivityConstraintType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceSensorSensitivityConstraintType msg;
+    if (j.contains("minimum_size")) {
+        msg.minimum_size = fromJson(j["minimum_size"].dump(), static_cast<OrbitalSurveillanceSensorMinimumSizeType*>(nullptr));
+    }
+    if (j.contains("minimum_signal_strength")) {
+        msg.minimum_signal_strength = j["minimum_signal_strength"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceSensorMinimumSizeType& msg) {
+    nlohmann::json obj;
+    if (msg.radar_cross_section.has_value()) {
+        obj["radar_cross_section"] = nlohmann::json::parse(toJson(msg.radar_cross_section.value()));
+    }
+    if (msg.visual_magnitude.has_value()) {
+        obj["visual_magnitude"] = msg.visual_magnitude.value();
+    }
+    if (msg.area.has_value()) {
+        obj["area"] = msg.area.value();
+    }
+    if (msg.intensity.has_value()) {
+        obj["intensity"] = msg.intensity.value();
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceSensorMinimumSizeType fromJson(const std::string& s, OrbitalSurveillanceSensorMinimumSizeType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceSensorMinimumSizeType msg;
+    if (j.contains("radar_cross_section")) {
+        msg.radar_cross_section = fromJson(j["radar_cross_section"].dump(), static_cast<PercentileRCSType*>(nullptr));
+    }
+    if (j.contains("visual_magnitude")) {
+        msg.visual_magnitude = j["visual_magnitude"].get<double>();
+    }
+    if (j.contains("area")) {
+        msg.area = j["area"].get<double>();
+    }
+    if (j.contains("intensity")) {
+        msg.intensity = j["intensity"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const PercentileRCSType& msg) {
+    nlohmann::json obj;
+    obj["rcs"] = msg.rcs;
+    if (msg.percentile.has_value()) {
+        obj["percentile"] = msg.percentile.value();
+    }
+    return obj.dump();
+}
+
+PercentileRCSType fromJson(const std::string& s, PercentileRCSType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PercentileRCSType msg;
+    if (j.contains("rcs")) msg.rcs = j["rcs"].get<double>();
+    if (j.contains("percentile")) {
+        msg.percentile = j["percentile"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const OrbitalSurveillanceSensorTargetType& msg) {
+    nlohmann::json obj;
+    if (msg.point_list.has_value()) {
+        obj["point_list"] = nlohmann::json::parse(toJson(msg.point_list.value()));
+    }
+    if (msg.element_set_cloud.has_value()) {
+        obj["element_set_cloud"] = nlohmann::json::parse(toJson(msg.element_set_cloud.value()));
+    }
+    if (msg.object_based.has_value()) {
+        obj["object_based"] = nlohmann::json::parse(toJson(msg.object_based.value()));
+    }
+    if (msg.location_based.has_value()) {
+        obj["location_based"] = nlohmann::json::parse(toJson(msg.location_based.value()));
+    }
+    if (msg.sensor_centric_volume.has_value()) {
+        obj["sensor_centric_volume"] = nlohmann::json::parse(toJson(msg.sensor_centric_volume.value()));
+    }
+    return obj.dump();
+}
+
+OrbitalSurveillanceSensorTargetType fromJson(const std::string& s, OrbitalSurveillanceSensorTargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OrbitalSurveillanceSensorTargetType msg;
+    if (j.contains("point_list")) {
+        msg.point_list = fromJson(j["point_list"].dump(), static_cast<SensorPointListType*>(nullptr));
+    }
+    if (j.contains("element_set_cloud")) {
+        msg.element_set_cloud = fromJson(j["element_set_cloud"].dump(), static_cast<ElementSetCloudType*>(nullptr));
+    }
+    if (j.contains("object_based")) {
+        msg.object_based = fromJson(j["object_based"].dump(), static_cast<OrbitalSurveillanceObjectsType*>(nullptr));
+    }
+    if (j.contains("location_based")) {
+        msg.location_based = fromJson(j["location_based"].dump(), static_cast<OrbitalSurveillanceLocationTargetType*>(nullptr));
+    }
+    if (j.contains("sensor_centric_volume")) {
+        msg.sensor_centric_volume = fromJson(j["sensor_centric_volume"].dump(), static_cast<SourceCoverageType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const SensorPointListType& msg) {
+    nlohmann::json obj;
+    if (msg.azimuth_elevation_range_point_list.has_value()) {
+        obj["azimuth_elevation_range_point_list"] = nlohmann::json::parse(toJson(msg.azimuth_elevation_range_point_list.value()));
+    }
+    if (msg.right_ascension_declination_point_list.has_value()) {
+        obj["right_ascension_declination_point_list"] = nlohmann::json::parse(toJson(msg.right_ascension_declination_point_list.value()));
+    }
+    if (msg.point3_d_list.has_value()) {
+        obj["point3_d_list"] = nlohmann::json::parse(toJson(msg.point3_d_list.value()));
+    }
+    return obj.dump();
+}
+
+SensorPointListType fromJson(const std::string& s, SensorPointListType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SensorPointListType msg;
+    if (j.contains("azimuth_elevation_range_point_list")) {
+        msg.azimuth_elevation_range_point_list = fromJson(j["azimuth_elevation_range_point_list"].dump(), static_cast<SensorPointListType_AzimuthElevationRangePointList_List*>(nullptr));
+    }
+    if (j.contains("right_ascension_declination_point_list")) {
+        msg.right_ascension_declination_point_list = fromJson(j["right_ascension_declination_point_list"].dump(), static_cast<SensorPointListType_RightAscensionDeclinationPointList_List*>(nullptr));
+    }
+    if (j.contains("point3_d_list")) {
+        msg.point3_d_list = fromJson(j["point3_d_list"].dump(), static_cast<SensorPointListType_Point3DList_List*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const AzimuthElevationRangePointType& msg) {
+    nlohmann::json obj;
+    obj["time"] = msg.time;
+    obj["azimuth"] = msg.azimuth;
+    obj["elevation"] = msg.elevation;
+    obj["range"] = msg.range;
+    return obj.dump();
+}
+
+AzimuthElevationRangePointType fromJson(const std::string& s, AzimuthElevationRangePointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AzimuthElevationRangePointType msg;
+    if (j.contains("time")) msg.time = j["time"].get<std::string>();
+    if (j.contains("azimuth")) msg.azimuth = j["azimuth"].get<double>();
+    if (j.contains("elevation")) msg.elevation = j["elevation"].get<double>();
+    if (j.contains("range")) msg.range = j["range"].get<double>();
+    return msg;
+}
+
+std::string toJson(const SensorPointListType_AzimuthElevationRangePointList_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+SensorPointListType_AzimuthElevationRangePointList_List fromJson(const std::string& s, SensorPointListType_AzimuthElevationRangePointList_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SensorPointListType_AzimuthElevationRangePointList_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<AzimuthElevationRangePointType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const RightAscensionDeclinationPointType& msg) {
+    nlohmann::json obj;
+    obj["time"] = msg.time;
+    obj["right_ascension"] = msg.right_ascension;
+    obj["declination"] = msg.declination;
+    return obj.dump();
+}
+
+RightAscensionDeclinationPointType fromJson(const std::string& s, RightAscensionDeclinationPointType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RightAscensionDeclinationPointType msg;
+    if (j.contains("time")) msg.time = j["time"].get<std::string>();
+    if (j.contains("right_ascension")) msg.right_ascension = j["right_ascension"].get<double>();
+    if (j.contains("declination")) msg.declination = j["declination"].get<double>();
+    return msg;
+}
+
+std::string toJson(const SensorPointListType_RightAscensionDeclinationPointList_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+SensorPointListType_RightAscensionDeclinationPointList_List fromJson(const std::string& s, SensorPointListType_RightAscensionDeclinationPointList_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SensorPointListType_RightAscensionDeclinationPointList_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<RightAscensionDeclinationPointType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const SensorPointListType_Point3DList_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+SensorPointListType_Point3DList_List fromJson(const std::string& s, SensorPointListType_Point3DList_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SensorPointListType_Point3DList_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<Point3D_Type*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const ElementSetCloudType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.element_set) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["element_set"] = arr;
+    }
+    return obj.dump();
+}
+
+ElementSetCloudType fromJson(const std::string& s, ElementSetCloudType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ElementSetCloudType msg;
+    if (j.contains("element_set")) {
+        for (const auto& v : j["element_set"]) {
+            msg.element_set.push_back(fromJson(v.dump(), static_cast<TLE_Type*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const TLE_Type& msg) {
+    nlohmann::json obj;
+    obj["base"] = nlohmann::json::parse(toJson(msg.base));
+    obj["epoch"] = msg.epoch;
+    if (msg.element_set_number.has_value()) {
+        obj["element_set_number"] = msg.element_set_number.value();
+    }
+    if (msg.first_time_derivative_of_mean_motion.has_value()) {
+        obj["first_time_derivative_of_mean_motion"] = msg.first_time_derivative_of_mean_motion.value();
+    }
+    if (msg.second_time_derivative_of_mean_motion.has_value()) {
+        obj["second_time_derivative_of_mean_motion"] = msg.second_time_derivative_of_mean_motion.value();
+    }
+    if (msg.bstar_drag.has_value()) {
+        obj["bstar_drag"] = msg.bstar_drag.value();
+    }
+    obj["position"] = nlohmann::json::parse(toJson(msg.position));
+    obj["mean_motion"] = msg.mean_motion;
+    if (msg.revolution_number.has_value()) {
+        obj["revolution_number"] = msg.revolution_number.value();
+    }
+    obj["satellite_identity"] = nlohmann::json::parse(toJson(msg.satellite_identity));
+    obj["classification"] = toString(msg.classification);
+    obj["ephemeris_type"] = msg.ephemeris_type;
+    return obj.dump();
+}
+
+TLE_Type fromJson(const std::string& s, TLE_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    TLE_Type msg;
+    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<COE_OrbitBaseType*>(nullptr));
+    if (j.contains("epoch")) msg.epoch = j["epoch"].get<std::string>();
+    if (j.contains("element_set_number")) {
+        msg.element_set_number = j["element_set_number"].get<uint32_t>();
+    }
+    if (j.contains("first_time_derivative_of_mean_motion")) {
+        msg.first_time_derivative_of_mean_motion = j["first_time_derivative_of_mean_motion"].get<double>();
+    }
+    if (j.contains("second_time_derivative_of_mean_motion")) {
+        msg.second_time_derivative_of_mean_motion = j["second_time_derivative_of_mean_motion"].get<double>();
+    }
+    if (j.contains("bstar_drag")) {
+        msg.bstar_drag = j["bstar_drag"].get<double>();
+    }
+    if (j.contains("position")) msg.position = fromJson(j["position"].dump(), static_cast<COE_PositionType*>(nullptr));
+    if (j.contains("mean_motion")) msg.mean_motion = j["mean_motion"].get<double>();
+    if (j.contains("revolution_number")) {
+        msg.revolution_number = j["revolution_number"].get<uint32_t>();
+    }
+    if (j.contains("satellite_identity")) msg.satellite_identity = fromJson(j["satellite_identity"].dump(), static_cast<SatelliteIdentifierType*>(nullptr));
+    if (j.contains("classification")) msg.classification = classificationEnumFromString(j["classification"].get<std::string>());
+    if (j.contains("ephemeris_type")) msg.ephemeris_type = j["ephemeris_type"].get<uint32_t>();
+    return msg;
+}
+
+std::string toJson(const SourceCoverageType& msg) {
+    nlohmann::json obj;
+    if (msg.fov_reference_frame.has_value()) {
+        obj["fov_reference_frame"] = toString(msg.fov_reference_frame.value());
+    }
+    if (msg.range_limits.has_value()) {
+        obj["range_limits"] = nlohmann::json::parse(toJson(msg.range_limits.value()));
+    }
+    if (msg.range_rate_limits.has_value()) {
+        obj["range_rate_limits"] = nlohmann::json::parse(toJson(msg.range_rate_limits.value()));
+    }
+    if (msg.azimuth_limits.has_value()) {
+        obj["azimuth_limits"] = nlohmann::json::parse(toJson(msg.azimuth_limits.value()));
+    }
+    if (msg.elevation_limits.has_value()) {
+        obj["elevation_limits"] = nlohmann::json::parse(toJson(msg.elevation_limits.value()));
+    }
+    if (msg.azimuth_angle_rate_limits.has_value()) {
+        obj["azimuth_angle_rate_limits"] = nlohmann::json::parse(toJson(msg.azimuth_angle_rate_limits.value()));
+    }
+    if (msg.elevation_angle_rate_limits.has_value()) {
+        obj["elevation_angle_rate_limits"] = nlohmann::json::parse(toJson(msg.elevation_angle_rate_limits.value()));
+    }
+    if (msg.coscone_y_range_limits.has_value()) {
+        obj["coscone_y_range_limits"] = nlohmann::json::parse(toJson(msg.coscone_y_range_limits.value()));
+    }
+    if (msg.coscone_z_range_limits.has_value()) {
+        obj["coscone_z_range_limits"] = nlohmann::json::parse(toJson(msg.coscone_z_range_limits.value()));
+    }
+    if (msg.coscone_y_rate_range_limits.has_value()) {
+        obj["coscone_y_rate_range_limits"] = nlohmann::json::parse(toJson(msg.coscone_y_rate_range_limits.value()));
+    }
+    if (msg.coscone_z_rate_range_limits.has_value()) {
+        obj["coscone_z_rate_range_limits"] = nlohmann::json::parse(toJson(msg.coscone_z_rate_range_limits.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.capability_coverage_area_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["capability_coverage_area_id"] = arr;
+    }
+    return obj.dump();
+}
+
+SourceCoverageType fromJson(const std::string& s, SourceCoverageType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SourceCoverageType msg;
+    if (j.contains("fov_reference_frame")) {
+        msg.fov_reference_frame = lOS_MeasurementEnumFromString(j["fov_reference_frame"].get<std::string>());
+    }
+    if (j.contains("range_limits")) {
+        msg.range_limits = fromJson(j["range_limits"].dump(), static_cast<SlantRangeConstraintsType*>(nullptr));
+    }
+    if (j.contains("range_rate_limits")) {
+        msg.range_rate_limits = fromJson(j["range_rate_limits"].dump(), static_cast<SpeedRangeType*>(nullptr));
+    }
+    if (j.contains("azimuth_limits")) {
+        msg.azimuth_limits = fromJson(j["azimuth_limits"].dump(), static_cast<AnglePairType*>(nullptr));
+    }
+    if (j.contains("elevation_limits")) {
+        msg.elevation_limits = fromJson(j["elevation_limits"].dump(), static_cast<AngleHalfPairType*>(nullptr));
+    }
+    if (j.contains("azimuth_angle_rate_limits")) {
+        msg.azimuth_angle_rate_limits = fromJson(j["azimuth_angle_rate_limits"].dump(), static_cast<AngleRateRangeType*>(nullptr));
+    }
+    if (j.contains("elevation_angle_rate_limits")) {
+        msg.elevation_angle_rate_limits = fromJson(j["elevation_angle_rate_limits"].dump(), static_cast<AngleRateRangeType*>(nullptr));
+    }
+    if (j.contains("coscone_y_range_limits")) {
+        msg.coscone_y_range_limits = fromJson(j["coscone_y_range_limits"].dump(), static_cast<DoubleMinMaxType*>(nullptr));
+    }
+    if (j.contains("coscone_z_range_limits")) {
+        msg.coscone_z_range_limits = fromJson(j["coscone_z_range_limits"].dump(), static_cast<DoubleMinMaxType*>(nullptr));
+    }
+    if (j.contains("coscone_y_rate_range_limits")) {
+        msg.coscone_y_rate_range_limits = fromJson(j["coscone_y_rate_range_limits"].dump(), static_cast<DoubleMinMaxType*>(nullptr));
+    }
+    if (j.contains("coscone_z_rate_range_limits")) {
+        msg.coscone_z_rate_range_limits = fromJson(j["coscone_z_rate_range_limits"].dump(), static_cast<DoubleMinMaxType*>(nullptr));
+    }
+    if (j.contains("capability_coverage_area_id")) {
+        for (const auto& v : j["capability_coverage_area_id"]) {
+            msg.capability_coverage_area_id.push_back(fromJson(v.dump(), static_cast<CapabilityCoverageAreaID_Type*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const AngleRateRangeType& msg) {
+    nlohmann::json obj;
+    obj["min"] = msg.min;
+    obj["max"] = msg.max;
+    return obj.dump();
+}
+
+AngleRateRangeType fromJson(const std::string& s, AngleRateRangeType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AngleRateRangeType msg;
+    if (j.contains("min")) msg.min = j["min"].get<double>();
+    if (j.contains("max")) msg.max = j["max"].get<double>();
+    return msg;
+}
+
+std::string toJson(const DoubleMinMaxType& msg) {
+    nlohmann::json obj;
+    obj["min"] = msg.min;
+    obj["max"] = msg.max;
+    return obj.dump();
+}
+
+DoubleMinMaxType fromJson(const std::string& s, DoubleMinMaxType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    DoubleMinMaxType msg;
+    if (j.contains("min")) msg.min = j["min"].get<double>();
+    if (j.contains("max")) msg.max = j["max"].get<double>();
+    return msg;
+}
+
+std::string toJson(const CapabilityCoverageAreaID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+CapabilityCoverageAreaID_Type fromJson(const std::string& s, CapabilityCoverageAreaID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    CapabilityCoverageAreaID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const PO_TaskType& msg) {
+    nlohmann::json obj;
+    obj["capability"] = toString(msg.capability);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.sensor_spectrum) {
+            arr.push_back(toString(v));
+        }
+        obj["sensor_spectrum"] = arr;
+    }
+    if (msg.look_at_coords.has_value()) {
+        obj["look_at_coords"] = nlohmann::json::parse(toJson(msg.look_at_coords.value()));
+    }
+    obj["minimum_niirs"] = msg.minimum_niirs;
+    obj["desired_niirs"] = msg.desired_niirs;
+    if (msg.collection_constraints.has_value()) {
+        obj["collection_constraints"] = nlohmann::json::parse(toJson(msg.collection_constraints.value()));
+    }
+    if (msg.pair_identifier.has_value()) {
+        obj["pair_identifier"] = toString(msg.pair_identifier.value());
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    return obj.dump();
+}
+
+PO_TaskType fromJson(const std::string& s, PO_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PO_TaskType msg;
+    if (j.contains("capability")) msg.capability = pO_CapabilityEnumFromString(j["capability"].get<std::string>());
+    if (j.contains("sensor_spectrum")) {
+        for (const auto& v : j["sensor_spectrum"]) {
+            msg.sensor_spectrum.push_back(sensorSpectrumEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("look_at_coords")) {
+        msg.look_at_coords = fromJson(j["look_at_coords"].dump(), static_cast<LocatedEllipseType*>(nullptr));
+    }
+    if (j.contains("minimum_niirs")) msg.minimum_niirs = j["minimum_niirs"].get<std::string>();
+    if (j.contains("desired_niirs")) msg.desired_niirs = j["desired_niirs"].get<std::string>();
+    if (j.contains("collection_constraints")) {
+        msg.collection_constraints = fromJson(j["collection_constraints"].dump(), static_cast<OpticalCollectionConstraintsType*>(nullptr));
+    }
+    if (j.contains("pair_identifier")) {
+        msg.pair_identifier = pairIdentifierEnumFromString(j["pair_identifier"].get<std::string>());
+    }
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<PO_ProductOutputCommandImageryType*>(nullptr)));
+        }
+    }
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<PointingType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const PointingType& msg) {
+    nlohmann::json obj;
+    if (msg.geospatial.has_value()) {
+        obj["geospatial"] = nlohmann::json::parse(toJson(msg.geospatial.value()));
+    }
+    if (msg.los_option.has_value()) {
+        obj["los_option"] = nlohmann::json::parse(toJson(msg.los_option.value()));
+    }
+    if (msg.volume.has_value()) {
+        obj["volume"] = nlohmann::json::parse(toJson(msg.volume.value()));
+    }
+    if (msg.turret_slaved.has_value()) {
+        obj["turret_slaved"] = msg.turret_slaved.value();
+    }
+    if (msg.activity_slaved_id.has_value()) {
+        obj["activity_slaved_id"] = nlohmann::json::parse(toJson(msg.activity_slaved_id.value()));
+    }
+    if (msg.fixed_pointing.has_value()) {
+        obj["fixed_pointing"] = toString(msg.fixed_pointing.value());
+    }
+    return obj.dump();
+}
+
+PointingType fromJson(const std::string& s, PointingType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PointingType msg;
+    if (j.contains("geospatial")) {
+        msg.geospatial = fromJson(j["geospatial"].dump(), static_cast<PointingType_Geospatial_List*>(nullptr));
+    }
+    if (j.contains("los_option")) {
+        msg.los_option = fromJson(j["los_option"].dump(), static_cast<LOS_D_Type*>(nullptr));
+    }
+    if (j.contains("volume")) {
+        msg.volume = fromJson(j["volume"].dump(), static_cast<PointingType_Volume_List*>(nullptr));
+    }
+    if (j.contains("turret_slaved")) {
+        msg.turret_slaved = j["turret_slaved"].get<std::string>();
+    }
+    if (j.contains("activity_slaved_id")) {
+        msg.activity_slaved_id = fromJson(j["activity_slaved_id"].dump(), static_cast<ActivityID_Type*>(nullptr));
+    }
+    if (j.contains("fixed_pointing")) {
+        msg.fixed_pointing = fixedPointingEnumFromString(j["fixed_pointing"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const PointingType_Geospatial_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+PointingType_Geospatial_List fromJson(const std::string& s, PointingType_Geospatial_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PointingType_Geospatial_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<TargetType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const LOS_D_Type& msg) {
+    nlohmann::json obj;
+    if (msg.los.has_value()) {
+        obj["los"] = nlohmann::json::parse(toJson(msg.los.value()));
+    }
+    if (msg.los_rates.has_value()) {
+        obj["los_rates"] = nlohmann::json::parse(toJson(msg.los_rates.value()));
+    }
+    return obj.dump();
+}
+
+LOS_D_Type fromJson(const std::string& s, LOS_D_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    LOS_D_Type msg;
+    if (j.contains("los")) {
+        msg.los = fromJson(j["los"].dump(), static_cast<LOS_VariableB_Type*>(nullptr));
+    }
+    if (j.contains("los_rates")) {
+        msg.los_rates = fromJson(j["los_rates"].dump(), static_cast<LOS_RatesType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const LOS_VariableB_Type& msg) {
+    nlohmann::json obj;
+    obj["reference"] = toString(msg.reference);
+    obj["azimuth"] = msg.azimuth;
+    obj["elevation"] = msg.elevation;
+    if (msg.roll.has_value()) {
+        obj["roll"] = msg.roll.value();
+    }
+    if (msg.rates.has_value()) {
+        obj["rates"] = nlohmann::json::parse(toJson(msg.rates.value()));
+    }
+    return obj.dump();
+}
+
+LOS_VariableB_Type fromJson(const std::string& s, LOS_VariableB_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    LOS_VariableB_Type msg;
+    if (j.contains("reference")) msg.reference = lOS_ReferenceEnumFromString(j["reference"].get<std::string>());
+    if (j.contains("azimuth")) msg.azimuth = j["azimuth"].get<double>();
+    if (j.contains("elevation")) msg.elevation = j["elevation"].get<double>();
+    if (j.contains("roll")) {
+        msg.roll = j["roll"].get<double>();
+    }
+    if (j.contains("rates")) {
+        msg.rates = fromJson(j["rates"].dump(), static_cast<LOS_RatesType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const LOS_VariableA_Type& msg) {
+    nlohmann::json obj;
+    obj["reference"] = toString(msg.reference);
+    obj["azimuth"] = msg.azimuth;
+    obj["elevation"] = msg.elevation;
+    return obj.dump();
+}
+
+LOS_VariableA_Type fromJson(const std::string& s, LOS_VariableA_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    LOS_VariableA_Type msg;
+    if (j.contains("reference")) msg.reference = lOS_ReferenceEnumFromString(j["reference"].get<std::string>());
+    if (j.contains("azimuth")) msg.azimuth = j["azimuth"].get<double>();
+    if (j.contains("elevation")) msg.elevation = j["elevation"].get<double>();
+    return msg;
+}
+
+std::string toJson(const LOS_RatesType& msg) {
+    nlohmann::json obj;
+    obj["azimuth_rate"] = msg.azimuth_rate;
+    obj["elevation_rate"] = msg.elevation_rate;
+    if (msg.roll_rate.has_value()) {
+        obj["roll_rate"] = msg.roll_rate.value();
+    }
+    return obj.dump();
+}
+
+LOS_RatesType fromJson(const std::string& s, LOS_RatesType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    LOS_RatesType msg;
+    if (j.contains("azimuth_rate")) msg.azimuth_rate = j["azimuth_rate"].get<double>();
+    if (j.contains("elevation_rate")) msg.elevation_rate = j["elevation_rate"].get<double>();
+    if (j.contains("roll_rate")) {
+        msg.roll_rate = j["roll_rate"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const PO_AirTargetVolumeCommandType& msg) {
+    nlohmann::json obj;
+    if (msg.air_volume.has_value()) {
+        obj["air_volume"] = nlohmann::json::parse(toJson(msg.air_volume.value()));
+    }
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    return obj.dump();
+}
+
+PO_AirTargetVolumeCommandType fromJson(const std::string& s, PO_AirTargetVolumeCommandType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PO_AirTargetVolumeCommandType msg;
+    if (j.contains("air_volume")) {
+        msg.air_volume = fromJson(j["air_volume"].dump(), static_cast<PO_AirTargetVolumeType*>(nullptr));
+    }
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const PO_AirTargetVolumeType& msg) {
+    nlohmann::json obj;
+    if (msg.air_volume_sensor_referenced.has_value()) {
+        obj["air_volume_sensor_referenced"] = nlohmann::json::parse(toJson(msg.air_volume_sensor_referenced.value()));
+    }
+    if (msg.air_volume_location.has_value()) {
+        obj["air_volume_location"] = nlohmann::json::parse(toJson(msg.air_volume_location.value()));
+    }
+    return obj.dump();
+}
+
+PO_AirTargetVolumeType fromJson(const std::string& s, PO_AirTargetVolumeType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PO_AirTargetVolumeType msg;
+    if (j.contains("air_volume_sensor_referenced")) {
+        msg.air_volume_sensor_referenced = fromJson(j["air_volume_sensor_referenced"].dump(), static_cast<PO_AirVolumeSensorReferencedType*>(nullptr));
+    }
+    if (j.contains("air_volume_location")) {
+        msg.air_volume_location = fromJson(j["air_volume_location"].dump(), static_cast<ZoneType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const PO_AirVolumeSensorReferencedType& msg) {
+    nlohmann::json obj;
+    obj["azimuth_scan_width"] = msg.azimuth_scan_width;
+    obj["azimuth_scan_center"] = msg.azimuth_scan_center;
+    obj["elevation_scan_width"] = msg.elevation_scan_width;
+    obj["elevation_scan_center"] = msg.elevation_scan_center;
+    obj["max_range_of_interest"] = msg.max_range_of_interest;
+    obj["min_range_of_interest"] = msg.min_range_of_interest;
+    obj["azimuth_scan_stabilization"] = toString(msg.azimuth_scan_stabilization);
+    obj["elevation_scan_stabilization"] = toString(msg.elevation_scan_stabilization);
+    if (msg.elevation_scan_center_altitude_range_pair.has_value()) {
+        obj["elevation_scan_center_altitude_range_pair"] = nlohmann::json::parse(toJson(msg.elevation_scan_center_altitude_range_pair.value()));
+    }
+    obj["roll_stabilized"] = msg.roll_stabilized;
+    return obj.dump();
+}
+
+PO_AirVolumeSensorReferencedType fromJson(const std::string& s, PO_AirVolumeSensorReferencedType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PO_AirVolumeSensorReferencedType msg;
+    if (j.contains("azimuth_scan_width")) msg.azimuth_scan_width = j["azimuth_scan_width"].get<double>();
+    if (j.contains("azimuth_scan_center")) msg.azimuth_scan_center = j["azimuth_scan_center"].get<double>();
+    if (j.contains("elevation_scan_width")) msg.elevation_scan_width = j["elevation_scan_width"].get<double>();
+    if (j.contains("elevation_scan_center")) msg.elevation_scan_center = j["elevation_scan_center"].get<double>();
+    if (j.contains("max_range_of_interest")) msg.max_range_of_interest = j["max_range_of_interest"].get<double>();
+    if (j.contains("min_range_of_interest")) msg.min_range_of_interest = j["min_range_of_interest"].get<double>();
+    if (j.contains("azimuth_scan_stabilization")) msg.azimuth_scan_stabilization = lOS_ReferenceEnumFromString(j["azimuth_scan_stabilization"].get<std::string>());
+    if (j.contains("elevation_scan_stabilization")) msg.elevation_scan_stabilization = elevationScanStabilizationEnumFromString(j["elevation_scan_stabilization"].get<std::string>());
+    if (j.contains("elevation_scan_center_altitude_range_pair")) {
+        msg.elevation_scan_center_altitude_range_pair = fromJson(j["elevation_scan_center_altitude_range_pair"].dump(), static_cast<AltitudeRangePairType*>(nullptr));
+    }
+    if (j.contains("roll_stabilized")) msg.roll_stabilized = j["roll_stabilized"].get<bool>();
+    return msg;
+}
+
+std::string toJson(const PointingType_Volume_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+PointingType_Volume_List fromJson(const std::string& s, PointingType_Volume_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PointingType_Volume_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<PO_AirTargetVolumeCommandType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const RefuelTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.taker) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["taker"] = arr;
+    }
+    return obj.dump();
+}
+
+RefuelTaskType fromJson(const std::string& s, RefuelTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RefuelTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = refuelCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("taker")) {
+        for (const auto& v : j["taker"]) {
+            msg.taker.push_back(fromJson(v.dump(), static_cast<IdentityKindAssetType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const IdentityKindAssetType& msg) {
+    nlohmann::json obj;
+    if (msg.by_instance.has_value()) {
+        obj["by_instance"] = nlohmann::json::parse(toJson(msg.by_instance.value()));
+    }
+    if (msg.by_identity.has_value()) {
+        obj["by_identity"] = nlohmann::json::parse(toJson(msg.by_identity.value()));
+    }
+    if (msg.by_plan.has_value()) {
+        obj["by_plan"] = nlohmann::json::parse(toJson(msg.by_plan.value()));
+    }
+    return obj.dump();
+}
+
+IdentityKindAssetType fromJson(const std::string& s, IdentityKindAssetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    IdentityKindAssetType msg;
+    if (j.contains("by_instance")) {
+        msg.by_instance = fromJson(j["by_instance"].dump(), static_cast<AssetType*>(nullptr));
+    }
+    if (j.contains("by_identity")) {
+        msg.by_identity = fromJson(j["by_identity"].dump(), static_cast<IdentityType*>(nullptr));
+    }
+    if (j.contains("by_plan")) {
+        msg.by_plan = fromJson(j["by_plan"].dump(), static_cast<RequirementPlanningCandidateType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const RequirementPlanningCandidateType& msg) {
+    nlohmann::json obj;
+    obj["system_id"] = nlohmann::json::parse(toJson(msg.system_id));
+    if (msg.constraining_plans.has_value()) {
+        obj["constraining_plans"] = nlohmann::json::parse(toJson(msg.constraining_plans.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.other_system_constraining_plans) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["other_system_constraining_plans"] = arr;
+    }
+    if (msg.route_guideline.has_value()) {
+        obj["route_guideline"] = nlohmann::json::parse(toJson(msg.route_guideline.value()));
+    }
+    if (msg.orbit_guideline.has_value()) {
+        obj["orbit_guideline"] = nlohmann::json::parse(toJson(msg.orbit_guideline.value()));
+    }
+    return obj.dump();
+}
+
+RequirementPlanningCandidateType fromJson(const std::string& s, RequirementPlanningCandidateType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RequirementPlanningCandidateType msg;
+    if (j.contains("system_id")) msg.system_id = fromJson(j["system_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("constraining_plans")) {
+        msg.constraining_plans = fromJson(j["constraining_plans"].dump(), static_cast<ConstrainingPlansType*>(nullptr));
+    }
+    if (j.contains("other_system_constraining_plans")) {
+        for (const auto& v : j["other_system_constraining_plans"]) {
+            msg.other_system_constraining_plans.push_back(fromJson(v.dump(), static_cast<OtherSystemConstrainingPlansType*>(nullptr)));
+        }
+    }
+    if (j.contains("route_guideline")) {
+        msg.route_guideline = fromJson(j["route_guideline"].dump(), static_cast<PlanningGuidelineType*>(nullptr));
+    }
+    if (j.contains("orbit_guideline")) {
+        msg.orbit_guideline = fromJson(j["orbit_guideline"].dump(), static_cast<OrbitGuidelineType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const PlanningCandidateBaseType& msg) {
+    nlohmann::json obj;
+    obj["system_id"] = nlohmann::json::parse(toJson(msg.system_id));
+    if (msg.constraining_plans.has_value()) {
+        obj["constraining_plans"] = nlohmann::json::parse(toJson(msg.constraining_plans.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.other_system_constraining_plans) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["other_system_constraining_plans"] = arr;
+    }
+    return obj.dump();
+}
+
+PlanningCandidateBaseType fromJson(const std::string& s, PlanningCandidateBaseType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PlanningCandidateBaseType msg;
+    if (j.contains("system_id")) msg.system_id = fromJson(j["system_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("constraining_plans")) {
+        msg.constraining_plans = fromJson(j["constraining_plans"].dump(), static_cast<ConstrainingPlansType*>(nullptr));
+    }
+    if (j.contains("other_system_constraining_plans")) {
+        for (const auto& v : j["other_system_constraining_plans"]) {
+            msg.other_system_constraining_plans.push_back(fromJson(v.dump(), static_cast<OtherSystemConstrainingPlansType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const ConstrainingPlansType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.constraining_plan_type) {
+            arr.push_back(toString(v));
+        }
+        obj["constraining_plan_type"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.mission_plan_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["mission_plan_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.task_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["task_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.route_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["route_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.route_activity_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["route_activity_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.orbit_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["orbit_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.orbit_activity_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["orbit_activity_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.activity_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["activity_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.comm_allocation) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["comm_allocation"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.effect_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["effect_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.action_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["action_plan"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.response_plan) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["response_plan"] = arr;
+    }
+    return obj.dump();
+}
+
+ConstrainingPlansType fromJson(const std::string& s, ConstrainingPlansType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ConstrainingPlansType msg;
+    if (j.contains("constraining_plan_type")) {
+        for (const auto& v : j["constraining_plan_type"]) {
+            msg.constraining_plan_type.push_back(planTypeEnumFromString(v.get<std::string>()));
+        }
+    }
+    if (j.contains("mission_plan_id")) {
+        for (const auto& v : j["mission_plan_id"]) {
+            msg.mission_plan_id.push_back(fromJson(v.dump(), static_cast<MissionPlanID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("task_plan")) {
+        for (const auto& v : j["task_plan"]) {
+            msg.task_plan.push_back(fromJson(v.dump(), static_cast<TaskPlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("route_plan")) {
+        for (const auto& v : j["route_plan"]) {
+            msg.route_plan.push_back(fromJson(v.dump(), static_cast<RoutePlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("route_activity_plan")) {
+        for (const auto& v : j["route_activity_plan"]) {
+            msg.route_activity_plan.push_back(fromJson(v.dump(), static_cast<RouteActivityPlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("orbit_plan")) {
+        for (const auto& v : j["orbit_plan"]) {
+            msg.orbit_plan.push_back(fromJson(v.dump(), static_cast<OrbitPlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("orbit_activity_plan")) {
+        for (const auto& v : j["orbit_activity_plan"]) {
+            msg.orbit_activity_plan.push_back(fromJson(v.dump(), static_cast<OrbitActivityPlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("activity_plan")) {
+        for (const auto& v : j["activity_plan"]) {
+            msg.activity_plan.push_back(fromJson(v.dump(), static_cast<ActivityPlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("comm_allocation")) {
+        for (const auto& v : j["comm_allocation"]) {
+            msg.comm_allocation.push_back(fromJson(v.dump(), static_cast<CommAllocationConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("effect_plan")) {
+        for (const auto& v : j["effect_plan"]) {
+            msg.effect_plan.push_back(fromJson(v.dump(), static_cast<EffectPlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("action_plan")) {
+        for (const auto& v : j["action_plan"]) {
+            msg.action_plan.push_back(fromJson(v.dump(), static_cast<ActionPlanConstraintType*>(nullptr)));
+        }
+    }
+    if (j.contains("response_plan")) {
+        for (const auto& v : j["response_plan"]) {
+            msg.response_plan.push_back(fromJson(v.dump(), static_cast<ResponsePlanConstraintType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const TaskPlanConstraintType& msg) {
+    nlohmann::json obj;
+    if (msg.allocation_plan_id.has_value()) {
+        obj["allocation_plan_id"] = nlohmann::json::parse(toJson(msg.allocation_plan_id.value()));
+    }
+    obj["changeable_allocations"] = toString(msg.changeable_allocations);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.task_type) {
+            arr.push_back(toString(v));
+        }
+        obj["task_type"] = arr;
+    }
+    return obj.dump();
+}
+
+TaskPlanConstraintType fromJson(const std::string& s, TaskPlanConstraintType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    TaskPlanConstraintType msg;
+    if (j.contains("allocation_plan_id")) {
+        msg.allocation_plan_id = fromJson(j["allocation_plan_id"].dump(), static_cast<TaskPlanID_Type*>(nullptr));
+    }
+    if (j.contains("changeable_allocations")) msg.changeable_allocations = planChangeableConstraintsEnumFromString(j["changeable_allocations"].get<std::string>());
+    if (j.contains("task_type")) {
+        for (const auto& v : j["task_type"]) {
+            msg.task_type.push_back(taskTypeEnumFromString(v.get<std::string>()));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const OtherSystemConstrainingPlansType& msg) {
+    nlohmann::json obj;
+    obj["constraining_system_id"] = nlohmann::json::parse(toJson(msg.constraining_system_id));
+    obj["constraint_usage"] = toString(msg.constraint_usage);
+    obj["contraining_plans"] = nlohmann::json::parse(toJson(msg.contraining_plans));
+    return obj.dump();
+}
+
+OtherSystemConstrainingPlansType fromJson(const std::string& s, OtherSystemConstrainingPlansType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    OtherSystemConstrainingPlansType msg;
+    if (j.contains("constraining_system_id")) msg.constraining_system_id = fromJson(j["constraining_system_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("constraint_usage")) msg.constraint_usage = planConstraintUsageEnumFromString(j["constraint_usage"].get<std::string>());
+    if (j.contains("contraining_plans")) msg.contraining_plans = fromJson(j["contraining_plans"].dump(), static_cast<ConstrainingPlansType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const SAR_TaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    obj["sub_capability_type"] = toString(msg.sub_capability_type);
+    if (msg.look_at_coords.has_value()) {
+        obj["look_at_coords"] = nlohmann::json::parse(toJson(msg.look_at_coords.value()));
+    }
+    if (msg.collection_options.has_value()) {
+        obj["collection_options"] = nlohmann::json::parse(toJson(msg.collection_options.value()));
+    }
+    if (msg.collection_constraints.has_value()) {
+        obj["collection_constraints"] = nlohmann::json::parse(toJson(msg.collection_constraints.value()));
+    }
+    if (msg.desired_waveform.has_value()) {
+        obj["desired_waveform"] = nlohmann::json::parse(toJson(msg.desired_waveform.value()));
+    }
+    if (msg.pair_identifier.has_value()) {
+        obj["pair_identifier"] = toString(msg.pair_identifier.value());
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    return obj.dump();
+}
+
+SAR_TaskType fromJson(const std::string& s, SAR_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SAR_TaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = sAR_CapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("sub_capability_type")) msg.sub_capability_type = sAR_SubCapabilityEnumFromString(j["sub_capability_type"].get<std::string>());
+    if (j.contains("look_at_coords")) {
+        msg.look_at_coords = fromJson(j["look_at_coords"].dump(), static_cast<LocatedEllipseType*>(nullptr));
+    }
+    if (j.contains("collection_options")) {
+        msg.collection_options = fromJson(j["collection_options"].dump(), static_cast<SAR_CollectionOptionsType*>(nullptr));
+    }
+    if (j.contains("collection_constraints")) {
+        msg.collection_constraints = fromJson(j["collection_constraints"].dump(), static_cast<SAR_CollectionConstraintsType*>(nullptr));
+    }
+    if (j.contains("desired_waveform")) {
+        msg.desired_waveform = fromJson(j["desired_waveform"].dump(), static_cast<SAR_WaveformType*>(nullptr));
+    }
+    if (j.contains("pair_identifier")) {
+        msg.pair_identifier = pairIdentifierEnumFromString(j["pair_identifier"].get<std::string>());
+    }
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<ProductOutputCommandImageryType*>(nullptr)));
+        }
+    }
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<SAR_TaskTargetType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const SAR_TaskTargetType& msg) {
+    nlohmann::json obj;
+    if (msg.sar.has_value()) {
+        obj["sar"] = nlohmann::json::parse(toJson(msg.sar.value()));
+    }
+    if (msg.isar.has_value()) {
+        obj["isar"] = nlohmann::json::parse(toJson(msg.isar.value()));
+    }
+    return obj.dump();
+}
+
+SAR_TaskTargetType fromJson(const std::string& s, SAR_TaskTargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SAR_TaskTargetType msg;
+    if (j.contains("sar")) {
+        msg.sar = fromJson(j["sar"].dump(), static_cast<SAR_TargetType*>(nullptr));
+    }
+    if (j.contains("isar")) {
+        msg.isar = fromJson(j["isar"].dump(), static_cast<ISAR_TargetType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const SAR_TargetType& msg) {
+    nlohmann::json obj;
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    if (msg.multi_look.has_value()) {
+        obj["multi_look"] = msg.multi_look.value();
+    }
+    return obj.dump();
+}
+
+SAR_TargetType fromJson(const std::string& s, SAR_TargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SAR_TargetType msg;
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<TargetType*>(nullptr));
+    if (j.contains("multi_look")) {
+        msg.multi_look = j["multi_look"].get<bool>();
+    }
+    return msg;
+}
+
+std::string toJson(const ISAR_TargetType& msg) {
+    nlohmann::json obj;
+    if (msg.entity_id.has_value()) {
+        obj["entity_id"] = nlohmann::json::parse(toJson(msg.entity_id.value()));
+    }
+    if (msg.raw_target.has_value()) {
+        obj["raw_target"] = nlohmann::json::parse(toJson(msg.raw_target.value()));
+    }
+    return obj.dump();
+}
+
+ISAR_TargetType fromJson(const std::string& s, ISAR_TargetType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ISAR_TargetType msg;
+    if (j.contains("entity_id")) {
+        msg.entity_id = fromJson(j["entity_id"].dump(), static_cast<EntityID_Type*>(nullptr));
+    }
+    if (j.contains("raw_target")) {
+        msg.raw_target = fromJson(j["raw_target"].dump(), static_cast<PointTargetType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const SMTI_TaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    if (msg.sub_capability_type.has_value()) {
+        obj["sub_capability_type"] = toString(msg.sub_capability_type.value());
+    }
+    if (msg.look_at_coords.has_value()) {
+        obj["look_at_coords"] = nlohmann::json::parse(toJson(msg.look_at_coords.value()));
+    }
+    if (msg.collection_options.has_value()) {
+        obj["collection_options"] = nlohmann::json::parse(toJson(msg.collection_options.value()));
+    }
+    if (msg.collection_constraints.has_value()) {
+        obj["collection_constraints"] = nlohmann::json::parse(toJson(msg.collection_constraints.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    return obj.dump();
+}
+
+SMTI_TaskType fromJson(const std::string& s, SMTI_TaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SMTI_TaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = sMTI_CapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("sub_capability_type")) {
+        msg.sub_capability_type = sMTI_SubCapabilityEnumFromString(j["sub_capability_type"].get<std::string>());
+    }
+    if (j.contains("look_at_coords")) {
+        msg.look_at_coords = fromJson(j["look_at_coords"].dump(), static_cast<LocatedEllipseType*>(nullptr));
+    }
+    if (j.contains("collection_options")) {
+        msg.collection_options = fromJson(j["collection_options"].dump(), static_cast<SMTI_CollectionOptionsType*>(nullptr));
+    }
+    if (j.contains("collection_constraints")) {
+        msg.collection_constraints = fromJson(j["collection_constraints"].dump(), static_cast<SMTI_CollectionConstraintsType*>(nullptr));
+    }
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<ProductOutputCommandSMTI_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<TargetType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const StrikeTaskType& msg) {
+    nlohmann::json obj;
+    obj["target"] = nlohmann::json::parse(toJson(msg.target));
+    if (msg.target_information.has_value()) {
+        obj["target_information"] = nlohmann::json::parse(toJson(msg.target_information.value()));
+    }
+    if (msg.ingress_constraint.has_value()) {
+        obj["ingress_constraint"] = nlohmann::json::parse(toJson(msg.ingress_constraint.value()));
+    }
+    if (msg.egress_constraint.has_value()) {
+        obj["egress_constraint"] = nlohmann::json::parse(toJson(msg.egress_constraint.value()));
+    }
+    if (msg.initial_point.has_value()) {
+        obj["initial_point"] = nlohmann::json::parse(toJson(msg.initial_point.value()));
+    }
+    if (msg.release_constraints.has_value()) {
+        obj["release_constraints"] = nlohmann::json::parse(toJson(msg.release_constraints.value()));
+    }
+    if (msg.weapon_list.has_value()) {
+        obj["weapon_list"] = nlohmann::json::parse(toJson(msg.weapon_list.value()));
+    }
+    obj["no_strike"] = msg.no_strike;
+    return obj.dump();
+}
+
+StrikeTaskType fromJson(const std::string& s, StrikeTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    StrikeTaskType msg;
+    if (j.contains("target")) msg.target = fromJson(j["target"].dump(), static_cast<TargetType*>(nullptr));
+    if (j.contains("target_information")) {
+        msg.target_information = fromJson(j["target_information"].dump(), static_cast<TargetInformationType*>(nullptr));
+    }
+    if (j.contains("ingress_constraint")) {
+        msg.ingress_constraint = fromJson(j["ingress_constraint"].dump(), static_cast<AnglePairType*>(nullptr));
+    }
+    if (j.contains("egress_constraint")) {
+        msg.egress_constraint = fromJson(j["egress_constraint"].dump(), static_cast<AnglePairType*>(nullptr));
+    }
+    if (j.contains("initial_point")) {
+        msg.initial_point = fromJson(j["initial_point"].dump(), static_cast<Point3D_Type*>(nullptr));
+    }
+    if (j.contains("release_constraints")) {
+        msg.release_constraints = fromJson(j["release_constraints"].dump(), static_cast<StrikeTaskReleaseConstraintsType*>(nullptr));
+    }
+    if (j.contains("weapon_list")) {
+        msg.weapon_list = fromJson(j["weapon_list"].dump(), static_cast<StrikeTaskWeaponListType*>(nullptr));
+    }
+    if (j.contains("no_strike")) msg.no_strike = j["no_strike"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const TargetInformationType& msg) {
+    nlohmann::json obj;
+    if (msg.number_of_dmp_is.has_value()) {
+        obj["number_of_dmp_is"] = msg.number_of_dmp_is.value();
+    }
+    if (msg.target_type.has_value()) {
+        obj["target_type"] = toString(msg.target_type.value());
+    }
+    if (msg.target_defenses.has_value()) {
+        obj["target_defenses"] = toString(msg.target_defenses.value());
+    }
+    return obj.dump();
+}
+
+TargetInformationType fromJson(const std::string& s, TargetInformationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    TargetInformationType msg;
+    if (j.contains("number_of_dmp_is")) {
+        msg.number_of_dmp_is = j["number_of_dmp_is"].get<uint32_t>();
+    }
+    if (j.contains("target_type")) {
+        msg.target_type = targetTypeEnumFromString(j["target_type"].get<std::string>());
+    }
+    if (j.contains("target_defenses")) {
+        msg.target_defenses = targetDefensesEnumFromString(j["target_defenses"].get<std::string>());
+    }
+    return msg;
+}
+
+std::string toJson(const StrikeTaskReleaseConstraintsType& msg) {
+    nlohmann::json obj;
+    if (msg.release_point.has_value()) {
+        obj["release_point"] = nlohmann::json::parse(toJson(msg.release_point.value()));
+    }
+    if (msg.release_area.has_value()) {
+        obj["release_area"] = nlohmann::json::parse(toJson(msg.release_area.value()));
+    }
+    return obj.dump();
+}
+
+StrikeTaskReleaseConstraintsType fromJson(const std::string& s, StrikeTaskReleaseConstraintsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    StrikeTaskReleaseConstraintsType msg;
+    if (j.contains("release_point")) {
+        msg.release_point = fromJson(j["release_point"].dump(), static_cast<Point3D_Type*>(nullptr));
+    }
+    if (j.contains("release_area")) {
+        msg.release_area = fromJson(j["release_area"].dump(), static_cast<AreaConstraintsType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const AreaConstraintsType& msg) {
+    nlohmann::json obj;
+    if (msg.distance_constraints.has_value()) {
+        obj["distance_constraints"] = nlohmann::json::parse(toJson(msg.distance_constraints.value()));
+    }
+    if (msg.altitude_constraints.has_value()) {
+        obj["altitude_constraints"] = nlohmann::json::parse(toJson(msg.altitude_constraints.value()));
+    }
+    return obj.dump();
+}
+
+AreaConstraintsType fromJson(const std::string& s, AreaConstraintsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AreaConstraintsType msg;
+    if (j.contains("distance_constraints")) {
+        msg.distance_constraints = fromJson(j["distance_constraints"].dump(), static_cast<DistanceConstraintsType*>(nullptr));
+    }
+    if (j.contains("altitude_constraints")) {
+        msg.altitude_constraints = fromJson(j["altitude_constraints"].dump(), static_cast<AltitudeConstraintsType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const AltitudeConstraintsType& msg) {
+    nlohmann::json obj;
+    if (msg.min.has_value()) {
+        obj["min"] = msg.min.value();
+    }
+    if (msg.max.has_value()) {
+        obj["max"] = msg.max.value();
+    }
+    return obj.dump();
+}
+
+AltitudeConstraintsType fromJson(const std::string& s, AltitudeConstraintsType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AltitudeConstraintsType msg;
+    if (j.contains("min")) {
+        msg.min = j["min"].get<double>();
+    }
+    if (j.contains("max")) {
+        msg.max = j["max"].get<double>();
+    }
+    return msg;
+}
+
+std::string toJson(const SystemDeploymentTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    obj["system_to_deploy"] = nlohmann::json::parse(toJson(msg.system_to_deploy));
+    obj["deployment_kinematics"] = nlohmann::json::parse(toJson(msg.deployment_kinematics));
+    return obj.dump();
+}
+
+SystemDeploymentTaskType fromJson(const std::string& s, SystemDeploymentTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    SystemDeploymentTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = systemDeploymentEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("system_to_deploy")) msg.system_to_deploy = fromJson(j["system_to_deploy"].dump(), static_cast<DeployableSystemIdentityType*>(nullptr));
+    if (j.contains("deployment_kinematics")) msg.deployment_kinematics = fromJson(j["deployment_kinematics"].dump(), static_cast<KinematicsMultiStandardType*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const DeployableSystemIdentityType& msg) {
+    nlohmann::json obj;
+    if (msg.platform.has_value()) {
+        obj["platform"] = nlohmann::json::parse(toJson(msg.platform.value()));
+    }
+    if (msg.specific.has_value()) {
+        obj["specific"] = nlohmann::json::parse(toJson(msg.specific.value()));
+    }
+    if (msg.specific_vehicle.has_value()) {
+        obj["specific_vehicle"] = nlohmann::json::parse(toJson(msg.specific_vehicle.value()));
+    }
+    if (msg.weapon.has_value()) {
+        obj["weapon"] = nlohmann::json::parse(toJson(msg.weapon.value()));
+    }
+    return obj.dump();
+}
+
+DeployableSystemIdentityType fromJson(const std::string& s, DeployableSystemIdentityType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    DeployableSystemIdentityType msg;
+    if (j.contains("platform")) {
+        msg.platform = fromJson(j["platform"].dump(), static_cast<PlatformIdentityType*>(nullptr));
+    }
+    if (j.contains("specific")) {
+        msg.specific = fromJson(j["specific"].dump(), static_cast<SpecificIdentityType*>(nullptr));
+    }
+    if (j.contains("specific_vehicle")) {
+        msg.specific_vehicle = fromJson(j["specific_vehicle"].dump(), static_cast<VehicleIdentificationType*>(nullptr));
+    }
+    if (j.contains("weapon")) {
+        msg.weapon = fromJson(j["weapon"].dump(), static_cast<StoreType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const TacticalOrderTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    if (msg.target.has_value()) {
+        obj["target"] = nlohmann::json::parse(toJson(msg.target.value()));
+    }
+    return obj.dump();
+}
+
+TacticalOrderTaskType fromJson(const std::string& s, TacticalOrderTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    TacticalOrderTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = tacticalOrderCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("target")) {
+        msg.target = fromJson(j["target"].dump(), static_cast<TargetType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const WeatherRadarTaskType& msg) {
+    nlohmann::json obj;
+    obj["capability_type"] = toString(msg.capability_type);
+    obj["air_volume_location"] = nlohmann::json::parse(toJson(msg.air_volume_location));
+    if (msg.collection_policy.has_value()) {
+        obj["collection_policy"] = toString(msg.collection_policy.value());
+    }
+    if (msg.repetition.has_value()) {
+        obj["repetition"] = nlohmann::json::parse(toJson(msg.repetition.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.output) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["output"] = arr;
+    }
+    return obj.dump();
+}
+
+WeatherRadarTaskType fromJson(const std::string& s, WeatherRadarTaskType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    WeatherRadarTaskType msg;
+    if (j.contains("capability_type")) msg.capability_type = weatherRadarCapabilityEnumFromString(j["capability_type"].get<std::string>());
+    if (j.contains("air_volume_location")) msg.air_volume_location = fromJson(j["air_volume_location"].dump(), static_cast<ZoneType*>(nullptr));
+    if (j.contains("collection_policy")) {
+        msg.collection_policy = collectionPolicyEnumFromString(j["collection_policy"].get<std::string>());
+    }
+    if (j.contains("repetition")) {
+        msg.repetition = fromJson(j["repetition"].dump(), static_cast<RepetitionType*>(nullptr));
+    }
+    if (j.contains("output")) {
+        for (const auto& v : j["output"]) {
+            msg.output.push_back(fromJson(v.dump(), static_cast<ProductOutputCommandBasicType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const MA_ConstraintID_Type& msg) {
+    nlohmann::json obj;
+    obj["uuid"] = msg.uuid;
+    obj["descriptive_label"] = msg.descriptive_label;
+    return obj.dump();
+}
+
+MA_ConstraintID_Type fromJson(const std::string& s, MA_ConstraintID_Type* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_ConstraintID_Type msg;
+    if (j.contains("uuid")) msg.uuid = j["uuid"].get<std::string>();
+    if (j.contains("descriptive_label")) msg.descriptive_label = j["descriptive_label"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const MA_TaskStatusMT& msg) {
+    nlohmann::json obj;
+    obj["security_information"] = nlohmann::json::parse(toJson(msg.security_information));
+    obj["message_header"] = nlohmann::json::parse(toJson(msg.message_header));
+    obj["message_data"] = nlohmann::json::parse(toJson(msg.message_data));
+    return obj.dump();
+}
+
+MA_TaskStatusMT fromJson(const std::string& s, MA_TaskStatusMT* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_TaskStatusMT msg;
+    if (j.contains("security_information")) msg.security_information = fromJson(j["security_information"].dump(), static_cast<SecurityInformationType*>(nullptr));
+    if (j.contains("message_header")) msg.message_header = fromJson(j["message_header"].dump(), static_cast<HeaderType*>(nullptr));
+    if (j.contains("message_data")) msg.message_data = fromJson(j["message_data"].dump(), static_cast<MA_TaskStatusMDT*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MA_TaskStatusMDT& msg) {
+    nlohmann::json obj;
+    obj["executing_system_or_package"] = nlohmann::json::parse(toJson(msg.executing_system_or_package));
+    obj["execution_state"] = toString(msg.execution_state);
+    if (msg.execution_state_reason.has_value()) {
+        obj["execution_state_reason"] = nlohmann::json::parse(toJson(msg.execution_state_reason.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.actual_timing) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["actual_timing"] = arr;
+    }
+    if (msg.percent_completed.has_value()) {
+        obj["percent_completed"] = msg.percent_completed.value();
+    }
+    if (msg.traceability.has_value()) {
+        obj["traceability"] = nlohmann::json::parse(toJson(msg.traceability.value()));
+    }
+    if (msg.metrics.has_value()) {
+        obj["metrics"] = nlohmann::json::parse(toJson(msg.metrics.value()));
+    }
+    obj["task_id"] = nlohmann::json::parse(toJson(msg.task_id));
+    return obj.dump();
+}
+
+MA_TaskStatusMDT fromJson(const std::string& s, MA_TaskStatusMDT* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MA_TaskStatusMDT msg;
+    if (j.contains("executing_system_or_package")) msg.executing_system_or_package = fromJson(j["executing_system_or_package"].dump(), static_cast<MA_PackageSystemType*>(nullptr));
+    if (j.contains("execution_state")) msg.execution_state = requirementExecutionStateEnumFromString(j["execution_state"].get<std::string>());
+    if (j.contains("execution_state_reason")) {
+        msg.execution_state_reason = fromJson(j["execution_state_reason"].dump(), static_cast<CannotComplyType*>(nullptr));
+    }
+    if (j.contains("actual_timing")) {
+        for (const auto& v : j["actual_timing"]) {
+            msg.actual_timing.push_back(fromJson(v.dump(), static_cast<RequirementTimingType*>(nullptr)));
+        }
+    }
+    if (j.contains("percent_completed")) {
+        msg.percent_completed = j["percent_completed"].get<double>();
+    }
+    if (j.contains("traceability")) {
+        msg.traceability = fromJson(j["traceability"].dump(), static_cast<MA_RequirementStatusTraceabilityType*>(nullptr));
+    }
+    if (j.contains("metrics")) {
+        msg.metrics = fromJson(j["metrics"].dump(), static_cast<MetricsType*>(nullptr));
+    }
+    if (j.contains("task_id")) msg.task_id = fromJson(j["task_id"].dump(), static_cast<TaskID_Type*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MissionContingencyAlertMT& msg) {
+    nlohmann::json obj;
+    obj["security_information"] = nlohmann::json::parse(toJson(msg.security_information));
+    obj["message_header"] = nlohmann::json::parse(toJson(msg.message_header));
+    if (msg.object_state.has_value()) {
+        obj["object_state"] = toString(msg.object_state.value());
+    }
+    obj["message_data"] = nlohmann::json::parse(toJson(msg.message_data));
+    return obj.dump();
+}
+
+MissionContingencyAlertMT fromJson(const std::string& s, MissionContingencyAlertMT* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MissionContingencyAlertMT msg;
+    if (j.contains("security_information")) msg.security_information = fromJson(j["security_information"].dump(), static_cast<SecurityInformationType*>(nullptr));
+    if (j.contains("message_header")) msg.message_header = fromJson(j["message_header"].dump(), static_cast<HeaderType*>(nullptr));
+    if (j.contains("object_state")) {
+        msg.object_state = objectStateEnumFromString(j["object_state"].get<std::string>());
+    }
+    if (j.contains("message_data")) msg.message_data = fromJson(j["message_data"].dump(), static_cast<MissionContingencyAlertMDT*>(nullptr));
+    return msg;
+}
+
+std::string toJson(const MissionContingencyAlertMDT& msg) {
+    nlohmann::json obj;
+    obj["mission_contingency_alert_id"] = nlohmann::json::parse(toJson(msg.mission_contingency_alert_id));
+    obj["source_system_id"] = nlohmann::json::parse(toJson(msg.source_system_id));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.contingency_condition) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["contingency_condition"] = arr;
+    }
+    return obj.dump();
+}
+
+MissionContingencyAlertMDT fromJson(const std::string& s, MissionContingencyAlertMDT* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MissionContingencyAlertMDT msg;
+    if (j.contains("mission_contingency_alert_id")) msg.mission_contingency_alert_id = fromJson(j["mission_contingency_alert_id"].dump(), static_cast<MissionContingencyAlertID_Type*>(nullptr));
+    if (j.contains("source_system_id")) msg.source_system_id = fromJson(j["source_system_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("contingency_condition")) {
+        for (const auto& v : j["contingency_condition"]) {
+            msg.contingency_condition.push_back(fromJson(v.dump(), static_cast<MissionContingencyConditionType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const MissionContingencyConditionType& msg) {
+    nlohmann::json obj;
+    obj["conflicted_system_id"] = nlohmann::json::parse(toJson(msg.conflicted_system_id));
+    obj["conflict_state"] = toString(msg.conflict_state);
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.conflict) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["conflict"] = arr;
+    }
+    if (msg.trigger.has_value()) {
+        obj["trigger"] = nlohmann::json::parse(toJson(msg.trigger.value()));
+    }
+    if (msg.autonomous_action_status.has_value()) {
+        obj["autonomous_action_status"] = nlohmann::json::parse(toJson(msg.autonomous_action_status.value()));
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.operator_recommendation) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["operator_recommendation"] = arr;
+    }
+    return obj.dump();
+}
+
+MissionContingencyConditionType fromJson(const std::string& s, MissionContingencyConditionType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    MissionContingencyConditionType msg;
+    if (j.contains("conflicted_system_id")) msg.conflicted_system_id = fromJson(j["conflicted_system_id"].dump(), static_cast<SystemID_Type*>(nullptr));
+    if (j.contains("conflict_state")) msg.conflict_state = conflictStateEnumFromString(j["conflict_state"].get<std::string>());
+    if (j.contains("conflict")) {
+        for (const auto& v : j["conflict"]) {
+            msg.conflict.push_back(fromJson(v.dump(), static_cast<ConflictType*>(nullptr)));
+        }
+    }
+    if (j.contains("trigger")) {
+        msg.trigger = fromJson(j["trigger"].dump(), static_cast<PlanningTriggerType*>(nullptr));
+    }
+    if (j.contains("autonomous_action_status")) {
+        msg.autonomous_action_status = fromJson(j["autonomous_action_status"].dump(), static_cast<AutonomousActionStatusChoiceType*>(nullptr));
+    }
+    if (j.contains("operator_recommendation")) {
+        for (const auto& v : j["operator_recommendation"]) {
+            msg.operator_recommendation.push_back(fromJson(v.dump(), static_cast<OperatorRecommendationType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const ConflictType& msg) {
+    nlohmann::json obj;
+    obj["conflict_id"] = nlohmann::json::parse(toJson(msg.conflict_id));
+    if (msg.conflicting_object_id.has_value()) {
+        obj["conflicting_object_id"] = nlohmann::json::parse(toJson(msg.conflicting_object_id.value()));
+    }
+    if (msg.conflict_location.has_value()) {
+        obj["conflict_location"] = nlohmann::json::parse(toJson(msg.conflict_location.value()));
+    }
+    if (msg.conflict_time.has_value()) {
+        obj["conflict_time"] = nlohmann::json::parse(toJson(msg.conflict_time.value()));
+    }
+    if (msg.affected_requirements.has_value()) {
+        obj["affected_requirements"] = nlohmann::json::parse(toJson(msg.affected_requirements.value()));
+    }
+    return obj.dump();
+}
+
+ConflictType fromJson(const std::string& s, ConflictType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ConflictType msg;
+    if (j.contains("conflict_id")) msg.conflict_id = fromJson(j["conflict_id"].dump(), static_cast<ID_Type*>(nullptr));
+    if (j.contains("conflicting_object_id")) {
+        msg.conflicting_object_id = fromJson(j["conflicting_object_id"].dump(), static_cast<ID_Type*>(nullptr));
+    }
+    if (j.contains("conflict_location")) {
+        msg.conflict_location = fromJson(j["conflict_location"].dump(), static_cast<ConflictLocationType*>(nullptr));
+    }
+    if (j.contains("conflict_time")) {
+        msg.conflict_time = fromJson(j["conflict_time"].dump(), static_cast<DateTimeRangeType*>(nullptr));
+    }
+    if (j.contains("affected_requirements")) {
+        msg.affected_requirements = fromJson(j["affected_requirements"].dump(), static_cast<RequirementsReferenceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const ConflictLocationType& msg) {
+    nlohmann::json obj;
+    obj["conflict_point"] = nlohmann::json::parse(toJson(msg.conflict_point));
+    if (msg.conflicted_route_segment.has_value()) {
+        obj["conflicted_route_segment"] = nlohmann::json::parse(toJson(msg.conflicted_route_segment.value()));
+    }
+    return obj.dump();
+}
+
+ConflictLocationType fromJson(const std::string& s, ConflictLocationType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ConflictLocationType msg;
+    if (j.contains("conflict_point")) msg.conflict_point = fromJson(j["conflict_point"].dump(), static_cast<Point2D_Type*>(nullptr));
+    if (j.contains("conflicted_route_segment")) {
+        msg.conflicted_route_segment = fromJson(j["conflicted_route_segment"].dump(), static_cast<RoutePlanSegmentReferenceType*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const RoutePlanSegmentReferenceType& msg) {
+    nlohmann::json obj;
+    obj["route_plan_id"] = nlohmann::json::parse(toJson(msg.route_plan_id));
+    obj["path_id"] = nlohmann::json::parse(toJson(msg.path_id));
+    obj["path_segment_id"] = nlohmann::json::parse(toJson(msg.path_segment_id));
+    if (msg.mission_plan_id.has_value()) {
+        obj["mission_plan_id"] = nlohmann::json::parse(toJson(msg.mission_plan_id.value()));
+    }
+    return obj.dump();
+}
+
+RoutePlanSegmentReferenceType fromJson(const std::string& s, RoutePlanSegmentReferenceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RoutePlanSegmentReferenceType msg;
+    if (j.contains("route_plan_id")) msg.route_plan_id = fromJson(j["route_plan_id"].dump(), static_cast<RoutePlanID_Type*>(nullptr));
+    if (j.contains("path_id")) msg.path_id = fromJson(j["path_id"].dump(), static_cast<PathID_Type*>(nullptr));
+    if (j.contains("path_segment_id")) msg.path_segment_id = fromJson(j["path_segment_id"].dump(), static_cast<SegmentID_Type*>(nullptr));
+    if (j.contains("mission_plan_id")) {
+        msg.mission_plan_id = fromJson(j["mission_plan_id"].dump(), static_cast<MissionPlanID_Type*>(nullptr));
+    }
+    return msg;
+}
+
+std::string toJson(const RequirementsReferenceType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.effect_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["effect_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.action_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["action_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.task_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["task_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.response_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["response_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.capability_command_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["capability_command_id"] = arr;
+    }
+    return obj.dump();
+}
+
+RequirementsReferenceType fromJson(const std::string& s, RequirementsReferenceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RequirementsReferenceType msg;
+    if (j.contains("effect_id")) {
+        for (const auto& v : j["effect_id"]) {
+            msg.effect_id.push_back(fromJson(v.dump(), static_cast<EffectID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("action_id")) {
+        for (const auto& v : j["action_id"]) {
+            msg.action_id.push_back(fromJson(v.dump(), static_cast<ActionID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("task_id")) {
+        for (const auto& v : j["task_id"]) {
+            msg.task_id.push_back(fromJson(v.dump(), static_cast<TaskID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("response_id")) {
+        for (const auto& v : j["response_id"]) {
+            msg.response_id.push_back(fromJson(v.dump(), static_cast<ResponseID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("capability_command_id")) {
+        for (const auto& v : j["capability_command_id"]) {
+            msg.capability_command_id.push_back(fromJson(v.dump(), static_cast<CommandID_Type*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const RequirementsReferenceLockableType& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.effect_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["effect_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.action_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["action_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.task_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["task_id"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.response_id) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["response_id"] = arr;
+    }
+    return obj.dump();
+}
+
+RequirementsReferenceLockableType fromJson(const std::string& s, RequirementsReferenceLockableType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    RequirementsReferenceLockableType msg;
+    if (j.contains("effect_id")) {
+        for (const auto& v : j["effect_id"]) {
+            msg.effect_id.push_back(fromJson(v.dump(), static_cast<EffectID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("action_id")) {
+        for (const auto& v : j["action_id"]) {
+            msg.action_id.push_back(fromJson(v.dump(), static_cast<ActionID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("task_id")) {
+        for (const auto& v : j["task_id"]) {
+            msg.task_id.push_back(fromJson(v.dump(), static_cast<TaskID_Type*>(nullptr)));
+        }
+    }
+    if (j.contains("response_id")) {
+        for (const auto& v : j["response_id"]) {
+            msg.response_id.push_back(fromJson(v.dump(), static_cast<ResponseID_Type*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+std::string toJson(const AutonomousActionStatusChoiceType& msg) {
+    nlohmann::json obj;
+    if (msg.autonomous_planning_action_status.has_value()) {
+        obj["autonomous_planning_action_status"] = nlohmann::json::parse(toJson(msg.autonomous_planning_action_status.value()));
+    }
+    if (msg.alert_only.has_value()) {
+        obj["alert_only"] = msg.alert_only.value();
+    }
+    return obj.dump();
+}
+
+AutonomousActionStatusChoiceType fromJson(const std::string& s, AutonomousActionStatusChoiceType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AutonomousActionStatusChoiceType msg;
+    if (j.contains("autonomous_planning_action_status")) {
+        msg.autonomous_planning_action_status = fromJson(j["autonomous_planning_action_status"].dump(), static_cast<AutonomousActionStatusChoiceType_AutonomousPlanningActionStatus_List*>(nullptr));
+    }
+    if (j.contains("alert_only")) {
+        msg.alert_only = j["alert_only"].get<std::string>();
+    }
+    return msg;
+}
+
+std::string toJson(const AutonomousPlanningActionStatusType& msg) {
+    nlohmann::json obj;
+    obj["autonomous_planning_action_id"] = nlohmann::json::parse(toJson(msg.autonomous_planning_action_id));
+    obj["status"] = toString(msg.status);
+    return obj.dump();
+}
+
+AutonomousPlanningActionStatusType fromJson(const std::string& s, AutonomousPlanningActionStatusType* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AutonomousPlanningActionStatusType msg;
+    if (j.contains("autonomous_planning_action_id")) msg.autonomous_planning_action_id = fromJson(j["autonomous_planning_action_id"].dump(), static_cast<AutonomousPlanningActionID_Type*>(nullptr));
+    if (j.contains("status")) msg.status = autonomousActionStatusEnumFromString(j["status"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const AutonomousActionStatusChoiceType_AutonomousPlanningActionStatus_List& msg) {
+    nlohmann::json obj;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.items) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["items"] = arr;
+    }
+    return obj.dump();
+}
+
+AutonomousActionStatusChoiceType_AutonomousPlanningActionStatus_List fromJson(const std::string& s, AutonomousActionStatusChoiceType_AutonomousPlanningActionStatus_List* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    AutonomousActionStatusChoiceType_AutonomousPlanningActionStatus_List msg;
+    if (j.contains("items")) {
+        for (const auto& v : j["items"]) {
+            msg.items.push_back(fromJson(v.dump(), static_cast<AutonomousPlanningActionStatusType*>(nullptr)));
+        }
+    }
+    return msg;
+}
+
+} // namespace pyramid::domain_model::agra
