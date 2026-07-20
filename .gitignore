@@ -158,3 +158,4 @@ subprojects/PYRAMID/log/
 # AMS GRA hello-world starter kit clones (LA-CAL integration plan Phase 6) --
 # persistent, git-ignored local working copies for Kitty Hawk demo bring-up.
 /external/
+subprojects/PYRAMID/pim/.agra_p2_seam_test_*
