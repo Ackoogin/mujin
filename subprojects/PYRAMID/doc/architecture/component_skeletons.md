@@ -101,6 +101,72 @@ public:
 };
 ```
 
+### Request ports: commands, `Read`, and state transitions
+
+A provided request port has two related, but separate, parts:
+
+- The caller sends a command using `Create`, `Update`, or `Cancel`. The
+  generated provider routes that command to the matching handler method:
+  `onCreate`, `onUpdate`, or `onCancel`.
+- The caller uses `Read(Query)` to observe service-entity transitions for an
+  identifier. In C++, the facade presents this operation as
+  `transitions(query, on_frame, on_end)`.
+
+`Read` does **not** add an `onRead` method to your handler. The generated
+provider owns the read-stream registry and query matching, so it can provide
+the same application interface when deployment selects RPC or publish/
+subscribe transport. Your handler accepts commands; your component emits the
+state that readers observe.
+
+For example, a handler can accept a create command, and the component can
+later report its state through the provided request port:
+
+```cpp
+services::provided::Ack SenrequirementHandler::onCreate(
+    const services::provided::SENRequirement_Service_Request& request) {
+  // Validate and begin the requested work. The Ack only reports whether the
+  // command was accepted; completion is reported as a transition.
+  return services::provided::Ack{true};
+}
+
+void SensorsComponent::reportSenRequirement(
+    const services::provided::SENRequirement_Service_Entity& transition) {
+  const auto status = senRequirementRequestPort()
+                          .transitionWriter()
+                          .send(transition);
+  // Handle a non-PCL_OK status as appropriate for this component.
+}
+```
+
+`transitionWriter().send()` records the latest transition for the entity and
+delivers it to matching readers. With RPC deployment it fans out to open
+`Read` streams; with publish/subscribe deployment it publishes the entity
+transition. The handler does not need to know which transport is in use.
+
+On the consuming side, use the consumed request port's facade to submit a
+command and to open the corresponding `Read` stream:
+
+```cpp
+auto result = dependencyRequestPort().submit(request).get();
+if (!result.accepted) {
+  // The command was not accepted for transfer. Inspect result.status.
+}
+
+auto read_handle = dependencyRequestPort().transitions(
+    query,
+    [](const services::consumed::Dependency_Service_Entity& transition) {
+      // Store or act on the latest state for the matching identifier.
+    },
+    [](pcl_status_t stream_status) {
+      // The Read subscription ended or was cancelled.
+    });
+```
+
+Keep `read_handle` alive for as long as the component needs updates.
+Destroying it, or calling `read_handle.cancel()`, stops the `Read`
+subscription. The exact generated service and frame type names depend on the
+contract; use the types exposed by the relevant `...RequestPortClient`.
+
 The generated skeleton constructor takes a `Handlers` aggregate. Its fields
 follow contract port order:
 
@@ -158,6 +224,51 @@ your injected handlers is inside the generated skeleton. The derived
 `<Comp>Component` remains only for lifecycle work such as `on_tick`. If you
 need custom configuration, override `on_user_configure()` rather than
 `on_configure()`; the skeleton calls it last, after all ports are bound.
+
+### Calling services through skeleton ports
+
+The protected `<portKey>Port()` accessors are also the component's service
+API. Do not construct another client, provider, source, or sink for a port
+that the skeleton already owns. Call the generated facade through its
+accessor instead:
+
+```cpp
+class SensorsComponent final : public SensorsSkeleton {
+ public:
+  using SensorsSkeleton::SensorsSkeleton;
+
+  pcl_status_t publishCapability(
+      const services::provided::Capabilities& capability) {
+    return capabilityInformationPort().publish(capability);
+  }
+
+  void sendSenRequirementTransition(
+      const services::provided::SENRequirement_Service_Entity& transition) {
+    const auto status = senRequirementRequestPort()
+                            .transitionWriter()
+                            .send(transition);
+    // Record or recover from a non-PCL_OK status.
+  }
+
+  void requestDependency(
+      const services::consumed::Dependency_Service_Request& request) {
+    // This accessor exists when the contract declares a consumed request
+    // port. submit() returns a deferred future<SubmitResult>.
+    auto result = dependencyRequestPort().submit(request).get();
+    if (!result.accepted) {
+      // Handle result.status; RPC may also supply result.remoteAck().
+    }
+  }
+};
+```
+
+The `Sensors` worked example has no consumed request port, so
+`dependencyRequestPort()` is illustrative rather than a member of that
+particular generated skeleton. Replace it and the placeholder `Dependency`
+types with the accessor and types generated for your component. A consumed
+information port is different: its callback is supplied in `Handlers` and
+the skeleton subscribes it during configuration, so component code normally
+does not call it directly.
 
 If you generated a scaffold using the earlier hook-based design,
 write-if-absent protects your existing `<comp>_component.*` files. They will
