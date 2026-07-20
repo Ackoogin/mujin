@@ -1,6 +1,6 @@
 # PYRAMID — Consolidated TODO & Plan
 
-**Last consolidated: 2026-07-17.** This is the single tracker for remaining
+**Last consolidated: 2026-07-20.** This is the single tracker for remaining
 PCL/PYRAMID work. Completed workstreams have been folded into "Delivered"
 below; the executed plans, reviews, and status reports that used to carry
 their detail were removed in the 2026-07-10 doc review — their design
@@ -71,6 +71,7 @@ see below for what's still open).
 | 3 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
 | 4 | F2(b) Tactical Objects example (rides on PIM migration plan and follows H1) | S/M |
 | 5 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
+| 6 | I1 Make the generated component codec selectable at process startup | S/M |
 
 ---
 
@@ -452,6 +453,49 @@ HLR/LLR requirements remain.
 The full impact analysis, compatibility policy, phased implementation plan,
 validation matrix, and completion criteria are in
 [`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md).
+
+---
+
+## WS-I — Generated component codec selection
+
+### I1. Make the generated component codec selectable at process startup
+
+**Status: proposed, not yet scheduled (2026-07-20).**
+
+The generated C++ service and port facades accept a content type, but default
+it to `application/json`. The generated component skeleton constructs every
+port facade without passing a content type, so the default becomes fixed for
+the component. The generated application scaffold reinforces that choice: its
+CMake target embeds and loads the JSON codec plugin only. The `.ports` file
+selects transport plugins and routes; it does not select a codec.
+
+As a result, an SDK can build and package both JSON and FlatBuffers codec
+plugins while an application built from the generated component skeleton
+cannot select FlatBuffers without changing generated code. Loading only the
+FlatBuffers plugin is not sufficient because the skeleton still tries to bind
+its ports with `application/json` and fails the codec-registry check.
+
+- **Plan:** add an explicit component codec setting to the generated C++
+  skeleton constructor or a small process-startup configuration object.
+  Thread the selected content type into every generated port facade owned by
+  the skeleton. Update generated scaffolds to load the matching component
+  codec plugin and pass the same content type to the skeleton. Keep JSON as the
+  compatibility default. Keep codec selection separate from the existing
+  per-port transport selection unless the `.ports` format is deliberately
+  extended and documented.
+- **Fail closed:** startup must report a clear configuration error when the
+  selected content type is empty, unsupported, or has no matching loaded
+  codec. A loaded codec plugin must not silently change the selected content
+  type, and loading both codec plugins must not make registration order choose
+  the component's wire format.
+- **Accept:** the same generated component and application scaffold run with
+  either `application/json` or `application/flatbuffers` without editing
+  generated files. RPC and pub/sub realizations use the selected content type
+  consistently for requests, responses, stream frames, and publications.
+  Add generator tests that pin constructor/configuration propagation and
+  end-to-end scaffold tests for both codecs, including the missing-plugin and
+  content-type/plugin-mismatch failures. Refresh the packaged SDK example and
+  document that `.ports` continues to select transports, not codecs.
 
 ---
 
