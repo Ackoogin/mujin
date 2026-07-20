@@ -17,6 +17,7 @@ message TOBDependency {
 }
 
 message TOBRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
 }
 
 // Standard properties of a Tactical Object

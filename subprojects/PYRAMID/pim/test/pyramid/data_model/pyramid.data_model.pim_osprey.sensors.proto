@@ -13,6 +13,7 @@ message SENRadarManualTrackRequest {
 }
 
 message SENRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
 }
 
 // Requirement to Create and Maintain active Tracking of a Tactical Object based on the provided position

@@ -125,6 +125,15 @@ class CppTypesGenerator:
 
     # -- internal --------------------------------------------------------------
 
+    @staticmethod
+    def _write_documentation(f, lines: List[str], indent: str = '') -> None:
+        """Emit source documentation as a Doxygen ``///`` block."""
+        if not lines:
+            return
+        for index, line in enumerate(lines):
+            prefix = '/// \\brief ' if index == 0 else '/// '
+            f.write(f'{indent}{prefix}{line}\n')
+
     def _package_of_type(self, name: str, current_pkg: str = '') -> str:
         """Return the proto package that defines a type."""
         return _package_for_proto_type(self._index, name, current_pkg)
@@ -218,10 +227,12 @@ class CppTypesGenerator:
         return [by_name[n] for n in order]
 
     def _write_enum(self, f, enum: ProtoEnum) -> None:
+        self._write_documentation(f, enum.documentation)
         f.write(f'enum class {enum.name} : int {{\n')
         for v in enum.values:
             suf = enum.suffix_of(v.name)
             lit = screaming_to_pascal(suf) if suf else v.name
+            self._write_documentation(f, v.documentation, '    ')
             f.write(f'    {lit} = {v.number},\n')
         f.write('};\n\n')
 
@@ -252,8 +263,10 @@ class CppTypesGenerator:
 
     def _write_struct(self, f, msg: ProtoMessage,
                       current_pkg: str = '') -> None:
+        self._write_documentation(f, msg.documentation)
         f.write(f'struct {msg.name} {{\n')
         for field, fname, comment in self._inline_base_fields(msg, current_pkg):
+            self._write_documentation(f, field.documentation, '    ')
             base_cpp = self._cpp_field_type(field.type, False, current_pkg)
             if field.is_repeated:
                 cpp_type = f'std::vector<{base_cpp}>'
@@ -270,8 +283,10 @@ class CppTypesGenerator:
             assign = f' = {default}' if default else ''
             f.write(f'    {cpp_type} {fname}{assign};{comment}{opt}\n')
         for oo in msg.oneofs:
+            self._write_documentation(f, oo.documentation, '    ')
             f.write(f'    // oneof {oo.name}\n')
             for field in oo.fields:
+                self._write_documentation(f, field.documentation, '    ')
                 cpp_type = self._cpp_field_type(field.type, False, current_pkg)
                 f.write(f'    tl::optional<{cpp_type}> {field.name};\n')
         f.write('};\n')
@@ -333,6 +348,7 @@ class CppTypesGenerator:
             # using aliases for scalar wrappers defined in this file
             for msg in pf.messages:
                 if msg.name in self._aliases:
+                    self._write_documentation(f, msg.documentation)
                     f.write(f'using {msg.name} = {self._aliases[msg.name]};\n')
             f.write('\n')
 
@@ -392,4 +408,3 @@ class CppTypesGenerator:
                     if enum.name in unique_names:
                         f.write(f'using {ns}::{enum.name};\n')
             f.write(f'}} // namespace {self._ns}\n')
-

@@ -14,9 +14,11 @@ message SPRDependencyInformation {
 }
 
 message SPRRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
 }
 
 message SPRInformation {
+  pyramid.data_model.common.Information base = 1;  // Inherited from Information
 }
 
 message Sensor_Products {

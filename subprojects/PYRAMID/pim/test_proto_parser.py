@@ -14,6 +14,38 @@ MBSE_PROTO_ROOT = REPO_ROOT / "subprojects" / "PYRAMID" / "pim" / "test"
 
 
 class ProtoParserInteractionTest(unittest.TestCase):
+    def test_declaration_comments_are_preserved_as_documentation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fixture.proto"
+            path.write_text(
+                '''
+syntax = "proto3";
+package fixture;
+
+// A command to execute.
+message Command {
+  // The command identifier.
+  string identifier = 1;
+}
+
+// Command execution endpoint.
+service CommandService {
+  // Starts command execution.
+  rpc Start(Command) returns (Command);
+}
+''',
+                encoding="utf-8",
+            )
+            parsed = parse_proto(path)
+
+        self.assertEqual(parsed.messages[0].documentation, ["A command to execute."])
+        self.assertEqual(parsed.messages[0].fields[0].documentation,
+                         ["The command identifier."])
+        self.assertEqual(parsed.services[0].documentation,
+                         ["Command execution endpoint."])
+        self.assertEqual(parsed.services[0].rpcs[0].documentation,
+                         ["Starts command execution."])
+
     def test_method_option_block_is_parsed(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fixture.proto"

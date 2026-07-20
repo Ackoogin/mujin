@@ -8,6 +8,7 @@ import "pyramid/data_model/pyramid.data_model.common_pim_components.sensor_produ
 import "pyramid/data_model/pyramid.data_model.common_pim_components.tactical_objects.proto";
 
 message SPRRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
 }
 
 // Request to process all track data from the radar relating to a particular area

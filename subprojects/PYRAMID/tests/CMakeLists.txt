@@ -172,6 +172,10 @@ add_test(NAME pyramid_binding_generation_dependencies
             --generator ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py
             --proto-dir ${PYRAMID_ROOT_DIR}/proto)
 
+add_test(NAME pyramid_mbse_proto_generation
+    COMMAND ${PYRAMID_PYTHON}
+            ${PYRAMID_ROOT_DIR}/pim/test_proto_generator.py)
+
 # Validates the native ROS2 IDL generator output against rosidl interface rules
 # (toolchain-free; the full rosidl build runs under the pyramid_msgs ament pkg).
 add_test(NAME pyramid_ros2_idl_generation

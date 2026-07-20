@@ -23,6 +23,7 @@ class ProtoEnumValue:
     """One enum constant: NAME = ordinal;"""
     name: str
     number: int
+    documentation: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -30,6 +31,7 @@ class ProtoEnum:
     """A proto enum definition."""
     name: str
     values: List[ProtoEnumValue] = field(default_factory=list)
+    documentation: List[str] = field(default_factory=list)
 
     @property
     def prefix(self) -> str:
@@ -56,6 +58,7 @@ class ProtoField:
     number: int
     label: str = ''     # "optional", "repeated", or "" (implicit presence)
     oneof_group: Optional[str] = None
+    documentation: List[str] = field(default_factory=list)
 
     @property
     def is_optional(self) -> bool:
@@ -84,6 +87,7 @@ class ProtoOneOf:
     """A oneof group inside a message."""
     name: str
     fields: List[ProtoField] = field(default_factory=list)
+    documentation: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -94,6 +98,7 @@ class ProtoMessage:
     oneofs: List[ProtoOneOf] = field(default_factory=list)
     nested_enums: List[ProtoEnum] = field(default_factory=list)
     nested_messages: List['ProtoMessage'] = field(default_factory=list)
+    documentation: List[str] = field(default_factory=list)
 
     def all_fields(self) -> List[ProtoField]:
         """All fields including those inside oneof groups."""
@@ -120,6 +125,7 @@ class ProtoRpc:
     pattern: Optional[str] = None
     topic: Optional[str] = None
     qos: Dict[str, object] = field(default_factory=dict)
+    documentation: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -128,6 +134,7 @@ class ProtoService:
     name: str
     rpcs: List[ProtoRpc] = field(default_factory=list)
     port_kind: Optional[str] = None
+    documentation: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -184,10 +191,38 @@ _PROTO_SCALARS = frozenset({
 # -- Tokeniser / parser -------------------------------------------------------
 
 def _strip_comments(text: str) -> str:
-    """Remove // and /* */ comments."""
-    text = re.sub(r'//[^\n]*', '', text)
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    return text
+    """Replace comments with whitespace while preserving source offsets."""
+    def blank(match: re.Match) -> str:
+        return ''.join('\n' if char == '\n' else ' ' for char in match.group())
+
+    text = re.sub(r'//[^\n]*', blank, text)
+    return re.sub(r'/\*.*?\*/', blank, text, flags=re.DOTALL)
+
+
+def _documentation_before(raw: str, offset: int) -> List[str]:
+    """Return contiguous source comments immediately before a declaration."""
+    prefix = raw[:offset]
+    match = re.search(
+        r'(?:(?:[ \t]*//[^\n]*(?:\n|$))|(?:[ \t]*/\*.*?\*/[ \t]*(?:\n|$)))+[ \t\r\n]*$',
+        prefix,
+        flags=re.DOTALL,
+    )
+    if not match:
+        return []
+
+    lines: List[str] = []
+    for comment in re.finditer(r'//([^\n]*)|/\*(.*?)\*/', match.group(), re.DOTALL):
+        content = comment.group(1) if comment.group(1) is not None else comment.group(2)
+        for line in content.splitlines() or ['']:
+            line = line.strip()
+            if line.startswith('*'):
+                line = line[1:].lstrip()
+            lines.append(line)
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    return lines
 
 
 def _find_block(text: str, start: int) -> tuple:
@@ -208,15 +243,18 @@ def _find_block(text: str, start: int) -> tuple:
     return text[start + 1:], len(text)
 
 
-def _parse_enum_body(body: str) -> List[ProtoEnumValue]:
+def _parse_enum_body(body: str, raw_body: str = '') -> List[ProtoEnumValue]:
     """Parse the body of an enum { ... } block."""
     values = []
     for m in re.finditer(r'(\w+)\s*=\s*(-?\d+)\s*;', body):
-        values.append(ProtoEnumValue(name=m.group(1), number=int(m.group(2))))
+        values.append(ProtoEnumValue(
+            name=m.group(1), number=int(m.group(2)),
+            documentation=_documentation_before(raw_body, m.start()) if raw_body else [],
+        ))
     return values
 
 
-def _parse_message_body(body: str) -> ProtoMessage:
+def _parse_message_body(body: str, raw_body: str = '') -> ProtoMessage:
     """Parse the body of a message { ... } block into fields, oneofs, and nested types."""
     msg = ProtoMessage(name='')  # caller sets the name
 
@@ -228,18 +266,26 @@ def _parse_message_body(body: str) -> ProtoMessage:
     for m in re.finditer(r'\benum\s+(\w+)\s*\{', remaining):
         enum_name = m.group(1)
         block_body, _ = _find_block(remaining, m.end() - 1)
-        msg.nested_enums.append(ProtoEnum(name=enum_name, values=_parse_enum_body(block_body)))
+        raw_block, _ = _find_block(raw_body, m.end() - 1) if raw_body else ('', 0)
+        msg.nested_enums.append(ProtoEnum(
+            name=enum_name,
+            values=_parse_enum_body(block_body, raw_block),
+            documentation=_documentation_before(raw_body, m.start()) if raw_body else [],
+        ))
 
-    # Remove nested enum blocks from remaining text
-    remaining = re.sub(r'\benum\s+\w+\s*\{[^}]*\}', '', remaining)
+    # Blank nested enum blocks while preserving positions for documentation.
+    remaining = _remove_nested_blocks(remaining, 'enum')
 
     # Nested messages (non-recursive for now -- handles one level of nesting)
     nested_msg_pattern = re.compile(r'\bmessage\s+(\w+)\s*\{')
     for m in nested_msg_pattern.finditer(remaining):
         nested_name = m.group(1)
         block_body, _ = _find_block(remaining, m.end() - 1)
-        nested = _parse_message_body(block_body)
+        raw_block, _ = _find_block(raw_body, m.end() - 1) if raw_body else ('', 0)
+        nested = _parse_message_body(block_body, raw_block)
         nested.name = nested_name
+        nested.documentation = (_documentation_before(raw_body, m.start())
+                                if raw_body else [])
         msg.nested_messages.append(nested)
 
     # Remove nested message blocks
@@ -249,7 +295,11 @@ def _parse_message_body(body: str) -> ProtoMessage:
     for m in re.finditer(r'\boneof\s+(\w+)\s*\{', remaining):
         oneof_name = m.group(1)
         block_body, _ = _find_block(remaining, m.end() - 1)
-        oo = ProtoOneOf(name=oneof_name)
+        raw_block, _ = _find_block(raw_body, m.end() - 1) if raw_body else ('', 0)
+        oo = ProtoOneOf(
+            name=oneof_name,
+            documentation=_documentation_before(raw_body, m.start()) if raw_body else [],
+        )
         for fm in re.finditer(
                 r'((?:repeated|optional)\s+)?([\w.]+)\s+(\w+)\s*=\s*(\d+)\s*;',
                 block_body):
@@ -260,6 +310,8 @@ def _parse_message_body(body: str) -> ProtoMessage:
                 number=int(fm.group(4)),
                 label=label,
                 oneof_group=oneof_name,
+                documentation=(_documentation_before(raw_block, fm.start())
+                               if raw_body else []),
             ))
         msg.oneofs.append(oo)
 
@@ -276,6 +328,8 @@ def _parse_message_body(body: str) -> ProtoMessage:
             type=fm.group(2),
             number=int(fm.group(4)),
             label=label,
+            documentation=(_documentation_before(raw_body, fm.start())
+                           if raw_body else []),
         ))
 
     # Sort fields by number
@@ -287,13 +341,15 @@ def _parse_message_body(body: str) -> ProtoMessage:
 
 
 def _remove_nested_blocks(text: str, keyword: str) -> str:
-    """Remove all `keyword Name { ... }` blocks from text (handles nesting)."""
+    """Blank all `keyword Name { ... }` blocks while preserving offsets."""
     result = []
     pattern = re.compile(rf'\b{keyword}\s+\w+\s*\{{')
     pos = 0
     for m in pattern.finditer(text):
         result.append(text[pos:m.start()])
         _, end = _find_block(text, m.end() - 1)
+        result.append(''.join('\n' if char == '\n' else ' '
+                              for char in text[m.start():end]))
         pos = end
     result.append(text[pos:])
     return ''.join(result)
@@ -422,22 +478,33 @@ def parse_proto(path: Path) -> ProtoFile:
     for m in re.finditer(r'\benum\s+(\w+)\s*\{', clean):
         enum_name = m.group(1)
         block_body, _ = _find_block(clean, m.end() - 1)
-        pf.enums.append(ProtoEnum(name=enum_name, values=_parse_enum_body(block_body)))
+        raw_block, _ = _find_block(raw, m.end() - 1)
+        pf.enums.append(ProtoEnum(
+            name=enum_name,
+            values=_parse_enum_body(block_body, raw_block),
+            documentation=_documentation_before(raw, m.start()),
+        ))
 
     # Top-level messages
     msg_text = _remove_nested_blocks(text, 'service')
     for m in re.finditer(r'\bmessage\s+(\w+)\s*\{', msg_text):
         msg_name = m.group(1)
         block_body, _ = _find_block(msg_text, m.end() - 1)
-        msg = _parse_message_body(block_body)
+        raw_block, _ = _find_block(raw, m.end() - 1)
+        msg = _parse_message_body(block_body, raw_block)
         msg.name = msg_name
+        msg.documentation = _documentation_before(raw, m.start())
         pf.messages.append(msg)
 
     # Services
     for m in re.finditer(r'\bservice\s+(\w+)\s*\{', text):
         svc_name = m.group(1)
         block_body, _ = _find_block(text, m.end() - 1)
-        svc = ProtoService(name=svc_name)
+        raw_block, _ = _find_block(raw, m.end() - 1)
+        svc = ProtoService(
+            name=svc_name,
+            documentation=_documentation_before(raw, m.start()),
+        )
         for rm in re.finditer(
                 r'\brpc\s+(\w+)\s*\(\s*(stream\s+)?([\w.]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([\w.]+)\s*\)',
                 block_body):
@@ -457,6 +524,7 @@ def parse_proto(path: Path) -> ProtoFile:
                 pattern=pattern,
                 topic=topic,
                 qos=qos,
+                documentation=_documentation_before(raw_block, rm.start()),
             ))
         svc.port_kind = classify_port_service(svc)
         pf.services.append(svc)

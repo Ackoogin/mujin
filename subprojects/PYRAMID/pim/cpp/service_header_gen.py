@@ -44,6 +44,13 @@ from .naming import (
 )
 
 
+def _write_documentation(f, lines, indent: str = '') -> None:
+    """Emit proto documentation as a Doxygen ``///`` block."""
+    for index, line in enumerate(lines):
+        prefix = '/// \\brief ' if index == 0 else '/// '
+        f.write(f'{indent}{prefix}{line}\n')
+
+
 class ServiceHeaderEmitterMixin:
     """Service constants/topics, handler surface, client invoke and
     ROS2 bind declarations of the generated binding header."""
@@ -233,8 +240,11 @@ class ServiceHeaderEmitterMixin:
             current_svc = None
             for i, (svc_name, rpc) in enumerate(all_rpcs):
                 if svc_name != current_svc:
+                    service = next(s for s in parsed.services if s.name == svc_name)
+                    _write_documentation(f, service.documentation, '    ')
                     f.write(f'\n    // {svc_name}\n')
                     current_svc = svc_name
+                _write_documentation(f, rpc.documentation, '    ')
                 f.write(f'    virtual {_cpp_rsp_type(rpc)}\n')
                 handler_name = _rpc_handler_name(
                     svc_name, rpc, duplicate_rpc_names)
@@ -542,4 +552,3 @@ class ServiceHeaderEmitterMixin:
                 f.write(f'namespace {alias_parent} {{\n')
                 f.write(f'namespace {alias_name} = ::{full_ns};\n')
                 f.write(f'}} // namespace {alias_parent}\n')
-

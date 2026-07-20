@@ -14,9 +14,11 @@ message IPRRequest {
 }
 
 message IPRInformation {
+  pyramid.data_model.common.Information base = 1;  // Inherited from Information
 }
 
 message IPRRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
 }
 
 message IPRDependencyInformation {

@@ -11,6 +11,7 @@ message SENRequest {
 }
 
 message SENRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
 }
 
 message SENDependencyRequirement {

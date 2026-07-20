@@ -1159,10 +1159,21 @@ class ProtobufGenerator:
         """Find a dataType or class by UUID/XMI id, falling back to name."""
         if not ref:
             return None
+
+        # A model can contain several types with the same display name in
+        # different namespaces. Resolve UUID/XMI references before considering
+        # names so an earlier same-named type cannot replace the referenced
+        # type. This also keeps inheritance and cross-package qualification
+        # consistent with _type_name() and _generalization_refs().
+        for namespace_types in self._group_by_namespace().values():
+            for obj in namespace_types['dataTypes'] + namespace_types['classes']:
+                if obj.get('id') == ref:
+                    return obj
+
         name = self._type_name(ref)
         for namespace_types in self._group_by_namespace().values():
             for obj in namespace_types['dataTypes'] + namespace_types['classes']:
-                if obj.get('id') == ref or obj.get('name') == name:
+                if obj.get('name') == name:
                     return obj
         return None
 

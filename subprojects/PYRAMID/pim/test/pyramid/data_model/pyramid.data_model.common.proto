@@ -146,6 +146,7 @@ message Information {
 }
 
 message DependencyInformation {
+  Information base = 1;  // Inherited from Information
 }
 
 message RequirementSolution {
@@ -161,6 +162,7 @@ message Action {
 }
 
 message DependencyRequirement {
+  Requirement base = 1;  // Inherited from Requirement
 }
 
 message Capability {
