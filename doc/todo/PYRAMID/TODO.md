@@ -460,7 +460,41 @@ validation matrix, and completion criteria are in
 
 ### I1. Make the generated component codec selectable at process startup
 
-**Status: proposed, not yet scheduled (2026-07-20).**
+**Status: mechanism implemented in the C++ toolchain (2026-07-20); FlatBuffers
+end-to-end proof and packaged-example refresh still open.**
+
+Implemented so far (tracked source; the regenerated `pcl_pyramid_sdk_pim_test`
+SDK is git-ignored, so its refreshed skeletons/scaffolds are on disk only):
+
+- The `.ports` format was **deliberately extended and documented** (the option
+  this item left open): a `codec CONTENT_TYPE PLUGIN` line loads a codec and
+  sets the process default content type (first line wins), and a `port_codec
+  PORT CONTENT_TYPE` line overrides one port so a process can speak several
+  codecs. Parsed and validated in `pcl_process_runtime.c`; exposed as
+  `pcl_process_runtime_content_type` / `pcl_process_runtime_port_content_type`
+  and `ProcessRuntime::contentType()` / `contentTypeFor()`.
+- The generated skeleton ctor now takes a `ContentTypeResolver` and threads a
+  per-port content type into every port facade it owns (see
+  `pim/cpp/component_skeleton_gen.py`). Default stays `application/json`.
+- The generated scaffold self-wires: the component builds its own handler set,
+  and `main` passes `runtime.contentTypeFor(port)` so each port uses the codec
+  its `codec`/`port_codec` line selected.
+- Fail-closed: a `port_codec` naming an unknown port or an unloaded codec is
+  rejected with a clear error; the process-default codec load tolerates a codec
+  a build-time fallback already registered. Pinned by
+  `test_pcl_process_runtime.cpp` (`SelectsCodecFromPortsFile`,
+  `SelectsPerPortCodecFromPortsFile`, `RejectsInvalidPortCodecLines`) and the
+  regenerated component-skeleton baseline; JSON verified end-to-end by building
+  and running the `pim_osprey_sensors` scaffold.
+
+Remaining for I1's acceptance:
+
+- End-to-end scaffold run with `application/flatbuffers` (the mechanism is
+  codec-agnostic, but only JSON has been exercised end-to-end so far).
+- A generator test that pins constructor/resolver propagation directly (beyond
+  the golden baseline), and the packaged-SDK example/doc refresh.
+
+Original analysis follows.
 
 The generated C++ service and port facades accept a content type, but default
 it to `application/json`. The generated component skeleton constructs every
@@ -518,3 +552,4 @@ No action until the trigger fires; listed so nothing silently drops.
 | `contract_routing_manifest.py` support for real (non-stub) transports | A generated manifest needs to target SHM/UDP/etc. rather than `contract_transport_plugin.c` | Today it only emits `{"mode":"rpc"\|"pubsub"}` config for the NULL-vtable stub. Needs `bus_name`/`participant_id` (SHM) and `remote_host`/`remote_port`/`local_port`/`peer_id` (UDP) config emission, plus the counterpart-participant-id peer-alias convention. |
 | Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream ([`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md), Remaining Design Point). |
 | Interaction-pattern options for the legacy tree / side-table deletion | Only if the frozen-compat stance changes | Resolved as *frozen compat, new consumers forbidden*; `standard_topics.py` stays scoped to the legacy layout. |
+| `cabi_codegen.py` non-deterministic typedef order | Next substantive change to `cabi_codegen.py`, or the first byte-stability guard failure it causes | `pyramid_data_model_generic_*_cabi.h` emits the generic container typedefs (the `*List`/`*Queue` `pyramid_slice_t` wrappers) in an order that varies between two runs of the *same* generator — observed as `RequirementList`/`RequirementQueue` swapping places. The output is functionally identical, but the instability undermines standing-regression-bar #1 (byte-for-byte identical output) and shows up as spurious diffs when regenerating a packaged SDK. Cause is an unsorted Python `set` iteration in the emitter (e.g. `set(self._aliases.keys())`); the fix is to sort the emission order (and ideally add a two-run determinism check). Found 2026-07-20 while regenerating the `pcl_pyramid_sdk_pim_test` SDK. |

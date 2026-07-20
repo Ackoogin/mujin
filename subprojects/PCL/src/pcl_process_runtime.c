@@ -52,6 +52,13 @@ struct pcl_process_runtime_t {
   size_t gateway_count;
   uint32_t duration_seconds;
   volatile sig_atomic_t stop_requested;
+  char content_type[PCL_RUNTIME_NAME_SIZE];
+  int content_type_selected;
+  struct {
+    char port[PCL_RUNTIME_NAME_SIZE];
+    char content_type[PCL_RUNTIME_NAME_SIZE];
+  } port_codecs[PCL_RUNTIME_MAX_PORTS];
+  size_t port_codec_count;
   char error[PCL_RUNTIME_CONFIG_SIZE];
 };
 
@@ -248,8 +255,34 @@ pcl_status_t pcl_process_runtime_create(
     return PCL_ERR_NOMEM;
   }
   runtime->duration_seconds = duration_seconds;
+  snprintf(runtime->content_type, sizeof(runtime->content_type),
+           "application/json");
   *out_runtime = runtime;
   return PCL_OK;
+}
+
+/* Implements: REQ_PCL_477. */
+const char* pcl_process_runtime_content_type(
+    const pcl_process_runtime_t* runtime) {
+  if (!runtime || runtime->content_type[0] == '\0') {
+    return "application/json";
+  }
+  return runtime->content_type;
+}
+
+/* Implements: REQ_PCL_477. */
+const char* pcl_process_runtime_port_content_type(
+    const pcl_process_runtime_t* runtime,
+    const char* port_name) {
+  if (runtime && port_name) {
+    size_t index;
+    for (index = 0; index < runtime->port_codec_count; ++index) {
+      if (strcmp(runtime->port_codecs[index].port, port_name) == 0) {
+        return runtime->port_codecs[index].content_type;
+      }
+    }
+  }
+  return pcl_process_runtime_content_type(runtime);
 }
 
 /* Implements: REQ_PCL_476, REQ_PCL_225. */
@@ -374,6 +407,70 @@ pcl_status_t pcl_process_runtime_load_ports_file(
     ++line_number;
     cursor = trim(line);
     if (cursor[0] == '\0' || cursor[0] == '#') continue;
+    if (sscanf(cursor, "%15s", directive) != 1) {
+      status = set_error(runtime, PCL_ERR_INVALID,
+                         "invalid port config line %lu",
+                         (unsigned long)line_number);
+      goto cleanup;
+    }
+    /* A `codec CONTENT_TYPE PLUGIN` line loads a wire codec, the same way a
+       `port` line selects a transport. The first codec line's content type is
+       the process-wide default; add more lines to load additional codecs. */
+    if (strcmp(directive, "codec") == 0) {
+      char content_type[PCL_RUNTIME_NAME_SIZE];
+      char codec_plugin[PCL_RUNTIME_PATH_SIZE];
+      if (sscanf(cursor, "%15s %127s %1023s",
+                 directive, content_type, codec_plugin) != 3) {
+        status = set_error(runtime, PCL_ERR_INVALID,
+                           "invalid codec config line %lu",
+                           (unsigned long)line_number);
+        goto cleanup;
+      }
+      status = pcl_process_runtime_load_codec(runtime, codec_plugin);
+      if (status != PCL_OK) {
+        /* A build-time fallback codec may already have been loaded; loading
+           the same codec vtable twice is rejected. If the selected content
+           type is already available the deployment goal is met, so tolerate
+           it. Any other failure (missing plugin, bad ABI) still propagates. */
+        if (!pcl_codec_registry_get(pcl_codec_registry_default(),
+                                    content_type)) {
+          goto cleanup;
+        }
+        clear_error(runtime);
+        status = PCL_OK;
+      }
+      if (!runtime->content_type_selected) {
+        snprintf(runtime->content_type, sizeof(runtime->content_type),
+                 "%s", content_type);
+        runtime->content_type_selected = 1;
+      }
+      continue;
+    }
+    /* A `port_codec PORT CONTENT_TYPE` line overrides the wire codec for one
+       port, so a single process can speak several codecs. The content type
+       must be loaded by a `codec` line; the pairing is validated below. */
+    if (strcmp(directive, "port_codec") == 0) {
+      char pc_port[PCL_RUNTIME_NAME_SIZE];
+      char pc_content_type[PCL_RUNTIME_NAME_SIZE];
+      if (sscanf(cursor, "%15s %127s %127s",
+                 directive, pc_port, pc_content_type) != 3) {
+        status = set_error(runtime, PCL_ERR_INVALID,
+                           "invalid port_codec config line %lu",
+                           (unsigned long)line_number);
+        goto cleanup;
+      }
+      if (runtime->port_codec_count >= PCL_RUNTIME_MAX_PORTS) {
+        status = set_error(runtime, PCL_ERR_NOMEM,
+                           "too many port_codec entries");
+        goto cleanup;
+      }
+      snprintf(runtime->port_codecs[runtime->port_codec_count].port,
+               PCL_RUNTIME_NAME_SIZE, "%s", pc_port);
+      snprintf(runtime->port_codecs[runtime->port_codec_count].content_type,
+               PCL_RUNTIME_NAME_SIZE, "%s", pc_content_type);
+      ++runtime->port_codec_count;
+      continue;
+    }
     if (sscanf(cursor, "%15s %127s %7s %127s %1023s %n",
                directive, name, mode, peer, plugin, &offset) != 5) {
       status = set_error(runtime, PCL_ERR_INVALID,
@@ -446,6 +543,23 @@ pcl_status_t pcl_process_runtime_load_ports_file(
     status = set_error(runtime, PCL_ERR_INVALID,
                        "port config must contain each component port");
     goto cleanup;
+  }
+  for (index = 0; index < runtime->port_codec_count; ++index) {
+    if (find_port(ports, port_count, runtime->port_codecs[index].port) < 0) {
+      status = set_error(runtime, PCL_ERR_INVALID,
+                         "port_codec names unknown port '%s'",
+                         runtime->port_codecs[index].port);
+      goto cleanup;
+    }
+    if (!pcl_codec_registry_get(pcl_codec_registry_default(),
+                                runtime->port_codecs[index].content_type)) {
+      status = set_error(runtime, PCL_ERR_INVALID,
+                         "port_codec for '%s' selects codec '%s' that no "
+                         "codec line loaded",
+                         runtime->port_codecs[index].port,
+                         runtime->port_codecs[index].content_type);
+      goto cleanup;
+    }
   }
   if (!make_temporary_path(manifest_path, sizeof(manifest_path))) {
     status = set_error(runtime, PCL_ERR_INVALID,

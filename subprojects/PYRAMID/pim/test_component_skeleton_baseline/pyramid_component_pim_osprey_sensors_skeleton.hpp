@@ -32,6 +32,7 @@ public:
   explicit SensorsSkeleton(
       pcl::Executor& executor,
       Handlers handlers,
+      pyramid::component_skeleton::ContentTypeResolver codec_for = {},
       std::string name = "sensors");
   ~SensorsSkeleton() override = default;
 

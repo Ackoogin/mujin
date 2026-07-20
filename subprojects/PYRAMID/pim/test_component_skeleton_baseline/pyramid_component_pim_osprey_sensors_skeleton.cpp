@@ -3,13 +3,15 @@
 namespace pyramid::components::pim_osprey::sensors {
 
 SensorsSkeleton::SensorsSkeleton(
-    pcl::Executor& executor, Handlers handlers, std::string name)
+    pcl::Executor& executor, Handlers handlers,
+    pyramid::component_skeleton::ContentTypeResolver codec_for,
+    std::string name)
     : pcl::Component(name),
       handlers_(std::move(handlers)),
-      authorisation_dependency_request_port_(*this, executor, handlers_.authorisation_dependency_request.get()),
-      capability_evidence_information_port_(*this, executor),
-      capability_information_port_(*this, executor),
-      sen_requirement_request_port_(*this, executor, handlers_.sen_requirement_request.get()) {}
+      authorisation_dependency_request_port_(*this, executor, handlers_.authorisation_dependency_request.get(), pyramid::component_skeleton::resolveContentType(codec_for, "authorisation_dependency_request")),
+      capability_evidence_information_port_(*this, executor, pyramid::component_skeleton::resolveContentType(codec_for, "capability_evidence_information")),
+      capability_information_port_(*this, executor, pyramid::component_skeleton::resolveContentType(codec_for, "capability_information")),
+      sen_requirement_request_port_(*this, executor, handlers_.sen_requirement_request.get(), pyramid::component_skeleton::resolveContentType(codec_for, "sen_requirement_request")) {}
 
 pcl_status_t SensorsSkeleton::on_configure() {
   if (!handlers_.capability_evidence_information) {

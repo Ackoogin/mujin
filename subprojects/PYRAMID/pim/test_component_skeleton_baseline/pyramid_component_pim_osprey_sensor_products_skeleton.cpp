@@ -3,15 +3,17 @@
 namespace pyramid::components::pim_osprey::sensor_products {
 
 SensorProductsSkeleton::SensorProductsSkeleton(
-    pcl::Executor& executor, Handlers handlers, std::string name)
+    pcl::Executor& executor, Handlers handlers,
+    pyramid::component_skeleton::ContentTypeResolver codec_for,
+    std::string name)
     : pcl::Component(name),
       handlers_(std::move(handlers)),
-      authorisation_dependency_request_port_(*this, executor, handlers_.authorisation_dependency_request.get()),
-      capability_evidence_information_port_(*this, executor),
-      capability_information_port_(*this, executor),
-      spr_information_information_port_(*this, executor),
-      spr_measured_information_information_port_(*this, executor),
-      spr_requirement_request_port_(*this, executor, handlers_.spr_requirement_request.get()) {}
+      authorisation_dependency_request_port_(*this, executor, handlers_.authorisation_dependency_request.get(), pyramid::component_skeleton::resolveContentType(codec_for, "authorisation_dependency_request")),
+      capability_evidence_information_port_(*this, executor, pyramid::component_skeleton::resolveContentType(codec_for, "capability_evidence_information")),
+      capability_information_port_(*this, executor, pyramid::component_skeleton::resolveContentType(codec_for, "capability_information")),
+      spr_information_information_port_(*this, executor, pyramid::component_skeleton::resolveContentType(codec_for, "spr_information_information")),
+      spr_measured_information_information_port_(*this, executor, pyramid::component_skeleton::resolveContentType(codec_for, "spr_measured_information_information")),
+      spr_requirement_request_port_(*this, executor, handlers_.spr_requirement_request.get(), pyramid::component_skeleton::resolveContentType(codec_for, "spr_requirement_request")) {}
 
 pcl_status_t SensorProductsSkeleton::on_configure() {
   if (!handlers_.capability_evidence_information) {

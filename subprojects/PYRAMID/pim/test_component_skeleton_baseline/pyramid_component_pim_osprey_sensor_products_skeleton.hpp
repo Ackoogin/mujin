@@ -34,6 +34,7 @@ public:
   explicit SensorProductsSkeleton(
       pcl::Executor& executor,
       Handlers handlers,
+      pyramid::component_skeleton::ContentTypeResolver codec_for = {},
       std::string name = "sensor_products");
   ~SensorProductsSkeleton() override = default;
 

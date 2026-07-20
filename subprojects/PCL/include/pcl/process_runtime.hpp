@@ -87,6 +87,27 @@ public:
 
   pcl::Executor& executor() { return executor_; }
 
+  /// \brief Content type selected by the ports file's `codec` line.
+  ///
+  /// Defaults to "application/json" when the loaded ports file names no
+  /// codec. Pass this to the component so its generated ports encode with
+  /// the codec the deployment loaded.
+  std::string contentType() const {
+    const char* content_type = pcl_process_runtime_content_type(runtime_);
+    return content_type ? content_type : "application/json";
+  }
+
+  /// \brief Content type selected for one port by a `port_codec` line.
+  ///
+  /// Falls back to contentType() (and then "application/json") when the port
+  /// has no override. Pass this per port so each of a component's ports can
+  /// encode with its own codec.
+  std::string contentTypeFor(const std::string& port_name) const {
+    const char* content_type =
+        pcl_process_runtime_port_content_type(runtime_, port_name.c_str());
+    return content_type ? content_type : "application/json";
+  }
+
   int run(pcl::Component& component) {
     require(pcl_process_runtime_run(runtime_, component.handle()));
     return 0;

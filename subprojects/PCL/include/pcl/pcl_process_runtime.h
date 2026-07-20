@@ -48,6 +48,26 @@ pcl_status_t pcl_process_runtime_load_codec(
     pcl_process_runtime_t* runtime,
     const char* plugin_path);
 
+/// \brief Wire content type selected by the ports file's `codec` line.
+///
+/// Returns the content type of the first `codec CONTENT_TYPE PLUGIN` line in
+/// the loaded ports file, or "application/json" when the file named no codec.
+/// This is the process-wide default, used by any port a `port_codec` line
+/// does not override. Components pass it to their generated ports so the wire
+/// codec matches what the deployment loaded.
+const char* pcl_process_runtime_content_type(
+    const pcl_process_runtime_t* runtime);
+
+/// \brief Wire content type selected for one port.
+///
+/// Returns the content type assigned to \p port_name by a `port_codec PORT
+/// CONTENT_TYPE` line, or the process-wide default (see
+/// pcl_process_runtime_content_type) when the port has no override. Lets a
+/// single process speak several codecs, one per port.
+const char* pcl_process_runtime_port_content_type(
+    const pcl_process_runtime_t* runtime,
+    const char* port_name);
+
 /// \brief Load a `.ports` file and install its generated endpoint routes.
 pcl_status_t pcl_process_runtime_load_ports_file(
     pcl_process_runtime_t* runtime,

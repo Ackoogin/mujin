@@ -210,6 +210,119 @@ TEST(PclProcessRuntime, LoadsCompletePortsFileAndRejectsSecondLoad) {
   std::remove(path.c_str());
 }
 
+///< REQ_PCL_477: a `codec` line in the ports file loads the plugin and selects the wire content type. PCL.079.
+TEST(PclProcessRuntime, SelectsCodecFromPortsFile) {
+  // Default before any ports file is loaded.
+  {
+    Runtime runtime;
+    EXPECT_EQ(std::string(pcl_process_runtime_content_type(runtime.value)),
+              "application/json");
+  }
+
+  const std::string plugin_config =
+      " {\"bus_name\":\"pcl_runtime_codec_" +
+      std::to_string(processId()) +
+      "\",\"participant_id\":\"runtime_codec\"}";
+  const std::string body =
+      std::string("codec application/pcl-ports-test ") +
+      PORTS_CODEC_PLUGIN_PATH + "\n" +
+      "port fixture_request rpc shared " + SHM_TRANSPORT_PLUGIN_PATH +
+      plugin_config + "\n";
+  const std::string path = writePortsFile(body);
+
+  // First load registers the selected codec and records its content type.
+  {
+    Runtime runtime;
+    EXPECT_EQ(pcl_process_runtime_load_ports_file(
+                  runtime.value, path.c_str(), &kPort, 1u),
+              PCL_OK)
+        << pcl_process_runtime_error(runtime.value);
+    EXPECT_EQ(std::string(pcl_process_runtime_content_type(runtime.value)),
+              "application/pcl-ports-test");
+  }
+
+  // A later process-lifetime load finds the same codec vtable already
+  // registered (as a build-time fallback would leave it) and tolerates it,
+  // still recording the content type the `codec` line selected.
+  {
+    Runtime runtime;
+    EXPECT_EQ(pcl_process_runtime_load_ports_file(
+                  runtime.value, path.c_str(), &kPort, 1u),
+              PCL_OK)
+        << pcl_process_runtime_error(runtime.value);
+    EXPECT_EQ(std::string(pcl_process_runtime_content_type(runtime.value)),
+              "application/pcl-ports-test");
+  }
+
+  std::remove(path.c_str());
+}
+
+///< REQ_PCL_477: `port_codec` lines give individual ports their own codec, and the first `codec` line is the default. PCL.079.
+TEST(PclProcessRuntime, SelectsPerPortCodecFromPortsFile) {
+  const std::string plugin_config =
+      " {\"bus_name\":\"pcl_runtime_perport_" +
+      std::to_string(processId()) +
+      "\",\"participant_id\":\"runtime_perport\"}";
+  const std::string body =
+      std::string("codec application/pcl-ports-test ") +
+      PORTS_CODEC_PLUGIN_PATH + "\n" +
+      "codec application/pcl-ports-test-2 " + PORTS2_CODEC_PLUGIN_PATH + "\n" +
+      "port_codec fixture_request application/pcl-ports-test-2\n" +
+      "port fixture_request rpc shared " + SHM_TRANSPORT_PLUGIN_PATH +
+      plugin_config + "\n";
+  const std::string path = writePortsFile(body);
+
+  Runtime runtime;
+  EXPECT_EQ(pcl_process_runtime_load_ports_file(
+                runtime.value, path.c_str(), &kPort, 1u),
+            PCL_OK)
+      << pcl_process_runtime_error(runtime.value);
+  // First codec line is the process-wide default.
+  EXPECT_EQ(std::string(pcl_process_runtime_content_type(runtime.value)),
+            "application/pcl-ports-test");
+  // The overridden port uses its own codec.
+  EXPECT_EQ(std::string(pcl_process_runtime_port_content_type(
+                runtime.value, "fixture_request")),
+            "application/pcl-ports-test-2");
+  // A port without an override falls back to the default.
+  EXPECT_EQ(std::string(pcl_process_runtime_port_content_type(
+                runtime.value, "unoverridden_port")),
+            "application/pcl-ports-test");
+
+  std::remove(path.c_str());
+}
+
+///< REQ_PCL_477: a `port_codec` line is rejected when it names an unknown port or an unloaded codec. PCL.079.
+TEST(PclProcessRuntime, RejectsInvalidPortCodecLines) {
+  const std::string good_port =
+      std::string("port fixture_request rpc peer ") + CAPTURE_PLUGIN_PATH +
+      " {}\n";
+  const std::string unknown_port =
+      std::string("codec application/pcl-ports-test ") +
+      PORTS_CODEC_PLUGIN_PATH + "\n" +
+      "port_codec no_such_port application/pcl-ports-test\n" + good_port;
+  const std::string unloaded_codec =
+      std::string("codec application/pcl-ports-test ") +
+      PORTS_CODEC_PLUGIN_PATH + "\n" +
+      "port_codec fixture_request application/never-loaded\n" + good_port;
+
+  for (const auto& entry : {std::make_pair(unknown_port, "unknown port"),
+                            std::make_pair(unloaded_codec,
+                                           "no codec line loaded")}) {
+    Runtime runtime;
+    const std::string path = writePortsFile(entry.first);
+    EXPECT_EQ(pcl_process_runtime_load_ports_file(
+                  runtime.value, path.c_str(), &kPort, 1u),
+              PCL_ERR_INVALID)
+        << entry.first;
+    EXPECT_NE(std::string(pcl_process_runtime_error(runtime.value))
+                  .find(entry.second),
+              std::string::npos)
+        << pcl_process_runtime_error(runtime.value);
+    std::remove(path.c_str());
+  }
+}
+
 ///< REQ_PCL_479, REQ_PCL_227: a discovered shared-memory gateway is activated and cleaned up. PCL.079.
 TEST(PclProcessRuntime, ActivatesAndCleansUpSharedMemoryGateway) {
   Runtime runtime;
@@ -277,6 +390,7 @@ TEST(PclProcessRuntime, RejectsInvalidPortsFileEntries) {
           CAPTURE_PLUGIN_PATH + " one\n" +
           "port fixture_request rpc peer " + CAPTURE_PLUGIN_PATH + " one\n",
       "# fixture_request is missing\n",
+      "codec application/json\n",
   };
 
   for (const std::string& body : bodies) {
