@@ -317,9 +317,13 @@ Two Ada-specific rules:
 
 The process takes a `.ports` file as its first command-line argument. The
 scaffold provides four templates under `configs/` (Linux and Windows plugin
-names, TCP and shared-memory transports), one line per logical port:
+names, TCP and shared-memory transports). The file selects two things the
+deployment owns rather than the code: the transport each port uses, and the
+wire codec each port encodes with.
 
 ```
+# codec CONTENT_TYPE PLUGIN
+codec application/json plugins/pyramid_codec_json_pim_osprey_sensors.so
 # port NAME MODE PEER PLUGIN PLUGIN_CONFIG
 port sen_requirement_request rpc <peer-process> plugins/pcl_transport_socket_plugin.so {"role":"<provided-or-consumed>","host":"127.0.0.1","port":<port>}
 ```
@@ -342,13 +346,46 @@ generated port exactly once.
 - `PLUGIN_CONFIG` is passed verbatim to the plugin: host/port JSON for the
   socket transport, bus name and participant id for shared memory.
 
-### The codec plugin path
+### Choosing the wire codec
 
-The generated `main` loads one JSON codec plugin whose path arrives through
-the compile definition `PYRAMID_COMPONENT_CODEC_PLUGIN_PATH`. The scaffolded
-`CMakeLists.txt` already sets it to the SDK-built plugin for your component
-(`pyramid_codec_json_<proj>_<comp>`), so there is nothing to edit unless you
-relocate the built plugin at deploy time.
+Two `.ports` directives select codecs. Both are optional; a file with neither
+gets `application/json`, which is the compatibility default.
+
+- `codec CONTENT_TYPE PLUGIN` loads a codec plugin and, on its first
+  occurrence, sets the content type for the whole process. Repeat the line to
+  load further codecs.
+- `port_codec PORT CONTENT_TYPE` overrides one port, so a single process can
+  speak several codecs at once — for example FlatBuffers to a bandwidth-
+  constrained peer and JSON to a peer you want to be able to read by eye. The
+  content type must already have been loaded by a `codec` line.
+
+```
+codec application/flatbuffers plugins/pyramid_codec_flatbuffers_pim_osprey_sensors.so
+codec application/json plugins/pyramid_codec_json_pim_osprey_sensors.so
+port_codec capability_information application/json
+```
+
+Here every port encodes with FlatBuffers except `capability_information`,
+which uses JSON. Note that the *first* `codec` line is the process default,
+so the order of the two `codec` lines matters and the order in which the
+plugins happen to register does not.
+
+Selection fails closed at startup, with a message naming what was wrong:
+
+- a `codec` line whose plugin cannot be loaded;
+- a `codec` line whose plugin loads but provides a different content type
+  (the realistic typo — both plugin files exist, so nothing else would catch
+  it until a port failed to bind);
+- a `port_codec` line naming an unknown port, or a content type that no
+  `codec` line loaded.
+
+The compile definition `PYRAMID_COMPONENT_CODEC_PLUGIN_PATH` remains as a
+build-time fallback: the scaffolded `CMakeLists.txt` sets it to the SDK-built
+JSON plugin for your component (`pyramid_codec_json_<proj>_<comp>`), and the
+generated `main` loads it before reading the `.ports` file. It is what a
+deployment gets when its ports file names no codec at all. A `codec` line
+always wins over it, so loading both codec plugins never lets registration
+order decide the component's wire format.
 
 ### CMake cache variables
 
@@ -378,21 +415,26 @@ in the scaffolded `main`:
 ```cpp
 pcl::ProcessRuntime runtime(
     argc, argv, {PYRAMID_COMPONENT_CODEC_PLUGIN_PATH},
-    SensorsSkeleton::deploymentPorts());          // 1. routes loaded
+    SensorsComponent::deploymentPorts());         // 1. routes and codecs loaded
 SensorsComponent component(
-    runtime.executor(), std::move(handlers));     // 2. ports self-attach
+    runtime.executor(),
+    [&runtime](const std::string& port) {         // 2. ports self-attach, each
+      return runtime.contentTypeFor(port);        //    with its selected codec
+    });
 return runtime.run(component);                    // 3. lifecycle + executor
 ```
 
-1. **Route setup.** Before any component exists, `ProcessRuntime` reads the
-   `.ports` file and matches each line against the static
-   `deploymentPorts()` list, loading transport routes and activating the
-   per-peer gateways.
-2. **Construction is the attachment point.** The skeleton constructor stores
-   your `Handlers`, then constructs every port facade with
-   `(*this, executor, ...)` — each port attaches itself to the component and
-   the executor, and provider ports capture your injected handler object, so
-   incoming commands dispatch straight to it.
+1. **Route and codec setup.** Before any component exists, `ProcessRuntime`
+   reads the `.ports` file and matches each line against the static
+   `deploymentPorts()` list, loading transport routes, activating the
+   per-peer gateways, and loading the codec plugins the `codec` lines name.
+2. **Construction is the attachment point.** The component builds its own
+   `Handlers` set, then the skeleton constructor constructs every port facade
+   with `(*this, executor, ...)` — each port attaches itself to the component
+   and the executor, and provider ports capture the handler object, so
+   incoming commands dispatch straight to it. The lambda `main` passes in is
+   consulted once per port, so each port is constructed with the content type
+   its `codec`/`port_codec` line selected.
 3. **`runtime.run(component)`** drives the PCL lifecycle: `configure` (the
    skeleton binds every port against the loaded routes and subscribes your
    sink functions, then calls `on_user_configure()`), `activate`, then the

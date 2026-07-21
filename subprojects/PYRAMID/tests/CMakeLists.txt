@@ -138,6 +138,9 @@ pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
     kPclSocketTransportPlugin
     pcl_transport_socket_plugin)
 pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
+    kPclSharedMemoryTransportPlugin
+    pcl_transport_shared_memory_plugin)
+pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
     kPyramidGrpcCoupledPlugin
     pyramid_grpc_coupled_plugin)
 
@@ -719,6 +722,48 @@ if(PYRAMID_ENABLE_FLATBUFFERS
             LABELS "integration;codec;transport;plugin"
             RESOURCE_LOCK pyramid_process_e2e
             TIMEOUT 15)
+endif()
+
+# Codec selection: the content type a `.ports` file selects must be the one the
+# generated facades encode with. Needs both codec plugins (so the two codecs
+# can be told apart on the wire) plus both transports (shared memory for the
+# ports file the runtime loads, sockets for the message exchange).
+if(PYRAMID_ENABLE_FLATBUFFERS
+        AND TARGET pyramid_codec_flatbuffers_tactical_objects
+        AND TARGET pyramid_codec_json_tactical_objects
+        AND TARGET pcl_transport_socket_plugin
+        AND TARGET pcl_transport_shared_memory_plugin)
+    add_executable(test_ports_file_codec_selection_e2e
+        test_ports_file_codec_selection_e2e.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+    )
+    add_dependencies(test_ports_file_codec_selection_e2e
+        pyramid_cpp_bindings_codegen
+        pyramid_codec_json_tactical_objects
+        pyramid_codec_flatbuffers_tactical_objects
+        pcl_transport_socket_plugin
+        pcl_transport_shared_memory_plugin)
+    target_link_libraries(test_ports_file_codec_selection_e2e PRIVATE
+        pcl_core
+        pyramid_generated_codecs
+        pyramid_flatbuffers_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_ports_file_codec_selection_e2e PRIVATE
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
+        ${PYRAMID_ROOT_DIR}/tactical_objects/include
+        ${PYRAMID_ROOT_DIR}/core/include
+    )
+    if(NOT WIN32)
+        target_link_libraries(test_ports_file_codec_selection_e2e PRIVATE pthread)
+    endif()
+    gtest_discover_tests(test_ports_file_codec_selection_e2e
+        DISCOVERY_MODE PRE_TEST
+        PROPERTIES
+            LABELS "integration;codec;transport;plugin"
+            RESOURCE_LOCK pyramid_process_e2e
+            TIMEOUT 30)
 endif()
 
 # Bridge scenario: a single process loads codec plugins for two distinct

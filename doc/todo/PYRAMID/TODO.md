@@ -1,6 +1,6 @@
 # PYRAMID — Consolidated TODO & Plan
 
-**Last consolidated: 2026-07-20.** This is the single tracker for remaining
+**Last consolidated: 2026-07-21.** This is the single tracker for remaining
 PCL/PYRAMID work. Completed workstreams have been folded into "Delivered"
 below; the executed plans, reviews, and status reports that used to carry
 their detail were removed in the 2026-07-10 doc review — their design
@@ -55,7 +55,16 @@ see below for what's still open).
    `python3 -m unittest subprojects/PYRAMID/pim/test_proto_parser.py`.
 3. For generator changes touching Ada: object-compile the generated Ada for
    both trees (`gnatgcc -c -gnat2020`).
-4. End-of-workstream (slow): `viability_check.sh`, `build_comms_test.sh`,
+4. **Known pre-existing CTest failures (as of 2026-07-21):** six tests fail on
+   a clean `main` — `tobj_ada_socket_e2e`, `tobj_ada_active_find_e2e`,
+   `tobj_ada_active_find_flatbuffers_e2e`, `tobj_ada_active_find_app_e2e`,
+   `tobj_ada_active_find_app_flatbuffers_e2e`, and `pyramid_bridge_e2e`
+   (804 of 810 pass). `pyramid_bridge_e2e` fails with repeated
+   `publish standard.object_evidence failed rc=-6` and a stub that receives
+   nothing. These were confirmed pre-existing by reverting the working-tree
+   change and re-running, so do not read them as breakage from current work —
+   but they do mean the suite is not green, and nobody has diagnosed them yet.
+5. End-of-workstream (slow): `viability_check.sh`, `build_comms_test.sh`,
    `build_plugin_load_test.sh`, `build_contract_routing_test.sh`, and the
    packaged-SDK import smoke (`package_sdk.sh` then
    `python3 -c "import generate_bindings"` from the packaged `generator/`).
@@ -67,11 +76,11 @@ see below for what's still open).
 | Order | Item | Size |
 |-------|------|------|
 | 1 | G1 Formal A-GRA P2 OMS codec and CAL validation (in progress; reach a stable checkpoint before changing generated contracts) | L |
-| 2 | H1 Rename the port-grammar result/update role from `Requirement` to `Entity` | L |
-| 3 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
-| 4 | F2(b) Tactical Objects example (rides on PIM migration plan and follows H1) | S/M |
-| 5 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
-| 6 | I1 Make the generated component codec selectable at process startup | S/M |
+| 2 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
+| 3 | F2(b) Tactical Objects example (rides on the PIM migration plan) | S/M |
+| 4 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
+
+H1 and I1 are delivered; see WS-H and WS-I below.
 
 ---
 
@@ -127,7 +136,8 @@ pattern) are done — see Delivered. Remaining:
 - **(b)** convert the Tactical Objects showcase when its contract becomes
   grammar-conforming — rides on
   [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
-  (the legacy CRUD services are not port-grammar shapes today).
+  (the legacy CRUD services are not port-grammar shapes today). This no longer
+  waits on H1, which is delivered.
 
 ---
 
@@ -350,6 +360,21 @@ pattern) are done — see Delivered. Remaining:
   step 7 (evidence publication; the compatibility matrix and user guide still
   describe P2 as offline-only until then).
 
+### G2. A-GRA P3 Core MMS contract — no tracker entry
+
+**Status: untracked work found during the 2026-07-21 review.** Commits
+`6d65410` ("P3 Core MMS contract: profile, seam, gated build") and `12e9bf9`
+("Make P3 source-compatible with P2") landed a P3 profile, the
+`pim/agra_p3_seam/` overlay, and `pim/uci_generated_p3/`, all of which are
+tracked in the repository. Nothing in this file describes that work, and WS-G
+above still lists "full P3/Table 3-1 coverage" as a non-goal, which now reads
+as contradicting the tree.
+
+Someone with the context for that run should write the missing entry: what the
+P3 profile covers, what evidence exists for it, and how its scope relates to
+the P2 non-goal. This review can confirm the artifacts are present and
+committed, but not what was proven about them.
+
 This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,
 interoperable OMS JSON codec. The current `pim/agra_example/` remains a
@@ -438,21 +463,29 @@ Phase 4; the live support statement remains
 
 ### H1. Rename the Request-port result/update role to `Entity`
 
-**Status: proposed, not yet scheduled (2026-07-17).**
+**Status: delivered.** Landed in commit `57eb50f` ("Complete the port-grammar
+requirement->entity rename"); the tracker entry had not been updated and was
+found stale during the 2026-07-21 review.
 
-Rename the grammar wrapper `_Service_Requirement` to `_Service_Entity`, the
-derived `.requirement` topic to `.entity`, and the interaction/configuration
-leg `requirement_leg` to `entity_leg`. Regenerate all PIM, P1, P2, and P3
-contracts and the C++/Ada APIs together.
+The grammar wrapper `_Service_Requirement` is now `_Service_Entity`, the
+derived topic is `.entity`, and the interaction/configuration leg is
+`entity_leg`. The PIM, P1, P2, and P3 contracts and the C++/Ada APIs were
+regenerated together.
 
-This is a coordinated breaking contract change, not a global replacement of
-the English word "requirement". Domain types such as
-`ObjectEvidenceRequirement`, endpoint capability requirements, and formal
-HLR/LLR requirements remain.
+Audit performed on 2026-07-21 against the plan's completion criteria: no
+tracked file under `subprojects/PYRAMID/` or `subprojects/PCL/` still contains
+`_Service_Requirement`, `requirement_leg`, or a derived `.requirement` topic.
+The remaining matches are all under
+`subprojects/PYRAMID/pim/test_harness/generated/`, which is stale local output
+excluded by that directory's own `.gitignore`. Legitimate domain requirements
+were preserved as intended, including `ObjectDetailRequirement`,
+`AUTDependencyRequirement`, and the `*Requirement_Service` names whose
+`_Service_Entity` wrappers now sit beside them.
 
-The full impact analysis, compatibility policy, phased implementation plan,
-validation matrix, and completion criteria are in
-[`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md).
+The impact analysis, compatibility policy, implementation plan, and validation
+matrix remain in
+[`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md)
+for reference.
 
 ---
 
@@ -460,8 +493,9 @@ validation matrix, and completion criteria are in
 
 ### I1. Make the generated component codec selectable at process startup
 
-**Status: mechanism implemented in the C++ toolchain (2026-07-20); FlatBuffers
-end-to-end proof and packaged-example refresh still open.**
+**Status: delivered (2026-07-21).** The mechanism landed in the C++ toolchain
+on 2026-07-20; the FlatBuffers end-to-end proof, the direct generator test, and
+the packaged-example and documentation refresh closed on 2026-07-21.
 
 Implemented so far (tracked source; the regenerated `pcl_pyramid_sdk_pim_test`
 SDK is git-ignored, so its refreshed skeletons/scaffolds are on disk only):
@@ -487,12 +521,51 @@ SDK is git-ignored, so its refreshed skeletons/scaffolds are on disk only):
   regenerated component-skeleton baseline; JSON verified end-to-end by building
   and running the `pim_osprey_sensors` scaffold.
 
-Remaining for I1's acceptance:
+Closed on 2026-07-21:
 
-- End-to-end scaffold run with `application/flatbuffers` (the mechanism is
-  codec-agnostic, but only JSON has been exercised end-to-end so far).
-- A generator test that pins constructor/resolver propagation directly (beyond
-  the golden baseline), and the packaged-SDK example/doc refresh.
+- **FlatBuffers proven end-to-end, with the wire bytes checked.** Bringing a
+  scaffold up is not by itself evidence of which codec was chosen, because a
+  process that silently kept the JSON default binds its ports and runs exactly
+  the same way. Two things were done instead. First,
+  `subprojects/PYRAMID/tests/test_ports_file_codec_selection_e2e.cpp` carries
+  the content type a `.ports` file selects through `ProcessRuntime` into a
+  generated port facade and over a real socket transport, then confirms the
+  received payload is FlatBuffers by checking that the FlatBuffers codec
+  recovers the published value and the JSON codec does not. The JSON case is
+  covered the same way. Second, the packaged `pim_osprey_sensors` scaffold was
+  built and run against the SDK under four configurations: JSON, FlatBuffers,
+  a mixed file (FlatBuffers default with one `port_codec` JSON override), and
+  a negative control that asks for FlatBuffers while naming the JSON plugin.
+  The first three bind all 15 ports and exit 0; the negative control exits 1.
+  That negative control is what makes the FlatBuffers run meaningful.
+- **A fail-closed gap found and fixed while doing this.** A `codec` line whose
+  plugin loaded but provided a *different* content type was accepted at
+  startup. The process then failed later, at port bind, with a bare
+  `PCL_ERR_INVALID` and no indication that the codec was the cause. This is
+  the realistic deployment typo, since both plugin files exist and both load.
+  `pcl_process_runtime.c` now requires the named content type to be in the
+  registry once its `codec` line has been processed, and reports a startup
+  error naming the plugin, the content type, and the config line.
+- **Generator test.** `ContentTypePropagationTest` in
+  `pim/test_component_skeleton_gen.py` asserts the rule rather than the bytes:
+  every port of every component in the contract is constructed with
+  `resolveContentType(codec_for, "<its own port name>")`, and the call count
+  matches the port count. A per-port lookup is what allows one process to speak
+  several codecs, so a single process-wide answer would be wrong even though it
+  would still satisfy a single-codec golden diff.
+- **Packaged SDK and docs refreshed.** The `pcl_pyramid_sdk_pim_test`
+  distribution was rebuilt through its own documented scripts
+  (`scripts/generate_bindings.bat --skeletons --scaffold-dir ...` then
+  `scripts/build_plugins.bat`), and
+  [`component_skeletons.md`](../../../subprojects/PYRAMID/doc/architecture/component_skeletons.md)
+  now documents that a `.ports` file selects the codec as well as the
+  transport, including the per-port override, the fail-closed cases, and how
+  the build-time fallback plugin relates to a `codec` line.
+
+Two findings from this work are recorded as separate rows in the deferred
+table below: the generated JSON codec accepts non-JSON input rather than
+rejecting it, and the `cabi_codegen.py` emission-order non-determinism was
+traced to its cause.
 
 Original analysis follows.
 
@@ -552,4 +625,5 @@ No action until the trigger fires; listed so nothing silently drops.
 | `contract_routing_manifest.py` support for real (non-stub) transports | A generated manifest needs to target SHM/UDP/etc. rather than `contract_transport_plugin.c` | Today it only emits `{"mode":"rpc"\|"pubsub"}` config for the NULL-vtable stub. Needs `bus_name`/`participant_id` (SHM) and `remote_host`/`remote_port`/`local_port`/`peer_id` (UDP) config emission, plus the counterpart-participant-id peer-alias convention. |
 | Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream ([`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md), Remaining Design Point). |
 | Interaction-pattern options for the legacy tree / side-table deletion | Only if the frozen-compat stance changes | Resolved as *frozen compat, new consumers forbidden*; `standard_topics.py` stays scoped to the legacy layout. |
-| `cabi_codegen.py` non-deterministic typedef order | Next substantive change to `cabi_codegen.py`, or the first byte-stability guard failure it causes | `pyramid_data_model_generic_*_cabi.h` emits the generic container typedefs (the `*List`/`*Queue` `pyramid_slice_t` wrappers) in an order that varies between two runs of the *same* generator — observed as `RequirementList`/`RequirementQueue` swapping places. The output is functionally identical, but the instability undermines standing-regression-bar #1 (byte-for-byte identical output) and shows up as spurious diffs when regenerating a packaged SDK. Cause is an unsorted Python `set` iteration in the emitter (e.g. `set(self._aliases.keys())`); the fix is to sort the emission order (and ideally add a two-run determinism check). Found 2026-07-20 while regenerating the `pcl_pyramid_sdk_pim_test` SDK. |
+| `cabi_codegen.py` non-deterministic typedef order | Next substantive change to `cabi_codegen.py`, or the first byte-stability guard failure it causes | `pyramid_data_model_generic_*_cabi.h` emits the generic container typedefs (the `*List`/`*Queue` `pyramid_slice_t` wrappers) in an order that varies between two runs of the *same* generator. The output is functionally identical, but the instability undermines standing-regression-bar #1 (byte-for-byte identical output) and shows up as spurious diffs when regenerating a packaged SDK. **Cause located 2026-07-21:** `_toposort` walks `for dep in deps.get(name, set())`, and iteration order over a `set` of strings depends on the per-process string hash seed. The earlier guess that `set(self._aliases.keys())` was responsible is wrong — those three sets are only used for `not in` membership tests, which is order-independent. The fix is to sort that one iteration; a two-run determinism check would guard it. Reproduced by generating the same tree twice with `PYTHONHASHSEED=1` and `PYTHONHASHSEED=99`, which differ in exactly this one file. Left deferred because sorting changes emission order and therefore requires refreshing the recorded generator baselines. |
+| Generated JSON codec accepts non-JSON input | Any hardening pass on codec fail-closed behaviour, or the first time a wrong-format payload is silently accepted in a deployment | Handed a FlatBuffers payload for `ObjectDetail`, the generated JSON codec **returns success** and fills the target with default values rather than rejecting the input. Found 2026-07-21 while writing `test_ports_file_codec_selection_e2e.cpp`: an early version of that test asserted "the JSON codec must refuse these bytes" and failed. The permissive JSON parse accepts a leading FlatBuffers byte as a bare JSON value, so nothing downstream notices. This matters because a peer misconfigured to the wrong codec then produces silently empty data instead of a startup error. Note the contrast with the schema-drop mismatch negatives in WS-G step 4, where the OMS codec is explicitly required to fail closed in both directions. The e2e test was written to compare the *decoded value* rather than the decode status, so it does not depend on this behaviour either way and will keep passing once it is fixed. |

@@ -76,6 +76,132 @@ class EmitterLockstepTest(unittest.TestCase):
                 cpp.slot_names(), ada.slot_names(), group.key)
 
 
+class ContentTypePropagationTest(unittest.TestCase):
+    """Pin the codec-selection wiring the generated C++ skeleton emits.
+
+    The golden baseline already covers the exact bytes for the two components
+    it was recorded from, but it cannot state the underlying rule. These tests
+    assert the rule itself against every component in the contract, so a port
+    kind added later that forgets to thread a content type fails here rather
+    than silently binding with the compatibility default.
+    """
+
+    def setUp(self):
+        files = parse_proto_tree(PROTO_DIR)
+        contract = build_contract(files, "pyramid")
+        index = ProtoTypeIndex(files)
+        self.generators = [
+            cpp_skeleton_gen.CppComponentSkeletonGenerator(
+                group, files, index, contract.naming_policy)
+            for group in contract.components
+        ]
+        self.assertTrue(self.generators, "contract produced no components")
+
+    def test_skeleton_constructor_accepts_a_content_type_resolver(self):
+        for generator in self.generators:
+            header = generator.render_header()
+            self.assertIn(
+                "pyramid::component_skeleton::ContentTypeResolver codec_for = {},",
+                header,
+                generator.group.key,
+            )
+            # The resolver has to be optional, so existing callers that do not
+            # select a codec keep compiling and keep getting JSON.
+            self.assertIn("codec_for = {}", header, generator.group.key)
+
+    def test_every_port_facade_is_constructed_with_its_own_content_type(self):
+        """The propagation claim: each port asks the resolver for its own name.
+
+        A per-port lookup is what lets one process speak several codecs. Using
+        one process-wide answer for every port would still pass a golden diff
+        for a single-codec deployment, so check the port name in each call.
+        """
+        for generator in self.generators:
+            source = generator.render_source()
+            ports = generator.port_names()
+            self.assertTrue(ports, generator.group.key)
+            for port in ports:
+                expected = (
+                    "pyramid::component_skeleton::resolveContentType("
+                    f'codec_for, "{port}")'
+                )
+                self.assertIn(
+                    expected,
+                    source,
+                    f"{generator.group.key}: port {port} does not receive "
+                    "its own content type",
+                )
+            # Every facade member the skeleton owns must be covered, not just
+            # the ones that happen to appear in the baseline.
+            self.assertEqual(
+                source.count("resolveContentType("),
+                len(ports),
+                f"{generator.group.key}: expected one resolveContentType call "
+                "per port",
+            )
+
+    def test_resolver_defaults_to_json_when_absent(self):
+        support = cpp_skeleton_gen.CppComponentSkeletonGenerator \
+            .render_support_header()
+        self.assertIn(
+            'return codec_for ? codec_for(port) : std::string("application/json");',
+            support,
+        )
+
+    def test_scaffold_forwards_the_resolver_from_main_to_the_skeleton(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            scaffold_dir = Path(temporary)
+            for generator in self.generators:
+                generator.generate_scaffold(str(scaffold_dir))
+
+            for generator in self.generators:
+                component = generator.group.component.replace(".", "_")
+                root = scaffold_dir / f"{generator.group.project}_{component}"
+                header = (root / "include"
+                          / f"{generator.group.project}_{component}"
+                          / f"{component}_component.hpp").read_text(
+                              encoding="utf-8")
+                source = (root / "src"
+                          / f"{component}_component.cpp").read_text(
+                              encoding="utf-8")
+                main = (root / "src"
+                        / f"{component}_main.cpp").read_text(encoding="utf-8")
+
+                # The developer-facing component takes a resolver ...
+                self.assertIn(
+                    "pyramid::component_skeleton::ContentTypeResolver "
+                    "codec_for = {}",
+                    header,
+                    generator.group.key,
+                )
+                # ... hands it to the skeleton base ...
+                self.assertIn(
+                    "std::move(codec_for)", source, generator.group.key)
+                # ... and main sources it from the loaded `.ports` file, so
+                # the deployment file is what chooses the codec.
+                self.assertIn(
+                    "return runtime.contentTypeFor(port);",
+                    main,
+                    generator.group.key,
+                )
+
+    def test_ports_template_documents_and_uses_the_codec_directives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            scaffold_dir = Path(temporary)
+            generator = self.generators[0]
+            generator.generate_scaffold(str(scaffold_dir))
+            component = generator.group.component.replace(".", "_")
+            ports = (scaffold_dir
+                     / f"{generator.group.project}_{component}"
+                     / "configs" / "linux" / "tcp"
+                     / f"{component}.ports").read_text(encoding="utf-8")
+
+        self.assertIn("codec CONTENT_TYPE PLUGIN", ports)
+        self.assertIn("port_codec PORT CONTENT_TYPE", ports)
+        # The template must ship a working default line, not just prose.
+        self.assertIn("codec application/json plugins/", ports)
+
+
 class ComponentSkeletonGenerationTest(unittest.TestCase):
     def test_golden_manifest_and_regeneration_idempotence(self):
         with tempfile.TemporaryDirectory() as temporary:

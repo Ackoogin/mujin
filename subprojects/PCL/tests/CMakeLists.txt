@@ -103,6 +103,9 @@ target_link_libraries(pcl_codec_ports_plugin PRIVATE pcl_core)
 add_library(pcl_codec_ports2_plugin MODULE pcl_codec_ports2_plugin.c)
 target_link_libraries(pcl_codec_ports2_plugin PRIVATE pcl_core)
 
+add_library(pcl_codec_ports3_plugin MODULE pcl_codec_ports3_plugin.c)
+target_link_libraries(pcl_codec_ports3_plugin PRIVATE pcl_core)
+
 add_executable(test_pcl_capabilities test_pcl_capabilities.cpp)
 target_link_libraries(test_pcl_capabilities PRIVATE pcl_core GTest::gtest_main)
 target_compile_definitions(test_pcl_capabilities PRIVATE
@@ -189,6 +192,7 @@ target_compile_definitions(test_pcl_process_runtime PRIVATE
     SEQUENCE_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_sequence_plugin>"
     PORTS_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_ports_plugin>"
     PORTS2_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_ports2_plugin>"
+    PORTS3_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_ports3_plugin>"
 )
 add_dependencies(test_pcl_process_runtime
     pcl_transport_capture_plugin
@@ -197,6 +201,7 @@ add_dependencies(test_pcl_process_runtime
     pcl_codec_sequence_plugin
     pcl_codec_ports_plugin
     pcl_codec_ports2_plugin
+    pcl_codec_ports3_plugin
 )
 gtest_discover_tests(test_pcl_process_runtime DISCOVERY_MODE PRE_TEST)
 
