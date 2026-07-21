@@ -537,6 +537,23 @@ the port abstraction, it does not bypass it. Emission is opt-in
 (`--native-inprocess`); without the flag the generated output is byte-for-byte
 identical to the serialized baseline.
 
+Native selection in the generated facade is **per port, not per facade**. Each
+publisher topic gets:
+
+- a per-topic flag so `publish<Topic>()` takes the native path for that topic
+  alone, and
+- `configure<Topic>Transport(json)`, which routes that one publisher and sets
+  its native preference from the same `{"transport":"local","payload":"native"}`
+  JSON as the bulk `configurePubSubTransport` — independent of the other topics.
+
+So two publishers on the same facade can differ (one native-local, one
+serialized-remote), which is what the fan-out analysis in the plan requires. The
+bulk `configurePubSubTransport` still applies one choice to every port, and
+clears the native flags when it routes remote so a stale selection cannot leave a
+publisher attempting native on a remote route. Subscribers need no per-port
+switch: the native trampoline recognises a native message on its own via
+`nativePayload`.
+
 ### Routing model — no discovery; same-executor by topic name
 
 Native routing is not a new routing mechanism and there is **no discovery step**.

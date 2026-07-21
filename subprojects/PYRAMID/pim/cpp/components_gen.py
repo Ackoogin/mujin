@@ -652,13 +652,15 @@ class ComponentsFacadeEmitterMixin:
                 f.write(f'            {topic_const}, "{spec.short_type}");\n')
                 f.write(f'        return {port_member} ? PCL_OK : PCL_ERR_NOMEM;\n')
                 f.write('    }\n\n')
+                native_flag = f'prefer_native_{key}_'
                 f.write(f'    pcl_status_t {publish_name}(\n')
                 f.write(f'        const {spec.cpp_payload_type}& payload) {{\n')
                 if self._emit_native:
-                    # When native is selected via configurePubSubTransport
-                    # ({"payload":"native"} on a local route), publish the live
-                    # object by pointer instead of serializing.
-                    f.write('        if (prefer_native_) '
+                    # Per-port native selection: this one topic's flag (set by
+                    # configure{Pascal}Transport or the bulk configurePubSubTransport
+                    # with {"payload":"native"} on a local route) decides whether
+                    # this publisher hands over the live object or serializes.
+                    f.write(f'        if ({native_flag}) '
                             f'return {publish_name}Native(payload);\n')
                 f.write(f'        return {helper_name}(\n')
                 f.write(f'            {port_member}.handle(), payload, content_type_.c_str());\n')
@@ -682,6 +684,34 @@ class ComponentsFacadeEmitterMixin:
                     f.write(f'        const {spec.cpp_payload_type}& payload) {{\n')
                     f.write(f'        return {port_member}.publishNative('
                             f'payload, "{spec.short_type}");\n')
+                    f.write('    }\n\n')
+
+                    # Per-port route + native selection for this one publisher,
+                    # independent of the other topics on this facade. Same JSON
+                    # shapes as configurePubSubTransport, applied to this port
+                    # only. Native is local-only; refused on a remote route.
+                    f.write('    /// \\brief Configure this one publisher\'s route and\n')
+                    f.write('    ///        payload representation from opaque JSON,\n')
+                    f.write('    ///        independent of the facade\'s other topics.\n')
+                    f.write(f'    pcl_status_t configure{pascal}Transport(\n')
+                    f.write('            std::string_view config_json) {\n')
+                    f.write('        const auto transport = configValue(config_json, "transport");\n')
+                    f.write('        const auto route = transport.empty()\n')
+                    f.write('            ? configValue(config_json, "route")\n')
+                    f.write('            : transport;\n')
+                    f.write('        const auto payload = configValue(config_json, "payload");\n')
+                    f.write('        if (route.empty() || route == "local") {\n')
+                    f.write(f'            {native_flag} = (payload == "native");\n')
+                    f.write(f'            return {port_member} ? {port_member}.routeLocal() : PCL_OK;\n')
+                    f.write('        }\n')
+                    f.write('        if (route == "remote") {\n')
+                    f.write('            if (payload == "native") return PCL_ERR_INVALID;\n')
+                    f.write('            auto peer = configValue(config_json, "peer");\n')
+                    f.write('            if (peer.empty()) peer = configValue(config_json, "peer_id");\n')
+                    f.write('            if (peer.empty()) return PCL_ERR_INVALID;\n')
+                    f.write(f'            return {port_member} ? {port_member}.routeRemote(peer) : PCL_OK;\n')
+                    f.write('        }\n')
+                    f.write('        return PCL_ERR_INVALID;\n')
                     f.write('    }\n\n')
 
             f.write('    pcl_status_t routeAllPublishersLocal() {\n')
@@ -731,7 +761,8 @@ class ComponentsFacadeEmitterMixin:
                 f.write('        const auto payload = configValue(config_json, "payload");\n')
             f.write('        if (route.empty() || route == "local") {\n')
             if self._emit_native:
-                f.write('            prefer_native_ = (payload == "native");\n')
+                for key in all_topics:
+                    f.write(f'            prefer_native_{key}_ = (payload == "native");\n')
             f.write('            if (auto rc = routeAllPublishersLocal(); rc != PCL_OK) return rc;\n')
             f.write('            return routeAllSubscribersLocal();\n')
             f.write('        }\n')
@@ -741,6 +772,12 @@ class ComponentsFacadeEmitterMixin:
             f.write('            auto peer = configValue(config_json, "peer");\n')
             f.write('            if (peer.empty()) peer = configValue(config_json, "peer_id");\n')
             f.write('            if (peer.empty()) return PCL_ERR_INVALID;\n')
+            if self._emit_native:
+                # Routing remote clears any prior native selection so a stale
+                # flag cannot leave a publisher attempting native on a remote
+                # route (which the runtime would then refuse).
+                for key in all_topics:
+                    f.write(f'            {f"prefer_native_{key}_"} = false;\n')
             f.write('            if (auto rc = routeAllPublishersRemote(peer); rc != PCL_OK) return rc;\n')
             f.write('            return routeAllSubscribersRemote(peer);\n')
             f.write('        }\n')
@@ -894,9 +931,13 @@ class ComponentsFacadeEmitterMixin:
             f.write('    pcl::Executor*  executor_ = nullptr;\n')
             f.write('    std::string     content_type_;\n')
             if self._emit_native:
-                f.write('    /// Set by configurePubSubTransport({"payload":"native"}) on a\n')
-                f.write('    /// local route; makes publishXxx() take the Tier-A native path.\n')
-                f.write('    bool            prefer_native_ = false;\n')
+                f.write('    /// Per-topic native selection: set by configure<Topic>Transport\n')
+                f.write('    /// or the bulk configurePubSubTransport ({"payload":"native"} on a\n')
+                f.write('    /// local route); makes that topic\'s publish<Topic>() take the\n')
+                f.write('    /// Tier-A native path. One flag per publisher so instances can\n')
+                f.write('    /// differ.\n')
+                for key in all_topics:
+                    f.write(f'    bool            prefer_native_{key}_ = false;\n')
             if all_topics:
                 f.write('    std::vector<std::shared_ptr<void>> topic_callbacks_;\n')
             f.write('    std::vector<pcl::Port> topic_subscriptions_;\n')

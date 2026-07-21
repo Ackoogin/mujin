@@ -201,15 +201,20 @@ different payload representations.
   subscriber side: a LOCAL-only subscriber instance receives native while a
   REMOTE-from-peer instance of the same topic receives serialized, and
   `route_accepts` steers each ingress to the right one.
-- **Native selection must be per-port, and the facade surface is not yet.** The
-  first cut's selection (`prefer_native_`, driven by `configurePubSubTransport`)
-  is **per-facade** — it flips *all* of a facade's publishers to native at once.
-  With multiple port instances wanting different representations, that is too
-  coarse: it cannot say "this publisher native, that one serialized." The port
-  abstraction already supports per-instance selection (`publishNative` is called
-  on a specific port), so the capability exists; what is missing is a per-port
-  selector on the facade/manifest surface. That is the concrete addition the
-  multi-instance case needs, and it should land with the mixed-native work.
+- **Native selection is per-port (implemented for publishers).** The port
+  abstraction always supported per-instance selection (`publishNative` on a
+  specific port); the generated facade now does too. Each publisher topic has
+  its own native flag and a `configure<Topic>Transport(json)` that routes that
+  one publisher and sets its native preference independently, so two publishers
+  on one facade can differ (one native-local, one serialized-remote). The bulk
+  `configurePubSubTransport` remains available for the uniform case and clears
+  the native flags when it routes remote. Subscribers need no per-port switch —
+  the native trampoline recognises a native message itself. The one piece still
+  outstanding is the **manifest**: because the endpoint-route table keys by
+  `(name, kind)` it cannot carry a per-instance native/route choice for two
+  same-named ports, so a manifest-driven per-instance selection still needs the
+  discriminator described below. Programmatic and JSON-config selection are
+  done.
 - **Deployment-surface gap to close with the deferred work.** If a deployment
   wants to express "native local + serialized remote" as two same-name ports,
   the manifest route table cannot currently give them distinct routes (the
@@ -225,14 +230,16 @@ different payload representations.
 No change to the first cut. Tier-A local native fan-out already works (one shared
 `const` pointer to N subscribers), multiple same-named ports already route
 independently through the port abstraction, and every remote-inclusive route —
-one peer or eight — is uniformly refused for native. The multiplicity work lands
-with Tier B and the mixed-native arm, which must add: (1) reference-counted
-shared ownership across all receiving executors; (2) a single encoded buffer
-reused across all remote peers in one publish; and (3) a **per-port** native
-selector on the facade/manifest surface (the port abstraction already supports
-per-instance native; the coarse per-facade `prefer_native_` does not), plus a
-decision on whether the manifest route table gains a per-instance discriminator.
-The decisions above are updated so those items are built against the one-to-many,
+one peer or eight — is uniformly refused for native. Per-port native selection on
+the generated facade is already in place (a per-topic flag plus
+`configure<Topic>Transport`), so publishers can differ within one facade today.
+The multiplicity work that remains lands with Tier B and the mixed-native arm,
+which must add: (1) reference-counted shared ownership across all receiving
+executors; (2) a single encoded buffer reused across all remote peers in one
+publish; and (3) for the **manifest** path only, a per-instance discriminator on
+the endpoint-route table so two same-named ports can carry different routes /
+native choices (the programmatic and JSON-config paths already can). The
+decisions above are updated so those items are built against the one-to-many,
 many-ports model rather than a one-to-one special case.
 
 ## What this is about
