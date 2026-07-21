@@ -327,6 +327,50 @@ optional extra.
   (per the N6 decision). That is the ergonomic A-GRA realisation and the concrete
   goal for the mixed-native (and Tier-B) work.
 
+## Motivating deployment: PYRAMID bridge (consumed ↔ provided)
+
+The second driver is the PYRAMID **bridge** pattern. In PYRAMID a service is
+defined once; a consumer gets a generated `Consumed` facade and a provider a
+`Provided` facade from that one contract, so **components do not depend on each
+other's service definitions**. A *bridge* wires one component's consumed
+endpoint to another's provided endpoint — often translating vocabulary between
+two independently-defined contracts (the planned `agra_c2_bridge` translating
+`PlanningRequirement` ↔ `MA_Action` is exactly this; the intra-process
+[`pcl_bridge`](../../../subprojects/PCL/include/pcl/pcl_bridge.h) is the
+same idea at the topic level: subscribe, transform, dispatch).
+
+The efficiency case the plan must serve: the bridge is deployed **local to the
+consumer** — `component 1 → bridge` is native (co-located), while `bridge →
+component 2` is remote (serialized). The important observation is that **the
+bridge is the representation-change boundary**, and it decomposes the mixed
+local+remote problem into two hops that each carry a *single* representation:
+
+- **c1 → bridge: native, local.** c1 hands the live object to the bridge by
+  pointer (Tier A). The bridge reads it through the native subscriber/handler.
+- **bridge → c2: serialized, remote.** The bridge encodes and sends over the
+  transport. Because a native payload is borrowed and read-only for the callback
+  only, the bridge must **encode inside that callback** (a transform does this
+  synchronously) — or take an owned copy first if it defers the forward. The
+  fail-closed guard makes this correct-by-construction: the bridge *cannot*
+  route the borrowed native pointer onto its remote leg (native on a transport
+  route is refused), so it is forced to serialize at the boundary.
+
+Two consequences:
+
+- **The bridge topology does not need the single-port mixed fan-out.** Each of
+  its two ports has one route and one representation, which the per-port routing
+  and native switch already landed handle directly: the c1-facing port is
+  native-local, the c2-facing port is serialized-remote. So for the *decoupled
+  point-to-point* case, the deferred mixed-native arm is unnecessary — the bridge
+  puts the encode where it belongs and keeps every port simple.
+- **The two motivating deployments split cleanly.** The A-GRA broadcast case
+  (one Objectives publish reaching a co-located Tasks natively *and* peers over
+  P2P, on one shared topic) is the genuine 1:N mixed fan-out that still wants the
+  single-port encode-once path. The bridge case is decoupled point-to-point and
+  is fully served today by two single-representation ports. Knowing which
+  topology a deployment uses tells you whether it needs the deferred mixed-native
+  arm at all.
+
 ## What this is about
 
 When two PYRAMID components run in the **same operating-system process**, they
