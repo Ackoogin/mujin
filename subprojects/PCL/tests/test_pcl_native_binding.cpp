@@ -216,6 +216,64 @@ TEST(PclNativeBinding, LocalNativePublishFansOutToManySubscribersZeroCopy) {
   pcl_container_destroy(c);
 }
 
+// -- Multiple port instances on one topic, each with its own route -----------
+// Proves per-port routing works today and that two ports can carry different
+// representations: a native-local port and a serialized-remote port together
+// express a mixed fan-out without the single-port mixed route N6 forbids.
+
+TEST(PclNativeBinding, MultiplePortInstancesPerTopicCarryDifferentRepresentations) {
+  struct Cfg {
+    FanoutSub*  sub;
+    pcl_port_t* pub_local  = nullptr;  // native, local only
+    pcl_port_t* pub_remote = nullptr;  // serialized, remote only
+  } cfg;
+  FanoutSub sub;
+  cfg.sub = &sub;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* cfg = static_cast<Cfg*>(ud);
+    pcl_port_t* s = pcl_container_add_subscriber(c, "world", "WorldState",
+                                                 fanout_sub_cb, cfg->sub);
+    // Two publisher ports, same topic name, different routes -- no uniqueness
+    // constraint prevents this.
+    cfg->pub_local  = pcl_container_add_publisher(c, "world", "WorldState");
+    cfg->pub_remote = pcl_container_add_publisher(c, "world", "WorldState");
+    if (!s || !cfg->pub_local || !cfg->pub_remote) return PCL_ERR_NOMEM;
+    pcl_port_set_route(s, PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE, nullptr, 0);
+    const char* peers[] = {"peer_a"};
+    pcl_port_set_route(cfg->pub_local, PCL_ROUTE_LOCAL, nullptr, 0);
+    return pcl_port_set_route(cfg->pub_remote, PCL_ROUTE_REMOTE, peers, 1);
+  };
+  auto* c = pcl_container_create("multi", &cbs, &cfg);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  CaptureTransport cap;
+  pcl_transport_t tr = capture_vtable(&cap);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &tr), PCL_OK);
+
+  // Native on the local port: delivered by pointer, nothing to the wire.
+  WorldState ws{77, 1.0};
+  pcl_msg_t native = make_native(&ws);
+  EXPECT_EQ(pcl_port_publish(cfg.pub_local, &native), PCL_OK);
+  EXPECT_EQ(sub.got, 1);
+  EXPECT_EQ(sub.addr, &ws);
+  EXPECT_EQ(cap.publish_count, 0);
+
+  // Serialized on the remote port: reaches the transport, no extra local
+  // delivery (the remote-only port has no local leg).
+  const char blob[] = "x";
+  pcl_msg_t ser = make_serialized(blob, 1);
+  EXPECT_EQ(pcl_port_publish(cfg.pub_remote, &ser), PCL_OK);
+  EXPECT_EQ(cap.publish_count, 1);
+  EXPECT_EQ(sub.got, 1);  // unchanged: remote-only port did not dispatch locally
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
 // -- N2 + N6: native publish on a REMOTE-inclusive route is refused up front -
 
 TEST(PclNativeBinding, NativePublishOnMixedRouteRefusedBeforeLocalDelivery) {

@@ -158,13 +158,82 @@ route each destination class to the representation it needs.
   encoded buffer (a borrowed native pointer cannot back a retained value —
   constraint 6).
 
+### Multiple port instances — another axis of multiplicity
+
+The classes above assumed one port per topic. A component may define **several
+ports on the same topic name**, and this multiplies the picture again — and it
+is directly relevant to native, because different port instances can carry
+different payload representations.
+
+**What is supported today (verified in code and test):**
+
+- **Multiple ports, same name — yes.** `validate_port_definition` imposes no
+  uniqueness check; a container may add up to `PCL_MAX_PORTS` (64) ports,
+  including several publishers or subscribers on the same topic.
+- **Per-port routes — yes, programmatically.** Each `pcl_port_t` carries its own
+  `route_mode` / `route_configured`, set by `pcl_port_set_route`
+  (`pcl::Port::setRoute` / `routeLocal` / `routeRemote`). Publish operates on a
+  specific port handle, and `dispatch_incoming_now` evaluates each subscriber
+  port's own route, so two same-named ports genuinely route independently. The
+  test `MultiplePortInstancesPerTopicCarryDifferentRepresentations` builds a
+  native-local publisher and a serialized-remote publisher on one topic and
+  shows each behaves on its own route.
+- **The `.ports` / manifest surface cannot — it collapses by (name, kind).** The
+  endpoint-route table (`pcl_executor_set_endpoint_route`, used by the manifest
+  loader and by the generated *consumed-service* facade) is keyed by
+  `(endpoint_name, endpoint_kind)`, and `port_route_mode` consults it **before**
+  the per-port route and lets it **win for every port of that name and kind**.
+  So the deployment-surface path cannot give two same-named same-kind ports
+  different routes, and installing any manifest route for a name overrides all
+  per-port routes for it. Pub/sub facade routing (`routeAllPublishersLocal`,
+  etc.) uses the per-port path, so it is not subject to this collapse; the
+  manifest path and consumed-service routing are.
+
+**Why this matters for native:**
+
+- **Different ports can hold different representations.** A native-local
+  publisher port plus a serialized-remote publisher port on one topic together
+  express the mixed local+remote fan-out that the single-port N6 rule forbids —
+  the author publishes the live object on the native port and the encoded value
+  on the remote port, with no double local delivery (only the local port has a
+  local leg). This is a legitimate pattern **today** and a lighter alternative
+  to the deferred single-port encode-once split. The same holds on the
+  subscriber side: a LOCAL-only subscriber instance receives native while a
+  REMOTE-from-peer instance of the same topic receives serialized, and
+  `route_accepts` steers each ingress to the right one.
+- **Native selection must be per-port, and the facade surface is not yet.** The
+  first cut's selection (`prefer_native_`, driven by `configurePubSubTransport`)
+  is **per-facade** — it flips *all* of a facade's publishers to native at once.
+  With multiple port instances wanting different representations, that is too
+  coarse: it cannot say "this publisher native, that one serialized." The port
+  abstraction already supports per-instance selection (`publishNative` is called
+  on a specific port), so the capability exists; what is missing is a per-port
+  selector on the facade/manifest surface. That is the concrete addition the
+  multi-instance case needs, and it should land with the mixed-native work.
+- **Deployment-surface gap to close with the deferred work.** If a deployment
+  wants to express "native local + serialized remote" as two same-name ports,
+  the manifest route table cannot currently give them distinct routes (the
+  (name, kind) collapse above). The deferred mixed-native design therefore has a
+  fork to record: either (a) extend the endpoint-route table with a per-instance
+  discriminator so same-named ports can be routed separately, or (b) keep one
+  port per name and do the encode-once/native split inside a single publish.
+  Option (b) avoids touching the routing key but requires the single-port split;
+  option (a) enables the lighter two-port pattern under the manifest.
+
 ### Does anything need adding to fan-out *now*?
 
 No change to the first cut. Tier-A local native fan-out already works (one shared
-`const` pointer to N subscribers), and every remote-inclusive route — one peer or
-eight — is uniformly refused for native. The multiplicity work lands with Tier B
-and the mixed-native arm; the decisions above are updated so those items are
-built against the one-to-many model rather than a one-to-one special case.
+`const` pointer to N subscribers), multiple same-named ports already route
+independently through the port abstraction, and every remote-inclusive route —
+one peer or eight — is uniformly refused for native. The multiplicity work lands
+with Tier B and the mixed-native arm, which must add: (1) reference-counted
+shared ownership across all receiving executors; (2) a single encoded buffer
+reused across all remote peers in one publish; and (3) a **per-port** native
+selector on the facade/manifest surface (the port abstraction already supports
+per-instance native; the coarse per-facade `prefer_native_` does not), plus a
+decision on whether the manifest route table gains a per-instance discriminator.
+The decisions above are updated so those items are built against the one-to-many,
+many-ports model rather than a one-to-one special case.
 
 ## What this is about
 
