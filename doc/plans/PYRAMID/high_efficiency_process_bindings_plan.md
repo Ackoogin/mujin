@@ -24,8 +24,10 @@ decision names the item it settles.
    live local object. The subscriber/handler callback ABI is left unchanged
    (option b is not taken).
 3. **Mixed local + remote fan-out — forbid at compose time (N6).** A native
-   publish on a mixed `PCL_ROUTE_LOCAL|PCL_ROUTE_REMOTE` route is rejected
-   before any local delivery occurs. Mixed-route topics use the serialized path.
+   publish on a route that includes `PCL_ROUTE_REMOTE` is rejected before any
+   local delivery occurs — this covers a mixed `PCL_ROUTE_LOCAL|PCL_ROUTE_REMOTE`
+   route *and* a route with **several** remote peers (fan-out is one-to-many;
+   see the fan-out analysis below). Mixed-route topics use the serialized path.
    The encode-once-for-remote-plus-native-for-local option is not built in the
    first cut.
 4. **Cross-language — C++-to-C++ only (N7).** Native handoff is C++-to-C++
@@ -35,9 +37,12 @@ decision names the item it settles.
 5. **(Follow-up, Tier B) ownership mechanism — reference-counted handle (N1,
    N3b).** When Tier B is built, a published native object is held by shared
    ownership (a reference-counted handle) that keeps it alive until every
-   subscriber on the receiving executor has run, rather than a single move into
-   the queue. Pub/sub fans one object out to several subscribers, so shared
-   `const` ownership is the cleaner model. Not built in the first cut.
+   subscriber on **every** receiving executor has run, rather than a single
+   move into one queue. Pub/sub fans one object out to several subscribers,
+   possibly spread across several sibling executors, so a single move cannot
+   serve them — shared `const` ownership referenced once per receiving-executor
+   queue is the model the fan-out analysis below requires. Not built in the
+   first cut.
 6. **(Follow-up, Tier B) native services scope — pub/sub only first (N3b, N4).**
    When Tier B is built, the first Tier-B increment covers native pub/sub only;
    sibling-executor native RPC (request/response/stream) is a later increment
@@ -68,6 +73,98 @@ Tests: [`subprojects/PCL/tests/test_pcl_native_binding.cpp`](../../../subproject
 covers the sentinel, the Tier-A local publish delivering by pointer, the
 mixed-route refusal before local delivery, all four ingress guards, and both
 native-service response paths.
+
+## Fan-out (port multiplicity) and the deferred native items
+
+The deferred items (Tier B, and the "support mixed native" arm of N6) cannot be
+scoped against the single "one local subscriber plus one remote subscriber"
+picture the original write-up used. A pub/sub port fans out to *many*
+destinations, and the native work has to account for that multiplicity from the
+start. This section records how fan-out works today and what each deferred item
+must add.
+
+### How fan-out works today
+
+- **Pub/sub is one-to-many; RPC and streaming are one-to-one.** A publisher
+  delivers to every matching subscriber. A *consumed* service or stream
+  endpoint is restricted to at most one peer — `pcl_executor_invoke_async` and
+  `pcl_executor_invoke_stream` both reject `peer_count > 1`
+  (`subprojects/PCL/src/pcl_executor.c`). So the multiplicity problem below is a
+  **pub/sub** problem only; the deferred native *services* work stays
+  point-to-point and does not inherit it.
+- **Local fan-out.** `dispatch_incoming_now` loops the containers on the
+  publisher's executor and calls each matching subscriber with the **same**
+  `pcl_msg_t`. For a native publish this already means one `const` object
+  pointer is shared by all local subscribers (the read-only-sharing rule,
+  constraint 3) — local fan-out needs nothing new for Tier A.
+- **Remote fan-out.** `pcl_executor_publish_port` iterates the port's named
+  peers — up to `PCL_MAX_ENDPOINT_PEERS` (8) — and calls each peer transport's
+  `publish` with the same message; a peer_count of zero uses the single default
+  transport. Crucially the payload is **encoded once** (the generated
+  `publish<Topic>` helper serializes into one buffer before calling
+  `pcl_port_publish`), and that one buffer is reused across all peers. Remote
+  fan-out is already encode-once, not encode-per-peer.
+- **Mixed.** When a route has both bits, the local leg runs first, then the
+  per-peer remote loop.
+- **Durability.** There is **no** retained/last-value/transient-local mechanism
+  in PCL today, so the durability concern (constraint 6) is forward-looking:
+  there is nothing to retain yet, and nothing the native path breaks today.
+
+### The general shape the deferred work must handle
+
+A single pub/sub publish can, in general, fan out across up to four destination
+classes **at once**, each wanting a different payload representation:
+
+| Destination class | Multiplicity | Representation the native design needs |
+|-------------------|--------------|----------------------------------------|
+| Same-executor local subscribers (Tier A) | N | one **borrowed** `const` pointer, shared |
+| Sibling-executor subscribers (Tier B) | across M sibling executors | one **shared-owned** native object (reference-counted), referenced once per receiving-executor queue |
+| Remote peers (serialized) | up to 8 named peers, or the default | **one** encoded buffer, reused across all peers |
+| Durable/retained snapshot (if durability is ever added) | 1 | one **owned** copy (encoded or native) |
+
+The single most important consequence: the "one local + one remote" framing is a
+special case. The mixed native publish is really *native-for-all-local* +
+*native-shared-for-all-siblings* + *one-encode-shared-across-all-remote-peers*.
+So the deferred work must produce **at most one** encoded buffer per publish (not
+one per peer) and **at most one** native representation (shared, not moved), then
+route each destination class to the representation it needs.
+
+### What each deferred item adds
+
+- **Tier B sibling-executor native (N3b).** This is where multiplicity forces
+  the ownership decision. A single move into one queue cannot serve N local
+  borrowers plus M sibling-executor queues; the object must be held by a
+  reference-counted handle, incremented once per sibling-executor queue entry
+  and released when that executor has drained it. The handle's lifetime spans
+  the *maximum* over all receiving executors, not one. Decision 5 is updated
+  accordingly. Local Tier-A subscribers still borrow synchronously and take no
+  reference.
+- **Mixed local+remote native (the "support" arm of N6).** The publish must
+  compute the encoded buffer once — only when there is at least one remote peer
+  (or a durable snapshot to back) — hand the borrowed/shared native
+  representation to the local and sibling legs, and reuse the single encoded
+  buffer across all K remote peers. Because the local leg currently runs before
+  the remote legs, the native/encoded split has to be decided **up front**
+  (before any dispatch), so a per-peer encode failure cannot leave a native
+  local delivery already committed. Until this is built, the first cut keeps the
+  simpler rule: any route with a remote leg (one peer or several) refuses native
+  and uses serialization (Decision 3).
+- **RPC/streaming native (N4 codegen).** No fan-out change: these stay
+  one-to-one by the `peer_count > 1` rejection above, so the native request /
+  response / stream-frame work does not need a multi-peer representation split.
+  Recording this so that work is not over-built.
+- **Durability.** Out of scope until a retained-value feature exists at all. If
+  one is added, its snapshot is simply a fifth consumer that shares the single
+  encoded buffer (a borrowed native pointer cannot back a retained value —
+  constraint 6).
+
+### Does anything need adding to fan-out *now*?
+
+No change to the first cut. Tier-A local native fan-out already works (one shared
+`const` pointer to N subscribers), and every remote-inclusive route — one peer or
+eight — is uniformly refused for native. The multiplicity work lands with Tier B
+and the mixed-native arm; the decisions above are updated so those items are
+built against the one-to-many model rather than a one-to-one special case.
 
 ## What this is about
 

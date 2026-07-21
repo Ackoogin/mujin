@@ -110,6 +110,24 @@ pcl_status_t configure_pub(pcl_container_t* c, void* ud) {
   return pcl_port_set_route(pub, cfg->route, cfg->peers, cfg->peer_count);
 }
 
+// Fan-out subscriber that records the object address it was handed, so a test
+// can prove every subscriber shares one object (no per-subscriber copy).
+struct FanoutSub {
+  int         got = 0;
+  int         world_a = 0;
+  const void* addr = nullptr;
+};
+
+void fanout_sub_cb(pcl_container_t*, const pcl_msg_t* m, void* ud) {
+  auto* s = static_cast<FanoutSub*>(ud);
+  s->got++;
+  if (const WorldState* w = static_cast<const WorldState*>(
+          pcl_msg_is_native(m) ? m->data : nullptr)) {
+    s->world_a = w->a;
+    s->addr = m->data;
+  }
+}
+
 }  // namespace
 
 // -- Sentinel helper --------------------------------------------------------
@@ -150,6 +168,49 @@ TEST(PclNativeBinding, LocalNativePublishDeliversByPointer) {
   EXPECT_EQ(sub.got, 1);
   EXPECT_TRUE(sub.saw_native);
   EXPECT_EQ(sub.world_a, 42);  // the live object arrived by pointer, no decode
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- Local native fan-out: one const object shared by many subscribers -------
+
+TEST(PclNativeBinding, LocalNativePublishFansOutToManySubscribersZeroCopy) {
+  FanoutSub s1, s2, s3;
+  struct Cfg { FanoutSub* a; FanoutSub* b; FanoutSub* c; pcl_port_t* pub; } cfg{
+      &s1, &s2, &s3, nullptr};
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* cfg = static_cast<Cfg*>(ud);
+    // Three subscribers on one topic, plus the publisher, all local.
+    pcl_container_add_subscriber(c, "world", "WorldState", fanout_sub_cb, cfg->a);
+    pcl_container_add_subscriber(c, "world", "WorldState", fanout_sub_cb, cfg->b);
+    pcl_container_add_subscriber(c, "world", "WorldState", fanout_sub_cb, cfg->c);
+    cfg->pub = pcl_container_add_publisher(c, "world", "WorldState");
+    return cfg->pub ? pcl_port_set_route(cfg->pub, PCL_ROUTE_LOCAL, nullptr, 0)
+                    : PCL_ERR_NOMEM;
+  };
+  auto* c = pcl_container_create("fan", &cbs, &cfg);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  WorldState ws{88, 1.0};
+  pcl_msg_t native = make_native(&ws);
+  EXPECT_EQ(pcl_port_publish(cfg.pub, &native), PCL_OK);
+
+  // Every subscriber ran once, saw the same value, and -- the zero-copy claim --
+  // was handed the *same* live object address (&ws), no per-subscriber copy.
+  EXPECT_EQ(s1.got, 1);
+  EXPECT_EQ(s2.got, 1);
+  EXPECT_EQ(s3.got, 1);
+  EXPECT_EQ(s1.world_a, 88);
+  EXPECT_EQ(s2.world_a, 88);
+  EXPECT_EQ(s3.world_a, 88);
+  EXPECT_EQ(s1.addr, &ws);
+  EXPECT_EQ(s2.addr, &ws);
+  EXPECT_EQ(s3.addr, &ws);
 
   pcl_executor_destroy(e);
   pcl_container_destroy(c);
