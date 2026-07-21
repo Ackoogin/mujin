@@ -439,6 +439,20 @@ pcl_status_t pcl_process_runtime_load_ports_file(
         clear_error(runtime);
         status = PCL_OK;
       }
+      /* The plugin loaded, but nothing yet guarantees that it is the codec
+         this line asked for. Requiring the named content type to be in the
+         registry now turns a mismatched codec/plugin pairing into a startup
+         configuration error naming both halves, instead of a bare
+         PCL_ERR_INVALID when a port later tries to bind with it. */
+      if (!pcl_codec_registry_get(pcl_codec_registry_default(),
+                                  content_type)) {
+        status = set_error(runtime, PCL_ERR_INVALID,
+                           "codec plugin '%s' does not provide content type "
+                           "'%s' (config line %lu)",
+                           codec_plugin, content_type,
+                           (unsigned long)line_number);
+        goto cleanup;
+      }
       if (!runtime->content_type_selected) {
         snprintf(runtime->content_type, sizeof(runtime->content_type),
                  "%s", content_type);

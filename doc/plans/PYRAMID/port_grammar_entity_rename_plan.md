@@ -1,6 +1,8 @@
 # PYRAMID Port-Grammar `Requirement` to `Entity` Rename Plan
 
-**Status:** proposed, not yet scheduled  
+**Status:** implemented (commit `57eb50f`); retained as the design record for
+the rename. The status line was corrected on 2026-07-21, when a tracker review
+found both this plan and the WS-H entry still describing the work as proposed.  
 **Created:** 2026-07-17  
 **Tracker:** [PYRAMID consolidated TODO](../../todo/PYRAMID/TODO.md)
 

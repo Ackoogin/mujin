@@ -323,6 +323,57 @@ TEST(PclProcessRuntime, RejectsInvalidPortCodecLines) {
   }
 }
 
+///< REQ_PCL_477: a `codec` line is rejected when its plugin loads but provides a different content type. PCL.079.
+TEST(PclProcessRuntime, RejectsCodecLineWhosePluginProvidesAnotherContentType) {
+  // The plugin here is a real, loadable codec; it simply registers
+  // "application/pcl-ports-test-3" rather than the content type the line asks
+  // for. Without a config-time check this would be accepted, and the process
+  // would only fail later when a port tried to bind an unregistered codec.
+  // No other test loads this plugin, so the load below is always the first
+  // one and always takes the mismatch path rather than the duplicate-load one.
+  const std::string body =
+      std::string("codec application/not-provided-by-this-plugin ") +
+      PORTS3_CODEC_PLUGIN_PATH + "\n" +
+      "port fixture_request rpc peer " + CAPTURE_PLUGIN_PATH + " {}\n";
+
+  Runtime runtime;
+  const std::string path = writePortsFile(body);
+  EXPECT_EQ(pcl_process_runtime_load_ports_file(
+                runtime.value, path.c_str(), &kPort, 1u),
+            PCL_ERR_INVALID);
+  const std::string error = pcl_process_runtime_error(runtime.value);
+  // The diagnostic must name both halves of the mismatch, since either one
+  // could be the typo.
+  EXPECT_NE(error.find("does not provide content type"), std::string::npos)
+      << error;
+  EXPECT_NE(error.find("application/not-provided-by-this-plugin"),
+            std::string::npos)
+      << error;
+  EXPECT_NE(error.find(PORTS3_CODEC_PLUGIN_PATH), std::string::npos) << error;
+  std::remove(path.c_str());
+}
+
+///< REQ_PCL_477: a `codec` line naming a plugin that does not exist fails closed. PCL.079.
+TEST(PclProcessRuntime, RejectsCodecLineWithMissingPlugin) {
+  const std::string body =
+      // The content type must be one nothing has registered, so the
+      // already-registered tolerance path cannot mask the missing plugin.
+      std::string("codec application/pcl-absent-codec "
+                  "/no/such/codec-plugin.so\n") +
+      "port fixture_request rpc peer " + CAPTURE_PLUGIN_PATH + " {}\n";
+
+  Runtime runtime;
+  const std::string path = writePortsFile(body);
+  EXPECT_EQ(pcl_process_runtime_load_ports_file(
+                runtime.value, path.c_str(), &kPort, 1u),
+            PCL_ERR_NOT_FOUND);
+  EXPECT_NE(std::string(pcl_process_runtime_error(runtime.value))
+                .find("load codec plugin"),
+            std::string::npos)
+      << pcl_process_runtime_error(runtime.value);
+  std::remove(path.c_str());
+}
+
 ///< REQ_PCL_479, REQ_PCL_227: a discovered shared-memory gateway is activated and cleaned up. PCL.079.
 TEST(PclProcessRuntime, ActivatesAndCleansUpSharedMemoryGateway) {
   Runtime runtime;
