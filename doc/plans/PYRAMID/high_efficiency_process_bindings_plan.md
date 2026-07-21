@@ -288,6 +288,25 @@ optional extra.
 
 ### What this means for the earlier open questions
 
+- **One reusable facade, realization by annotation — do not split the contract.**
+  The pub/sub projection is already expressed as `pattern` / `topic` annotations
+  on each rpc of the single service contract. In
+  `MA_MissionPlanCommand_Service`, for example, `Create` / `Update` / `Cancel`
+  carry `pattern: SUBSCRIBE topic: "MA_MissionPlanCommand"` and `Read` carries
+  `pattern: PUBLISH topic: "MA_MissionPlanCommandStatus"`
+  ([`pim/agra_p2_seam`](../../../subprojects/PYRAMID/pim/agra_p2_seam) overlay).
+  The generator turns those annotated operations into the facade's
+  `subscribe<Topic>` / `publish<Topic>` ports directly, so **one** facade already
+  presents the interaction with its pub/sub realization built in — that is the
+  whole point of the port binding being a single reusable facade. The
+  mixed-native fan-out therefore extends *that* facade's `publish<Topic>` to
+  deliver native-local and serialized-peer in one call, on the ports already
+  generated. It must **not** fork the contract into a parallel pub/sub binding or
+  a separate facade — doing so would defeat the reuse the facade exists for. (An
+  earlier note in this file's history suggested sequencing the mixed-native work
+  behind a separate pub/sub projection; that was wrong. The projection is
+  annotation-driven on the same contract, and the per-port routing / native
+  switch already attach to these generated topic ports.)
 - **Port naming / per-instance topics.** A-GRA answers this the opposite way from
   a "distinct name per instance" design. The onboard and peer Tasks share **one**
   topic identity; they are told apart by route and by header IDs, not by
