@@ -1365,6 +1365,22 @@ pcl_status_t pcl_executor_publish_port(pcl_executor_t*   e,
   if (!e || !port || !msg) return PCL_ERR_INVALID;
 
   route_mode = port_route_mode(e, port);
+
+  /* Native (raw-struct) fail-closed guard -- N2 / N6.
+     A native payload is a borrowed pointer into this process; it must never
+     reach a transport adapter. Because the local leg below runs *before* the
+     remote leg, a native publish on any route that includes REMOTE (a
+     remote-only or a mixed local+remote route) is refused up front, before
+     any local delivery produces side effects. Native publishing is a
+     same-executor local-only path. */
+  if (pcl_msg_is_native(msg) && (route_mode & PCL_ROUTE_REMOTE)) {
+    pcl_log(port->owner, PCL_LOG_ERROR,
+            "native publish rejected for '%s': a raw-struct payload cannot be "
+            "routed remotely; native routing is same-executor local only",
+            port->name);
+    return PCL_ERR_INVALID;
+  }
+
   if (route_mode & PCL_ROUTE_LOCAL) {
     rc = dispatch_incoming_now(e, port->name, msg, PCL_ROUTE_LOCAL, NULL);
     if (rc == PCL_OK) delivered = 1;
@@ -1403,6 +1419,16 @@ pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
                                   const pcl_msg_t* msg) {
   if (!e || !topic || !msg) return PCL_ERR_INVALID;
   if (e->has_transport && e->transport.publish) {
+    /* Native (raw-struct) fail-closed guard -- N2. This entry point always
+       routes through the transport when one is installed, so a native payload
+       here would ship a raw address off-box. Refuse it. */
+    if (pcl_msg_is_native(msg)) {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "native publish rejected for topic '%s': a raw-struct payload "
+              "cannot be handed to a transport adapter",
+              topic);
+      return PCL_ERR_INVALID;
+    }
     return e->transport.publish(e->transport.adapter_ctx, topic, msg);
   }
   return dispatch_incoming_now(e, topic, msg, PCL_ROUTE_LOCAL, NULL);
@@ -1452,6 +1478,15 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
                   service_name);
           return PCL_ERR_NOT_FOUND;
         }
+        /* Native (raw-struct) fail-closed guard -- N2. A native request must
+           never reach a transport adapter. */
+        if (pcl_msg_is_native(request)) {
+          pcl_log(NULL, PCL_LOG_ERROR,
+                  "native service request rejected for '%s': a raw-struct "
+                  "payload cannot be routed to a remote peer",
+                  service_name);
+          return PCL_ERR_INVALID;
+        }
         return transport->invoke_async(transport->adapter_ctx, service_name,
                                        request, callback, user_data);
       } else {
@@ -1466,6 +1501,17 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
   // Legacy executor-wide transport fallback (skipped when an explicit
   // LOCAL route exists for this endpoint -- see route_forces_local above).
   if (!route_forces_local && e->has_transport && e->transport.invoke_async) {
+    /* Native (raw-struct) fail-closed guard -- N2. Without an explicit local
+       route a native request would fall through to the default transport and
+       ship a raw address off-box. Refuse rather than transmit. A native
+       service caller must configure a LOCAL route (route_forces_local). */
+    if (pcl_msg_is_native(request)) {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "native service request rejected for '%s': a raw-struct payload "
+              "reached the default transport; native services require a local route",
+              service_name);
+      return PCL_ERR_INVALID;
+    }
     return e->transport.invoke_async(e->transport.adapter_ctx, service_name,
                                      request, callback, user_data);
   }
@@ -1557,6 +1603,14 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
                   service_name);
           return PCL_ERR_NOT_FOUND;
         }
+        /* Native (raw-struct) fail-closed guard -- N2. */
+        if (pcl_msg_is_native(request)) {
+          pcl_log(NULL, PCL_LOG_ERROR,
+                  "native stream request rejected for '%s': a raw-struct "
+                  "payload cannot be routed to a remote peer",
+                  service_name);
+          return PCL_ERR_INVALID;
+        }
         {
           void* stream_handle = NULL;
           pcl_status_t rc = transport->invoke_stream(
@@ -1591,7 +1645,18 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
   // LOCAL route exists for this endpoint -- see route_forces_local above).
   if (!route_forces_local && e->has_transport && e->transport.invoke_stream) {
     void* stream_handle = NULL;
-    pcl_status_t rc = e->transport.invoke_stream(
+    pcl_status_t rc;
+    /* Native (raw-struct) fail-closed guard -- N2. Without an explicit local
+       route a native stream request would fall through to the default
+       transport. Refuse rather than transmit. */
+    if (pcl_msg_is_native(request)) {
+      pcl_log(NULL, PCL_LOG_ERROR,
+              "native stream request rejected for '%s': a raw-struct payload "
+              "reached the default transport; native streams require a local route",
+              service_name);
+      return PCL_ERR_INVALID;
+    }
+    rc = e->transport.invoke_stream(
         e->transport.adapter_ctx, service_name, request,
         callback, user_data, &stream_handle);
     if (rc == PCL_OK || rc == PCL_STREAMING) {
@@ -1665,6 +1730,20 @@ pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
 
   if (!e || !cb || !msg) return PCL_ERR_INVALID;
 
+  /* Native-provenance guard -- N2b (option a). This entry point is for
+     transport recv threads returning remote responses (and server-stream
+     frames). A native sentinel here would be wire bytes forged with the
+     sentinel; a real native response is delivered synchronously to the local
+     caller's callback and never enters this queue. Reject it so a native
+     response reaching a client trampoline is guaranteed to be locally
+     originated. */
+  if (pcl_msg_is_native(msg)) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "async response was rejected: a native (raw-struct) content type "
+            "is not valid on the cross-thread response queue");
+    return PCL_ERR_INVALID;
+  }
+
   node = (pcl_resp_cb_node_t*)pcl_calloc(1, sizeof(*node));
   if (!node) return PCL_ERR_NOMEM;
 
@@ -1716,6 +1795,20 @@ static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
   if (!msg->type_name) {
     pcl_log(NULL, PCL_LOG_ERROR,
             "incoming message for topic '%s' was rejected: no content type was provided",
+            topic);
+    return PCL_ERR_INVALID;
+  }
+  /* Native-provenance guard -- N2b (option a). The cross-thread ingress queue
+     deep-copies payload *bytes*; a native sentinel here would either be wire
+     bytes forged with the sentinel (from a transport recv thread) or an
+     attempt to smuggle a raw pointer across threads. Neither is a valid Tier-A
+     (same-executor) native message, which is delivered synchronously without
+     touching this queue. Reject it so a native sentinel reaching a subscriber
+     trampoline is guaranteed to be a live, locally originated object. */
+  if (pcl_msg_is_native(msg)) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "incoming message for topic '%s' was rejected: a native (raw-struct) "
+            "content type is not valid on the cross-thread ingress queue",
             topic);
     return PCL_ERR_INVALID;
   }
@@ -1815,6 +1908,19 @@ static pcl_status_t enqueue_svc_req(pcl_executor_t*  e,
   pcl_pending_svc_req_t* node;
 
   if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
+
+  /* Native-provenance guard -- N2b (option a). As with the pub/sub ingress
+     queue, a native sentinel on the cross-thread service-request queue is
+     never a valid Tier-A message (native services dispatch synchronously on
+     the executor thread). Reject it so a native sentinel a service handler
+     sees is guaranteed to be a live, locally originated request. */
+  if (pcl_msg_is_native(request)) {
+    pcl_log(NULL, PCL_LOG_ERROR,
+            "service request for '%s' was rejected: a native (raw-struct) "
+            "content type is not valid on the cross-thread request queue",
+            service_name);
+    return PCL_ERR_INVALID;
+  }
 
   node = (pcl_pending_svc_req_t*)pcl_calloc(1, sizeof(*node));
   if (!node) return PCL_ERR_NOMEM;

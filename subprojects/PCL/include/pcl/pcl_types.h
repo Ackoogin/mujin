@@ -160,6 +160,53 @@ typedef struct {
   const char* type_name;     // e.g. "WorldState", "GetFact_Request"
 } pcl_msg_t;
 
+// -- High-efficiency in-process (native) payload sentinel ----------------
+//
+// When two components run in the same executor, a message can be handed over
+// as the live native object (the generated C++ struct) instead of a
+// serialized buffer. Such a message sets `data` to the address of that live
+// object and `type_name` to the sentinel below. This is the "Tier A"
+// (same-executor, zero-copy) path described in
+// doc/plans/PYRAMID/high_efficiency_process_bindings_plan.md.
+//
+// The sentinel is a content-type string. It may be used bare, or with the
+// schema short-name appended after a ';' separator (for example
+// "application/x-pcl-native;WorldState"), so a receiver can sanity-check the
+// object type it is about to cast to. The helpers below match on the prefix,
+// so either form is recognised.
+//
+// Two invariants make the raw-pointer handoff safe; both are enforced by the
+// PCL runtime rather than assumed:
+//   1. A native-tagged message must never be handed to a transport adapter --
+//      that would ship a raw address off-box. The executor and container
+//      egress paths reject it (fail closed).
+//   2. A native sentinel that reaches a subscriber/handler callback must be a
+//      live local object, never wire bytes. Transport ingress paths reject a
+//      native-tagged message on entry, so a sentinel a callback sees is
+//      guaranteed to have originated in-process.
+#define PCL_NATIVE_CONTENT_TYPE "application/x-pcl-native"
+
+/// \brief True if \p type_name names the native (raw-struct) payload path.
+///
+/// Matches the \ref PCL_NATIVE_CONTENT_TYPE sentinel as a prefix, so both the
+/// bare form and the "sentinel;SchemaName" form are recognised. Deliberately
+/// avoids <string.h> so this stays usable from the pure-C core header.
+static inline bool pcl_type_name_is_native(const char* type_name) {
+  const char* p = PCL_NATIVE_CONTENT_TYPE;
+  if (!type_name) return false;
+  while (*p != '\0') {
+    if (*type_name != *p) return false;
+    ++type_name;
+    ++p;
+  }
+  return true;
+}
+
+/// \brief True if \p msg carries a native (raw-struct) payload.
+static inline bool pcl_msg_is_native(const pcl_msg_t* msg) {
+  return msg != NULL && pcl_type_name_is_native(msg->type_name);
+}
+
 /// \brief Callback fired on the executor thread when an async service response arrives.
 /// \param resp       Response message (borrow -- do not retain pointers after return).
 /// \param user_data  Caller-supplied context passed to invoke_remote_async.

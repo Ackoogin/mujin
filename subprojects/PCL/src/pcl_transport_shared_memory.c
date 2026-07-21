@@ -2165,6 +2165,26 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
     return;
   }
 
+  /* Native-provenance guard -- N2b (option a). This gateway unpacks a wire
+     frame and calls the service handler directly, bypassing the generic
+     post_* ingress helpers, so its guard cannot live in those helpers. A wire
+     frame whose content type is the native sentinel is a forged request: its
+     bytes are not a live object and must never be cast as one. Refuse it by
+     returning an empty response, exactly as for an unexposed service. */
+  if (pcl_type_name_is_native(request_type)) {
+    memset(&empty_response, 0, sizeof(empty_response));
+    target = (pcl_shm_response_target_t*)pcl_calloc(1, sizeof(*target));
+    if (target) {
+      target->seq_id = seq_id;
+      snprintf(target->requester_id, sizeof(target->requester_id), "%s", source_id);
+      pcl_shm_send_response(ctx, target, &empty_response);
+      pcl_free(target);
+    }
+    pcl_free(request_type);
+    pcl_free(service_name);
+    return;
+  }
+
   svc_ctx = (pcl_svc_context_t*)pcl_calloc(1, sizeof(*svc_ctx));
   target = (pcl_shm_response_target_t*)pcl_calloc(1, sizeof(*target));
   if (!svc_ctx || !target) {
@@ -2197,7 +2217,15 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
                                  svc_ctx,
                                  service_port->svc_user_data);
   if (rc == PCL_OK) {
-    pcl_shm_send_response(ctx, target, &response);
+    /* Native (raw-struct) egress guard -- N2 fail-closed. A handler must not
+       return a native response on a remote (shm) request; that would ship a
+       raw pointer's bytes onto the wire. Send an empty response instead. */
+    if (pcl_msg_is_native(&response)) {
+      memset(&empty_response, 0, sizeof(empty_response));
+      pcl_shm_send_response(ctx, target, &empty_response);
+    } else {
+      pcl_shm_send_response(ctx, target, &response);
+    }
     pcl_free(target);
     pcl_free(svc_ctx);
   } else if (rc != PCL_PENDING) {
@@ -2294,6 +2322,23 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
     pcl_shm_stream_send_frame(ctx, &end_target,
                               PCL_SHM_FRAME_STREAM_END, NULL,
                               PCL_ERR_NOT_FOUND);
+    pcl_free(request_type);
+    pcl_free(service_name);
+    return;
+  }
+
+  /* Native-provenance guard -- N2b (option a). As with the unary gateway
+     above, a wire stream request whose content type is the native sentinel is
+     forged; its bytes are not a live object. Refuse it by ending the stream
+     with an error rather than casting wire bytes as a native struct. */
+  if (pcl_type_name_is_native(request_type)) {
+    pcl_shm_stream_send_target_t end_target;
+    end_target.owner  = ctx;
+    end_target.seq_id = seq_id;
+    snprintf(end_target.requester_id, sizeof(end_target.requester_id), "%s", source_id);
+    pcl_shm_stream_send_frame(ctx, &end_target,
+                              PCL_SHM_FRAME_STREAM_END, NULL,
+                              PCL_ERR_INVALID);
     pcl_free(request_type);
     pcl_free(service_name);
     return;

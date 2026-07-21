@@ -1,0 +1,364 @@
+/// \file test_pcl_native_binding.cpp
+/// \brief Tests for the high-efficiency in-process (Tier-A native) binding
+///        path: the raw-struct payload sentinel, the fail-closed egress guards
+///        (N2), the transport-ingress provenance guards (N2b), the
+///        forbid-mixed-route rule (N6), and native service response routing
+///        (N4). See doc/plans/PYRAMID/high_efficiency_process_bindings_plan.md.
+#include <gtest/gtest.h>
+
+extern "C" {
+#include "pcl/pcl_executor.h"
+#include "pcl/pcl_container.h"
+#include "pcl/pcl_transport.h"
+#include "pcl/pcl_types.h"
+}
+
+namespace {
+
+// A live native object handed over by pointer instead of serialized.
+struct WorldState {
+  int    a;
+  double b;
+};
+
+const char* kNativeType = PCL_NATIVE_CONTENT_TYPE ";WorldState";
+
+pcl_msg_t make_native(const WorldState* ws) {
+  pcl_msg_t m = {};
+  m.data = ws;
+  m.size = static_cast<uint32_t>(sizeof(*ws));
+  m.type_name = kNativeType;
+  return m;
+}
+
+pcl_msg_t make_serialized(const void* data, uint32_t size) {
+  pcl_msg_t m = {};
+  m.data = data;
+  m.size = size;
+  m.type_name = "WorldState";
+  return m;
+}
+
+// -- Capture transport: records whether an egress hook was ever reached ------
+struct CaptureTransport {
+  int publish_count = 0;
+  int invoke_count = 0;
+  int respond_count = 0;
+};
+
+pcl_status_t cap_publish(void* ctx, const char*, const pcl_msg_t*) {
+  static_cast<CaptureTransport*>(ctx)->publish_count++;
+  return PCL_OK;
+}
+pcl_status_t cap_invoke_async(void* ctx, const char*, const pcl_msg_t*,
+                              pcl_resp_cb_fn_t cb, void* ud) {
+  static_cast<CaptureTransport*>(ctx)->invoke_count++;
+  if (cb) { pcl_msg_t r = {}; cb(&r, ud); }
+  return PCL_OK;
+}
+pcl_status_t cap_respond(void* ctx, pcl_svc_context_t*, const pcl_msg_t*) {
+  static_cast<CaptureTransport*>(ctx)->respond_count++;
+  return PCL_OK;
+}
+
+pcl_transport_t capture_vtable(CaptureTransport* state) {
+  pcl_transport_t t = {};
+  t.publish = cap_publish;
+  t.invoke_async = cap_invoke_async;
+  t.respond = cap_respond;
+  t.adapter_ctx = state;
+  return t;
+}
+
+// -- Subscriber that casts the native pointer back --------------------------
+struct SubState {
+  int  got = 0;
+  bool saw_native = false;
+  int  world_a = 0;
+};
+
+void sub_cb(pcl_container_t*, const pcl_msg_t* m, void* ud) {
+  auto* s = static_cast<SubState*>(ud);
+  s->got++;
+  if (pcl_msg_is_native(m)) {
+    s->saw_native = true;
+    s->world_a = static_cast<const WorldState*>(m->data)->a;
+  }
+}
+
+// Publisher/subscriber container built with a chosen publisher route.
+struct PubCfg {
+  SubState*          sub;
+  uint32_t           route;
+  const char* const* peers;
+  uint32_t           peer_count;
+  pcl_port_t*        pub;  // out
+};
+
+pcl_status_t configure_pub(pcl_container_t* c, void* ud) {
+  auto* cfg = static_cast<PubCfg*>(ud);
+  pcl_port_t* sub = pcl_container_add_subscriber(c, "world", "WorldState",
+                                                 sub_cb, cfg->sub);
+  pcl_port_t* pub = pcl_container_add_publisher(c, "world", "WorldState");
+  if (!sub || !pub) return PCL_ERR_NOMEM;
+  pcl_port_set_route(sub, PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE, nullptr, 0);
+  cfg->pub = pub;
+  return pcl_port_set_route(pub, cfg->route, cfg->peers, cfg->peer_count);
+}
+
+}  // namespace
+
+// -- Sentinel helper --------------------------------------------------------
+
+TEST(PclNativeBinding, HelperRecognisesSentinel) {
+  WorldState ws{1, 2.0};
+  pcl_msg_t native = make_native(&ws);
+  EXPECT_TRUE(pcl_msg_is_native(&native));
+
+  pcl_msg_t bare = {};
+  bare.type_name = PCL_NATIVE_CONTENT_TYPE;  // no schema suffix
+  EXPECT_TRUE(pcl_msg_is_native(&bare));
+
+  pcl_msg_t ser = make_serialized("x", 1);
+  EXPECT_FALSE(pcl_msg_is_native(&ser));
+
+  pcl_msg_t none = {};
+  EXPECT_FALSE(pcl_msg_is_native(&none));
+}
+
+// -- Tier-A native local publish (N3a substrate) ----------------------------
+
+TEST(PclNativeBinding, LocalNativePublishDeliversByPointer) {
+  SubState sub;
+  PubCfg cfg{&sub, PCL_ROUTE_LOCAL, nullptr, 0, nullptr};
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = configure_pub;
+  auto* c = pcl_container_create("p", &cbs, &cfg);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  WorldState ws{42, 3.14};
+  pcl_msg_t native = make_native(&ws);
+  EXPECT_EQ(pcl_port_publish(cfg.pub, &native), PCL_OK);
+
+  EXPECT_EQ(sub.got, 1);
+  EXPECT_TRUE(sub.saw_native);
+  EXPECT_EQ(sub.world_a, 42);  // the live object arrived by pointer, no decode
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- N2 + N6: native publish on a REMOTE-inclusive route is refused up front -
+
+TEST(PclNativeBinding, NativePublishOnMixedRouteRefusedBeforeLocalDelivery) {
+  SubState sub;
+  const char* peers[] = {"peer_a"};
+  PubCfg cfg{&sub, PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE, peers, 1, nullptr};
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = configure_pub;
+  auto* c = pcl_container_create("p", &cbs, &cfg);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  CaptureTransport cap;
+  pcl_transport_t tr = capture_vtable(&cap);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &tr), PCL_OK);
+
+  WorldState ws{7, 1.0};
+  pcl_msg_t native = make_native(&ws);
+  EXPECT_EQ(pcl_port_publish(cfg.pub, &native), PCL_ERR_INVALID);
+  EXPECT_EQ(sub.got, 0);            // N6: no local side effect leaked past guard
+  EXPECT_EQ(cap.publish_count, 0);  // N2: nothing reached the transport
+
+  // A serialized publish on the same mixed route still fans out both legs.
+  const char blob[] = "x";
+  pcl_msg_t ser = make_serialized(blob, 1);
+  EXPECT_EQ(pcl_port_publish(cfg.pub, &ser), PCL_OK);
+  EXPECT_EQ(sub.got, 1);
+  EXPECT_EQ(cap.publish_count, 1);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- N2b: transport-ingress provenance guards -------------------------------
+
+TEST(PclNativeBinding, IngressQueuesRejectNativeSentinel) {
+  WorldState ws{5, 0.0};
+  pcl_msg_t native = make_native(&ws);
+  auto* e = pcl_executor_create();
+
+  // pub/sub cross-thread ingress (local and remote)
+  EXPECT_EQ(pcl_executor_post_incoming(e, "world", &native), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_remote_incoming(e, "peer_a", "world", &native),
+            PCL_ERR_INVALID);
+  // service request cross-thread ingress (local and remote)
+  auto noop_resp = [](const pcl_msg_t*, void*) {};
+  EXPECT_EQ(pcl_executor_post_service_request(e, "svc", &native, noop_resp, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_service_request_remote(e, "peer_a", "svc", &native,
+                                                     noop_resp, nullptr),
+            PCL_ERR_INVALID);
+  // response cross-thread ingress (transport recv thread path)
+  EXPECT_EQ(pcl_executor_post_response_msg(e, noop_resp, nullptr, &native),
+            PCL_ERR_INVALID);
+
+  // A serialized message on the same queues is still accepted.
+  const char blob[] = "x";
+  pcl_msg_t ser = make_serialized(blob, 1);
+  EXPECT_EQ(pcl_executor_post_incoming(e, "world", &ser), PCL_OK);
+
+  pcl_executor_destroy(e);
+}
+
+// -- N2: native request never reaches a transport ---------------------------
+
+TEST(PclNativeBinding, NativeRequestRefusedOnDefaultTransport) {
+  CaptureTransport cap;
+  pcl_transport_t tr = capture_vtable(&cap);
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_set_transport(e, &tr), PCL_OK);
+
+  WorldState ws{9, 0.0};
+  pcl_msg_t native = make_native(&ws);
+  bool fired = false;
+  auto cb = [](const pcl_msg_t*, void* ud) { *static_cast<bool*>(ud) = true; };
+
+  // No local route -> would fall through to the default transport; refused.
+  EXPECT_EQ(pcl_executor_invoke_async(e, "svc", &native, cb, &fired),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(cap.invoke_count, 0);
+  EXPECT_FALSE(fired);
+
+  pcl_executor_destroy(e);
+}
+
+// -- N4: native unary service works locally even with a transport installed --
+
+namespace {
+struct EchoService {
+  WorldState owned_response{0, 0.0};  // owned slot -- outlives handler return
+  bool deferred = false;
+  pcl_svc_context_t* saved_ctx = nullptr;
+};
+
+// Immediate native reply: point the response at an owned object.
+pcl_status_t echo_handler(pcl_container_t*, const pcl_msg_t* req,
+                          pcl_msg_t* resp, pcl_svc_context_t* ctx, void* ud) {
+  auto* svc = static_cast<EchoService*>(ud);
+  const auto* in = static_cast<const WorldState*>(req->data);
+  svc->owned_response.a = in->a + 1;
+  if (svc->deferred) {
+    svc->saved_ctx = ctx;
+    return PCL_PENDING;
+  }
+  resp->data = &svc->owned_response;
+  resp->size = sizeof(svc->owned_response);
+  resp->type_name = kNativeType;
+  return PCL_OK;
+}
+
+pcl_status_t configure_service(pcl_container_t* c, void* ud) {
+  pcl_port_t* p = pcl_container_add_service(c, "echo", "WorldState",
+                                            echo_handler, ud);
+  if (!p) return PCL_ERR_NOMEM;
+  return pcl_port_set_route(p, PCL_ROUTE_LOCAL, nullptr, 0);
+}
+}  // namespace
+
+TEST(PclNativeBinding, NativeUnaryServiceLocalRouteBypassesTransport) {
+  EchoService svc;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = configure_service;
+  auto* c = pcl_container_create("svc", &cbs, &svc);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  // A default transport is installed, but an explicit LOCAL route on the
+  // consumed endpoint forces the intra-process path.
+  CaptureTransport cap;
+  pcl_transport_t tr = capture_vtable(&cap);
+  ASSERT_EQ(pcl_executor_set_transport(e, &tr), PCL_OK);
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "echo";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_LOCAL;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  WorldState req{100, 0.0};
+  pcl_msg_t native_req = make_native(&req);
+  struct Result { bool fired = false; bool native = false; int a = 0; } res;
+  auto cb = [](const pcl_msg_t* r, void* ud) {
+    auto* out = static_cast<Result*>(ud);
+    out->fired = true;
+    out->native = pcl_msg_is_native(r);
+    if (out->native) out->a = static_cast<const WorldState*>(r->data)->a;
+  };
+  EXPECT_EQ(pcl_executor_invoke_async(e, "echo", &native_req, cb, &res), PCL_OK);
+
+  EXPECT_TRUE(res.fired);
+  EXPECT_TRUE(res.native);
+  EXPECT_EQ(res.a, 101);            // native response delivered, no decode
+  EXPECT_EQ(cap.invoke_count, 0);   // transport never consulted
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- N4: deferred native reply bypasses the executor-default transport ------
+
+TEST(PclNativeBinding, NativeDeferredReplyBypassesDefaultTransport) {
+  EchoService svc;
+  svc.deferred = true;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = configure_service;
+  auto* c = pcl_container_create("svc", &cbs, &svc);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  CaptureTransport cap;
+  pcl_transport_t tr = capture_vtable(&cap);
+  ASSERT_EQ(pcl_executor_set_transport(e, &tr), PCL_OK);
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "echo";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_LOCAL;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  WorldState req{200, 0.0};
+  pcl_msg_t native_req = make_native(&req);
+  struct Result { bool fired = false; bool native = false; int a = 0; } res;
+  auto cb = [](const pcl_msg_t* r, void* ud) {
+    auto* out = static_cast<Result*>(ud);
+    out->fired = true;
+    out->native = pcl_msg_is_native(r);
+    if (out->native) out->a = static_cast<const WorldState*>(r->data)->a;
+  };
+  // Handler returns PCL_PENDING; nothing delivered yet.
+  EXPECT_EQ(pcl_executor_invoke_async(e, "echo", &native_req, cb, &res), PCL_OK);
+  EXPECT_FALSE(res.fired);
+  ASSERT_NE(svc.saved_ctx, nullptr);
+
+  // Complete the deferred reply with a native response. Even though a default
+  // transport with a respond hook is installed, the native reply must go
+  // straight to the saved local callback, not the transport (N4).
+  pcl_msg_t native_resp = make_native(&svc.owned_response);
+  EXPECT_EQ(pcl_service_respond(svc.saved_ctx, &native_resp), PCL_OK);
+
+  EXPECT_TRUE(res.fired);
+  EXPECT_TRUE(res.native);
+  EXPECT_EQ(res.a, 201);
+  EXPECT_EQ(cap.respond_count, 0);  // transport.respond never called
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}

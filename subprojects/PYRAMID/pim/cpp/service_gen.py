@@ -44,13 +44,20 @@ class CppServiceGenerator(
 
     def __init__(self, proto_input: str, enabled_backends=None,
                  naming_policy: NamingPolicy = None,
-                 topic_resolver: TopicSpecResolver = None):
+                 topic_resolver: TopicSpecResolver = None,
+                 emit_native: bool = False):
         self._proto_input = Path(proto_input)
         self._enabled_backends = set(enabled_backends or [
             'json', 'flatbuffers', 'protobuf',
         ])
         self._naming = naming_policy or _DEFAULT_NAMING_POLICY
         self._topics = topic_resolver or TopicSpecResolver()
+        # When True, emit the opt-in high-efficiency in-process (Tier-A native)
+        # publish/subscribe fast path alongside the default serialized path.
+        # Off by default so generated output is byte-for-byte identical to the
+        # serialized-only baseline (the standing regression bar). See
+        # doc/plans/PYRAMID/high_efficiency_process_bindings_plan.md.
+        self._emit_native = emit_native
 
     def _has_backend(self, name: str) -> bool:
         return name in self._enabled_backends

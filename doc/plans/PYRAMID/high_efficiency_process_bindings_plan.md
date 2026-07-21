@@ -1,6 +1,72 @@
 # High-Efficiency In-Process Port Bindings — Gap Analysis & TODO
 
-**Status: proposed (2026-07-19). Not yet scheduled.**
+**Status: first cut scheduled (2026-07-21). Scope decisions recorded below.**
+
+## Decisions for the first cut (2026-07-21)
+
+These choices were made to keep the first cut small, provably safe, and
+strictly additive. They resolve the open questions the TODO items raise. Each
+decision names the item it settles.
+
+1. **Scope — Tier A only (N3a, N4, N5).** The first cut implements the
+   same-executor, zero-copy pointer handoff (Tier A). Tier B (native handoff
+   across sibling executor threads, N3b) is deferred to a follow-up: it needs a
+   new in-process sibling-executor route in PCL and cross-thread ownership
+   transfer that Tier A does not. Where a component requests `native` but the
+   peer is on a different executor, the runtime falls back to the serialized
+   path rather than failing to route. Decisions 5 and 6 below (Tier-B ownership
+   mechanism, Tier-B native services) are therefore recorded as the intended
+   follow-up direction, not built now.
+2. **Provenance guard — reject at transport ingress (N2b, option a).** A
+   transport-originated message carrying the native sentinel is refused at the
+   ingress choke point. Same-executor dispatch does not pass through transport
+   ingress, so a native sentinel reaching a trampoline is guaranteed to be a
+   live local object. The subscriber/handler callback ABI is left unchanged
+   (option b is not taken).
+3. **Mixed local + remote fan-out — forbid at compose time (N6).** A native
+   publish on a mixed `PCL_ROUTE_LOCAL|PCL_ROUTE_REMOTE` route is rejected
+   before any local delivery occurs. Mixed-route topics use the serialized path.
+   The encode-once-for-remote-plus-native-for-local option is not built in the
+   first cut.
+4. **Cross-language — C++-to-C++ only (N7).** Native handoff is C++-to-C++
+   only. C++ to Ada in-process native handoff is out of scope for the first cut;
+   it needs a struct-ABI-compatibility decision, not just plumbing. Any
+   cross-language leg falls back to serialization.
+5. **(Follow-up, Tier B) ownership mechanism — reference-counted handle (N1,
+   N3b).** When Tier B is built, a published native object is held by shared
+   ownership (a reference-counted handle) that keeps it alive until every
+   subscriber on the receiving executor has run, rather than a single move into
+   the queue. Pub/sub fans one object out to several subscribers, so shared
+   `const` ownership is the cleaner model. Not built in the first cut.
+6. **(Follow-up, Tier B) native services scope — pub/sub only first (N3b, N4).**
+   When Tier B is built, the first Tier-B increment covers native pub/sub only;
+   sibling-executor native RPC (request/response/stream) is a later increment
+   and falls back to serialized until then. Not built in the first cut.
+7. **Deployment surface — route-JSON field (N5).** The native opt-in is a field
+   on the existing route JSON, `{"transport":"local","payload":"native"}`, not a
+   new `.ports` payload column. The default stays serialized (`payload` absent
+   or `"serialized"`).
+
+## First-cut implementation status (2026-07-21)
+
+What is built and verified, and what is deliberately deferred within the
+Tier-A-only scope.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| **N1** native payload contract | **Done** | `PCL_NATIVE_CONTENT_TYPE` sentinel + `pcl_msg_is_native()` in [`pcl_types.h`](../../../subprojects/PCL/include/pcl/pcl_types.h); normative contract in [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md). |
+| **N2** fail-closed egress guard | **Done** | Rejects native on publish, service request, deferred response, and stream frame across the executor, container, and shared-memory gateway paths. |
+| **N2b** inbound provenance guard | **Done** | Reject-at-ingress (option a): the cross-thread pub/sub, service-request, and response queues, and the shared-memory gateway's direct handler dispatch, all refuse a native sentinel. |
+| **N3a** generator Tier-A native pub/sub | **Done** | Opt-in `--native-inprocess` flag emits `publish<Topic>Native()` and a native-casting subscriber trampoline. Default output byte-for-byte unchanged (verified by `diff -qr`). |
+| **N5** deployment surface | **Done (pub/sub)** | `configurePubSubTransport({"transport":"local","payload":"native"})` selects native; rejected on a remote route. |
+| **N6** mixed local+remote fan-out | **Done (runtime)** | Runtime refuses a native publish on any REMOTE-inclusive route *before* the local leg runs, so no local side effect leaks. This is the "rejected before local dispatch" arm of the N6 decision; a separate compose-time validator is not added because the runtime already fails closed. |
+| **N4** generator native services | **Runtime done; codegen deferred** | The PCL runtime for native services is complete and tested: a native unary/deferred response bypasses the executor-default transport and returns to the local callback ([`pcl_service_respond`](../../../subprojects/PCL/src/pcl_container.c)), and a native local invoke via an explicit LOCAL route skips the transport. The **generator emission** of native request/response/stream trampolines and the owned response slot is deferred to the next increment. |
+| **N7** benchmarks + Ada scope | **Ada scope recorded; benchmark deferred** | C++-to-C++ only recorded (Decision 4). The microbenchmark/parity harness is a follow-up. |
+
+Tests: [`subprojects/PCL/tests/test_pcl_native_binding.cpp`](../../../subprojects/PCL/tests/test_pcl_native_binding.cpp)
+covers the sentinel, the Tier-A local publish delivering by pointer, the
+mixed-route refusal before local delivery, all four ingress guards, and both
+native-service response paths.
 
 ## What this is about
 

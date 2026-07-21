@@ -497,6 +497,25 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
                                  const pcl_msg_t*   response) {
   if (!ctx || !response) return PCL_ERR_INVALID;
 
+  /* Native (raw-struct) deferred response -- N2 fail-closed + N4 routing.
+     A native response is a borrowed pointer and must never touch a transport.
+     It also must not be handed to the executor-default transport (the checks
+     below would otherwise route a native local deferred reply there and it
+     would then be rejected). Route it straight back to the saved local
+     callback. A deferred reply to a *remote* caller (ctx->transport set)
+     cannot be native -- refuse that, failing closed. */
+  if (pcl_msg_is_native(response)) {
+    if (ctx->transport) {
+      pcl_free(ctx);
+      return PCL_ERR_INVALID;
+    }
+    if (ctx->callback) {
+      ctx->callback(response, ctx->user_data);
+    }
+    pcl_free(ctx);
+    return PCL_OK;
+  }
+
   // If transport has respond function, use it (for remote callers)
   if (ctx->transport && ctx->transport->respond) {
     pcl_status_t rc = ctx->transport->respond(
@@ -569,6 +588,18 @@ pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg) {
   if (!ctx || !msg) return PCL_ERR_INVALID;
   if (ctx->ended) return PCL_ERR_STATE;
   if (ctx->cancelled) return PCL_ERR_CANCELLED;
+
+  /* Native (raw-struct) stream frame -- N2 fail-closed + N4 routing.
+     A native frame must never touch a transport (nor the executor-default
+     transport). Deliver it straight to the local stream callback. A native
+     frame on a remote stream (ctx->transport set) is invalid -- refuse it. */
+  if (pcl_msg_is_native(msg)) {
+    if (ctx->transport) return PCL_ERR_INVALID;
+    if (ctx->callback) {
+      ctx->callback(msg, false, PCL_OK, ctx->user_data);
+    }
+    return PCL_OK;
+  }
 
   // If transport has stream_send, use it
   if (ctx->transport && ctx->transport->stream_send) {
