@@ -513,11 +513,65 @@ the payload is the object, not `size` bytes.
    so a forged wire frame carrying the sentinel can never be cast as a native
    object.
 
-These rules are covered by the PCL tests in
-[`test_pcl_native_binding.cpp`](../../../subprojects/PCL/tests/test_pcl_native_binding.cpp).
-The generated C++ facades emit the opt-in native pub/sub fast path only when the
-binding generator is run with `--native-inprocess`; without it, output is
+### The standard surface: the port abstraction
+
+Native publishing and receiving are first-class on the **port abstraction**
+(`pcl::Port` in [`component.hpp`](../../../subprojects/PCL/include/pcl/component.hpp)),
+which is the standard interface for binding use. A component written against
+the port abstraction directly — not only through the generated typed facade —
+uses native without touching `pcl_msg_t`:
+
+- **Publish:** `port.publishNative(value, "SchemaName")` hands the live object
+  by pointer. It builds the sentinel-tagged message and calls
+  `pcl_port_publish`, so it honours the same route rules and fail-closed guard
+  as any other publish.
+- **Receive:** in a subscriber or service callback, `pcl::nativePayload<T>(msg)`
+  returns a typed pointer to the live object when the message is native, or
+  `nullptr` for a serialized message (decode it as usual). This is the one
+  provenance-safe way to consume a native payload; it relies on the ingress
+  guard, so a `nullptr` result means "serialized", never "forged native".
+
+The generated typed facade's `publish<Topic>Native()` and native subscriber
+trampoline are thin wrappers over exactly these two calls — the facade sits on
+the port abstraction, it does not bypass it. Emission is opt-in
+(`--native-inprocess`); without the flag the generated output is byte-for-byte
 identical to the serialized baseline.
+
+### Routing model — no discovery; same-executor by topic name
+
+Native routing is not a new routing mechanism and there is **no discovery step**.
+A publish is delivered to every subscriber **on the publisher's own executor**
+whose port topic name matches and whose route accepts the local leg — the same
+`dispatch_incoming_now` path the serialized local route already uses. Selecting
+native (`publishNative`, or `{"payload":"native"}`) changes the *payload
+representation* (a borrowed pointer instead of serialized bytes), not the
+*destination*.
+
+Concretely, "which executor does it go to?" has a fixed answer: the one the
+publishing component was added to (`executor.add(component)`). Co-location is a
+**composition decision** made when the system is assembled, not something the
+runtime discovers. There is no broker, registry, or address resolution on the
+native path; the topic name is the only match key, scanned across the
+containers registered on that single executor.
+
+It follows that:
+
+- A subscriber on a **different executor** (a sibling thread in the same
+  process — "Tier B") or in a **different process** is simply not among the
+  publisher's local containers, so a local native publish does not reach it —
+  exactly as a serialized *local-only* publish would not. Reaching such a peer
+  requires a remote route, and native is refused there (fail closed), so that
+  leg uses serialization. Sibling-executor native handoff (Tier B) is deferred;
+  see the plan.
+- Because there is no discovery, the same deployment surface that co-locates
+  the components (adding them to one executor) is what makes the native path
+  applicable. The runtime does not silently switch a route to native — the
+  author opts in (`publishNative` or `{"payload":"native"}` on a local route).
+
+These rules are covered by the PCL tests in
+[`test_pcl_native_binding.cpp`](../../../subprojects/PCL/tests/test_pcl_native_binding.cpp),
+including port-abstraction cases that publish via `pcl::Port::publishNative` and
+receive via `pcl::nativePayload`.
 
 ### Known gap — capability model does not encode plugin direction/mode (deferred)
 

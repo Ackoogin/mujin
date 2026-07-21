@@ -13,6 +13,10 @@ extern "C" {
 #include "pcl/pcl_types.h"
 }
 
+// The standard binding-use surface: the C++ port abstraction.
+#include "pcl/component.hpp"
+#include "pcl/executor.hpp"
+
 namespace {
 
 // A live native object handed over by pointer instead of serialized.
@@ -310,6 +314,84 @@ TEST(PclNativeBinding, NativeUnaryServiceLocalRouteBypassesTransport) {
 
   pcl_executor_destroy(e);
   pcl_container_destroy(c);
+}
+
+// -- Port abstraction: publishNative / nativePayload (standard surface) ------
+
+namespace {
+// A component that publishes and subscribes to "world" natively, using only
+// the standard C++ port abstraction (pcl::Port), not the generated facade.
+class NativePortComponent : public pcl::Component {
+public:
+  explicit NativePortComponent(SubState* sub)
+      : pcl::Component("native_port"), sub_(sub) {}
+
+  pcl::Port pub;
+
+protected:
+  pcl_status_t on_configure() override {
+    sub_port_ = addSubscriber(
+        "world", "WorldState",
+        [](pcl_container_t*, const pcl_msg_t* msg, void* ud) {
+          auto* s = static_cast<SubState*>(ud);
+          s->got++;
+          // Standard read helper: typed pointer for native, nullptr otherwise.
+          if (const WorldState* w = pcl::nativePayload<WorldState>(msg)) {
+            s->saw_native = true;
+            s->world_a = w->a;
+          }
+        },
+        sub_);
+    pub = addPublisher("world", "WorldState");
+    if (!sub_port_ || !pub) return PCL_ERR_NOMEM;
+    sub_port_.routeLocal();
+    return pub.routeLocal();
+  }
+
+private:
+  SubState*  sub_;
+  pcl::Port  sub_port_;
+};
+}  // namespace
+
+TEST(PclNativeBinding, PortAbstractionPublishNativeDeliversByPointer) {
+  SubState sub;
+  NativePortComponent comp(&sub);
+  ASSERT_EQ(comp.configure(), PCL_OK);
+  ASSERT_EQ(comp.activate(), PCL_OK);
+
+  pcl::Executor exec;
+  ASSERT_EQ(exec.add(comp), PCL_OK);
+
+  WorldState ws{55, 2.5};
+  // The standard port surface -- typed native publish, no generated facade.
+  EXPECT_EQ(comp.pub.publishNative(ws, "WorldState"), PCL_OK);
+
+  EXPECT_EQ(sub.got, 1);
+  EXPECT_TRUE(sub.saw_native);
+  EXPECT_EQ(sub.world_a, 55);
+}
+
+TEST(PclNativeBinding, PortAbstractionNativeRefusedOnRemoteRoute) {
+  SubState sub;
+  NativePortComponent comp(&sub);
+  ASSERT_EQ(comp.configure(), PCL_OK);
+  ASSERT_EQ(comp.activate(), PCL_OK);
+
+  pcl::Executor exec;
+  ASSERT_EQ(exec.add(comp), PCL_OK);
+  CaptureTransport cap;
+  pcl_transport_t tr = capture_vtable(&cap);
+  ASSERT_EQ(exec.registerTransport("peer_a", &tr), PCL_OK);
+
+  // Re-route the publisher to include a remote leg; a native publish must then
+  // be refused up front, before any local delivery, and never reach the wire.
+  ASSERT_EQ(comp.pub.routeLocalAndRemote("peer_a"), PCL_OK);
+
+  WorldState ws{1, 0.0};
+  EXPECT_EQ(comp.pub.publishNative(ws, "WorldState"), PCL_ERR_INVALID);
+  EXPECT_EQ(sub.got, 0);
+  EXPECT_EQ(cap.publish_count, 0);
 }
 
 // -- N4: deferred native reply bypasses the executor-default transport ------

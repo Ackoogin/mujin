@@ -669,7 +669,6 @@ class ComponentsFacadeEmitterMixin:
                 f.write(f'            {port_member}.handle(), payload, content_type_.c_str());\n')
                 f.write('    }\n\n')
                 if self._emit_native:
-                    native_type = f'PCL_NATIVE_CONTENT_TYPE ";{spec.short_type}"'
                     f.write('    /// \\brief High-efficiency in-process publish (Tier-A native).\n')
                     f.write('    ///\n')
                     f.write('    /// Hands the live object to same-executor subscribers by pointer,\n')
@@ -677,13 +676,12 @@ class ComponentsFacadeEmitterMixin:
                     f.write('    /// runtime refuses a native payload on any remote/mixed route\n')
                     f.write('    /// (fail closed). The object must outlive the synchronous\n')
                     f.write('    /// dispatch call; subscribers must treat it as read-only.\n')
+                    f.write('    /// Delegates to the standard port abstraction\n')
+                    f.write('    /// (pcl::Port::publishNative).\n')
                     f.write(f'    pcl_status_t {publish_name}Native(\n')
                     f.write(f'        const {spec.cpp_payload_type}& payload) {{\n')
-                    f.write('        pcl_msg_t msg{};\n')
-                    f.write('        msg.data      = &payload;\n')
-                    f.write('        msg.size      = static_cast<uint32_t>(sizeof(payload));\n')
-                    f.write(f'        msg.type_name = {native_type};\n')
-                    f.write(f'        return pcl_port_publish({port_member}.handle(), &msg);\n')
+                    f.write(f'        return {port_member}.publishNative('
+                            f'payload, "{spec.short_type}");\n')
                     f.write('    }\n\n')
 
             f.write('    pcl_status_t routeAllPublishersLocal() {\n')
@@ -877,12 +875,13 @@ class ComponentsFacadeEmitterMixin:
                 f.write('                user_data);\n')
                 f.write('        if (!callback || !*callback) return;\n')
                 if self._emit_native:
-                    # Tier-A native fast path: the sentinel guarantees (via the
-                    # PCL ingress guard, N2b) a live, locally originated object,
-                    # so cast msg->data back to the typed pointer -- no decode.
-                    f.write('        if (pcl_msg_is_native(msg)) {\n')
-                    f.write('            if (msg->data) (*callback)(\n')
-                    f.write(f'                *static_cast<const {payload_t}*>(msg->data));\n')
+                    # Tier-A native fast path via the standard port abstraction:
+                    # nativePayload() returns the live typed object (or nullptr
+                    # for a serialized message). The PCL ingress guard (N2b)
+                    # guarantees a native sentinel here is locally originated.
+                    f.write(f'        if (const {payload_t}* native =\n')
+                    f.write(f'                ::pcl::nativePayload<{payload_t}>(msg)) {{\n')
+                    f.write('            (*callback)(*native);\n')
                     f.write('            return;\n')
                     f.write('        }\n')
                 f.write(f'        {payload_t} payload{{}};\n')

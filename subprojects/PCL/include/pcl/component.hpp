@@ -95,10 +95,62 @@ public:
     return pcl_port_publish(handle_, &msg);
   }
 
+  /// \brief High-efficiency in-process publish (Tier-A native).
+  ///
+  /// Hands the live object \p value to same-executor subscribers by pointer,
+  /// with no serialization. Valid only on a local route: the runtime refuses a
+  /// native payload on any remote or mixed route (fail closed), before the
+  /// local leg runs. \p value must outlive the synchronous publish call, and
+  /// subscribers must treat it as read-only (one const object fans out to
+  /// all of them). \p schema is the optional schema short-name recorded after
+  /// the sentinel so a subscriber can sanity-check the type it casts back to.
+  ///
+  /// Routing is unchanged from the serialized path: the message is delivered
+  /// to every subscriber on *this publisher's executor* whose topic name
+  /// matches. There is no discovery step -- native selects the payload
+  /// representation, not the destination.
+  template <class T>
+  pcl_status_t publishNative(const T& value,
+                             std::string_view schema = {}) const {
+    if (!handle_) return PCL_ERR_INVALID;
+    pcl_msg_t msg = {};
+    msg.data = &value;
+    msg.size = static_cast<uint32_t>(sizeof(T));
+    // Bare sentinel is a compile-time literal (no allocation); the tagged form
+    // must outlive the synchronous publish call, so keep it in a local.
+    std::string tagged;
+    if (schema.empty()) {
+      msg.type_name = PCL_NATIVE_CONTENT_TYPE;
+    } else {
+      tagged.reserve(sizeof(PCL_NATIVE_CONTENT_TYPE) + schema.size());
+      tagged = PCL_NATIVE_CONTENT_TYPE ";";
+      tagged.append(schema);
+      msg.type_name = tagged.c_str();
+    }
+    return pcl_port_publish(handle_, &msg);
+  }
+
 private:
   pcl_port_t* handle_ = nullptr;
   std::string default_type_name_;
 };
+
+/// \brief Typed read of a native (raw-struct) payload in a subscriber or
+///        service callback.
+///
+/// Returns a pointer to the live object when \p msg carries the native
+/// sentinel (\ref PCL_NATIVE_CONTENT_TYPE), or nullptr for a serialized
+/// message -- in which case the caller decodes as usual. The pointer is
+/// borrowed for the callback's duration only and must not be retained
+/// (Tier-A borrow rule). Provenance is guaranteed by the PCL ingress guards:
+/// a native sentinel reaching a callback is always a live, locally originated
+/// object, never wire bytes.
+template <class T>
+inline const T* nativePayload(const pcl_msg_t* msg) {
+  return (pcl_msg_is_native(msg) && msg->data)
+      ? static_cast<const T*>(msg->data)
+      : nullptr;
+}
 
 /// \brief C++ base class wrapping a pcl_container_t.
 ///
