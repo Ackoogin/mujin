@@ -242,6 +242,72 @@ native choices (the programmatic and JSON-config paths already can). The
 decisions above are updated so those items are built against the one-to-many,
 many-ports model rather than a one-to-one special case.
 
+## Motivating deployment: A-GRA Objectives → Tasks, onboard and peer
+
+The concrete driver for the mixed-route native work is an A-GRA (Autonomy
+Government Reference Architecture) deployment. A-GRA's Mission Autonomy
+decomposes Effect → Action → Task; its **Objectives (COMP-039)** and **Tasks
+(COMP-062)** components are exactly the AME planning/execution role (see
+[`doc/research/AME/a_gra_e2e_worked_example.md`](../../research/AME/a_gra_e2e_worked_example.md)
+§7–8 and [`a_gra_standard_review.md`](../../research/AME/a_gra_standard_review.md)).
+An Objectives component must drive a Tasks component in up to three places at
+once:
+
+1. **Onboard, same process, same executor** — a co-located Tasks. The Tier-A
+   native path: hand the live task command over by pointer, zero copy.
+2. **Onboard, same host, separate process** — a Tasks in a sibling process,
+   reached over the shared-memory transport. A *local* deployment but a
+   *transport* route: it serializes (native is refused on a transport route, by
+   design), though it stays on-box with no network. (A same-process sibling
+   *executor* would be Tier B once built; a separate process is SHM.)
+3. **Peer ACP** — a Tasks on another platform, over the A-GRA **Peer-to-Peer
+   (P2P)** L1 interface (UCI/EXI over DDS). A remote route through the P2P
+   transport plugin; serialized.
+
+Two facts from A-GRA shape the model (worked example §8):
+
+- **A-GRA is pub/sub end to end — there is no RPC.** Every "service" is a
+  correlated command/`*Status` object pair over a topic. So Objectives → Tasks is
+  a *topic*, inherently one-to-many, not a point-to-point call. The one-to-one
+  RPC constraint in PCL does not bind A-GRA traffic; fan-out to the onboard Tasks
+  **and** one or more peers is the normal case, not an edge case.
+- **Instances are disambiguated by in-band header IDs, not by per-instance topic
+  names.** The topic name equals the message name and is *shared* across the
+  onboard and peer Tasks; which instance a command targets is carried in the
+  message header (IDs), and which instances receive it is a matter of *routing*
+  (which transports/peers the topic is bound to). A-GRA does **not** mint a
+  distinct topic per Tasks instance.
+
+The routing consequence is the four-destination fan-out from the analysis below,
+made concrete: a single Objectives publish of one task command wants to reach
+(1) the co-located Tasks as a **native pointer**, and (2)+(3) the SHM-sibling and
+P2P-peer Tasks as **one serialized buffer**, encoded once and reused across both
+transports. That is precisely the deferred "support mixed native" arm of N6 — so
+A-GRA makes that arm the **primary** target of the next increment, not an
+optional extra.
+
+### What this means for the earlier open questions
+
+- **Port naming / per-instance topics.** A-GRA answers this the opposite way from
+  a "distinct name per instance" design. The onboard and peer Tasks share **one**
+  topic identity; they are told apart by route and by header IDs, not by
+  different port names. So what matters is a per-instance *route* (one
+  shared-named port carrying a native-local leg and a peer-remote leg), not
+  per-instance *naming* / remapping — that is not the A-GRA mechanism and need
+  not be built for this use case.
+- **What works today.** The per-port routing and native switch already landed let
+  an Objectives component realise this use case **now** with two publisher ports
+  on the shared topic: one routed local and published native
+  (`publish<Task>Native` / `configure<Task>Transport({"payload":"native"})`) for
+  the onboard leg, and one routed remote to the peer and published serialized for
+  the P2P (or SHM) leg. It costs two publish calls and two ports, but it is fully
+  supported and tested.
+- **What the next increment buys.** The single-port mixed fan-out collapses those
+  two into one publish: encode once for the SHM/P2P peers, hand the native
+  pointer to the onboard leg, with the fail-closed guard moved to compose time
+  (per the N6 decision). That is the ergonomic A-GRA realisation and the concrete
+  goal for the mixed-native (and Tier-B) work.
+
 ## What this is about
 
 When two PYRAMID components run in the **same operating-system process**, they
