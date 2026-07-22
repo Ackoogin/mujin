@@ -371,6 +371,72 @@ Two consequences:
   topology a deployment uses tells you whether it needs the deferred mixed-native
   arm at all.
 
+## Impact of the CommandStatus port type
+
+The A-GRA correlated command/status pattern is now a first-class **CommandStatus
+port kind** in the binding contract (`pim/binding_contract.py`,
+`port_kind == "command_status"`). It is the exact shape the Objectives → Tasks
+and bridge deployments above use, so its impact on the native work is worth
+recording. The conclusion is that it needs **no new native machinery** but adds
+one **grouping obligation**.
+
+**What it is.** Two explicitly paired one-way services — a COMMAND leg and a
+STATUS leg, tagged by `command_status_name` / `command_status_leg` in the
+`pyramid_op` annotation — grouped into one logical port
+(`CommandStatusPair` / `command_status_interaction_for_pair`). Both legs are
+**topic-only**: each is an ordinary pub/sub publisher or subscriber. The command
+is correlated to its status by an **in-band payload ID, not by topic**
+(consistent with A-GRA's "no RPC, correlated pairs, instance disambiguation by
+header ID"). Each leg already carries a PCL `exclusive` group name for
+compose-time realization validation.
+
+**Impact 1 — no new native mechanism at the leg level.** Because each leg is a
+plain pub/sub topic, the native path already covers it: `publish<Topic>Native`,
+the native subscriber trampoline, `pcl::nativePayload`, the per-port native
+switch, and the fail-closed guards all operate per topic. A CommandStatus port
+is not a new PCL port *type* — it is two pub/sub ports grouped at the contract
+layer — so there is **no PCL runtime change and no new per-leg codegen** needed
+to make it native. It inherits everything that already landed.
+
+**Impact 2 — paired-leg endpoint consistency (the new consideration).** A
+CommandStatus port is a correlated conversation: the commander publishes COMMAND
+and subscribes STATUS (the provider mirrors it). For the correlation to close,
+**both legs must resolve to the same endpoint**. If COMMAND is native-local to a
+co-located provider, STATUS must be native-local from *that same* provider; if
+COMMAND routes to peer X, STATUS must come from peer X. A split — COMMAND
+native-local, STATUS remote — is individually valid on each leg (each passes its
+own fail-closed guard) yet silently breaks the conversation: you command the
+local provider and listen for status from a remote one. PCL cannot detect this;
+the two legs are independent topics to the dispatch path. The per-port selector
+that landed (`configure<Topic>Transport`) is **per single topic**, so nothing
+stops an inconsistent configuration. The per-leg `exclusive` group guarantees
+each leg has *one realization*; it does **not** guarantee the two legs share an
+*endpoint*. That pairing consistency is the gap the port type adds.
+
+**Impact 3 — the pair can span two facades.** A pair is built from two *separate*
+services (`command_service`, `status_service`), so its legs may be generated
+into two different facades. There is no single facade method that configures both
+legs together today; consistency is the deployer's responsibility across two
+`configure<Topic>Transport` calls. The clean closure is an **interaction-level
+(CommandStatus-aware) configuration** that sets both legs' route and
+representation as a unit, and/or a **compose-time check** that both legs of a
+`command_status` interaction resolve to the same endpoint — a natural extension
+of the existing `InteractionLeg` / `exclusive`-group machinery, and the same
+theme as the manifest per-instance discriminator already noted.
+
+**Impact 4 — correlation is representation-agnostic.** Command↔status correlation
+is an in-band payload ID, and native handoff passes the whole object (ID
+included) by pointer, so choosing native for a leg does not affect correlation.
+No impact.
+
+**Net.** The CommandStatus port type is served by the existing per-port native
+path with no runtime or per-leg codegen change. What it adds is a grouping
+obligation — the two legs of a pair must be routed to the same endpoint with a
+consistent representation — which is currently unenforced and un-surfaced.
+Closing it (an interaction-level configure plus a compose-time pairing check) is
+a small, additive follow-up that belongs with the per-port **deployment surface**
+work, not with the Tier-B / mixed-native runtime work.
+
 ## What this is about
 
 When two PYRAMID components run in the **same operating-system process**, they
