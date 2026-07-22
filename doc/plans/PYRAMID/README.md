@@ -58,7 +58,7 @@ to these entries; the full text is in git history.
   fails closed. *Now:*
   [`pyramid_interaction_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/pyramid_interaction_semantics.md)
   and the
-  [pub/sub & interaction facade guide](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md).
+  [port abstraction guide](../../../subprojects/PYRAMID/doc/guides/port_abstraction_guide.md).
 
 - **`agra_pubsub_shm_udp_proving_plan.md`** — *Intent:* prove the
   contract-derived pub/sub data plane over **real decoupled transports**
@@ -79,7 +79,7 @@ to these entries; the full text is in git history.
   promises only the weaker realization's guarantee — no synthesised acks.
   Design points D1–D7 and the evidence ledger are in the retired plan (git
   history). *Now:*
-  [pub/sub & interaction facade guide](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md),
+  [port abstraction guide](../../../subprojects/PYRAMID/doc/guides/port_abstraction_guide.md),
   [`cpp_component_authoring.md`](../../../subprojects/PYRAMID/doc/architecture/cpp_component_authoring.md).
 
 - **`standard_alignment_plan.md`** — not retired; it is the stable design

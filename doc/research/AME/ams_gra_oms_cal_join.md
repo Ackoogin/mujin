@@ -21,7 +21,7 @@ the onboard MS/VI legs this doc makes concrete),
 LA-CAL/Sleet, §5.2 MS-leg demo — extended here),
 [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md).
 **In-repo anchors:**
-[`pubsub_interaction_guide.md`](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md)
+[`port_abstraction_guide.md`](../../../subprojects/PYRAMID/doc/guides/port_abstraction_guide.md)
 (the interaction facade / pub-sub seam),
 [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
 (plugin ABI + capability model),
@@ -361,7 +361,7 @@ against a PUBSUB-only transport — correctly, and terminally. **The
 interaction facade changes the conclusion, not the validation**: realizing
 both legs of every Request port as the correlated
 `.request`/`.requirement` topic pair
-([`pubsub_interaction_guide.md`](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md))
+([`port_abstraction_guide.md`](../../../subprojects/PYRAMID/doc/guides/port_abstraction_guide.md))
 needs only `PUBSUB`, is chosen per leg in the routing manifest, and runs
 the same compiled component. The A-GRA-shaped correlated-pair semantics the
 seam implements (flat topics, correlation by payload id, acceptance as a
@@ -626,7 +626,7 @@ feature needs to know what a message *means*, it belongs in the bridge.
   [`ams_gra_starter_kit_review.md`](ams_gra_starter_kit_review.md),
   [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md)
 - In-repo:
-  [`pubsub_interaction_guide.md`](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md),
+  [`port_abstraction_guide.md`](../../../subprojects/PYRAMID/doc/guides/port_abstraction_guide.md),
   [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md),
   [`agra_example/README.md`](../../../subprojects/PYRAMID/proofs/contracts/agra_example/README.md),
   `subprojects/PCL/include/pcl/pcl_plugin.h` (transport ABI);

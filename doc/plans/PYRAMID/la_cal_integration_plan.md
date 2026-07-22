@@ -37,7 +37,7 @@ kit.
 **Companions:**
 [`ams_gra_starter_kit_review.md`](../../research/AME/ams_gra_starter_kit_review.md)
 (Sleet, registration, Kitty Hawk scenario),
-[`pubsub_interaction_guide.md`](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md)
+[`port_abstraction_guide.md`](../../../subprojects/PYRAMID/doc/guides/port_abstraction_guide.md)
 (the interaction seam this rides),
 [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
 (plugin ABI, capability model),
@@ -77,7 +77,7 @@ the whole path proven against independently-authored infrastructure
 | 3 | OMS JSON codec for the demo vocabulary (`application/oms-json`) | hand-written first: `subprojects/PYRAMID/plugins/pyramid_oms_json_codec_agra.cpp`; end-state: `pim/backends/oms_json_backend.py` | new |
 | 4 | Sleet-backed E2E harnesses (+ mock-server unit tests) | `subprojects/PYRAMID/tests/test_owp_client.cpp`, `pim/test_harness/lacal_*` | new; follows `agra_*` harness conventions |
 | 5 | Interaction-facade-over-LA-CAL proof (rpc/pubsub interchange, third transport) | `pim/test_harness/lacal_seam_test.cpp` (variant of `agra_seam_interchange_test.cpp`) | extends |
-| 6 | Capability-matrix + guide updates | `transport_codec_plugin_system.md` (new row), `pubsub_interaction_guide.md` §7 (new examples) | doc |
+| 6 | Capability-matrix + guide updates | `transport_codec_plugin_system.md` (new row), `port_abstraction_guide.md` (new examples) | doc |
 
 ---
 
@@ -380,7 +380,7 @@ UCI command/report message pair the schema validates.
    provides {PUBSUB}`), confirming the capability row.
 
 **Exit gate:** rpc-impossible/pubsub-works matrix demonstrated over the
-real broker; `pubsub_interaction_guide.md` §7 table gains the row.
+real broker; `port_abstraction_guide.md` gains the row.
 
 ### Phase 6 (stretch, originally AME-facing) — MS-leg demo — superseded
 
