@@ -12,6 +12,10 @@ add_executable(test_pcl_executor test_pcl_executor.cpp)
 target_link_libraries(test_pcl_executor PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_executor DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_native_binding test_pcl_native_binding.cpp)
+target_link_libraries(test_pcl_native_binding PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_native_binding DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_pcl_log test_pcl_log.cpp)
 target_link_libraries(test_pcl_log PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_log DISCOVERY_MODE PRE_TEST)

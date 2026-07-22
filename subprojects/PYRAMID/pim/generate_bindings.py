@@ -462,7 +462,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                        enabled_backends=None, contract_layout: str = 'pyramid',
                        proto_files=None,
                        manifest: BindingArtifactManifest = None,
-                       contract=None) -> int:
+                       contract=None, emit_native: bool = False) -> int:
     total = 0
     # One topic-spec resolver per generation run, shared by every service
     # generator in the run (mirrors the pre-refactor module-global cache).
@@ -499,6 +499,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                 enabled_backends=enabled_backends,
                 naming_policy=policy,
                 topic_resolver=topic_resolver,
+                emit_native=emit_native,
             )
             if manifest:
                 manifest.record_service_generation(
@@ -594,6 +595,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
             str(proto_path),
             enabled_backends=enabled_backends,
             topic_resolver=topic_resolver,
+            emit_native=emit_native,
         )
         if manifest:
             manifest.record_service_generation(
@@ -783,6 +785,14 @@ def main():
         '--components',
         help='Comma-separated component keys to generate (for example a.b,c.d)',
     )
+    parser.add_argument(
+        '--native-inprocess',
+        action='store_true',
+        help='Also emit the opt-in high-efficiency in-process (Tier-A native) '
+             'pub/sub fast path in the C++ component facades. Off by default; '
+             'the serialized path is unchanged. See '
+             'doc/plans/PYRAMID/high_efficiency_process_bindings_plan.md',
+    )
 
     args = parser.parse_args()
 
@@ -859,6 +869,7 @@ def main():
                 proto_files=proto_files,
                 manifest=manifest,
                 contract=contract,
+                emit_native=args.native_inprocess,
             )
         if 'ada' in langs:
             total += _generate_json_ada(
@@ -880,7 +891,8 @@ def main():
             total += _generate_json_cpp(
                 proto_dir, output_dir, enabled_backends=backend_names,
                 contract_layout=args.contract_layout, proto_files=proto_files,
-                manifest=manifest, contract=contract)
+                manifest=manifest, contract=contract,
+                emit_native=args.native_inprocess)
         if 'ada' in langs:
             total += _generate_json_ada(
                 proto_dir, output_dir, enabled_backends=backend_names,

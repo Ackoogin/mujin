@@ -1,6 +1,375 @@
 # High-Efficiency In-Process Port Bindings — Gap Analysis & TODO
 
-**Status: proposed (2026-07-19). Not yet scheduled.**
+**Status: first cut scheduled (2026-07-21). Scope decisions recorded below.**
+
+## Decisions for the first cut (2026-07-21)
+
+These choices were made to keep the first cut small, provably safe, and
+strictly additive. They resolve the open questions the TODO items raise. Each
+decision names the item it settles.
+
+1. **Scope — Tier A only (N3a, N4, N5).** The first cut implements the
+   same-executor, zero-copy pointer handoff (Tier A). Tier B (native handoff
+   across sibling executor threads, N3b) is deferred to a follow-up: it needs a
+   new in-process sibling-executor route in PCL and cross-thread ownership
+   transfer that Tier A does not. Where a component requests `native` but the
+   peer is on a different executor, the runtime falls back to the serialized
+   path rather than failing to route. Decisions 5 and 6 below (Tier-B ownership
+   mechanism, Tier-B native services) are therefore recorded as the intended
+   follow-up direction, not built now.
+2. **Provenance guard — reject at transport ingress (N2b, option a).** A
+   transport-originated message carrying the native sentinel is refused at the
+   ingress choke point. Same-executor dispatch does not pass through transport
+   ingress, so a native sentinel reaching a trampoline is guaranteed to be a
+   live local object. The subscriber/handler callback ABI is left unchanged
+   (option b is not taken).
+3. **Mixed local + remote fan-out — forbid at compose time (N6).** A native
+   publish on a route that includes `PCL_ROUTE_REMOTE` is rejected before any
+   local delivery occurs — this covers a mixed `PCL_ROUTE_LOCAL|PCL_ROUTE_REMOTE`
+   route *and* a route with **several** remote peers (fan-out is one-to-many;
+   see the fan-out analysis below). Mixed-route topics use the serialized path.
+   The encode-once-for-remote-plus-native-for-local option is not built in the
+   first cut.
+4. **Cross-language — C++-to-C++ only (N7).** Native handoff is C++-to-C++
+   only. C++ to Ada in-process native handoff is out of scope for the first cut;
+   it needs a struct-ABI-compatibility decision, not just plumbing. Any
+   cross-language leg falls back to serialization.
+5. **(Follow-up, Tier B) ownership mechanism — reference-counted handle (N1,
+   N3b).** When Tier B is built, a published native object is held by shared
+   ownership (a reference-counted handle) that keeps it alive until every
+   subscriber on **every** receiving executor has run, rather than a single
+   move into one queue. Pub/sub fans one object out to several subscribers,
+   possibly spread across several sibling executors, so a single move cannot
+   serve them — shared `const` ownership referenced once per receiving-executor
+   queue is the model the fan-out analysis below requires. Not built in the
+   first cut.
+6. **(Follow-up, Tier B) native services scope — pub/sub only first (N3b, N4).**
+   When Tier B is built, the first Tier-B increment covers native pub/sub only;
+   sibling-executor native RPC (request/response/stream) is a later increment
+   and falls back to serialized until then. Not built in the first cut.
+7. **Deployment surface — route-JSON field (N5).** The native opt-in is a field
+   on the existing route JSON, `{"transport":"local","payload":"native"}`, not a
+   new `.ports` payload column. The default stays serialized (`payload` absent
+   or `"serialized"`).
+
+## First-cut implementation status (2026-07-21)
+
+What is built and verified, and what is deliberately deferred within the
+Tier-A-only scope.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| **N1** native payload contract | **Done** | `PCL_NATIVE_CONTENT_TYPE` sentinel + `pcl_msg_is_native()` in [`pcl_types.h`](../../../subprojects/PCL/include/pcl/pcl_types.h); normative contract in [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md). |
+| **N2** fail-closed egress guard | **Done** | Rejects native on publish, service request, deferred response, and stream frame across the executor, container, and shared-memory gateway paths. |
+| **N2b** inbound provenance guard | **Done** | Reject-at-ingress (option a): the cross-thread pub/sub, service-request, and response queues, and the shared-memory gateway's direct handler dispatch, all refuse a native sentinel. |
+| **Port abstraction** | **Done** | Native is first-class on the standard `pcl::Port` surface: `pcl::Port::publishNative(value, schema)` and `pcl::nativePayload<T>(msg)` in [`component.hpp`](../../../subprojects/PCL/include/pcl/component.hpp), usable without the generated facade. |
+| **N3a** generator Tier-A native pub/sub | **Done** | Opt-in `--native-inprocess` flag emits `publish<Topic>Native()` (delegating to `pcl::Port::publishNative`) and a native subscriber trampoline (via `pcl::nativePayload`). Default output byte-for-byte unchanged (verified by `diff -qr`). |
+| **N5** deployment surface | **Done (pub/sub)** | `configurePubSubTransport({"transport":"local","payload":"native"})` selects native; rejected on a remote route. |
+| **N6** mixed local+remote fan-out | **Done (runtime)** | Runtime refuses a native publish on any REMOTE-inclusive route *before* the local leg runs, so no local side effect leaks. This is the "rejected before local dispatch" arm of the N6 decision; a separate compose-time validator is not added because the runtime already fails closed. |
+| **N4** generator native services | **Runtime done; codegen deferred** | The PCL runtime for native services is complete and tested: a native unary/deferred response bypasses the executor-default transport and returns to the local callback ([`pcl_service_respond`](../../../subprojects/PCL/src/pcl_container.c)), and a native local invoke via an explicit LOCAL route skips the transport. The **generator emission** of native request/response/stream trampolines and the owned response slot is deferred to the next increment. |
+| **N7** benchmarks + Ada scope | **Ada scope recorded; benchmark deferred** | C++-to-C++ only recorded (Decision 4). The microbenchmark/parity harness is a follow-up. |
+
+Tests: [`subprojects/PCL/tests/test_pcl_native_binding.cpp`](../../../subprojects/PCL/tests/test_pcl_native_binding.cpp)
+covers the sentinel, the Tier-A local publish delivering by pointer, the
+mixed-route refusal before local delivery, all four ingress guards, and both
+native-service response paths.
+
+## Fan-out (port multiplicity) and the deferred native items
+
+The deferred items (Tier B, and the "support mixed native" arm of N6) cannot be
+scoped against the single "one local subscriber plus one remote subscriber"
+picture the original write-up used. A pub/sub port fans out to *many*
+destinations, and the native work has to account for that multiplicity from the
+start. This section records how fan-out works today and what each deferred item
+must add.
+
+### How fan-out works today
+
+- **Pub/sub is one-to-many; RPC and streaming are one-to-one.** A publisher
+  delivers to every matching subscriber. A *consumed* service or stream
+  endpoint is restricted to at most one peer — `pcl_executor_invoke_async` and
+  `pcl_executor_invoke_stream` both reject `peer_count > 1`
+  (`subprojects/PCL/src/pcl_executor.c`). So the multiplicity problem below is a
+  **pub/sub** problem only; the deferred native *services* work stays
+  point-to-point and does not inherit it.
+- **Local fan-out.** `dispatch_incoming_now` loops the containers on the
+  publisher's executor and calls each matching subscriber with the **same**
+  `pcl_msg_t`. For a native publish this already means one `const` object
+  pointer is shared by all local subscribers (the read-only-sharing rule,
+  constraint 3) — local fan-out needs nothing new for Tier A.
+- **Remote fan-out.** `pcl_executor_publish_port` iterates the port's named
+  peers — up to `PCL_MAX_ENDPOINT_PEERS` (8) — and calls each peer transport's
+  `publish` with the same message; a peer_count of zero uses the single default
+  transport. Crucially the payload is **encoded once** (the generated
+  `publish<Topic>` helper serializes into one buffer before calling
+  `pcl_port_publish`), and that one buffer is reused across all peers. Remote
+  fan-out is already encode-once, not encode-per-peer.
+- **Mixed.** When a route has both bits, the local leg runs first, then the
+  per-peer remote loop.
+- **Durability.** There is **no** retained/last-value/transient-local mechanism
+  in PCL today, so the durability concern (constraint 6) is forward-looking:
+  there is nothing to retain yet, and nothing the native path breaks today.
+
+### The general shape the deferred work must handle
+
+A single pub/sub publish can, in general, fan out across up to four destination
+classes **at once**, each wanting a different payload representation:
+
+| Destination class | Multiplicity | Representation the native design needs |
+|-------------------|--------------|----------------------------------------|
+| Same-executor local subscribers (Tier A) | N | one **borrowed** `const` pointer, shared |
+| Sibling-executor subscribers (Tier B) | across M sibling executors | one **shared-owned** native object (reference-counted), referenced once per receiving-executor queue |
+| Remote peers (serialized) | up to 8 named peers, or the default | **one** encoded buffer, reused across all peers |
+| Durable/retained snapshot (if durability is ever added) | 1 | one **owned** copy (encoded or native) |
+
+The single most important consequence: the "one local + one remote" framing is a
+special case. The mixed native publish is really *native-for-all-local* +
+*native-shared-for-all-siblings* + *one-encode-shared-across-all-remote-peers*.
+So the deferred work must produce **at most one** encoded buffer per publish (not
+one per peer) and **at most one** native representation (shared, not moved), then
+route each destination class to the representation it needs.
+
+### What each deferred item adds
+
+- **Tier B sibling-executor native (N3b).** This is where multiplicity forces
+  the ownership decision. A single move into one queue cannot serve N local
+  borrowers plus M sibling-executor queues; the object must be held by a
+  reference-counted handle, incremented once per sibling-executor queue entry
+  and released when that executor has drained it. The handle's lifetime spans
+  the *maximum* over all receiving executors, not one. Decision 5 is updated
+  accordingly. Local Tier-A subscribers still borrow synchronously and take no
+  reference.
+- **Mixed local+remote native (the "support" arm of N6).** The publish must
+  compute the encoded buffer once — only when there is at least one remote peer
+  (or a durable snapshot to back) — hand the borrowed/shared native
+  representation to the local and sibling legs, and reuse the single encoded
+  buffer across all K remote peers. Because the local leg currently runs before
+  the remote legs, the native/encoded split has to be decided **up front**
+  (before any dispatch), so a per-peer encode failure cannot leave a native
+  local delivery already committed. Until this is built, the first cut keeps the
+  simpler rule: any route with a remote leg (one peer or several) refuses native
+  and uses serialization (Decision 3).
+- **RPC/streaming native (N4 codegen).** No fan-out change: these stay
+  one-to-one by the `peer_count > 1` rejection above, so the native request /
+  response / stream-frame work does not need a multi-peer representation split.
+  Recording this so that work is not over-built.
+- **Durability.** Out of scope until a retained-value feature exists at all. If
+  one is added, its snapshot is simply a fifth consumer that shares the single
+  encoded buffer (a borrowed native pointer cannot back a retained value —
+  constraint 6).
+
+### Multiple port instances — another axis of multiplicity
+
+The classes above assumed one port per topic. A component may define **several
+ports on the same topic name**, and this multiplies the picture again — and it
+is directly relevant to native, because different port instances can carry
+different payload representations.
+
+**What is supported today (verified in code and test):**
+
+- **Multiple ports, same name — yes.** `validate_port_definition` imposes no
+  uniqueness check; a container may add up to `PCL_MAX_PORTS` (64) ports,
+  including several publishers or subscribers on the same topic.
+- **Per-port routes — yes, programmatically.** Each `pcl_port_t` carries its own
+  `route_mode` / `route_configured`, set by `pcl_port_set_route`
+  (`pcl::Port::setRoute` / `routeLocal` / `routeRemote`). Publish operates on a
+  specific port handle, and `dispatch_incoming_now` evaluates each subscriber
+  port's own route, so two same-named ports genuinely route independently. The
+  test `MultiplePortInstancesPerTopicCarryDifferentRepresentations` builds a
+  native-local publisher and a serialized-remote publisher on one topic and
+  shows each behaves on its own route.
+- **The `.ports` / manifest surface cannot — it collapses by (name, kind).** The
+  endpoint-route table (`pcl_executor_set_endpoint_route`, used by the manifest
+  loader and by the generated *consumed-service* facade) is keyed by
+  `(endpoint_name, endpoint_kind)`, and `port_route_mode` consults it **before**
+  the per-port route and lets it **win for every port of that name and kind**.
+  So the deployment-surface path cannot give two same-named same-kind ports
+  different routes, and installing any manifest route for a name overrides all
+  per-port routes for it. Pub/sub facade routing (`routeAllPublishersLocal`,
+  etc.) uses the per-port path, so it is not subject to this collapse; the
+  manifest path and consumed-service routing are.
+
+**Why this matters for native:**
+
+- **Different ports can hold different representations.** A native-local
+  publisher port plus a serialized-remote publisher port on one topic together
+  express the mixed local+remote fan-out that the single-port N6 rule forbids —
+  the author publishes the live object on the native port and the encoded value
+  on the remote port, with no double local delivery (only the local port has a
+  local leg). This is a legitimate pattern **today** and a lighter alternative
+  to the deferred single-port encode-once split. The same holds on the
+  subscriber side: a LOCAL-only subscriber instance receives native while a
+  REMOTE-from-peer instance of the same topic receives serialized, and
+  `route_accepts` steers each ingress to the right one.
+- **Native selection is per-port (implemented for publishers).** The port
+  abstraction always supported per-instance selection (`publishNative` on a
+  specific port); the generated facade now does too. Each publisher topic has
+  its own native flag and a `configure<Topic>Transport(json)` that routes that
+  one publisher and sets its native preference independently, so two publishers
+  on one facade can differ (one native-local, one serialized-remote). The bulk
+  `configurePubSubTransport` remains available for the uniform case and clears
+  the native flags when it routes remote. Subscribers need no per-port switch —
+  the native trampoline recognises a native message itself. The one piece still
+  outstanding is the **manifest**: because the endpoint-route table keys by
+  `(name, kind)` it cannot carry a per-instance native/route choice for two
+  same-named ports, so a manifest-driven per-instance selection still needs the
+  discriminator described below. Programmatic and JSON-config selection are
+  done.
+- **Deployment-surface gap to close with the deferred work.** If a deployment
+  wants to express "native local + serialized remote" as two same-name ports,
+  the manifest route table cannot currently give them distinct routes (the
+  (name, kind) collapse above). The deferred mixed-native design therefore has a
+  fork to record: either (a) extend the endpoint-route table with a per-instance
+  discriminator so same-named ports can be routed separately, or (b) keep one
+  port per name and do the encode-once/native split inside a single publish.
+  Option (b) avoids touching the routing key but requires the single-port split;
+  option (a) enables the lighter two-port pattern under the manifest.
+
+### Does anything need adding to fan-out *now*?
+
+No change to the first cut. Tier-A local native fan-out already works (one shared
+`const` pointer to N subscribers), multiple same-named ports already route
+independently through the port abstraction, and every remote-inclusive route —
+one peer or eight — is uniformly refused for native. Per-port native selection on
+the generated facade is already in place (a per-topic flag plus
+`configure<Topic>Transport`), so publishers can differ within one facade today.
+The multiplicity work that remains lands with Tier B and the mixed-native arm,
+which must add: (1) reference-counted shared ownership across all receiving
+executors; (2) a single encoded buffer reused across all remote peers in one
+publish; and (3) for the **manifest** path only, a per-instance discriminator on
+the endpoint-route table so two same-named ports can carry different routes /
+native choices (the programmatic and JSON-config paths already can). The
+decisions above are updated so those items are built against the one-to-many,
+many-ports model rather than a one-to-one special case.
+
+## Motivating deployment: A-GRA Objectives → Tasks, onboard and peer
+
+The concrete driver for the mixed-route native work is an A-GRA (Autonomy
+Government Reference Architecture) deployment. A-GRA's Mission Autonomy
+decomposes Effect → Action → Task; its **Objectives (COMP-039)** and **Tasks
+(COMP-062)** components are exactly the AME planning/execution role (see
+[`doc/research/AME/a_gra_e2e_worked_example.md`](../../research/AME/a_gra_e2e_worked_example.md)
+§7–8 and [`a_gra_standard_review.md`](../../research/AME/a_gra_standard_review.md)).
+An Objectives component must drive a Tasks component in up to three places at
+once:
+
+1. **Onboard, same process, same executor** — a co-located Tasks. The Tier-A
+   native path: hand the live task command over by pointer, zero copy.
+2. **Onboard, same host, separate process** — a Tasks in a sibling process,
+   reached over the shared-memory transport. A *local* deployment but a
+   *transport* route: it serializes (native is refused on a transport route, by
+   design), though it stays on-box with no network. (A same-process sibling
+   *executor* would be Tier B once built; a separate process is SHM.)
+3. **Peer ACP** — a Tasks on another platform, over the A-GRA **Peer-to-Peer
+   (P2P)** L1 interface (UCI/EXI over DDS). A remote route through the P2P
+   transport plugin; serialized.
+
+Two facts from A-GRA shape the model (worked example §8):
+
+- **A-GRA is pub/sub end to end — there is no RPC.** Every "service" is a
+  correlated command/`*Status` object pair over a topic. So Objectives → Tasks is
+  a *topic*, inherently one-to-many, not a point-to-point call. The one-to-one
+  RPC constraint in PCL does not bind A-GRA traffic; fan-out to the onboard Tasks
+  **and** one or more peers is the normal case, not an edge case.
+- **Instances are disambiguated by in-band header IDs, not by per-instance topic
+  names.** The topic name equals the message name and is *shared* across the
+  onboard and peer Tasks; which instance a command targets is carried in the
+  message header (IDs), and which instances receive it is a matter of *routing*
+  (which transports/peers the topic is bound to). A-GRA does **not** mint a
+  distinct topic per Tasks instance.
+
+The routing consequence is the four-destination fan-out from the analysis below,
+made concrete: a single Objectives publish of one task command wants to reach
+(1) the co-located Tasks as a **native pointer**, and (2)+(3) the SHM-sibling and
+P2P-peer Tasks as **one serialized buffer**, encoded once and reused across both
+transports. That is precisely the deferred "support mixed native" arm of N6 — so
+A-GRA makes that arm the **primary** target of the next increment, not an
+optional extra.
+
+### What this means for the earlier open questions
+
+- **One reusable facade, realization by annotation — do not split the contract.**
+  The pub/sub projection is already expressed as `pattern` / `topic` annotations
+  on each rpc of the single service contract. In
+  `MA_MissionPlanCommand_Service`, for example, `Create` / `Update` / `Cancel`
+  carry `pattern: SUBSCRIBE topic: "MA_MissionPlanCommand"` and `Read` carries
+  `pattern: PUBLISH topic: "MA_MissionPlanCommandStatus"`
+  ([`pim/agra_p2_seam`](../../../subprojects/PYRAMID/pim/agra_p2_seam) overlay).
+  The generator turns those annotated operations into the facade's
+  `subscribe<Topic>` / `publish<Topic>` ports directly, so **one** facade already
+  presents the interaction with its pub/sub realization built in — that is the
+  whole point of the port binding being a single reusable facade. The
+  mixed-native fan-out therefore extends *that* facade's `publish<Topic>` to
+  deliver native-local and serialized-peer in one call, on the ports already
+  generated. It must **not** fork the contract into a parallel pub/sub binding or
+  a separate facade — doing so would defeat the reuse the facade exists for. (An
+  earlier note in this file's history suggested sequencing the mixed-native work
+  behind a separate pub/sub projection; that was wrong. The projection is
+  annotation-driven on the same contract, and the per-port routing / native
+  switch already attach to these generated topic ports.)
+- **Port naming / per-instance topics.** A-GRA answers this the opposite way from
+  a "distinct name per instance" design. The onboard and peer Tasks share **one**
+  topic identity; they are told apart by route and by header IDs, not by
+  different port names. So what matters is a per-instance *route* (one
+  shared-named port carrying a native-local leg and a peer-remote leg), not
+  per-instance *naming* / remapping — that is not the A-GRA mechanism and need
+  not be built for this use case.
+- **What works today.** The per-port routing and native switch already landed let
+  an Objectives component realise this use case **now** with two publisher ports
+  on the shared topic: one routed local and published native
+  (`publish<Task>Native` / `configure<Task>Transport({"payload":"native"})`) for
+  the onboard leg, and one routed remote to the peer and published serialized for
+  the P2P (or SHM) leg. It costs two publish calls and two ports, but it is fully
+  supported and tested.
+- **What the next increment buys.** The single-port mixed fan-out collapses those
+  two into one publish: encode once for the SHM/P2P peers, hand the native
+  pointer to the onboard leg, with the fail-closed guard moved to compose time
+  (per the N6 decision). That is the ergonomic A-GRA realisation and the concrete
+  goal for the mixed-native (and Tier-B) work.
+
+## Motivating deployment: PYRAMID bridge (consumed ↔ provided)
+
+The second driver is the PYRAMID **bridge** pattern. In PYRAMID a service is
+defined once; a consumer gets a generated `Consumed` facade and a provider a
+`Provided` facade from that one contract, so **components do not depend on each
+other's service definitions**. A *bridge* wires one component's consumed
+endpoint to another's provided endpoint — often translating vocabulary between
+two independently-defined contracts (the planned `agra_c2_bridge` translating
+`PlanningRequirement` ↔ `MA_Action` is exactly this; the intra-process
+[`pcl_bridge`](../../../subprojects/PCL/include/pcl/pcl_bridge.h) is the
+same idea at the topic level: subscribe, transform, dispatch).
+
+The efficiency case the plan must serve: the bridge is deployed **local to the
+consumer** — `component 1 → bridge` is native (co-located), while `bridge →
+component 2` is remote (serialized). The important observation is that **the
+bridge is the representation-change boundary**, and it decomposes the mixed
+local+remote problem into two hops that each carry a *single* representation:
+
+- **c1 → bridge: native, local.** c1 hands the live object to the bridge by
+  pointer (Tier A). The bridge reads it through the native subscriber/handler.
+- **bridge → c2: serialized, remote.** The bridge encodes and sends over the
+  transport. Because a native payload is borrowed and read-only for the callback
+  only, the bridge must **encode inside that callback** (a transform does this
+  synchronously) — or take an owned copy first if it defers the forward. The
+  fail-closed guard makes this correct-by-construction: the bridge *cannot*
+  route the borrowed native pointer onto its remote leg (native on a transport
+  route is refused), so it is forced to serialize at the boundary.
+
+Two consequences:
+
+- **The bridge topology does not need the single-port mixed fan-out.** Each of
+  its two ports has one route and one representation, which the per-port routing
+  and native switch already landed handle directly: the c1-facing port is
+  native-local, the c2-facing port is serialized-remote. So for the *decoupled
+  point-to-point* case, the deferred mixed-native arm is unnecessary — the bridge
+  puts the encode where it belongs and keeps every port simple.
+- **The two motivating deployments split cleanly.** The A-GRA broadcast case
+  (one Objectives publish reaching a co-located Tasks natively *and* peers over
+  P2P, on one shared topic) is the genuine 1:N mixed fan-out that still wants the
+  single-port encode-once path. The bridge case is decoupled point-to-point and
+  is fully served today by two single-representation ports. Knowing which
+  topology a deployment uses tells you whether it needs the deferred mixed-native
+  arm at all.
 
 ## What this is about
 
