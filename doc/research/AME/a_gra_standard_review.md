@@ -825,9 +825,9 @@ contract. Phases 3–4 are where genuinely new capability lives.
 - OMS CAL join analysis (companion doc): [`ams_gra_oms_cal_join.md`](ams_gra_oms_cal_join.md)
 - A-GRA repository: https://github.com/open-arsenal/a-gra (Schema/, Documentation/, ASK 5.0a Start Here Guide); local copy at `doc/research/AME/a-gra-main/`
 - USAF A-GRA/CCA reporting: [The Aviationist](https://theaviationist.com/2026/02/14/usaf-integrates-a-gra-architecture-mission-autonomy-ccas/), [ExecutiveGov](https://www.executivegov.com/articles/air-force-a-gra-cca-open-architecture)
-- In-repo: `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.autonomy.proto`,
-  `subprojects/PYRAMID/proto/pyramid/components/pyramid.components.autonomy_backend.services.provided.proto`,
+- In-repo: `subprojects/PYRAMID/proofs/contracts/proto/pyramid/data_model/pyramid.data_model.autonomy.proto`,
+  `subprojects/PYRAMID/proofs/contracts/proto/pyramid/components/pyramid.components.autonomy_backend.services.provided.proto`,
   `subprojects/AME/include/ame/{autonomy_backend.h,execution_sink.h,pyramid_autonomy_bridge.h,action_registry.h}`,
   `subprojects/PYRAMID/doc/architecture/generated_bindings.md`,
-  `subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md`,
+  `subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md`,
   `doc/research/AME/temporal_extension_research.md`

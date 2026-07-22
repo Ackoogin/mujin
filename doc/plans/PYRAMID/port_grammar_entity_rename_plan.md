@@ -137,7 +137,7 @@ The main implementation sources are:
 | Ada interaction facade | `subprojects/PYRAMID/pim/ada/interaction_facade_gen.py` |
 | OMS JSON wrapper recognition | `subprojects/PYRAMID/pim/cpp/oms_json_codec_gen.py`, `pim/ada/oms_json_codec_gen.py` |
 | Generated binding manifest | `subprojects/PYRAMID/pim/generate_bindings.py` and `binding_contract.py` |
-| Deployment manifest example | `subprojects/PYRAMID/pim/test_harness/contract_routing_manifest.py` |
+| Deployment manifest example | `subprojects/PYRAMID/proofs/harness/contract_routing_manifest.py` |
 
 ## 4. Compatibility impact
 

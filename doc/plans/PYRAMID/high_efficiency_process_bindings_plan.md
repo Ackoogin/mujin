@@ -294,7 +294,7 @@ optional extra.
   `MA_MissionPlanCommand_Service`, for example, `Create` / `Update` / `Cancel`
   carry `pattern: SUBSCRIBE topic: "MA_MissionPlanCommand"` and `Read` carries
   `pattern: PUBLISH topic: "MA_MissionPlanCommandStatus"`
-  ([`pim/agra_p2_seam`](../../../subprojects/PYRAMID/pim/agra_p2_seam) overlay).
+  ([`pim/agra_p2_seam`](../../../subprojects/PYRAMID/proofs/contracts/agra_p2_seam) overlay).
   The generator turns those annotated operations into the facade's
   `subscribe<Topic>` / `publish<Topic>` ports directly, so **one** facade already
   presents the interaction with its pub/sub realization built in — that is the
@@ -409,7 +409,7 @@ simpler borrow contract.
 A note on the term: "high efficiency" is used here as a plain description of
 the zero-serialization local path, not as a formal term from the PYRAMID
 Technical Standard. The wire-efficient FlatBuffers path
-([`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md))
+([`standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md))
 is a *smaller* serialized form; it is not the same thing as skipping
 serialization entirely.
 
@@ -426,7 +426,7 @@ raw object pointer through a port:
   **PCL.022 — Intra-Process Direct Dispatch** ("zero-copy pointer handoff",
   [`subprojects/PCL/doc/requirements/HLR.md`](../../../subprojects/PCL/doc/requirements/HLR.md)),
   and design principle **P5 — Zero-copy where possible**
-  ([`component_container_design.md`](../../../subprojects/PCL/doc/architecture/component_container_design.md)).
+  ([`pcl-component-system.md`](../../../subprojects/PCL/doc/architecture/pcl-component-system.md)).
 - **Tier B — cross-thread ingress (different executor, same process).** An
   external thread hands a message to an executor with
   `pcl_executor_post_incoming()` (requirements **PCL.025 / PCL.026**); the

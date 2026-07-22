@@ -239,7 +239,7 @@ marker noted there).
    public release; the review's Phase-0 residual — confirm CUI status
    before deriving checked-in artifacts — is resolved here, once, in
    writing).
-2. If vendorable: check the XSDs in under `subprojects/PYRAMID/pim/schemas/`
+2. If vendorable: check the XSDs in under `subprojects/PYRAMID/proofs/schemas/uci/`
    with provenance headers (upstream repo, tag/commit, sha256). If not:
    a fetch script + pinned sha256, and everything XSD-dependent SKIPs with
    a printed reason (the established Sleet/GNAT pattern).

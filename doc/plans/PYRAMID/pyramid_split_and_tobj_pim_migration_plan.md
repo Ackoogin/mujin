@@ -1,34 +1,76 @@
-# PYRAMID Split & Tactical Objects PIM Migration Plan
+# PYRAMID CAL Split and Historical Tactical Objects Migration Plan
 
-**Scope:** (1) A plan to split `subprojects/PYRAMID` into the reusable
-**binding/plugin capability** and the **examples/apps** that consume it;
-(2) a gap analysis for moving Tactical Objects from the legacy hand-written
-contract (`proto/`) onto the **new-style MBSE contract tree**
-(`pim/test/`, PIM Osprey), whose port grammar realises every request-shaped
-service as `Create` / `Read` / `Update` / `Cancel`.
+**Current scope:** Keep the PYRAMID repository focused on the reusable
+**Critical Abstraction Layer (CAL)**: contract parsing, binding generation,
+runtime and plugin composition, and SDK packaging. Keep only in-repository
+contracts, components, examples, and integration scenarios that prove the CAL.
+Downstream products consume versioned SDK distributions and supply their own
+contracts; they do not adopt a contract from the PYRAMID source tree.
 
-**Date:** 2026-07-06
+**Original scope:** This document also contains the earlier gap analysis for
+moving Tactical Objects from a hand-written contract to the PIM Osprey model.
+That analysis is retained below as historical design context. It is not part of
+the PYRAMID CAL repository split and must not drive product-protocol adoption in
+this repository.
+
+**Dates:** proposed 2026-07-06; CAL split delivered 2026-07-22
 **Related:**
 [`README.md`](README.md) (design-intent summary of the executed plans, incl. `pubsub_contract_generation_plan.md`),
-[`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md) (legacy design reference),
+[`standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md) (proof design reference),
 [`generic_contract_layout.md`](../../../subprojects/PYRAMID/doc/architecture/generic_contract_layout.md),
 [`pyramid_interaction_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/pyramid_interaction_semantics.md),
 [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md) (single tracker; E5 lands inside Part 2 here).
 
-**Status:** proposed — not yet scheduled. Open decisions are listed at the
-end of each part; nothing below changes generator output or build behaviour
-until the phases run. **The original open decisions (D1.1, D1.3, D2.1–D2.6)
-were resolved on 2026-07-07** — resolutions are recorded inline at each
-decision and consolidated in the "Decision resolutions" section below. The
-MBSE-model gap analysis (§2.6) subsequently surfaced one further open
-decision, **D2.7** (the `circle_area` narrowing), tracked in §2.5.
+**Status:** Part 1 is complete in PYRAMID commit `99e470f`, with existing-build
+cache migration in `a681479`. The CAL configures,
+builds, and tests without an in-repository contract. The optional `proofs/`
+composition contains the specific contracts, Tactical Objects, bridge,
+examples, profiles, schemas, harnesses, and product-shaped tests. SDK creation
+requires an explicit external contract and its packaged distribution is tested
+as an isolated downstream build.
+
+The old `PYRAMID_COMPONENTS` repository proposal and the multi-contract CMake
+migration seam are superseded for this phase. A separate consumer repository is
+not needed to establish the boundary: `PYRAMID_BUILD_PROOFS=OFF` is the
+standalone CAL configuration, while SDK distributions are the supported
+downstream integration boundary. The Tactical Objects PIM decisions in Part 2
+belong to a future product/model migration and remain unscheduled here.
+
+## Delivered repository boundary
+
+| Path | Responsibility |
+|------|----------------|
+| `pim/`, `cmake/`, `core/`, `include/`, `src/` | Contract-neutral generation and runtime machinery |
+| `plugins/`, `ros2/`, `ros2_msgs/` | Generic codec and transport projections |
+| `scripts/`, `sdk_template/` | Explicit-contract SDK construction and isolated consumer verification |
+| `tests/` | Contract-neutral CAL unit tests and dependency-direction guard |
+| `proofs/` | Optional contracts, components, examples, profiles, harnesses, and end-to-end evidence |
+
+The dependency direction is `proofs -> CAL`. Production CAL sources are guarded
+against proof-layer dependencies. The default repository build composes both
+layers for full evidence; the `cal` preset exercises only the reusable layer.
+
+## Delivered acceptance evidence
+
+- CAL-only preset: configure and build green; CTest 1/1 green.
+- Contract-neutral Python suite: 46/46 green.
+- Full proof composition: parallel build green; CTest 406/406 green.
+- SDK distribution: explicit-contract package built and smoke-tested outside
+  the source build graph.
+- Parallel build/test defects found during validation were fixed by ordering
+  generated Protobuf support after binding generation and serialising the
+  shared performance-test resource.
+
+The remainder of this document is the archived original proposal and model gap
+analysis. Its paths have been updated where useful, but its phases and decisions
+do not describe current PYRAMID CAL work.
 
 ## Decision resolutions (2026-07-07)
 
 | ID | Resolution | Note |
 |----|-----------|------|
 | D1.1 | **`PYRAMID_COMPONENTS`** | As recommended |
-| D1.3 | **Promote `pim/test/` to `PYRAMID_COMPONENTS/contracts/pim/`**, leaving a reduced synthetic fixture behind for generator tests | Departs from the "keep under capability" recommendation — commits to the split now rather than deferring it |
+| D1.3 | **Promote `proofs/contracts/pim/` to `PYRAMID_COMPONENTS/contracts/pim/`**, leaving a reduced synthetic fixture behind for generator tests | Departs from the "keep under capability" recommendation — commits to the split now rather than deferring it |
 | D2.1 | **Re-enable `pMatchingObjects` for Osprey** | As recommended |
 | D2.2 | **Hybrid: the Request port carries the criteria; the information port emits details tagged with the matching requirement id for tracing** | Refines the recommendation — correlation-by-requirement-id, not pure flat-topic + client-side ID filtering |
 | D2.3 | **Add `policy` to the common `ObjectDetailRequest`/`Requirement`** | As recommended — active-find is a common capability |
@@ -54,7 +96,7 @@ and different future homes:
   "later become its own repository" per the subproject README.
 - **The consumers**: Tactical Objects (runtime + component + app),
   `pyramid_bridge`, the hand-written C++/Ada examples, the legacy contract
-  tree (`proto/`) those consumers implement, and their E2E/conformance
+  tree (`proofs/contracts/proto/`) those consumers implement, and their E2E/conformance
   tests.
 
 The build already knows this seam exists but expresses it as a single
@@ -72,9 +114,9 @@ migration (which needs legacy and PIM bindings side by side).
 |------|------|-------|
 | `core/` | capability | `pyramid_core` runtime services (UUID, logging, event, job) |
 | `pim/` (generator, `backends/`, `cpp/`, `ada/`, `mbse/`, `topic_metadata/`) | capability | contract-agnostic since the generic-layout + manifest work |
-| `pim/test/` | capability (fixture) | the MBSE-generated proving contract tree; also Part 2's target contract — see decision D1.3 |
-| `pim/test_harness/` | capability | proves bindings/plugins against the MBSE tree; no app coupling |
-| `proto/` | consumers | legacy component contracts (tactical objects, sensor data interpretation, autonomy backend). `pyramid/options/pyramid.options.proto` is capability-owned and ships with the generator (already duplicated per tree) |
+| `proofs/contracts/pim/` | capability (fixture) | the MBSE-generated proving contract tree; also Part 2's target contract — see decision D1.3 |
+| `proofs/harness/` | capability | proves bindings/plugins against the MBSE tree; no app coupling |
+| `proofs/contracts/proto/` | consumers | legacy component contracts (tactical objects, sensor data interpretation, autonomy backend). `pyramid/options/pyramid.options.proto` is capability-owned and ships with the generator (already duplicated per tree) |
 | `plugins/` | capability | coupled gRPC/ROS2 plugin sources |
 | `cmake/` (+ `cmake/tests/`) | capability | manifest/binding-source helpers |
 | `ros2/`, `ros2_msgs/` | capability | transport adapter + generated interface package build (contract-parameterised) |
@@ -84,7 +126,7 @@ migration (which needs legacy and PIM bindings side by side).
 | `pyramid_bridge/` | consumers | Ada/C++ bridge demo apps |
 | `examples/` | consumers | hand-written Ada/C++ clients (tobj interest client, evidence provider, sensor demo) |
 | `tests/` (python generator suite, `cmake/tests` driver, plugin/facade C++ tests) | capability | `test_generic_*`, `test_binding_manifest.py`, `test_manifest_cmake_helper.py`, `test_no_domain_literals.py`, `test_topic_metadata.py`, `test_ros2_*`, `test_plugin_only_fail_closed.cpp`, `test_codec_plugin_swap.cpp`, `test_codec_registry_bridge.cpp`, `test_transport_codec_plugin_composition.cpp`, `test_pcl_generated_component_stream_handle.cpp`, `test_grpc_*` |
-| `tests/` (contract-coupled binding + app tests) | consumers | `tests/tactical_objects/**`, `tests/ada/**` (tobj/active-find/grpc-interop e2e), `tobj_grpc_server.cpp`, `test_pcl_proto_bindings.cpp`, `test_sensor_data_interpretation_bindings.cpp`, `test_codec_dispatch_e2e.cpp`, `test_binding_performance.cpp` — all compile against `proto/`-generated `pyramid_services_*` names |
+| `tests/` (contract-coupled binding + app tests) | consumers | `tests/tactical_objects/**`, `tests/ada/**` (tobj/active-find/grpc-interop e2e), `tobj_grpc_server.cpp`, `test_pcl_proto_bindings.cpp`, `test_sensor_data_interpretation_bindings.cpp`, `test_codec_dispatch_e2e.cpp`, `test_binding_performance.cpp` — all compile against `proofs/contracts/proto/`-generated `pyramid_services_*` names |
 | `doc/architecture/` | split | capability keeps `generated_bindings.md`, `transport_codec_plugin_system.md`, `ros2_transport_semantics.md`, `generic_contract_layout.md`, `pyramid_interaction_semantics.md`, `sdk_packaging.md`; `tactical_objects/` + `doc/requirements/tactical_objects/` move with the component |
 
 Borderline case worth naming: some "capability" C++ tests today compile
@@ -92,7 +134,7 @@ against the tactical-objects contract because it is the only contract in
 the default build (e.g. `test_codec_dispatch_e2e`). Near-term they move
 with the consumers (they are de facto contract-conformance tests);
 long-term the capability should regain equivalents pinned to a neutral
-fixture contract (`pim/test/` or a minimal synthetic contract), so the
+fixture contract (`proofs/contracts/pim/` or a minimal synthetic contract), so the
 capability test suite is self-contained. That is Phase P4.
 
 ## 1.3 Target layout
@@ -158,9 +200,9 @@ when `PYRAMID_PROTO_DIR` targets `pim/test`).
 | Phase | Work | Acceptance gate |
 |-------|------|-----------------|
 | P1 — CMake seam | Implement `pyramid_add_contract()` over the manifest accessors; re-express the current build as one default invocation + alias targets. No file moves. | Full CTest suite: same registered test set, all green; generated bindings byte-identical; `build_plugins.sh` (both proto dirs) and `package_sdk.sh` unchanged in behaviour |
-| P2 — Move consumers | Create `subprojects/PYRAMID_COMPONENTS/`; move `tactical_objects/`, `pyramid_bridge/`, `examples/`, `proto/` (→ `contracts/proto/`), consumer tests + scripts; root `CMakeLists.txt` adds the new subproject (gated by a `UNMANNED_BUILD_PYRAMID_COMPONENTS` option replacing `PYRAMID_BUILD_TESTS`) | Same test set and names green from new paths; capability configures with **no contract at all** (bindings generation becomes consumer-invoked); `.bat`/`.sh` script pairs fixed together |
+| P2 — Move consumers | Create `subprojects/PYRAMID_COMPONENTS/`; move `tactical_objects/`, `pyramid_bridge/`, `examples/`, `proofs/contracts/proto/` (→ `contracts/proto/`), consumer tests + scripts; root `CMakeLists.txt` adds the new subproject (gated by a `UNMANNED_BUILD_PYRAMID_COMPONENTS` option replacing `PYRAMID_BUILD_TESTS`) | Same test set and names green from new paths; capability configures with **no contract at all** (bindings generation becomes consumer-invoked); `.bat`/`.sh` script pairs fixed together |
 | P3 — Docs + scripts split | Move tactical-objects docs/requirements; update both READMEs, `CLAUDE.md` test counts/paths, doc cross-links (many docs hardlink `subprojects/PYRAMID/...` paths) | Link check over `doc/` and both subproject `doc/` trees; stakeholder-facing docs reviewed |
-| P4 — Capability test self-sufficiency | Re-pin capability C++ binding tests to a fixture contract (`pim/test/` or a minimal synthetic one) so `subprojects/PYRAMID` tests run with zero consumer content | Capability-only configure+build+ctest green in isolation (the "own repository" rehearsal) |
+| P4 — Capability test self-sufficiency | Re-pin capability C++ binding tests to a fixture contract (`proofs/contracts/pim/` or a minimal synthetic one) so `subprojects/PYRAMID` tests run with zero consumer content | Capability-only configure+build+ctest green in isolation (the "own repository" rehearsal) |
 | P5 — Guard | Source-guard test for dependency direction; CI job building capability standalone | Guard green in CI |
 
 ## 1.6 Risks
@@ -180,7 +222,7 @@ when `PYRAMID_PROTO_DIR` targets `pim/test`).
   `PYRAMID_COMPONENTS`** (it holds several components plus examples, not
   only apps); revisit per-component repos only when a second real
   component ships.
-- **`pim/test/` ownership** (Decision D1.3): it is simultaneously the
+- **`proofs/contracts/pim/` ownership** (Decision D1.3): it is simultaneously the
   generator's proving fixture and Part 2's production-bound contract.
   **Resolved (D1.3): promote it to `PYRAMID_COMPONENTS/contracts/pim/`**
   and leave a reduced synthetic fixture behind for generator tests. (This
@@ -195,7 +237,7 @@ when `PYRAMID_PROTO_DIR` targets `pim/test`).
 
 ## 2.1 Target shape
 
-The new tree (`subprojects/PYRAMID/pim/test/`, emitted by
+The new tree (`subprojects/PYRAMID/proofs/contracts/pim/`, emitted by
 `pim/mbse/proto_generator.py` from `pim/mbse/test.json`) has a closed port
 grammar: every service is either a **Request port**
 
@@ -300,7 +342,7 @@ emits their services:
 
 Fix home: the SysML model (and its `test.json` export) — the same place
 the working ports (`pSENRequirement`, `pCapability`, …) carry kinds. Then
-regenerate `pim/test/` and confirm drift is exactly the new services.
+regenerate `proofs/contracts/pim/` and confirm drift is exactly the new services.
 
 Also verify under G1 that the **refinement edges** land the intended oneof
 variants in the wrappers: `Object_Of_Interest`'s payloads are the *base*
@@ -455,7 +497,7 @@ now against the real app).
 | Step | Work | Acceptance gate |
 |------|------|-----------------|
 | M0 | Resolve decisions D2.1–D2.6 (below) | ✅ done 2026-07-07 — recorded in this doc (§2.5 + Decision resolutions) |
-| M1 | Model edits: stamp port kinds (G1), re-enable/leave `pMatchingObjects` per D2.1, add missing fields/refinements (G4); regenerate `pim/test/` | regeneration drift is exactly the intended new services/fields; wrapper oneofs carry the interest variants; viability + comms harness green; Ada object-compile stays 174/174 (plus new units) |
+| M1 | Model edits: stamp port kinds (G1), re-enable/leave `pMatchingObjects` per D2.1, add missing fields/refinements (G4); regenerate `proofs/contracts/pim/` | regeneration drift is exactly the intended new services/fields; wrapper oneofs carry the interest variants; viability + comms harness green; Ada object-compile stays 174/174 (plus new units) |
 | M2 | Part 1 P1 lands (per-contract CMake seam) | legacy build byte-identical via compat invocation |
 | M3 | New adapter (`PimBridge` or `StandardBridge` v2) on the generated facade + `tactical_objects_app` variant hosting the Osprey contract; legacy app untouched | app serves Create/Read/Update/Cancel + information topics over JSON; facade-only (no raw PCL) — E5 satisfied for the new path |
 | M4 | Port clients/examples/tests; run legacy and PIM apps side by side; conformance parity matrix (JSON/FB/protobuf codecs × socket/shm transports × C++/Ada clients, plus gRPC + typed-ROS2 smoke) | parity matrix green; sequence checks (create→acceptance, cancel→transition) green; legacy suite still green untouched |
@@ -526,7 +568,7 @@ of the legacy criteria surface (avoids a silent capability loss even though
 the runtime tolerates it). Treat as **D2.7**.
 
 **Sequencing.** MM1–MM4, MM6, MM7 are all prerequisites for M1
-(regenerate `pim/test/`) and must land together in the model so the first
+(regenerate `proofs/contracts/pim/`) and must land together in the model so the first
 regeneration drift is exactly the intended new services/fields. MM5/MM9 are
 independent contract-quality choices; MM8 is deferred. None of these touch
 generator code — every one is a model edit consumed by existing machinery,

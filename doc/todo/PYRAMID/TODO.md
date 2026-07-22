@@ -16,9 +16,9 @@ Live companion documents:
 | [`high_efficiency_process_bindings_plan.md`](../../plans/PYRAMID/high_efficiency_process_bindings_plan.md) | **Live plan (2026-07-19, proposed):** gap analysis + TODO for a native in-process payload path in the generated port bindings — distinguishes Tier A (same executor, zero-copy pointer handoff, PCL.022) from Tier B (sibling executor, native transfer over cross-thread ingress, PCL.025/026); the typed facades serialize even on local routes today |
 | [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **Live plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
 | [`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md) | **Live plan:** XSD-to-proto profile ladder; Phase 3/P1 is live-proven, while Phase 4/P2 supplies the detailed background for WS-G below |
-| [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) | Current support boundary and evidence for UCI 2.5/AMS-GRA versus formal A-GRA |
+| [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/oms_agra_compatibility.md) | Proof support boundary and evidence for UCI 2.5/AMS-GRA versus formal A-GRA |
 | [`pyramid_user_guide.md`](../../../subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Single high-level user guide (design intent, usage, diagrams) |
-| [`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md) | Stable design reference for shipped Tactical Objects; one open design point (D-list row below) |
+| [`standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md) | Stable design reference for shipped Tactical Objects; one open design point (D-list row below) |
 | [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) / [`ros2_transport_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md) | How the plugin/codec system and the ROS2 mapping work |
 
 ## Delivered (context, not work)
@@ -148,7 +148,7 @@ pattern) are done — see Delivered. Remaining:
 **Status: in progress (2026-07-14).** Checkpoint log for session handover:
 
 - **Prerequisites 1–3 discharged.** Decision record:
-  [`pim/uci_profiles/README.md`](../../../subprojects/PYRAMID/pim/uci_profiles/README.md)
+  [`pim/uci_profiles/README.md`](../../../subprojects/PYRAMID/proofs/profiles/uci/README.md)
   ("P2 conversion-scope decision"). Root list approved and then grown to 20
   (the two `*CommandStatus` messages the Command-2 pattern needs); size
   budget 1,169 messages + 297 enums; validator designated: Sleet
@@ -456,7 +456,7 @@ general A-GRA certification beyond the selected, evidenced P2 OMS/CAL profile.
 Detailed conversion design and current P2 measurements remain in
 [`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md)
 Phase 4; the live support statement remains
-[`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md).
+[`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/oms_agra_compatibility.md).
 
 ---
 
@@ -477,7 +477,7 @@ Audit performed on 2026-07-21 against the plan's completion criteria: no
 tracked file under `subprojects/PYRAMID/` or `subprojects/PCL/` still contains
 `_Service_Requirement`, `requirement_leg`, or a derived `.requirement` topic.
 The remaining matches are all under
-`subprojects/PYRAMID/pim/test_harness/generated/`, which is stale local output
+`subprojects/PYRAMID/proofs/harness/generated/`, which is stale local output
 excluded by that directory's own `.gitignore`. Legitimate domain requirements
 were preserved as intended, including `ObjectDetailRequirement`,
 `AUTDependencyRequirement`, and the `*Requirement_Service` names whose
@@ -624,7 +624,7 @@ No action until the trigger fires; listed so nothing silently drops.
 | `ada/service_body_gen.py` `_write_body` split (~1.3k lines) | Next substantive change inside that emitter | Splitting means threading the output stream and dozens of locals — do it when already in there. |
 | `pcl_transport_shared_memory.c` split (~2.2k lines) | Peer-identity threading work grows it further | Split along existing seams (ring/mailbox, frame codec, gateway dispatch, plugin entry) within the same target. |
 | `contract_routing_manifest.py` support for real (non-stub) transports | A generated manifest needs to target SHM/UDP/etc. rather than `contract_transport_plugin.c` | Today it only emits `{"mode":"rpc"\|"pubsub"}` config for the NULL-vtable stub. Needs `bus_name`/`participant_id` (SHM) and `remote_host`/`remote_port`/`local_port`/`peer_id` (UDP) config emission, plus the counterpart-participant-id peer-alias convention. |
-| Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream ([`standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md), Remaining Design Point). |
+| Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream ([`standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md), Remaining Design Point). |
 | Interaction-pattern options for the legacy tree / side-table deletion | Only if the frozen-compat stance changes | Resolved as *frozen compat, new consumers forbidden*; `standard_topics.py` stays scoped to the legacy layout. |
 | `cabi_codegen.py` non-deterministic typedef order | Next substantive change to `cabi_codegen.py`, or the first byte-stability guard failure it causes | `pyramid_data_model_generic_*_cabi.h` emits the generic container typedefs (the `*List`/`*Queue` `pyramid_slice_t` wrappers) in an order that varies between two runs of the *same* generator. The output is functionally identical, but the instability undermines standing-regression-bar #1 (byte-for-byte identical output) and shows up as spurious diffs when regenerating a packaged SDK. **Cause located 2026-07-21:** `_toposort` walks `for dep in deps.get(name, set())`, and iteration order over a `set` of strings depends on the per-process string hash seed. The earlier guess that `set(self._aliases.keys())` was responsible is wrong — those three sets are only used for `not in` membership tests, which is order-independent. The fix is to sort that one iteration; a two-run determinism check would guard it. Reproduced by generating the same tree twice with `PYTHONHASHSEED=1` and `PYTHONHASHSEED=99`, which differ in exactly this one file. Left deferred because sorting changes emission order and therefore requires refreshing the recorded generator baselines. |
 | Generated JSON codec accepts non-JSON input | Any hardening pass on codec fail-closed behaviour, or the first time a wrong-format payload is silently accepted in a deployment | Handed a FlatBuffers payload for `ObjectDetail`, the generated JSON codec **returns success** and fills the target with default values rather than rejecting the input. Found 2026-07-21 while writing `test_ports_file_codec_selection_e2e.cpp`: an early version of that test asserted "the JSON codec must refuse these bytes" and failed. The permissive JSON parse accepts a leading FlatBuffers byte as a bare JSON value, so nothing downstream notices. This matters because a peer misconfigured to the wrong codec then produces silently empty data instead of a startup error. Note the contrast with the schema-drop mismatch negatives in WS-G step 4, where the OMS codec is explicitly required to fail closed in both directions. The e2e test was written to compare the *decoded value* rather than the decode status, so it does not depend on this behaviour either way and will keep passing once it is fixed. |

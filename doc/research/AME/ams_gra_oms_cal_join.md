@@ -25,7 +25,7 @@ LA-CAL/Sleet, §5.2 MS-leg demo — extended here),
 (the interaction facade / pub-sub seam),
 [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
 (plugin ABI + capability model),
-[`agra_example/README.md`](../../../subprojects/PYRAMID/pim/agra_example/README.md).
+[`agra_example/README.md`](../../../subprojects/PYRAMID/proofs/contracts/agra_example/README.md).
 **Inputs reviewed:** the OMS Standard v2.5 document set, published publicly
 2026 in [github.com/open-arsenal/oms](https://github.com/open-arsenal/oms) —
 specifically OMSC-STD-001 RevM (OMS Standard), OMSC-SPC-001 RevL (CAL
@@ -379,7 +379,7 @@ anticipated by the `agra_example` notes:
    strings are contract options (`pyramid.options.pyramid_op`), so an
    OMS-facing contract tree simply stamps UCI type names — expressible
    today, no generator change
-   ([`agra_example/README.md`](../../../subprojects/PYRAMID/pim/agra_example/README.md)).
+   ([`agra_example/README.md`](../../../subprojects/PYRAMID/proofs/contracts/agra_example/README.md)).
 2. **The `_Request` wrapper.** Our request topic carries the service's
    wrapper message (command variants + `cancel` in a oneof); the OMS wire
    carries each UCI message on its own topic (`MA_Action` on the
@@ -628,7 +628,7 @@ feature needs to know what a message *means*, it belongs in the bridge.
 - In-repo:
   [`pubsub_interaction_guide.md`](../../../subprojects/PYRAMID/doc/guides/pubsub_interaction_guide.md),
   [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md),
-  [`agra_example/README.md`](../../../subprojects/PYRAMID/pim/agra_example/README.md),
+  [`agra_example/README.md`](../../../subprojects/PYRAMID/proofs/contracts/agra_example/README.md),
   `subprojects/PCL/include/pcl/pcl_plugin.h` (transport ABI);
   websocketpp + asio are CMake-fetched at the repo root (`CMakeLists.txt`,
   currently consumed only by `ame_foxglove`)

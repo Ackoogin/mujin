@@ -212,7 +212,7 @@ compliance is a separately costed commitment.
 | Full A-GRA standard review (positioning, gaps, adoption path) | `doc/research/AME/a_gra_standard_review.md` |
 | Message-level worked example (FIND_SEARCH → EO → track) | `doc/research/AME/a_gra_e2e_worked_example.md` |
 | OMS / AMS-GRA / A-GRA compatibility status | `subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md` |
-| A-GRA example contract + facade proofs | `subprojects/PYRAMID/pim/agra_example/README.md` |
+| A-GRA example contract + facade proofs | `subprojects/PYRAMID/proofs/contracts/agra_example/README.md` |
 | AME architecture | `subprojects/AME/doc/architecture/` |
 | Temporal extension research (A-GRA-relevant) | `doc/research/AME/temporal_extension_research.md` |
 | PCL/PYRAMID + CAL overview deck (companion) | `subprojects/PYRAMID/doc/slides/pcl_pyramid_cal_overview.md` |

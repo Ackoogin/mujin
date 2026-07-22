@@ -10,7 +10,7 @@ Every exchange is named — A-GRA/UCI messages at the boundary (verified against
 `A-GRA_MessageDefinitions_v5_0_a.xsd`), `pyramid.*` proto messages and
 services internally — and each step is mapped to the PYRAMID component
 responsibilities it discharges
-([`PYRAMID_COMPONENT_RESPONSIBILITIES.md`](../../../subprojects/PYRAMID/doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md)).
+([`PYRAMID_COMPONENT_RESPONSIBILITIES.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md)).
 
 **Date:** 2026-07-08
 **Status:** Design walkthrough, revision 2. Messages marked **exists** are in
@@ -852,7 +852,7 @@ contract set adopts.
 - A-GRA schema (local): `a-gra-main/Schema/A-GRA_MessageDefinitions_v5_0_a.xsd`
   (message names in §4/§6 verified against top-level element declarations;
   `PO_Command` annotation confirms PO = passive optical incl. search & track)
-- `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.autonomy.proto`,
+- `subprojects/PYRAMID/proofs/contracts/proto/pyramid/data_model/pyramid.data_model.autonomy.proto`,
   `.sensors.proto`; `pyramid.components.autonomy_backend.services.provided.proto`,
   `pyramid.components.sensor_data_interpretation.services.provided.proto`,
   `pyramid.components.sensor_data_interpretation.services.consumed.proto`
@@ -860,7 +860,7 @@ contract set adopts.
   `pyramid.components.tactical_objects.services.provided.proto`
 - `subprojects/AME/include/ame/execution_sink.h` (`ExecutionBinding`,
   `RequirementBindingExecutionSink`), `pyramid_autonomy_bridge.h`
-- `subprojects/PYRAMID/doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md`
+- `subprojects/PYRAMID/proofs/doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md`
   (PYR-RESP IDs cited in §2.1/§7; PYR-RESP-0622 and PYR-RESP-0634 are the
   delegation hooks)
 - `doc/plans/PYRAMID/pubsub_contract_generation_plan.md` (service-over-pub/sub

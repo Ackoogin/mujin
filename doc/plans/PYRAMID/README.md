@@ -9,12 +9,12 @@ were removed. What remains is:
 | **Outstanding work** (the single tracker) | [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md) |
 | **High-level design & usage** (single user-guide entry, with diagrams) | [`subprojects/PYRAMID/doc/guides/pyramid_user_guide.md`](../../../subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) |
 | **Live plan** (proposed, not yet scheduled) | [`port_grammar_entity_rename_plan.md`](port_grammar_entity_rename_plan.md) — coordinated breaking rename of the Request-port result/update grammar role from `Requirement` to `Entity` |
-| **Live plan** (proposed, not yet scheduled) | [`pyramid_split_and_tobj_pim_migration_plan.md`](pyramid_split_and_tobj_pim_migration_plan.md) |
+| **Delivered plan** (CAL split complete 2026-07-22; product PIM migration retained as unscheduled history) | [`pyramid_split_and_tobj_pim_migration_plan.md`](pyramid_split_and_tobj_pim_migration_plan.md) |
 | **Live plan** (in progress; Phases 0–4 and Phase 5 step 1 verified against real Sleet; Phase 6 superseded) | [`la_cal_integration_plan.md`](la_cal_integration_plan.md) — LA-CAL (`owp`) transport plugin + OMS JSON codec, rung 1 of the OMS CAL join |
 | **Live plan** (done 2026-07-12; supersedes the AME-facing scope of Phase 6 above) | [`kitty_hawk_pcl_consumer_plan.md`](kitty_hawk_pcl_consumer_plan.md) — PCL-only consumer proof against the full live Kitty Hawk stack |
 | **Live plan** (in progress; Phase 3 complete and live-verified 2026-07-12 — generated P1 tree drives both the command seam and the Kitty Hawk consumer harness over real Sleet; Phase 4 (A-GRA/P2) is planned as TODO WS-G, unscheduled) | [`uci_mms_conversion_plan.md`](uci_mms_conversion_plan.md) — `xsd2proto` + profile ladder: from the hand-authored UCI seam test cases to a GRA-scale minimum message set converted from the XSD (rung 3) |
 | **Live plan** (proposed, not yet scheduled) | [`docker_build_deploy_plan.md`](docker_build_deploy_plan.md) — Docker/OCI build-environment image family and per-component deployment images for PYRAMID, with diagrammed options and an air-gap strategy |
-| **Architecture reference** | `subprojects/PYRAMID/doc/architecture/` — see especially [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) for current OMS/AMS-GRA/A-GRA compatibility status |
+| **Architecture reference** | `subprojects/PYRAMID/doc/architecture/` for CAL design; see [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/oms_agra_compatibility.md) for proof-specific OMS/AMS-GRA/A-GRA compatibility status |
 | Full text of any retired document | git history (`git log --diff-filter=D --oneline -- doc/plans/PYRAMID doc/reports/PYRAMID doc/reviews/PYRAMID`) |
 
 ## Design intents of the retired documents
@@ -66,8 +66,8 @@ to these entries; the full text is in git history.
   fail-closed negative and the explicit deploy-time downgrade path (writing
   `best_effort` as a route's floor is an operator decision, never a silent
   default). *Now:* the `agra_*` harnesses under
-  `subprojects/PYRAMID/pim/test_harness/` and
-  `subprojects/PYRAMID/pim/agra_example/README.md`; the retired findings
+  `subprojects/PYRAMID/proofs/harness/` and
+  `subprojects/PYRAMID/proofs/contracts/agra_example/README.md`; the retired findings
   ledger remains available in PYRAMID git history.
 
 - **`rpc_pubsub_interchangeability_plan.md`** — *Intent:* RPC and pub/sub
@@ -84,7 +84,7 @@ to these entries; the full text is in git history.
 
 - **`standard_alignment_plan.md`** — not retired; it is the stable design
   reference for the shipped Tactical Objects component and **moved** to
-  [`subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md`](../../../subprojects/PYRAMID/doc/architecture/tactical_objects/standard_alignment.md).
+  [`subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md).
 
 ### Reviews (`doc/reviews/PYRAMID/`)
 
@@ -140,4 +140,4 @@ to these entries; the full text is in git history.
 
 Tactical Objects HLR→test traceability is maintained with the standalone
 project in
-[`doc/requirements/tactical_objects/TRACEABILITY.md`](../../../subprojects/PYRAMID/doc/requirements/tactical_objects/TRACEABILITY.md).
+[`TRACEABILITY.md`](../../../subprojects/PYRAMID/proofs/doc/requirements/tactical_objects/TRACEABILITY.md).
