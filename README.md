@@ -4,8 +4,10 @@ This repository is organised as a workspace containing three subprojects. PCL
 and PYRAMID have been split into standalone repositories and are included here
 as Git submodules; AME remains owned by this workspace:
 
-- `subprojects/PCL` -- the low-level PYRAMID Composition Library runtime and C/C++ wrappers ([Ackoogin/pcl](https://github.com/Ackoogin/pcl))
-- `subprojects/PYRAMID` -- PYRAMID core and tactical-objects components built on top of PCL ([Ackoogin/PYRAMID](https://github.com/Ackoogin/PYRAMID))
+- [`subprojects/PCL`](subprojects/PCL) -- the low-level, C-only PYRAMID
+  Composition Library runtime
+- [`subprojects/PYRAMID`](subprojects/PYRAMID) -- the PYRAMID Critical
+  Abstraction Layer, C++ PCL wrappers, and in-repository proof components
 - `subprojects/AME` -- the Autonomous Mission Engine planning/execution stack built on top of PCL and PYRAMID
 
 AME is the headline application in the workspace: a **PDDL planning + Behaviour Tree execution** pipeline for autonomous mission planning and execution, with full observability and audit trail support.

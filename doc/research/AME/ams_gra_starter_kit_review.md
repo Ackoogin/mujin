@@ -252,8 +252,10 @@ PYRAMID mapping and gaps:
    (Sleet) then *silently rejects* unregistered services, a pitfall our
    fail-closed validation deliberately avoids. Keep ours; if we integrate
    with Sleet, surface registration failures loudly in the client.
-3. **Identity: adopt UUIDv5 derivation.** `pyramid_core` already has UUID
-   helpers (`core/include/uuid/`). The starter kit's
+3. **Identity: adopt UUIDv5 derivation in the consuming contract or product.**
+   PYRAMID CAL deliberately has no generic identity library; the UUID helper
+   retained by the Tactical Objects proof only provides the operations that
+   proof uses. The starter kit's
    Realm→SystemID→SubsystemID→MessageID scheme is a concrete, proven
    convention for populating the A-GRA `MessageHeader.SystemID/ServiceID`
    fields (and correlating command/status pairs) deterministically from
@@ -409,6 +411,7 @@ the shape it should have.
   [`agra_pubsub_shm_udp_proving_plan.md`](../../plans/PYRAMID/README.md)
 - In-repo anchors: `subprojects/PCL/include/pcl/pcl_container.h`
   (stream-service endpoints), `subprojects/PCL/include/pcl/pcl_plugin.h`
-  (plugin ABI), `subprojects/PYRAMID/core/include/uuid/`,
+  (plugin ABI), `subprojects/PYRAMID/proofs/tactical_objects/include/uuid/`
+  (proof-local identity support),
   `subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md`,
   `subprojects/PYRAMID/doc/architecture/sdk_packaging.md`

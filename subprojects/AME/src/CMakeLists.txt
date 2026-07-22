@@ -36,20 +36,12 @@ target_include_directories(ame_core PUBLIC
     ${PYRAMID_CPP_BINDINGS_DIR}
 )
 
-if(NOT UNMANNED_BUILD_PYRAMID)
-    # Provide a no-op stub so ame_core and its dependants link cleanly
-    # when the PYRAMID subproject is excluded from the build.
-    if(NOT TARGET pyramid_core)
-        add_library(pyramid_core INTERFACE)
-    endif()
-endif()
-
 target_link_libraries(ame_core
     PUBLIC
         behaviortree_cpp
         lapkt_core
         pcl_core
-        pyramid_core
+        pyramid_pcl_cpp
         pyramid_generated_codecs
 )
 add_dependencies(ame_core pyramid_cpp_bindings_codegen)

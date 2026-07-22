@@ -1,6 +1,6 @@
 [submodule "subprojects/PCL"]
 	path = subprojects/PCL
-	url = git@github.com:Ackoogin/pcl.git
+	url = ../pcl.git
 [submodule "subprojects/PYRAMID"]
 	path = subprojects/PYRAMID
-	url = git@github.com:Ackoogin/PYRAMID.git
+	url = ../PYRAMID.git

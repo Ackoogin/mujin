@@ -40,7 +40,7 @@ belong to a future product/model migration and remain unscheduled here.
 
 | Path | Responsibility |
 |------|----------------|
-| `pim/`, `cmake/`, `core/`, `include/`, `src/` | Contract-neutral generation and runtime machinery |
+| `pim/`, `cmake/`, `include/`, `src/` | Contract-neutral generation and runtime machinery |
 | `plugins/`, `ros2/`, `ros2_msgs/` | Generic codec and transport projections |
 | `scripts/`, `sdk_template/` | Explicit-contract SDK construction and isolated consumer verification |
 | `tests/` | Contract-neutral CAL unit tests and dependency-direction guard |
@@ -49,6 +49,9 @@ belong to a future product/model migration and remain unscheduled here.
 The dependency direction is `proofs -> CAL`. Production CAL sources are guarded
 against proof-layer dependencies. The default repository build composes both
 layers for full evidence; the `cal` preset exercises only the reusable layer.
+The former `pyramid_core` target was removed after an in-repository usage audit:
+its only used code was UUID support, which now belongs to the Tactical Objects
+proof that consumes it. AME links the explicit `pyramid_pcl_cpp` wrapper target.
 
 ## Delivered acceptance evidence
 
@@ -87,8 +90,8 @@ do not describe current PYRAMID CAL work.
 `subprojects/PYRAMID` currently mixes two things with different lifecycles
 and different future homes:
 
-- **The capability**: the binding generator (`pim/`), the runtime core
-  (`core/`), the codec/transport plugin system (`plugins/`, generated codec
+- **The capability**: the binding generator (`pim/`), the C++ PCL wrapper
+  interface (`include/pcl/`), the codec/transport plugin system (`plugins/`, generated codec
   plugin targets), the manifest-driven CMake helpers (`cmake/`), the ROS2
   transport adapters (`ros2/`, `ros2_msgs/`), and SDK packaging
   (`sdk_template/`, `scripts/package_sdk.*`). This is proto-agnostic by
@@ -112,7 +115,7 @@ migration (which needs legacy and PIM bindings side by side).
 
 | Path | Side | Notes |
 |------|------|-------|
-| `core/` | capability | `pyramid_core` runtime services (UUID, logging, event, job) |
+| former `core/` | removed | Its EventBus, logger, job system, and greeting code had no consumers. Used UUID support moved under `proofs/tactical_objects/`. The retained `core/external/` path contains third-party headers only. |
 | `pim/` (generator, `backends/`, `cpp/`, `ada/`, `mbse/`, `topic_metadata/`) | capability | contract-agnostic since the generic-layout + manifest work |
 | `proofs/contracts/pim/` | capability (fixture) | the MBSE-generated proving contract tree; also Part 2's target contract — see decision D1.3 |
 | `proofs/harness/` | capability | proves bindings/plugins against the MBSE tree; no app coupling |
@@ -141,7 +144,7 @@ capability test suite is self-contained. That is Phase P4.
 
 ```
 subprojects/PYRAMID/                # binding/plugin capability (future standalone SDK repo)
-    core/  pim/  plugins/  cmake/  ros2/  ros2_msgs/  sdk_template/
+    pim/  include/  plugins/  cmake/  ros2/  ros2_msgs/  sdk_template/
     scripts/        (capability scripts only)
     tests/          (generator + plugin/facade tests, fixture-contract only)
     doc/
@@ -155,7 +158,7 @@ subprojects/PYRAMID_COMPONENTS/     # example components + apps consuming the ca
 ```
 
 Dependency direction is one-way: `PYRAMID_COMPONENTS` links capability
-targets (`pyramid::core`, generated binding targets, `pcl_core`); the
+targets (`pyramid_pcl_cpp`, generated binding targets, `pcl_core`); the
 capability never references a consumer path. That property is what makes
 the later repo extraction "minimal path churn", and it should be enforced
 by a source-guard test (grep for `PYRAMID_COMPONENTS` under
