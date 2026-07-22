@@ -1,8 +1,11 @@
 # Mujin Workspace
 
-This repository is organised as a workspace containing three subprojects that can be split into separate repositories later with much less churn:
+This repository is organised as a workspace containing three subprojects. PCL
+has been split into its own repository and is included here as a Git submodule;
+the remaining subprojects retain the same repository boundaries for a later
+split:
 
-- `subprojects/PCL` -- the low-level PYRAMID Composition Library runtime and C/C++ wrappers
+- `subprojects/PCL` -- the low-level PYRAMID Composition Library runtime and C/C++ wrappers ([Ackoogin/pcl](https://github.com/Ackoogin/pcl))
 - `subprojects/PYRAMID` -- PYRAMID core and tactical-objects components built on top of PCL
 - `subprojects/AME` -- the Autonomous Mission Engine planning/execution stack built on top of PCL and PYRAMID
 
@@ -58,6 +61,18 @@ For full architecture details, see `subprojects/AME/doc/architecture/` and the c
 - Git (for automatic dependency fetching)
 
 Core dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, GoogleTest, and optional PYRAMID transport dependencies) are fetched automatically by CMake.
+
+Clone the workspace with its submodules:
+
+```bash
+git clone --recurse-submodules git@github.com:Ackoogin/mujin.git
+```
+
+For an existing clone, initialise the PCL submodule before configuring:
+
+```bash
+git submodule update --init --recursive
+```
 
 ### Build
 
