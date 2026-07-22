@@ -134,8 +134,8 @@ the whole path proven against independently-authored infrastructure
 ### Phase 0 — Recon and pinning (small)
 
 **Progress:** complete (2026-07-11). See
-`subprojects/PYRAMID/pim/test_harness/FINDINGS.md` and
-`pim/test_harness/lacal/owp_grammar.md`.
+`pim/test_harness/lacal/owp_grammar.md`; the retired run ledger remains
+available in PYRAMID git history.
 
 The one phase with no code deliverable; everything after it keys off its
 answers.
@@ -157,8 +157,8 @@ answers.
      validates payloads against the schema or routes opaque JSON by
      topic — this decides whether Phase 3 can run our `agra_example`
      vocabulary through Sleet or must adopt kit-native UCI messages.
-4. Record findings in `pim/test_harness/FINDINGS.md`; confirm Apache-2.0
-   posture for any harness fixtures we vendor.
+4. Record findings and confirm Apache-2.0 posture for any harness fixtures
+   we vendor. The completed evidence record is retained in git history.
 
 **Exit gate:** frame grammar + schema/validation behaviour documented;
 D2 resolved; demo-vocabulary decision made (own contract vs kit UCI

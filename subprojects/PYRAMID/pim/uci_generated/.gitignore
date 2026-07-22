@@ -1,3 +1,0 @@
-# Generated drop trees are checked in once their check-in gates pass (see
-# README.md).  Both uci_2_5_0/ (profile P1) and agra_5_0a/ (profile P2) are
-# promoted and guarded for byte stability by test_xsd2proto.py.

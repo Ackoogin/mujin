@@ -66,8 +66,9 @@ to these entries; the full text is in git history.
   fail-closed negative and the explicit deploy-time downgrade path (writing
   `best_effort` as a route's floor is an operator decision, never a silent
   default). *Now:* the `agra_*` harnesses under
-  `subprojects/PYRAMID/pim/test_harness/` (see `FINDINGS.md` there),
-  `subprojects/PYRAMID/pim/agra_example/README.md`.
+  `subprojects/PYRAMID/pim/test_harness/` and
+  `subprojects/PYRAMID/pim/agra_example/README.md`; the retired findings
+  ledger remains available in PYRAMID git history.
 
 - **`rpc_pubsub_interchangeability_plan.md`** — *Intent:* RPC and pub/sub
   are **interchangeable realizations of one contract interaction**.
@@ -137,6 +138,6 @@ to these entries; the full text is in git history.
   suite itself plus TODO.md; architecture/usage is
   [`generated_bindings.md`](../../../subprojects/PYRAMID/doc/architecture/generated_bindings.md).
 
-`doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md` is **kept**: it is
-the maintained HLR→test traceability input consumed by
-`subprojects/PYRAMID/scripts/gen_requirement_trace.py`.
+Tactical Objects HLR→test traceability is maintained with the standalone
+project in
+[`doc/requirements/tactical_objects/TRACEABILITY.md`](../../../subprojects/PYRAMID/doc/requirements/tactical_objects/TRACEABILITY.md).

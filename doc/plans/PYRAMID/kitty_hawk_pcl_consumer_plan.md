@@ -97,7 +97,7 @@ sensor-sim rate), not just a generator's fixed sample set.
 | 2 | Golden fixture tests from the live-captured payload shape | `subprojects/PYRAMID/tests/test_oms_json_codec_uci.cpp` | extends |
 | 3 | Kitty Hawk consumer harness (PCL process, no AME dep) | `pim/test_harness/lacal/kittyhawk_consumer_test.cpp` + `build_kittyhawk_consumer_test.sh` | new, follows `lacal_e2e_test`/`lacal_interop_driver.py` conventions |
 | 4 | Sleet registration for the harness | `external/ams-gra/sleet/services.d.local/kittyhawk-consumer.toml` (local, git-ignored — see bring-up guide) | new |
-| 5 | FINDINGS.md exit entry | `subprojects/PYRAMID/pim/test_harness/FINDINGS.md` | doc |
+| 5 | Exit evidence | Retained in PYRAMID git history | doc |
 
 ## 4. Harness design
 
@@ -138,7 +138,7 @@ Codec covers all four UCI messages genuinely observed on the wire from
 independent AMS GRA producers; the harness decodes a real, multi-minute
 run of live Kitty Hawk traffic (not a fixture) end to end with no decode
 errors; `SignalReport` is handled as scenario-intermittent rather than
-asserted present. FINDINGS.md gains the exit entry.
+asserted present. The exit evidence is retained in PYRAMID git history.
 
 **Met (2026-07-12).** Deliverable 1 (extending the frozen hand codec)
 was superseded per `uci_mms_conversion_plan.md` Phase 3 — `ObservationMeasurementReport`
@@ -148,9 +148,8 @@ and `ServiceStatus` ride the generated xsd2proto path instead, alongside
 against the live stack (`PositionReport`, `ObservationMeasurementReport`,
 `ServiceStatus` present every run; `SignalReport` decoded when the pentagon
 flight pattern has RF lock, correctly treated as inconclusive-not-failing
-otherwise). See `pim/test_harness/FINDINGS.md`'s dated entry for the exact
-PASS output and the codec-generator/transport-plugin bugs this run
-surfaced and fixed.
+otherwise). The exact PASS output and the codec-generator/transport-plugin
+bugs this run surfaced and fixed remain available in PYRAMID git history.
 
 ## 7. Cross-repo note
 

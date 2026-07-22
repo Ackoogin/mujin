@@ -1,3 +1,0 @@
-# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
-port task_command_request rpc mission_autonomy plugins/pcl_transport_socket_plugin.dll {"role":"provided","port":19402}
-port task_information pubsub mission_autonomy plugins/pcl_transport_socket_plugin.dll {"role":"provided","port":19402}

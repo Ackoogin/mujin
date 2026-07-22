@@ -76,8 +76,8 @@ contract, codecs, bindings, and transports that such a bridge consumes.
 
 ## 2. Review — where the A-GRA integration actually is
 
-What exists and is verified (all 2026-07-11, see
-`subprojects/PYRAMID/pim/test_harness/FINDINGS.md`):
+What exists and is verified (all 2026-07-11; the retired evidence ledger is
+available in PYRAMID git history):
 
 | Layer | Artifact | State |
 |-------|----------|-------|
@@ -375,8 +375,8 @@ proofs pass against the persistent `external/ams-gra` Kitty Hawk stack from
 a from-clean rebuild: `build_lacal_generated_seam_test.sh` → `PASS:
 generated UCI facade LA-CAL seam over Sleet`; `build_kittyhawk_consumer_test.sh`
 → all four information topics PASS with real decoded samples (see
-`pim/test_harness/FINDINGS.md`'s dated entry for the exact counts and the
-three real bugs this surfaced and fixed — a `wire_names.json` symlink
+PYRAMID git history for the exact counts and the three real bugs this
+surfaced and fixed — a `wire_names.json` symlink
 pointed at the wrong path, `oms_json_codec_gen.py` never generated
 wrapper-unwrap handling for single-variant information wrappers, and the
 LA-CAL plugin's OWP message-name mapping needed the same generalization).

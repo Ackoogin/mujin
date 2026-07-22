@@ -1,12 +1,11 @@
 # Mujin Workspace
 
 This repository is organised as a workspace containing three subprojects. PCL
-has been split into its own repository and is included here as a Git submodule;
-the remaining subprojects retain the same repository boundaries for a later
-split:
+and PYRAMID have been split into standalone repositories and are included here
+as Git submodules; AME remains owned by this workspace:
 
 - `subprojects/PCL` -- the low-level PYRAMID Composition Library runtime and C/C++ wrappers ([Ackoogin/pcl](https://github.com/Ackoogin/pcl))
-- `subprojects/PYRAMID` -- PYRAMID core and tactical-objects components built on top of PCL
+- `subprojects/PYRAMID` -- PYRAMID core and tactical-objects components built on top of PCL ([Ackoogin/PYRAMID](https://github.com/Ackoogin/PYRAMID))
 - `subprojects/AME` -- the Autonomous Mission Engine planning/execution stack built on top of PCL and PYRAMID
 
 AME is the headline application in the workspace: a **PDDL planning + Behaviour Tree execution** pipeline for autonomous mission planning and execution, with full observability and audit trail support.
@@ -68,7 +67,7 @@ Clone the workspace with its submodules:
 git clone --recurse-submodules git@github.com:Ackoogin/mujin.git
 ```
 
-For an existing clone, initialise the PCL submodule before configuring:
+For an existing clone, initialise both submodules before configuring:
 
 ```bash
 git submodule update --init --recursive
@@ -117,7 +116,7 @@ If the CMake Tools picker only shows `Release`, `Debug`, or `[Default]`, presets
 ctest --test-dir build --output-on-failure -C Release
 ```
 
-The current build registers 715 tests across PCL, PYRAMID, Tactical Objects, AME core, generated bindings, transport adapters, ROS2 semantics, and end-to-end planning/execution flows. Use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
+The current build registers 920 tests across PCL, PYRAMID, Tactical Objects, AME core, generated bindings, transport adapters, ROS2 semantics, and end-to-end planning/execution flows. Use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
 
 ### Run the Demo
 
@@ -203,7 +202,6 @@ cmake/                   Shared CMake support files
 | [PYRAMID User Guide](subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Engineers, integrators | High-level PYRAMID design/usage with diagrams; entry point to all PYRAMID docs |
 | [PYRAMID Plugin System](subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) | Component authors, deployers | Plugin types, ABI, loading/configuration, routing, capabilities, staging, and known limitations |
 | [PCL/PYRAMID Offline SDK](subprojects/PYRAMID/doc/architecture/sdk_packaging.md) | Maintainers, downstream SDK users | Package and verify a self-contained proto-to-plugin SDK, including custom contracts and the GRA runtime profile |
-| [PCL/PYRAMID Binding Generation Overview](subprojects/PYRAMID/doc/architecture/pcl_pyramid_binding_generation_overview.md) | Engineers | Broad architecture for how PYRAMID contracts become generated bindings that run on PCL |
 | [OMS / AMS-GRA / A-GRA Compatibility](subprojects/PYRAMID/doc/architecture/oms_agra_compatibility.md) | Engineers, integrators | Current compatibility status with the OMS/CAL wire protocol, the AMS-GRA reference stack, and the A-GRA compliance standard, with diagrams and known quirks |
 | [Generated Bindings](subprojects/PYRAMID/doc/architecture/generated_bindings.md) | Engineers | PYRAMID service/codegen pipeline and generated bindings |
 | [PCL Component Design](subprojects/PCL/doc/architecture/component_container_design.md) | Engineers | PCL component/container integration design |

@@ -1,4 +1,0 @@
-# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
-# Both ports share one client connection. Their modes remain independent.
-port action_command_request rpc mission_autonomy plugins/libpcl_transport_socket_plugin.so {"role":"consumed","host":"127.0.0.1","port":19401}
-port action_information pubsub mission_autonomy plugins/libpcl_transport_socket_plugin.so {"role":"consumed","host":"127.0.0.1","port":19401}

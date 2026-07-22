@@ -1,3 +1,0 @@
-# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
-port action_command_request rpc mission_autonomy plugins/pcl_transport_socket_plugin.dll {"role":"consumed","host":"127.0.0.1","port":19401}
-port action_information pubsub mission_autonomy plugins/pcl_transport_socket_plugin.dll {"role":"consumed","host":"127.0.0.1","port":19401}

@@ -1,5 +1,0 @@
-# port NAME MODE PEER PLUGIN PLUGIN_CONFIG
-# The Request port returns its typed Ack. The independent Information port
-# receives MA-Task publications.
-port task_command_request rpc mission_autonomy plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"agra_p3_ma_ms_link","participant_id":"mission_system"}
-port task_information pubsub mission_autonomy plugins/libpcl_transport_shared_memory_plugin.so {"bus_name":"agra_p3_ma_ms_link","participant_id":"mission_system"}

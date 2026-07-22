@@ -160,7 +160,8 @@ pattern) are done — see Delivered. Remaining:
   `005.0a.ASK`, routes PUB/SUB/MSG, schema-validates payloads (rejected a
   harness-generated instance on a UUID facet), and fails closed on wrong
   schema, unknown service, and unauthorized topic. Evidence to be folded
-  into `pim/test_harness/FINDINGS.md` at step 7.
+  into the P2 profile documentation at step 7 (the retired findings ledger is
+  available in PYRAMID git history).
 - **Drop-delta finding:** A-GRA 5.0a UUIDs are `xs:hexBinary` length-16
   (32 hex chars, no hyphens), unlike UCI 2.5's hyphenated form; the
   la-cal-harness generator hardcodes hyphenated UUIDs, so P2 instance
