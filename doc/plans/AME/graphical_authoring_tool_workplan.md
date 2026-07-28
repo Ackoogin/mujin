@@ -2,6 +2,8 @@
 
 **Approach:** Option 1 — C++ native tool using Dear ImGui + imgui-node-editor, linked against `ame_core`
 **Reference:** `doc/research/AME/graphical_authoring_option1_extend_existing.md`
+**Proposed Phase 6 (WI-6.1 – WI-6.10):** `doc/research/AME/pddl_authoring_usability_and_navigation.md` §8 —
+navigation for wide domains and guided authoring for non-programmers
 
 ---
 

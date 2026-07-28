@@ -4,6 +4,11 @@
 
 **Status:** Research and recommendation. No implementation started.
 
+**Follow-on documents:**
+
+- [`graphical_authoring_option1_extend_existing.md`](graphical_authoring_option1_extend_existing.md) — detailed assessment of Option 1, which led to the C++ tool now built under `subprojects/AME/src/authoring`
+- [`pddl_authoring_usability_and_navigation.md`](pddl_authoring_usability_and_navigation.md) — how to navigate a wide domain without a wall of nodes, and which authoring styles (block-based editors and similar) help non-programmers
+
 ---
 
 ## 1. Executive Summary
