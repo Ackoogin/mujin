@@ -1,0 +1,1704 @@
+<title>PDDL Authoring — HMI Concepts for Review</title>
+
+<style>
+/* ==========================================================================
+   Tokens. The review page is deliberately quiet; the mockups carry the colour.
+   Mockup chrome reuses the authoring tool's own Holo-Cyan ImGui palette
+   (subprojects/AME/src/authoring/app_theme.cpp) so concepts read as the
+   application, not as a website.
+   ========================================================================== */
+:root {
+  --ground:      #E8EBED;
+  --paper:       #F7F9FA;
+  --ink:         #0C1216;
+  --ink-2:       #47555D;
+  --ink-3:       #6F8089;
+  --line:        #C2CDD3;
+  --line-soft:   #D9E0E4;
+  --accent:      #06626F;
+  --accent-line: #00A2C4;
+  --accent-wash: #DCEEF1;
+
+  --req:      #8A6510;   /* requires    */
+  --req-wash: #F5EAD2;
+  --add:      #1C7A50;   /* makes true  */
+  --add-wash: #DBEDE3;
+  --del:      #A93F2B;   /* makes false */
+  --del-wash: #F6DFDA;
+
+  /* Application chrome — fixed in both themes. A screenshot does not invert. */
+  --ui-window:  #060A0E;
+  --ui-child:   #0A1016;
+  --ui-popup:   #0E161E;
+  --ui-bar:     #020406;
+  --ui-frame:   #04080E;
+  --ui-button:  #121E28;
+  --ui-header:  #0C1822;
+  --ui-border:  #008CB4;
+  --ui-hair:    #003C55;
+  --ui-text:    #DCF0FA;
+  --ui-dim:     #648296;
+  --ui-cyan:    #00E6FF;
+  --ui-tab-on:  #005A78;
+  --ui-req:     #E0B152;
+  --ui-add:     #52D69A;
+  --ui-del:     #F2836A;
+
+  --font-ui: system-ui, "Segoe UI", "Liberation Sans", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", "DejaVu Sans Mono",
+               "Liberation Mono", Consolas, monospace;
+
+  --measure: 68ch;
+  --col: min(1120px, 100% - 3rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground:      #0A0F13;
+    --paper:       #0F171C;
+    --ink:         #DCE9EF;
+    --ink-2:       #93A8B3;
+    --ink-3:       #6D828E;
+    --line:        #1E313C;
+    --line-soft:   #17262F;
+    --accent:      #45C9DD;
+    --accent-line: #0E7A92;
+    --accent-wash: #0B2A33;
+
+    --req:      #E0B152;
+    --req-wash: #2A2314;
+    --add:      #59CE94;
+    --add-wash: #0F2A20;
+    --del:      #F08C74;
+    --del-wash: #2E1813;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #0A0F13;
+  --paper:       #0F171C;
+  --ink:         #DCE9EF;
+  --ink-2:       #93A8B3;
+  --ink-3:       #6D828E;
+  --line:        #1E313C;
+  --line-soft:   #17262F;
+  --accent:      #45C9DD;
+  --accent-line: #0E7A92;
+  --accent-wash: #0B2A33;
+  --req:      #E0B152;
+  --req-wash: #2A2314;
+  --add:      #59CE94;
+  --add-wash: #0F2A20;
+  --del:      #F08C74;
+  --del-wash: #2E1813;
+}
+
+:root[data-theme="light"] {
+  --ground:      #E8EBED;
+  --paper:       #F7F9FA;
+  --ink:         #0C1216;
+  --ink-2:       #47555D;
+  --ink-3:       #6F8089;
+  --line:        #C2CDD3;
+  --line-soft:   #D9E0E4;
+  --accent:      #06626F;
+  --accent-line: #00A2C4;
+  --accent-wash: #DCEEF1;
+  --req:      #8A6510;
+  --req-wash: #F5EAD2;
+  --add:      #1C7A50;
+  --add-wash: #DBEDE3;
+  --del:      #A93F2B;
+  --del-wash: #F6DFDA;
+}
+
+/* ==========================================================================
+   Page
+   ========================================================================== */
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { width: var(--col); margin-inline: auto; }
+
+p, li { max-width: var(--measure); }
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: break-word; }
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* --- Masthead ------------------------------------------------------------ */
+/* The 2px overline echoes the selected-tab motif in the tool's own theme. */
+.masthead {
+  border-top: 2px solid var(--accent-line);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.masthead-inner {
+  width: var(--col);
+  margin-inline: auto;
+  padding: clamp(2.5rem, 6vw, 4.5rem) 0 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.masthead h1 {
+  font-size: clamp(2rem, 4.6vw, 3.15rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  text-wrap: balance;
+  max-width: 20ch;
+}
+.masthead .standfirst {
+  font-size: clamp(1.02rem, 1.6vw, 1.2rem);
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+.masthead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.masthead-meta div { display: flex; flex-direction: column; gap: 2px; padding-top: 0.75rem; }
+.masthead-meta .k {
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3);
+  font-weight: 700;
+}
+.masthead-meta .v { font-family: var(--font-mono); font-size: 12.5px; }
+
+/* --- Direction panel ----------------------------------------------------- */
+.direction {
+  margin-block: clamp(2.5rem, 5vw, 4rem);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-line);
+  background: var(--paper);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.direction h2 { font-size: 1.3rem; letter-spacing: -0.01em; }
+.rules { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); }
+@media (min-width: 800px) { .rules { grid-template-columns: repeat(3, 1fr); } }
+.rule { background: var(--paper); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.rule .k { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--accent); }
+.rule .h { font-weight: 650; font-size: 1rem; }
+.rule p { font-size: 14px; color: var(--ink-2); margin: 0; }
+
+/* --- Concept sections ---------------------------------------------------- */
+.concept {
+  padding-block: clamp(2.5rem, 5vw, 4rem);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.concept-head { display: flex; flex-direction: column; gap: 0.6rem; }
+.concept-head .tagline {
+  display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap;
+}
+.wi {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  padding: 2px 7px;
+}
+.concept h2 {
+  font-size: clamp(1.45rem, 2.6vw, 2rem);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-wrap: balance;
+  font-weight: 700;
+}
+.concept .intro { color: var(--ink-2); }
+
+/* --- Annotation legend --------------------------------------------------- */
+.notes { display: grid; gap: 0.55rem; padding: 0; list-style: none; }
+@media (min-width: 860px) { .notes { grid-template-columns: 1fr 1fr; gap: 0.55rem 2rem; } }
+.notes li {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 0.6rem;
+  font-size: 14px;
+  color: var(--ink-2);
+  max-width: none;
+}
+.marker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--paper);
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+/* --- Meta strip under each concept --------------------------------------- */
+.meta {
+  display: grid;
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+}
+@media (min-width: 760px) { .meta { grid-template-columns: repeat(3, 1fr); } }
+.meta div { background: var(--paper); padding: 0.85rem 1rem; }
+.meta .k {
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 700; display: block; margin-bottom: 0.25rem;
+}
+.meta .v { font-size: 14px; color: var(--ink-2); }
+
+/* ==========================================================================
+   Application chrome — shared mockup components
+   ========================================================================== */
+.ui {
+  background: var(--ui-window);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-x: auto;
+}
+.ui * { border-radius: 0; }
+
+.ui-menubar {
+  background: var(--ui-bar);
+  border-bottom: 1px solid var(--ui-hair);
+  padding: 5px 8px;
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--ui-dim);
+}
+.ui-menubar .title { color: var(--ui-text); font-family: var(--font-mono); margin-left: auto; }
+
+.ui-tabs { display: flex; background: var(--ui-bar); border-bottom: 2px solid var(--ui-hair); }
+.ui-tab {
+  padding: 6px 18px;
+  font-size: 12px;
+  color: var(--ui-dim);
+  border-right: 1px solid var(--ui-hair);
+  border-top: 2px solid transparent;
+  background: #04080C;
+}
+.ui-tab.on {
+  background: var(--ui-tab-on);
+  color: #EAFBFF;
+  border-top-color: var(--ui-cyan);
+  font-weight: 600;
+}
+
+.ui-body { display: grid; gap: 1px; background: var(--ui-hair); padding: 1px; }
+.ui-pane { background: var(--ui-child); padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.ui-pane.flush { padding: 0; }
+
+.ui-pane-title {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #4FA9C6;
+  font-weight: 700;
+  border-bottom: 1px solid var(--ui-hair);
+  padding-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ui-pane-title .count { color: var(--ui-dim); letter-spacing: 0; font-weight: 400; }
+
+.ui-status {
+  background: var(--ui-bar);
+  border-top: 1px solid var(--ui-hair);
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--ui-dim);
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.ui-status .ok { color: var(--ui-add); }
+.ui-status .bad { color: var(--ui-del); }
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ui-button);
+  border: 1px solid var(--ui-hair);
+  color: var(--ui-text);
+  padding: 3px 9px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ui-btn.ghost { background: transparent; color: var(--ui-dim); }
+.ui-btn.cyan { border-color: var(--ui-border); color: var(--ui-cyan); }
+
+.ui-list { display: flex; flex-direction: column; }
+.ui-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ui-text);
+  border-bottom: 1px solid rgba(0, 60, 85, 0.4);
+}
+.ui-row.on { background: var(--ui-header); border-left: 2px solid var(--ui-cyan); padding-left: 8px; }
+.ui-row .dim { color: var(--ui-dim); }
+.ui-row .grow { margin-left: auto; }
+
+/* Dropdown control — the core of the proposed editing model */
+.combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--ui-frame);
+  border: 1px solid #0A6E8C;
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ui-text);
+  white-space: nowrap;
+}
+.combo::after { content: "▾"; color: var(--ui-cyan); font-size: 10px; }
+.combo.open { border-color: var(--ui-cyan); background: #071620; }
+.combo.type { color: #9FD8EA; }
+.combo.pred { color: var(--ui-cyan); }
+.combo.var  { color: #FFD9A0; }
+.combo.plain::after { content: ""; }
+
+.lede-word { color: var(--ui-dim); font-size: 12.5px; }
+
+.popup {
+  background: var(--ui-popup);
+  border: 1px solid var(--ui-cyan);
+  padding: 3px 0;
+  width: max-content;
+  min-width: 260px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  box-shadow: 0 0 0 1px rgba(0, 230, 255, 0.12);
+}
+.popup .opt { padding: 3px 10px; display: flex; gap: 10px; align-items: baseline; color: var(--ui-text); }
+.popup .opt.sel { background: var(--ui-tab-on); }
+.popup .opt.off { color: #4A6272; }
+.popup .opt .why { margin-left: auto; font-size: 10.5px; color: var(--ui-dim); font-family: var(--font-ui); }
+.popup .head {
+  padding: 4px 10px 5px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #4FA9C6;
+  border-bottom: 1px solid var(--ui-hair);
+  margin-bottom: 3px;
+}
+
+/* Sentence rows in the guided editor */
+.sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 0; }
+.sentence.indent { padding-left: 14px; border-left: 1px solid var(--ui-hair); margin-left: 2px; }
+.tail { font-size: 11.5px; color: var(--ui-dim); margin-left: 4px; }
+.tail.add { color: var(--ui-add); }
+.tail.del { color: var(--ui-del); }
+.add-line { color: #4FA9C6; font-size: 12px; padding: 4px 0 2px 14px; }
+
+.group-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6FBCD4;
+  font-weight: 700;
+  padding-top: 6px;
+}
+
+/* Chips: requires / makes true / makes false — one language everywhere */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid;
+  padding: 0 5px;
+  min-width: 18px;
+  height: 17px;
+}
+.chip.req { color: var(--ui-req); border-color: #6B5316; background: #1E1808; }
+.chip.add { color: var(--ui-add); border-color: #1D5B41; background: #071A12; }
+.chip.del { color: var(--ui-del); border-color: #6B3025; background: #1E0C08; }
+
+/* In-mockup annotation marker */
+.mk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: var(--ui-cyan);
+  color: #041018;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  flex: none;
+}
+
+/* Code preview inside a pane */
+.ui-code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #A8CADA;
+  background: var(--ui-frame);
+  border: 1px solid var(--ui-hair);
+  padding: 8px 10px;
+  white-space: pre;
+  overflow-x: auto;
+}
+.ui-code .kw { color: #6FBCD4; }
+.ui-code .pr { color: var(--ui-cyan); }
+.ui-code .vr { color: #FFD9A0; }
+.ui-code .neg { color: var(--ui-del); }
+
+.check { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--ui-text); }
+.check .g { color: var(--ui-add); }
+.check .r { color: var(--ui-del); }
+.check .y { color: var(--ui-req); }
+
+/* Breadcrumb / history */
+.history {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--ui-dim);
+}
+.history .now { color: var(--ui-cyan); }
+.history .sep { color: #2A5A70; }
+
+/* Matrix */
+.matrix { border-collapse: collapse; font-family: var(--font-mono); font-size: 11.5px; width: 100%; }
+.matrix th, .matrix td { border: 1px solid rgba(0, 80, 110, 0.55); padding: 4px 6px; text-align: center; }
+.matrix thead th {
+  background: #081018;
+  color: #9FD8EA;
+  font-weight: 600;
+  font-size: 10.5px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  height: 116px;
+  padding: 6px 3px;
+  white-space: nowrap;
+}
+.matrix tbody th {
+  text-align: left;
+  color: var(--ui-cyan);
+  font-weight: 500;
+  white-space: nowrap;
+  background: #081018;
+}
+.matrix tbody tr:nth-child(even) td { background: rgba(8, 16, 24, 0.6); }
+.matrix td.hl { background: rgba(0, 90, 120, 0.28); }
+.matrix .cellset { display: flex; gap: 3px; justify-content: center; }
+
+/* Diagram frame */
+.diagram { background: var(--ui-child); padding: 6px; overflow-x: auto; }
+.diagram svg { display: block; min-width: 640px; width: 100%; height: auto; }
+.diagram.compact svg { min-width: 380px; }
+
+.two-up { display: grid; gap: 1px; background: var(--ui-hair); }
+@media (min-width: 900px) { .two-up { grid-template-columns: 1fr 1fr; } }
+
+/* Legend under a mockup */
+.legend {
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem;
+  font-size: 12.5px; color: var(--ink-2);
+  align-items: center;
+}
+.legend .swatch {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-mono); font-size: 11.5px;
+}
+.legend .box { width: 13px; height: 13px; border: 1px solid; display: inline-block; }
+.legend .box.req { border-color: var(--req); background: var(--req-wash); }
+.legend .box.add { border-color: var(--add); background: var(--add-wash); }
+.legend .box.del { border-color: var(--del); background: var(--del-wash); }
+
+/* Finding callout — things the mockups surfaced about the real domain */
+.finding {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--req);
+  background: var(--paper);
+  padding: 1rem 1.2rem;
+  font-size: 14.5px;
+  color: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.finding strong { color: var(--ink); font-weight: 650; }
+.finding p { margin: 0; max-width: none; }
+
+/* Closing tables */
+.sched { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sched th, .sched td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.sched thead th {
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3); border-bottom: 1px solid var(--line);
+}
+.sched td:first-child { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+.sched td.effort { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+
+.qlist { display: flex; flex-direction: column; gap: 1rem; padding: 0; list-style: none; counter-reset: q; }
+.qlist li {
+  display: grid; grid-template-columns: 2.2rem 1fr; gap: 0.8rem;
+  max-width: none; padding-bottom: 1rem; border-bottom: 1px solid var(--line-soft);
+}
+.qlist li::before {
+  counter-increment: q;
+  content: "Q" counter(q);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--accent);
+  padding-top: 3px;
+}
+.qlist .q { font-weight: 650; }
+.qlist .a { font-size: 14px; color: var(--ink-2); }
+
+footer.page-foot {
+  border-top: 1px solid var(--line);
+  margin-top: 3rem;
+  padding-block: 2rem 3rem;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+footer.page-foot p { max-width: 70ch; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .concept { scroll-margin-top: 2rem; }
+}
+</style>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <span class="eyebrow">AME · Graphical authoring tool · Concept review</span>
+    <h1>PDDL authoring: what the screens should look like</h1>
+    <p class="standfirst">
+      Six concept mockups for the next phase of the authoring tool. They follow one decision:
+      people <em>edit</em> through guided sentences and dropdown menus, and use the
+      <em>graph</em> to find their way around a domain — not to build one.
+    </p>
+    <div class="masthead-meta">
+      <div>
+        <span class="k">Status</span>
+        <span class="v">Concept — for review, nothing built</span>
+      </div>
+      <div>
+        <span class="k">Source research</span>
+        <span class="v">pddl_authoring_usability_and_navigation.md</span>
+      </div>
+      <div>
+        <span class="k">Domain shown</span>
+        <span class="v">mission-autonomy · 10 predicates · 7 actions</span>
+      </div>
+      <div>
+        <span class="k">Work items</span>
+        <span class="v">WI-6.1 – WI-6.10</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ==================================================================== -->
+  <section class="direction">
+    <div>
+      <span class="eyebrow">The direction being proposed</span>
+      <h2>Dropdowns for writing. Graphs for finding.</h2>
+    </div>
+    <p>
+      The research paper found the same result in every published evaluation of visual PDDL
+      tools: building a domain by dragging boxes and wires is slower than typing, and it does
+      not make the vocabulary any easier for a non-specialist. What people actually struggle
+      with is different in each case — an engineer cannot <em>find</em> anything in a domain of
+      sixty actions, and a non-engineer does not know what "delete effect" means. Those need two
+      different answers, so the concepts below split the tool along that line.
+    </p>
+    <div class="rules">
+      <div class="rule">
+        <span class="k">Editing</span>
+        <span class="h">Guided sentences</span>
+        <p>
+          Every slot is a dropdown holding only the choices that are legal at that point.
+          A type error becomes impossible to express rather than something reported afterwards.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Navigation</span>
+        <span class="h">Small, computed views</span>
+        <p>
+          Never the whole domain at once. One element plus its immediate neighbours, with back
+          and forward history — plus a matrix and per-type lifecycle diagrams for overview.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Escape hatch</span>
+        <span class="h">The PDDL stays real</span>
+        <p>
+          The PDDL tab remains editable and round-trippable through the existing importer. For
+          an experienced engineer, typing stays the fastest path, and that is fine.
+        </p>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="eyebrow">One colour language throughout:</span>
+      <span class="swatch"><span class="box req"></span> requires</span>
+      <span class="swatch"><span class="box add"></span> makes true</span>
+      <span class="swatch"><span class="box del"></span> makes false</span>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- CONCEPT 1 — GUIDED FORM EDITOR                                        -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="guided-editor">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">WI-6.4</span>
+        <span class="eyebrow">Primary editing surface</span>
+      </div>
+      <h2>Guided action editor</h2>
+      <p class="intro">
+        This replaces the current selected-element panel. The action is described as three
+        plain-English sentences — what it involves, what must be true before, and what changes
+        afterwards. The words "precondition", "add effect" and "delete effect" never appear on
+        screen. Every bracketed slot is a dropdown, and each dropdown is filtered to what the
+        type system allows in that position.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-menubar">
+        <span>File</span><span>Edit</span><span>Domain</span><span>Validate</span><span>Help</span>
+        <span class="title">mission-autonomy.ameproj *</span>
+      </div>
+      <div class="ui-tabs">
+        <span class="ui-tab on">Domain</span>
+        <span class="ui-tab">PDDL</span>
+        <span class="ui-tab">Plan</span>
+        <span class="ui-tab">BT</span>
+      </div>
+
+      <div class="ui-body" style="grid-template-columns: 180px minmax(420px, 1fr) 250px;">
+
+        <!-- Palette -->
+        <div class="ui-pane">
+          <div class="ui-pane-title">Actions <span class="count">7</span></div>
+          <div class="ui-list">
+            <div class="ui-row on"><span>move</span></div>
+            <div class="ui-row"><span>search</span></div>
+            <div class="ui-row"><span>classify</span></div>
+            <div class="ui-row"><span>withdraw-agent</span></div>
+            <div class="ui-row"><span>mark-task-failed</span></div>
+            <div class="ui-row"><span>reallocate-task</span></div>
+            <div class="ui-row"><span>search-degraded</span></div>
+          </div>
+          <div class="ui-pane-title">Predicates <span class="count">10</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span>at</span></div>
+            <div class="ui-row"><span>agent-available</span></div>
+            <div class="ui-row"><span>agent-unavailable</span></div>
+            <div class="ui-row"><span class="dim">…7 more</span></div>
+          </div>
+        </div>
+
+        <!-- Guided form -->
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            Editing an action
+            <span class="grow" style="margin-left:auto"></span>
+            <span class="ui-btn ghost">Show as PDDL</span>
+          </div>
+
+          <div class="sentence">
+            <span class="lede-word">Action</span>
+            <span class="combo plain" style="color:var(--ui-cyan)">move</span>
+            <span class="lede-word">— described as</span>
+            <span class="combo plain" style="color:#9FD8EA">an agent goes from one place to another</span>
+          </div>
+
+          <div class="group-label">It involves</div>
+          <div class="sentence indent">
+            <span class="lede-word">an</span>
+            <span class="combo type">agent</span>
+            <span class="lede-word">called</span>
+            <span class="combo var">?a</span>
+          </div>
+          <div class="sentence indent">
+            <span class="lede-word">a</span>
+            <span class="combo type">location</span>
+            <span class="lede-word">called</span>
+            <span class="combo var">?from</span>
+          </div>
+          <div class="sentence indent">
+            <span class="lede-word">a</span>
+            <span class="combo type">location</span>
+            <span class="lede-word">called</span>
+            <span class="combo var">?to</span>
+          </div>
+          <div class="add-line">+ add something else it involves</div>
+
+          <div class="group-label">Before it can happen</div>
+          <div class="sentence indent">
+            <span class="combo var">?a</span>
+            <span class="lede-word">must be</span>
+            <span class="combo pred">at</span>
+            <span class="combo var">?from</span>
+          </div>
+          <div class="sentence indent">
+            <span class="combo var">?a</span>
+            <span class="lede-word">must be</span>
+            <span class="combo pred open">agent-available</span>
+            <span class="mk">A</span>
+          </div>
+
+          <!-- open dropdown -->
+          <div style="padding-left: 74px;">
+            <div class="popup">
+              <div class="head">Things that can be true of an agent</div>
+              <div class="opt">at <span class="why">needs a location too</span></div>
+              <div class="opt sel">agent-available</div>
+              <div class="opt">agent-unavailable</div>
+              <div class="opt">sensor-operational</div>
+              <div class="opt">sensor-degraded</div>
+              <div class="opt off">searched <span class="why">applies to a sector</span></div>
+              <div class="opt off">task-failed <span class="why">applies to a sector</span></div>
+            </div>
+          </div>
+
+          <div class="add-line">+ add a condition</div>
+
+          <div class="group-label">Afterwards</div>
+          <div class="sentence indent">
+            <span class="combo var">?a</span>
+            <span class="lede-word">is</span>
+            <span class="combo pred">at</span>
+            <span class="combo var">?to</span>
+            <span class="tail add">becomes true</span>
+          </div>
+          <div class="sentence indent">
+            <span class="combo var">?a</span>
+            <span class="lede-word">is</span>
+            <span class="combo pred">at</span>
+            <span class="combo var">?from</span>
+            <span class="tail del">becomes false</span>
+            <span class="mk">B</span>
+          </div>
+          <div class="add-line">+ add an outcome</div>
+
+          <div class="ui-pane-title" style="margin-top:6px">When it runs</div>
+          <div class="sentence indent">
+            <span class="lede-word">behaviour tree node</span>
+            <span class="combo plain" style="color:#9FD8EA">MoveTo</span>
+            <span class="combo">reactive: no</span>
+            <span class="mk">D</span>
+          </div>
+        </div>
+
+        <!-- Live PDDL + checks -->
+        <div class="ui-pane">
+          <div class="ui-pane-title">Reads as <span class="mk" style="margin-left:auto">C</span></div>
+          <div class="ui-code">(<span class="kw">:action</span> move
+ <span class="kw">:parameters</span>
+   (<span class="vr">?a</span> - agent
+    <span class="vr">?from</span> - location
+    <span class="vr">?to</span> - location)
+ <span class="kw">:precondition</span> (and
+   (<span class="pr">at</span> <span class="vr">?a ?from</span>)
+   (<span class="pr">agent-available</span> <span class="vr">?a</span>))
+ <span class="kw">:effect</span> (and
+   (<span class="pr">at</span> <span class="vr">?a ?to</span>)
+   <span class="neg">(not</span> (<span class="pr">at</span> <span class="vr">?a ?from</span>)<span class="neg">)</span>))</div>
+
+          <div class="ui-pane-title">Checks</div>
+          <div class="check"><span class="g">✓</span><span>Every name has a type</span></div>
+          <div class="check"><span class="g">✓</span><span>Parses as STRIPS</span></div>
+          <div class="check"><span class="g">✓</span><span>Grounds against 6 objects</span></div>
+          <div class="check"><span class="y">!</span><span>Nothing else uses <span class="mono">?to</span> yet</span></div>
+        </div>
+      </div>
+
+      <div class="ui-status">
+        <span>move · 3 parameters · 2 conditions · 2 outcomes</span>
+        <span class="ok">✓ domain valid</span>
+        <span>undo: 4</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>The open dropdown offers only predicates whose first argument accepts an <span class="mono">agent</span>. Predicates that would need a <span class="mono">sector</span> are shown greyed with the reason, so the user learns the type system by using it rather than by reading about it.</span></li>
+      <li><span class="marker">B</span><span>Delete effects are written as "becomes false" on the same line as the fact. The user never has to know the two lists are separate in the file.</span></li>
+      <li><span class="marker">C</span><span>The generated PDDL is always visible beside the form. Nothing is hidden — this is what makes the form trustworthy to an engineer who will eventually read the file.</span></li>
+      <li><span class="marker">D</span><span>The behaviour tree binding stays on the same panel, because "what the robot actually does" is the question a mission author asks immediately after describing the action.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">The vocabulary problem. No planning background needed to add or correct an action.</span></div>
+      <div><span class="k">Cost</span><span class="v">Medium — a redesign of <span class="mono">renderSelectedElementEditor()</span>, no new infrastructure.</span></div>
+      <div><span class="k">Depends on</span><span class="v">Nothing new. Buildable first if the review prefers it.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- CONCEPT 2 — RELATIONS PANEL                                           -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="relations">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">WI-6.2</span>
+        <span class="eyebrow">Cheapest useful navigation</span>
+      </div>
+      <h2>Relations panel</h2>
+      <p class="intro">
+        The walk described in the brief — pick a fact, see every action that touches it, jump to
+        one of those actions, carry on — needs no canvas at all. Three lists and a history are
+        enough, and they are useful whether or not any of the graph work gets built.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-tabs">
+        <span class="ui-tab on">Domain</span>
+        <span class="ui-tab">PDDL</span>
+        <span class="ui-tab">Plan</span>
+        <span class="ui-tab">BT</span>
+      </div>
+      <div class="ui-body" style="grid-template-columns: 1fr 320px;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            Selected
+            <span style="margin-left:auto; display:flex; gap:6px;">
+              <span class="ui-btn ghost">◀ back</span>
+              <span class="ui-btn ghost">forward ▶</span>
+            </span>
+          </div>
+          <div class="history">
+            <span class="mk">A</span>
+            <span>at</span><span class="sep">›</span>
+            <span>move</span><span class="sep">›</span>
+            <span>agent-available</span><span class="sep">›</span>
+            <span class="now">task-assigned</span>
+          </div>
+
+          <div class="sentence" style="padding-top:4px">
+            <span class="lede-word">fact</span>
+            <span class="combo plain" style="color:var(--ui-cyan); font-size:14px;">(task-assigned ?s ?a)</span>
+          </div>
+          <div class="sentence">
+            <span class="lede-word">reads as</span>
+            <span style="color:#9FD8EA; font-size:12.5px;">sector <span class="mono">?s</span> is assigned to agent <span class="mono">?a</span></span>
+          </div>
+
+          <div class="ui-pane-title">Actions that need this to be true <span class="count">4</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="chip req">req</span><span>search</span><span class="dim grow">also needs sensor-operational</span></div>
+            <div class="ui-row"><span class="chip req">req</span><span>classify</span><span class="dim grow">also needs searched</span></div>
+            <div class="ui-row"><span class="chip req">req</span><span>search-degraded</span><span class="dim grow">also needs sensor-degraded</span></div>
+            <div class="ui-row"><span class="chip req">req</span><span>mark-task-failed</span><span class="dim grow">also needs agent-unavailable</span></div>
+          </div>
+
+          <div class="ui-pane-title">Actions that make it true <span class="count">1</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="chip add">+</span><span>reallocate-task</span><span class="dim grow">needs comms-available</span><span class="mk">B</span></div>
+          </div>
+
+          <div class="ui-pane-title">Actions that make it false <span class="count">1</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="chip del">−</span><span>mark-task-failed</span><span class="dim grow">also appears above</span><span class="mk">C</span></div>
+          </div>
+        </div>
+
+        <div class="ui-pane">
+          <div class="ui-pane-title">Where it starts out</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="dim">nominal</span><span class="grow">3 sectors assigned</span></div>
+            <div class="ui-row"><span class="dim">agent-lost</span><span class="grow">2 sectors assigned</span></div>
+            <div class="ui-row"><span class="dim">comms-lost</span><span class="grow">3 sectors assigned</span></div>
+          </div>
+          <div class="ui-pane-title">Same shape</div>
+          <div class="ui-list">
+            <div class="ui-row"><span>task-failed</span><span class="dim grow">sector</span></div>
+            <div class="ui-row"><span>searched</span><span class="dim grow">sector</span></div>
+            <div class="ui-row"><span>classified</span><span class="dim grow">sector</span></div>
+          </div>
+          <div class="ui-pane-title">Jump to</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            <span class="ui-btn cyan">Neighbourhood view</span>
+            <span class="ui-btn">Lifecycle of sector</span>
+            <span class="ui-btn">Row in matrix</span>
+          </div>
+        </div>
+      </div>
+      <div class="ui-status">
+        <span>relation index: 10 predicates · 7 actions · 34 links · rebuilt in 0.4 ms</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>Selection history with back and forward. This is what makes step-by-step exploration feel safe — you can always get back to where you were.</span></li>
+      <li><span class="marker">B</span><span>Each entry carries the reason it might not fire, so the walk answers "why did this not happen?" as well as "what touches this?".</span></li>
+      <li><span class="marker">C</span><span>An action can legitimately appear in two lists. <span class="mono">mark-task-failed</span> both needs the fact and removes it, and seeing that stated plainly is often the moment a modelling error is spotted.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">Finding your way around a domain too large to hold in your head.</span></div>
+      <div><span class="k">Cost</span><span class="v">Low. It is a list panel over an index the tool does not yet build.</span></div>
+      <div><span class="k">Depends on</span><span class="v">WI-6.1, the relation index — the one piece everything else here also needs.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- CONCEPT 3 — NEIGHBOURHOOD VIEW                                        -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="neighbourhood">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">WI-6.3</span>
+        <span class="eyebrow">What the canvas becomes</span>
+      </div>
+      <h2>Focused neighbourhood view</h2>
+      <p class="intro">
+        The current canvas draws every predicate in one row and every action in another, joined
+        only by hand-drawn links that the PDDL generator ignores. This replaces it: the selected
+        element in the middle, everything one step away around it, nothing else. Positions are
+        computed, so nobody has to tidy the layout by hand as the domain grows. Clicking a
+        neighbour re-centres the view on it.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-menubar">
+        <span>Domain</span><span>View</span>
+        <span class="title">neighbourhood · 1 step</span>
+      </div>
+      <div class="ui-body" style="grid-template-columns: 1fr;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            Around (task-assigned ?s ?a)
+            <span style="margin-left:auto; display:flex; gap:6px; align-items:center;">
+              <span class="ui-btn ghost">◀</span>
+              <span class="ui-btn ghost">▶</span>
+              <span class="combo">steps: 1</span>
+              <span class="combo">show: everything</span>
+              <span class="ui-btn cyan">Whole domain</span>
+              <span class="mk">A</span>
+            </span>
+          </div>
+          <div class="diagram">
+            <svg viewBox="0 0 940 372" role="img"
+                 aria-label="Focused neighbourhood graph: reallocate-task makes task-assigned true, mark-task-failed makes it false, and search, classify, search-degraded and mark-task-failed all require it.">
+              <defs>
+                <marker id="ar-add" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#52D69A"></path>
+                </marker>
+                <marker id="ar-del" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#F2836A"></path>
+                </marker>
+                <marker id="ar-req" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#E0B152"></path>
+                </marker>
+              </defs>
+
+              <!-- column captions -->
+              <text x="20" y="24" fill="#4FA9C6" font-family="system-ui, sans-serif" font-size="11" letter-spacing="1.6">CHANGES IT</text>
+              <text x="372" y="24" fill="#4FA9C6" font-family="system-ui, sans-serif" font-size="11" letter-spacing="1.6">IN FOCUS</text>
+              <text x="700" y="24" fill="#4FA9C6" font-family="system-ui, sans-serif" font-size="11" letter-spacing="1.6">NEEDS IT</text>
+
+              <!-- edges: left to centre -->
+              <path d="M 208 108 C 280 108 300 160 356 168" fill="none" stroke="#52D69A" stroke-width="1.6" marker-end="url(#ar-add)"></path>
+              <path d="M 208 252 C 280 252 300 202 356 192" fill="none" stroke="#F2836A" stroke-width="1.6" marker-end="url(#ar-del)"></path>
+              <text x="252" y="152" fill="#52D69A" font-family="ui-monospace, monospace" font-size="10.5">makes true</text>
+              <text x="252" y="284" fill="#F2836A" font-family="ui-monospace, monospace" font-size="10.5">makes false</text>
+
+              <!-- edges: centre to right -->
+              <path d="M 584 172 C 640 172 650 72 692 68"  fill="none" stroke="#E0B152" stroke-width="1.6" marker-end="url(#ar-req)"></path>
+              <path d="M 584 178 C 640 178 650 136 692 132" fill="none" stroke="#E0B152" stroke-width="1.6" marker-end="url(#ar-req)"></path>
+              <path d="M 584 186 C 640 186 650 200 692 200" fill="none" stroke="#E0B152" stroke-width="1.6" marker-end="url(#ar-req)"></path>
+              <path d="M 584 192 C 640 192 650 264 692 268" fill="none" stroke="#E0B152" stroke-width="1.6" marker-end="url(#ar-req)"></path>
+
+              <!-- left nodes -->
+              <rect x="24" y="86" width="184" height="44" fill="#0C1822" stroke="#1D5B41"></rect>
+              <rect x="24" y="86" width="3" height="44" fill="#52D69A"></rect>
+              <text x="40" y="105" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="13">reallocate-task</text>
+              <text x="40" y="121" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">action · needs comms-available</text>
+
+              <rect x="24" y="230" width="184" height="44" fill="#0C1822" stroke="#6B3025"></rect>
+              <rect x="24" y="230" width="3" height="44" fill="#F2836A"></rect>
+              <text x="40" y="249" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="13">mark-task-failed</text>
+              <text x="40" y="265" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">action · also needs this fact</text>
+
+              <!-- centre node -->
+              <rect x="356" y="128" width="228" height="104" fill="#071620" stroke="#00E6FF" stroke-width="1.5"></rect>
+              <rect x="356" y="128" width="228" height="22" fill="#005A78"></rect>
+              <text x="368" y="144" fill="#EAFBFF" font-family="system-ui, sans-serif" font-size="10.5" letter-spacing="1.4">FACT</text>
+              <text x="368" y="176" fill="#00E6FF" font-family="ui-monospace, monospace" font-size="15">task-assigned</text>
+              <text x="368" y="196" fill="#9FD8EA" font-family="ui-monospace, monospace" font-size="11.5">?s - sector  ?a - agent</text>
+              <text x="368" y="218" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">6 links · true in 3 of 6 scenarios</text>
+
+              <!-- right nodes -->
+              <rect x="692" y="46" width="176" height="40" fill="#0C1822" stroke="#6B5316"></rect>
+              <rect x="692" y="46" width="3" height="40" fill="#E0B152"></rect>
+              <text x="708" y="64" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="13">search</text>
+              <text x="708" y="78" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">makes searched true</text>
+
+              <rect x="692" y="110" width="176" height="40" fill="#0C1822" stroke="#6B5316"></rect>
+              <rect x="692" y="110" width="3" height="40" fill="#E0B152"></rect>
+              <text x="708" y="128" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="13">classify</text>
+              <text x="708" y="142" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">makes classified true</text>
+
+              <rect x="692" y="178" width="176" height="40" fill="#0C1822" stroke="#6B5316"></rect>
+              <rect x="692" y="178" width="3" height="40" fill="#E0B152"></rect>
+              <text x="708" y="196" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="13">search-degraded</text>
+              <text x="708" y="210" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">makes searched true</text>
+
+              <rect x="692" y="246" width="176" height="40" fill="#0C1822" stroke="#6B5316"></rect>
+              <rect x="692" y="246" width="3" height="40" fill="#E0B152"></rect>
+              <text x="708" y="264" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="13">mark-task-failed</text>
+              <text x="708" y="278" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">appears on both sides</text>
+
+              <!-- what a busier fact would look like -->
+              <rect x="692" y="306" width="176" height="30" fill="#04080E" stroke="#003C55" stroke-dasharray="3 3"></rect>
+              <text x="708" y="325" fill="#648296" font-family="system-ui, sans-serif" font-size="11.5">nothing hidden (cap: 20)</text>
+            </svg>
+          </div>
+          <div class="ui-status" style="border-top:1px solid var(--ui-hair)">
+            <span>layout computed · positions not stored</span>
+            <span>click any neighbour to re-centre</span>
+            <span class="mk" style="margin-left:auto">B</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>Depth control, a filter for which relationship kinds to draw, and an explicit escape to the existing whole-domain canvas for small domains or for a presentation slide.</span></li>
+      <li><span class="marker">B</span><span>Because the subgraph is computed, layout is computed too. The stored <span class="mono">posX</span>/<span class="mono">posY</span> fields stop being something a user has to maintain.</span></li>
+      <li><span class="marker">C</span><span>Heavily used facts such as <span class="mono">(at ?a ?l)</span> would flood the view, so neighbours are capped and the remainder collapses into a single "+ n more" node that opens a list.</span></li>
+      <li><span class="marker">D</span><span>Every edge here is derived from the model, not drawn by hand. That removes the reason <span class="mono">causalLinks</span> exists — see the closing section.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">The wall of nodes. Domain size stops affecting readability.</span></div>
+      <div><span class="k">Cost</span><span class="v">Medium — an index, a small layered layout routine, history. No new library.</span></div>
+      <div><span class="k">Depends on</span><span class="v">WI-6.1. Uses the <span class="mono">imgui-node-editor</span> already integrated.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- CONCEPT 4 — MATRIX                                                    -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="matrix">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">WI-6.5</span>
+        <span class="eyebrow">Overview without a graph</span>
+      </div>
+      <h2>Fact-by-action matrix</h2>
+      <p class="intro">
+        For a wide, shallow domain a grid is often more readable than any graph, and it exposes
+        gaps immediately. Below is the real <span class="mono">mission-autonomy</span> domain.
+        Two things jump out of it that are hard to see in the PDDL file itself, and both are
+        called out under the table.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-body" style="grid-template-columns: 1fr;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            mission-autonomy · 10 facts × 7 actions
+            <span style="margin-left:auto; display:flex; gap:6px;">
+              <span class="combo">rows: all facts</span>
+              <span class="ui-btn ghost">Export</span>
+            </span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="matrix">
+              <thead>
+                <tr>
+                  <th style="writing-mode:horizontal-tb; transform:none; height:auto; text-align:left;">fact \ action</th>
+                  <th>move</th>
+                  <th>search</th>
+                  <th>classify</th>
+                  <th>withdraw-agent</th>
+                  <th>mark-task-failed</th>
+                  <th>reallocate-task</th>
+                  <th>search-degraded</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>at</th>
+                  <td><span class="cellset"><span class="chip req">R</span><span class="chip add">+</span><span class="chip del">−</span></span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td></td><td></td><td></td>
+                  <td><span class="chip req">R</span></td>
+                </tr>
+                <tr>
+                  <th>agent-available</th>
+                  <td><span class="chip req">R</span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td><span class="cellset"><span class="chip req">R</span><span class="chip del">−</span></span></td>
+                  <td></td>
+                  <td><span class="chip req">R</span></td>
+                  <td><span class="chip req">R</span></td>
+                </tr>
+                <tr>
+                  <th>agent-unavailable</th>
+                  <td></td><td></td><td></td>
+                  <td><span class="chip add">+</span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td></td><td></td>
+                </tr>
+                <tr>
+                  <th>sensor-operational</th>
+                  <td></td>
+                  <td><span class="chip req">R</span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td></td><td></td>
+                  <td><span class="chip req">R</span></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <th>sensor-degraded</th>
+                  <td></td><td></td><td></td>
+                  <td><span class="chip req">R</span></td>
+                  <td></td><td></td>
+                  <td><span class="chip req">R</span></td>
+                </tr>
+                <tr>
+                  <th>searched</th>
+                  <td></td>
+                  <td><span class="chip add">+</span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td></td><td></td><td></td>
+                  <td><span class="chip add">+</span></td>
+                </tr>
+                <tr>
+                  <th>classified</th>
+                  <td></td><td></td>
+                  <td class="hl"><span class="chip add">+</span></td>
+                  <td></td><td></td><td></td><td></td>
+                </tr>
+                <tr>
+                  <th>task-assigned</th>
+                  <td></td>
+                  <td><span class="chip req">R</span></td>
+                  <td><span class="chip req">R</span></td>
+                  <td></td>
+                  <td><span class="cellset"><span class="chip req">R</span><span class="chip del">−</span></span></td>
+                  <td><span class="chip add">+</span></td>
+                  <td><span class="chip req">R</span></td>
+                </tr>
+                <tr>
+                  <th>task-failed</th>
+                  <td></td><td></td><td></td><td></td>
+                  <td><span class="chip add">+</span></td>
+                  <td><span class="cellset"><span class="chip req">R</span><span class="chip del">−</span></span></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <th>comms-available</th>
+                  <td></td><td></td><td></td><td></td><td></td>
+                  <td class="hl"><span class="chip req">R</span></td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="ui-status" style="border-top:1px solid var(--ui-hair)">
+            <span><span class="chip req">R</span> needs it</span>
+            <span><span class="chip add">+</span> makes it true</span>
+            <span><span class="chip del">−</span> makes it false</span>
+            <span class="bad" style="margin-left:auto">4 facts no action ever makes true</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <strong>What this view already tells us about the real domain</strong>
+      <p>
+        <span class="mono">comms-available</span> is required by <span class="mono">reallocate-task</span>
+        and is never made true by anything. If a scenario does not start with it, reallocation can
+        never happen — which is exactly the behaviour the comms-lost contingency problems rely on,
+        but nothing in the file says so out loud.
+      </p>
+      <p>
+        <span class="mono">classified</span> has exactly one action that makes it true and no action
+        that ever makes it false. Any goal mentioning it depends on a single action succeeding, so a
+        reviewer looking for single points of failure should start there.
+      </p>
+      <p>
+        Four facts in total — <span class="mono">agent-available</span>,
+        <span class="mono">sensor-operational</span>, <span class="mono">sensor-degraded</span> and
+        <span class="mono">comms-available</span> — are required by actions but produced by none.
+        Each is set once in the scenario file and never changes again, which is a deliberate
+        modelling choice here and worth stating explicitly rather than leaving for a reader to infer.
+      </p>
+    </div>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">Reviewing a whole domain at once, and spotting facts nothing changes.</span></div>
+      <div><span class="k">Cost</span><span class="v">Low. An ImGui table over the same index.</span></div>
+      <div><span class="k">Depends on</span><span class="v">WI-6.1.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- CONCEPT 5 — LIFECYCLE                                                 -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="lifecycle">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">WI-6.6</span>
+        <span class="eyebrow">The domain, sliced by type</span>
+      </div>
+      <h2>Object lifecycle view</h2>
+      <p class="intro">
+        A domain is wide because it describes several kinds of thing at once. Split it by type and
+        each slice becomes a small state diagram — the kind of picture a systems engineer can read
+        without any planning background. A domain that is unreadable as one large picture is
+        usually readable as several small ones.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-menubar">
+        <span>Domain</span><span>View</span>
+        <span class="title">lifecycles · 2 of 3 types grouped</span>
+      </div>
+      <div class="two-up">
+        <div class="ui-pane flush">
+          <div class="ui-pane-title" style="padding:10px 12px 6px">
+            agent <span class="count">2 objects</span>
+            <span class="combo" style="margin-left:auto">grouped by: availability</span>
+          </div>
+          <div class="diagram compact">
+            <svg viewBox="0 0 520 250" role="img"
+                 aria-label="Agent availability lifecycle: an agent starts available and moves to unavailable via withdraw-agent, with no action returning it to available.">
+              <defs>
+                <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#00E6FF"></path>
+                </marker>
+              </defs>
+
+              <circle cx="118" cy="34" r="5" fill="#52D69A"></circle>
+              <text x="132" y="38" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">start</text>
+              <path d="M 118 42 L 118 62" fill="none" stroke="#52D69A" stroke-width="1.3"></path>
+
+              <rect x="100" y="66" width="164" height="48" fill="#071620" stroke="#00E6FF"></rect>
+              <text x="114" y="90" fill="#00E6FF" font-family="ui-monospace, monospace" font-size="13">agent-available</text>
+              <text x="114" y="105" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">can move, search, classify</text>
+
+              <path d="M 264 90 L 300 90 L 300 172 L 266 172" fill="none" stroke="#00E6FF" stroke-width="1.5" marker-end="url(#ar2)"></path>
+              <text x="312" y="126" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="11">withdraw-agent</text>
+              <text x="312" y="141" fill="#E0B152" font-family="system-ui, sans-serif" font-size="10.5">needs sensor-degraded</text>
+
+              <rect x="100" y="148" width="164" height="48" fill="#0C1822" stroke="#6B3025"></rect>
+              <text x="114" y="172" fill="#F2836A" font-family="ui-monospace, monospace" font-size="13">agent-unavailable</text>
+              <text x="114" y="187" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">tasks can be reallocated</text>
+
+              <path d="M 100 184 C 52 184 52 112 96 100" fill="none" stroke="#F2836A" stroke-width="1.2" stroke-dasharray="4 4"></path>
+              <text x="52" y="146" fill="#F2836A" font-family="system-ui, sans-serif" font-size="15" text-anchor="middle">✕</text>
+              <text x="20" y="228" fill="#F2836A" font-family="system-ui, sans-serif" font-size="11">no action returns an agent to available</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="ui-pane flush">
+          <div class="ui-pane-title" style="padding:10px 12px 6px">
+            sector <span class="count">3 objects</span>
+            <span class="combo" style="margin-left:auto">grouped by: task state</span>
+          </div>
+          <div class="diagram compact">
+            <svg viewBox="0 0 560 250" role="img"
+                 aria-label="Sector task lifecycle: assigned cycles to failed via mark-task-failed and back via reallocate-task; search then classify move a sector through searched to classified.">
+              <defs>
+                <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="#00E6FF"></path>
+                </marker>
+              </defs>
+
+              <rect x="24" y="46" width="140" height="44" fill="#071620" stroke="#00E6FF"></rect>
+              <text x="38" y="68" fill="#00E6FF" font-family="ui-monospace, monospace" font-size="12.5">task-assigned</text>
+              <text x="38" y="82" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">set in the scenario</text>
+
+              <rect x="24" y="160" width="140" height="44" fill="#0C1822" stroke="#6B3025"></rect>
+              <text x="38" y="182" fill="#F2836A" font-family="ui-monospace, monospace" font-size="12.5">task-failed</text>
+              <text x="38" y="196" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">awaiting reallocation</text>
+
+              <path d="M 60 90 L 60 156" fill="none" stroke="#00E6FF" stroke-width="1.4" marker-end="url(#ar4)"></path>
+              <text x="142" y="118" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="10.5">mark-task-failed</text>
+              <path d="M 128 160 L 128 94" fill="none" stroke="#00E6FF" stroke-width="1.4" marker-end="url(#ar4)"></path>
+              <text x="142" y="142" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="10.5">reallocate-task</text>
+
+              <rect x="300" y="46" width="172" height="44" fill="#0C1822" stroke="#1D5B41"></rect>
+              <text x="314" y="68" fill="#52D69A" font-family="ui-monospace, monospace" font-size="12.5">searched</text>
+              <text x="314" y="82" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">search · search-degraded</text>
+
+              <rect x="300" y="160" width="172" height="44" fill="#0C1822" stroke="#1D5B41"></rect>
+              <text x="314" y="182" fill="#52D69A" font-family="ui-monospace, monospace" font-size="12.5">classified</text>
+              <text x="314" y="196" fill="#648296" font-family="system-ui, sans-serif" font-size="10.5">classify</text>
+
+              <path d="M 164 62 L 296 62" fill="none" stroke="#00E6FF" stroke-width="1.4" marker-end="url(#ar4)"></path>
+              <text x="196" y="54" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="10.5">search</text>
+              <path d="M 340 90 L 340 156" fill="none" stroke="#00E6FF" stroke-width="1.4" marker-end="url(#ar4)"></path>
+              <text x="350" y="126" fill="#DCF0FA" font-family="ui-monospace, monospace" font-size="10.5">classify</text>
+
+              <text x="24" y="232" fill="#648296" font-family="system-ui, sans-serif" font-size="11">searched and classified are never cleared — a sector cannot be re-searched</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="ui-status">
+        <span>groupings declared by hand · automatic suggestion is a later step</span>
+        <span class="mk" style="margin-left:auto">A</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>The first version asks the user to say "these facts are alternative states of an agent" and stores that grouping in the project. Working it out automatically is a later addition, not a prerequisite.</span></li>
+      <li><span class="marker">B</span><span>Both diagrams here were drawn from the real domain, and both surfaced something worth a review question — an agent that can never recover, and a sector that can never be re-searched. Neither is visible in the PDDL at a glance.</span></li>
+      <li><span class="marker">C</span><span>Sensor state has no diagram because no action changes it; <span class="mono">sensor-degraded</span> is only ever set in the scenario file. The view showing nothing is itself the correct answer.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">Reviewability. Eight small state diagrams instead of one unreadable picture.</span></div>
+      <div><span class="k">Cost</span><span class="v">Medium. Higher if automatic grouping is attempted — so stage it.</span></div>
+      <div><span class="k">Depends on</span><span class="v">WI-6.1 plus one new field on the project model for groupings.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- CONCEPT 6 — FAILURE EXPLANATION                                       -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="explain">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">WI-6.8</span>
+        <span class="eyebrow">The message that decides whether people keep using the tool</span>
+      </div>
+      <h2>Plain-language failure report</h2>
+      <p class="intro">
+        "No plan found" is the least helpful thing a planning tool can say to someone who is not a
+        planning expert. The same index that powers the views above can turn it into a specific
+        statement about which fact is unreachable and why — and can offer the two or three edits
+        that would fix it.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-tabs">
+        <span class="ui-tab">Domain</span>
+        <span class="ui-tab">PDDL</span>
+        <span class="ui-tab on">Plan</span>
+        <span class="ui-tab">BT</span>
+      </div>
+      <div class="ui-body" style="grid-template-columns: 1fr 260px;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            Scenario: comms-lost-realloc-needed
+            <span style="margin-left:auto; color:var(--ui-del); letter-spacing:0;">✕ no plan</span>
+          </div>
+
+          <div class="sentence">
+            <span class="lede-word">the goal it could not reach</span>
+            <span class="combo plain" style="color:var(--ui-cyan); font-size:14px;">(classified sector-b)</span>
+            <span class="mk">A</span>
+          </div>
+
+          <div class="ui-pane-title">Why</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="chip add">+</span><span class="dim">only</span><span>classify</span><span class="dim">makes</span><span>(classified sector-b)</span><span>true</span></div>
+            <div class="ui-row"><span class="chip req">R</span><span>classify</span><span class="dim">needs</span><span>(task-assigned sector-b ?a)</span></div>
+            <div class="ui-row"><span class="chip del">−</span><span>mark-task-failed</span><span class="dim">removed it, and only</span><span>reallocate-task</span><span class="dim">puts it back</span></div>
+            <div class="ui-row"><span class="chip req">R</span><span>reallocate-task</span><span class="dim">needs</span><span>(comms-available)</span></div>
+            <div class="ui-row on" style="border-left-color:var(--ui-del)">
+              <span style="color:var(--ui-del)">▸</span>
+              <span>No action in this domain ever makes <span style="color:var(--ui-cyan)">(comms-available)</span> true,
+              and the scenario does not start with it.</span>
+              <span class="mk">B</span>
+            </div>
+          </div>
+
+          <div class="ui-pane-title">What would fix it</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <span class="ui-btn cyan">Add (comms-available) to this scenario's starting facts</span>
+            <span class="ui-btn">Add an action that restores comms</span>
+            <span class="ui-btn">Show me reallocate-task</span>
+            <span class="mk">C</span>
+          </div>
+
+          <div class="ui-pane-title">If this is intended</div>
+          <div class="check">
+            <span class="y">!</span>
+            <span>Mark the scenario as expected-to-fail so the batch run treats this as a pass.</span>
+          </div>
+        </div>
+
+        <div class="ui-pane">
+          <div class="ui-pane-title">All scenarios</div>
+          <div class="ui-list">
+            <div class="ui-row"><span style="color:var(--ui-add)">✓</span><span>nominal</span><span class="dim grow">7 steps</span></div>
+            <div class="ui-row"><span style="color:var(--ui-add)">✓</span><span>sensor-fail</span><span class="dim grow">9 steps</span></div>
+            <div class="ui-row"><span style="color:var(--ui-add)">✓</span><span>agent-lost</span><span class="dim grow">11 steps</span></div>
+            <div class="ui-row on"><span style="color:var(--ui-del)">✕</span><span>comms-lost-realloc</span><span class="dim grow">no plan</span></div>
+            <div class="ui-row"><span style="color:var(--ui-add)">✓</span><span>comms-lost-no-realloc</span><span class="dim grow">6 steps</span></div>
+            <div class="ui-row"><span style="color:var(--ui-add)">✓</span><span>both-sensors-degraded</span><span class="dim grow">8 steps</span></div>
+          </div>
+          <div class="ui-pane-title">Facts no action produces <span class="count">4</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="chip del">−</span><span>comms-available</span></div>
+            <div class="ui-row"><span class="chip del">−</span><span>agent-available</span></div>
+            <div class="ui-row"><span class="chip del">−</span><span>sensor-operational</span></div>
+            <div class="ui-row"><span class="chip del">−</span><span>sensor-degraded</span></div>
+            <div class="ui-row"><span class="dim">each is set in the scenario and never changes</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ui-status">
+        <span>5 of 6 scenarios as expected</span>
+        <span class="bad">1 unexplained failure</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>Name the goal that failed, not the run. The user asked for something specific and the tool should answer about that specific thing.</span></li>
+      <li><span class="marker">B</span><span>The chain stops at the first fact nothing can produce. That single sentence is usually the whole answer, and it comes straight out of the relation index.</span></li>
+      <li><span class="marker">C</span><span>Offer the edit, not just the diagnosis — and include "this failure is intended" as a first-class option, because for contingency domains it very often is.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">The point where a non-expert gives up on the tool.</span></div>
+      <div><span class="k">Cost</span><span class="v">Low to medium. A backward walk over the index from the failed goal.</span></div>
+      <div><span class="k">Depends on</span><span class="v">WI-6.1 and the existing feasibility check.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- NOT DOING                                                             -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="not-doing">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">§4.2 · WI-6.10</span>
+        <span class="eyebrow">Deliberately left out</span>
+      </div>
+      <h2>What these concepts do not propose</h2>
+    </div>
+
+    <div class="rules">
+      <div class="rule">
+        <span class="k">Not now</span>
+        <span class="h">Snap-together blocks</span>
+        <p>
+          Scratch-style blocks suit tree-shaped logic — nested <span class="mono">and</span>,
+          <span class="mono">or</span>, <span class="mono">not</span>. AME's PDDL support is flat
+          conjunctions today, so blocks would buy nothing a dropdown does not already give. Revisit
+          if nested conditions arrive; reimplement the interaction in ImGui rather than embedding a
+          browser for Blockly.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Not at all</span>
+        <span class="h">Graph-first authoring</span>
+        <p>
+          Building a domain by wiring nodes together. Every published evaluation that measured it
+          found it slower than typing, and it does not help the people it is meant to help. The
+          graph earns its place as a way to look, not a way to write.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Decision needed</span>
+        <span class="h">Hand-drawn causal links</span>
+        <p>
+          <span class="mono">causalLinks</span> is drawn, saved and type-checked today, and then
+          read by nothing — not the PDDL generator, not the planner. The neighbourhood view derives
+          the same relationship automatically, so the field should become derived and read-only, or
+          be removed.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- SEQUENCE                                                              -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="sequence">
+    <div class="concept-head">
+      <span class="eyebrow">Suggested build order</span>
+      <h2>Each step is useful on its own</h2>
+      <p class="intro">
+        One shared piece comes first — an index answering "which actions need, make true, or make
+        false this fact". Five of the six concepts above are a panel over that index. Nothing here
+        invalidates code already written, and no new third-party dependency is needed.
+      </p>
+    </div>
+    <div class="table-scroll">
+      <table class="sched">
+        <thead>
+          <tr><th>Item</th><th>What gets built</th><th>What a reviewer sees</th><th>Effort</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>WI-6.1</td>
+            <td>Relation index over the project model</td>
+            <td>Nothing yet — this is the foundation the rest reads</td>
+            <td class="effort">Low</td>
+          </tr>
+          <tr>
+            <td>WI-6.2</td>
+            <td>Relations panel with history</td>
+            <td>The fact-to-action walk, working, without touching the canvas</td>
+            <td class="effort">Low</td>
+          </tr>
+          <tr>
+            <td>WI-6.4</td>
+            <td>Guided sentence editor</td>
+            <td>A non-specialist adding a correct action unaided</td>
+            <td class="effort">Medium</td>
+          </tr>
+          <tr>
+            <td>WI-6.3</td>
+            <td>Focused neighbourhood canvas</td>
+            <td>A large domain that stays readable; layout no longer hand-maintained</td>
+            <td class="effort">Medium</td>
+          </tr>
+          <tr>
+            <td>WI-6.5</td>
+            <td>Fact-by-action matrix</td>
+            <td>The whole domain on one screen, with gaps visible</td>
+            <td class="effort">Low</td>
+          </tr>
+          <tr>
+            <td>WI-6.8</td>
+            <td>Failure explanation</td>
+            <td>"Nothing makes comms-available true" instead of "no plan found"</td>
+            <td class="effort">Low–med</td>
+          </tr>
+          <tr>
+            <td>WI-6.6</td>
+            <td>Object lifecycle view</td>
+            <td>Per-type state diagrams a systems engineer can review</td>
+            <td class="effort">Medium</td>
+          </tr>
+          <tr>
+            <td>WI-6.7 · 6.9</td>
+            <td>Semantic zoom, groups, saved views</td>
+            <td>Polish: curated diagrams for review meetings</td>
+            <td class="effort">Low–med</td>
+          </tr>
+          <tr>
+            <td>WI-6.10</td>
+            <td>Resolve <span class="mono">causalLinks</span></td>
+            <td>One less thing in the UI that does nothing</td>
+            <td class="effort">Low</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section class="concept" id="questions">
+    <div class="concept-head">
+      <span class="eyebrow">For this review</span>
+      <h2>Questions these mockups are asking</h2>
+    </div>
+    <ol class="qlist">
+      <li>
+        <div>
+          <div class="q">Is the sentence wording right for your users?</div>
+          <div class="a">
+            "Before it can happen" and "Afterwards" are the two labels doing the most work. If the
+            people who will use this say "entry conditions" and "outcomes", the mockup should say
+            that instead — the words are cheap to change now and expensive later.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">Does the guided editor come before or after the navigation work?</div>
+          <div class="a">
+            The research recommends the index and relations panel first, because everything else
+            reads them. If the immediate audience is non-specialists rather than engineers, the
+            guided editor could go first — it depends on nothing new.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">Should the whole-domain canvas survive?</div>
+          <div class="a">
+            These concepts keep it as an explicit "show everything" mode. If nobody wants it,
+            dropping it removes the stored positions, the hand-drawn links and a chunk of code.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">Is the fact-by-action matrix a review artefact in its own right?</div>
+          <div class="a">
+            It found two real properties of the mission-autonomy domain while these mockups were
+            being drawn. If it is going into assurance evidence, it needs an export format, which is
+            a small addition worth deciding now.
+          </div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <footer class="page-foot">
+    <p>
+      Concept mockups only — no implementation has started, and nothing shown here exists in the
+      tool today. All domain content is taken from
+      <span class="mono">subprojects/AME/domains/mission_autonomy/domain.pddl</span>; the mockup
+      chrome reuses the tool's own Holo-Cyan theme values. Full reasoning, prior art and sources are
+      in <span class="mono">doc/research/AME/pddl_authoring_usability_and_navigation.md</span>.
+    </p>
+  </footer>
+</main>
