@@ -1,0 +1,1221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap</title>
+<!-- HEAD-STYLE:BEGIN -->
+<style>
+/* ------------------------------------------------------------------
+   Roadmap dashboard styles.
+
+   The palette is inherited from the AME Dev Environment theme in
+   subprojects/AME/tools/devenv/ui/theme.py ("Holo-Cyan"): a near-black
+   ground, a vivid cyan accent, panels separated by a background lift
+   rather than borders, and no corner rounding anywhere.
+
+   Light mode is the printed-briefing counterpart of the same palette:
+   cool paper instead of white, and the cyan deepened so it still holds
+   contrast on a light ground. Both modes are defined through the tokens
+   below, so components never name a colour directly.
+   ------------------------------------------------------------------ */
+
+/* -- Tokens: light is the base, dark overrides ---------------------- */
+:root {
+  --ground:      #e9eef1;
+  --panel:       #ffffff;
+  --panel-sunk:  #dfe7eb;
+  --hairline:    #c4d2da;
+  --hairline-hi: #9fb6c2;
+
+  --ink:         #0c1519;
+  --ink-soft:    #33474f;
+  --ink-dim:     #5a6d78;
+
+  --accent:      #04627a;
+  --accent-soft: #0d8fae;
+  --accent-wash: rgba(4, 98, 122, 0.09);
+
+  --state-done:    #8e9ba1;
+  --state-active:  #04627a;
+  --state-planned: #b8c2c7;
+  --state-risk:    #c9820e;
+  --state-blocked: #96131f;
+
+  --gauge-track: #d3dee4;
+  --gauge-gap:   var(--panel);
+
+  --font-display: "Roboto Condensed", "Archivo Narrow", "Liberation Sans Narrow",
+                  "Arial Narrow", system-ui, sans-serif;
+  --font-body:    "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:    Consolas, "Cascadia Mono", ui-monospace, "DejaVu Sans Mono",
+                  "Liberation Mono", monospace;
+
+  --measure: 66ch;
+  --shell:   1220px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground:      #04070a;
+    --panel:       #0a1016;
+    --panel-sunk:  #060b10;
+    --hairline:    rgba(0, 120, 150, 0.30);
+    --hairline-hi: rgba(0, 180, 210, 0.55);
+
+    --ink:         #dcf0fa;
+    --ink-soft:    #a8c2d0;
+    --ink-dim:     #6b8b9d;
+
+    --accent:      #00e6ff;
+    --accent-soft: #00b4d2;
+    --accent-wash: rgba(0, 230, 255, 0.10);
+
+    --state-done:    #54707f;
+    --state-active:  #00e6ff;
+    --state-planned: #2c3f4b;
+    --state-risk:    #ffb020;
+    --state-blocked: #ff5a6b;
+
+    --gauge-track: #10202b;
+    --gauge-gap:   var(--panel);
+  }
+}
+
+/* The viewer's theme toggle stamps data-theme on the root element and
+   must win over the media query above, in both directions. */
+:root[data-theme="light"] {
+  --ground:      #e9eef1;
+  --panel:       #ffffff;
+  --panel-sunk:  #dfe7eb;
+  --hairline:    #c4d2da;
+  --hairline-hi: #9fb6c2;
+  --ink:         #0c1519;
+  --ink-soft:    #33474f;
+  --ink-dim:     #5a6d78;
+  --accent:      #04627a;
+  --accent-soft: #0d8fae;
+  --accent-wash: rgba(4, 98, 122, 0.09);
+  --state-done:    #8e9ba1;
+  --state-active:  #04627a;
+  --state-planned: #b8c2c7;
+  --state-risk:    #c9820e;
+  --state-blocked: #96131f;
+  --gauge-track: #d3dee4;
+}
+
+:root[data-theme="dark"] {
+  --ground:      #04070a;
+  --panel:       #0a1016;
+  --panel-sunk:  #060b10;
+  --hairline:    rgba(0, 120, 150, 0.30);
+  --hairline-hi: rgba(0, 180, 210, 0.55);
+  --ink:         #dcf0fa;
+  --ink-soft:    #a8c2d0;
+  --ink-dim:     #6b8b9d;
+  --accent:      #00e6ff;
+  --accent-soft: #00b4d2;
+  --accent-wash: rgba(0, 230, 255, 0.10);
+  --state-done:    #54707f;
+  --state-active:  #00e6ff;
+  --state-planned: #2c3f4b;
+  --state-risk:    #ffb020;
+  --state-blocked: #ff5a6b;
+  --gauge-track: #10202b;
+}
+
+/* -- Base ----------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+p { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--ink);
+  background: var(--accent-wash);
+  padding: 0 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.shell {
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding-inline: clamp(16px, 4vw, 40px);
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 8px;
+  top: 8px;
+  z-index: 10;
+  background: var(--panel);
+  padding: 8px 12px;
+}
+
+/* -- Masthead ------------------------------------------------------- */
+.masthead {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--panel-sunk);
+}
+
+.masthead__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 32px;
+  padding-block: 26px 20px;
+}
+
+.masthead__title {
+  font-family: var(--font-display);
+  font-stretch: condensed;
+  font-size: clamp(26px, 3.6vw, 40px);
+  line-height: 1.05;
+  letter-spacing: 0.012em;
+  text-transform: uppercase;
+}
+
+.masthead__sub {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+.masthead__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+.masthead__meta b { color: var(--ink-soft); font-weight: 500; }
+
+.themetoggle {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.themetoggle:hover { color: var(--accent); border-color: var(--accent-soft); }
+
+/* -- Status band ---------------------------------------------------- */
+.band {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.35fr);
+  gap: 28px 40px;
+  padding-block: 28px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.headline__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(52px, 8vw, 78px);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+}
+.headline__unit { font-size: 0.42em; letter-spacing: 0; color: var(--ink-dim); }
+.headline__note { margin-top: 10px; color: var(--ink-dim); font-size: 13px; max-width: 42ch; }
+.headline .gauge { margin-top: 16px; }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+  align-content: start;
+}
+
+.tile {
+  background: var(--panel);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  border: 1px solid var(--hairline);
+  border-top: 2px solid var(--tile-hue, var(--hairline));
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.tile:hover { background: var(--accent-wash); }
+.tile[aria-pressed="true"] { background: var(--accent-wash); }
+.tile[aria-pressed="true"] .tile__count { color: var(--tile-hue, var(--accent)); }
+
+.tile__count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--ink);
+}
+.tile__label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em;
+               text-transform: uppercase; color: var(--ink-dim); }
+
+.split { display: flex; gap: 2px; height: 12px; margin-top: 4px; }
+.split__seg { min-width: 2px; }
+.split__key { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 10px; }
+.split__key li {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim);
+}
+.split__key i { width: 9px; height: 9px; flex: none; }
+
+/* Work that has not started is drawn hollow rather than solid, so the two
+   neutral states stay apart for colourblind readers and in print. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    45deg, transparent 0 3px, var(--ground) 3px 5px);
+}
+.split__key b { color: var(--ink-soft); font-weight: 500; }
+
+/* -- Gauge: a segmented meter, in the manner of an equipment gauge -- */
+.gauge {
+  position: relative;
+  height: 10px;
+  background: var(--gauge-track);
+  overflow: hidden;
+}
+.gauge__fill {
+  height: 100%;
+  width: var(--pct, 0%);
+  background: var(--gauge-hue, var(--accent));
+}
+.gauge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(5% - 2px),
+    var(--gauge-gap) calc(5% - 2px) 5%
+  );
+}
+.gauge--tall { height: 14px; }
+
+/* -- Controls ------------------------------------------------------- */
+.controls {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding-block: 12px;
+  background: var(--ground);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.search {
+  flex: 1 1 230px;
+  min-width: 190px;
+  background: var(--panel-sunk);
+  border: 1px solid var(--hairline);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.search::placeholder { color: var(--ink-dim); }
+.search:focus { border-color: var(--accent-soft); outline: none; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.chip:hover { color: var(--ink); border-color: var(--hairline-hi); }
+.chip[aria-pressed="true"] {
+  color: var(--ink);
+  border-color: var(--chip-hue, var(--accent));
+  background: var(--accent-wash);
+}
+.chip__dot { width: 8px; height: 8px; background: var(--chip-hue, var(--ink-dim)); flex: none; }
+.chip__n { color: var(--ink-dim); }
+
+.controls__count {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  margin-left: auto;
+}
+
+/* -- Streams -------------------------------------------------------- */
+.streams { padding-block: 4px 56px; display: flex; flex-direction: column; }
+
+.stream { border-bottom: 1px solid var(--hairline); }
+.stream[hidden] { display: none; }
+
+.stream__head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px 18px;
+  width: 100%;
+  padding: 18px 0 14px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.stream__head:hover .stream__name { color: var(--accent); }
+
+.stream__code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  border: 1px solid var(--hairline-hi);
+  padding: 4px 8px;
+}
+
+.stream__name {
+  font-family: var(--font-display);
+  font-stretch: condensed;
+  font-size: clamp(18px, 2.2vw, 23px);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.stream__right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.stream__right .gauge { width: 132px; }
+.stream__pct { color: var(--ink-soft); min-width: 4ch; text-align: right; }
+.stream__caret { color: var(--ink-dim); transition: transform 0.18s ease; }
+.stream__head[aria-expanded="false"] .stream__caret { transform: rotate(-90deg); }
+
+.stream__summary {
+  color: var(--ink-soft);
+  max-width: var(--measure);
+  margin-bottom: 18px;
+  font-size: 14px;
+}
+
+.items { display: flex; flex-direction: column; gap: 1px; background: var(--hairline);
+         margin-bottom: 22px; }
+
+/* -- Item ----------------------------------------------------------- */
+.item {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) 13rem;
+  gap: 12px 22px;
+  padding: 16px 16px 18px;
+  background: var(--panel);
+  border-left: 2px solid var(--state-hue);
+}
+.item[hidden] { display: none; }
+.item:target { background: var(--accent-wash); }
+
+.item__mark { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+.item__id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+
+/* The label wears a text token and the glyph carries the state colour, so
+   the pill never depends on colour alone and never asks small text to
+   hold contrast at a mark colour. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border: 1px solid var(--state-hue);
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+.pill__glyph { font-size: 10px; line-height: 1; color: var(--state-hue); }
+
+.item__title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  margin-bottom: 6px;
+}
+.item__desc { color: var(--ink-soft); max-width: var(--measure); font-size: 14px; }
+
+.item__why {
+  margin-top: 12px;
+  padding-left: 13px;
+  border-left: 1px solid var(--hairline-hi);
+  max-width: var(--measure);
+}
+.item__why p { color: var(--ink-soft); font-size: 13.5px; margin-top: 3px; }
+body[data-rationale="off"] .item__why { display: none; }
+
+.item__links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; }
+.item__links a { font-family: var(--font-mono); font-size: 11.5px; }
+
+.item__gauge { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.item__gauge .gauge { width: 100%; }
+.item__pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink-soft);
+}
+.item__pct span { font-size: 0.5em; color: var(--ink-dim); }
+.item__facts { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.item__facts span {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.item__facts b { color: var(--ink-soft); font-weight: 500; }
+
+.empty {
+  padding: 48px 0 64px;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* -- Footer --------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--hairline);
+  background: var(--panel-sunk);
+  padding-block: 20px 28px;
+}
+.foot p {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  max-width: 90ch;
+}
+.foot code { color: var(--ink-soft); }
+
+/* -- Narrow screens ------------------------------------------------- */
+@media (max-width: 900px) {
+  .band { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .item { grid-template-columns: 1fr; }
+  .item__mark { flex-direction: row; align-items: center; gap: 12px; }
+  .item__gauge { flex-direction: row; align-items: center; gap: 14px; }
+  .item__gauge .gauge { flex: 1; }
+  .stream__head { grid-template-columns: auto 1fr; }
+  .stream__right { grid-column: 1 / -1; }
+  .controls { position: static; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* -- Print: the briefing version ------------------------------------ */
+@media print {
+  .controls, .themetoggle, .skip { display: none !important; }
+  body { background: #fff; color: #111; font-size: 11pt; }
+  .stream, .item, .tiles { break-inside: avoid; }
+  .item { border-left-width: 3px; }
+  .masthead, .foot { background: #fff; }
+  a { color: inherit; }
+}
+</style>
+<!-- HEAD-STYLE:END -->
+</head>
+<body>
+<!-- BODY:BEGIN -->
+<a class="skip" href="#streams">Skip to the roadmap</a>
+
+<header class="masthead">
+  <div class="shell masthead__inner">
+    <div>
+      <h1 class="masthead__title" id="rm-title">Roadmap</h1>
+      <p class="masthead__sub" id="rm-sub"></p>
+    </div>
+    <div class="masthead__meta">
+      <span>Updated <b id="rm-updated">—</b></span>
+      <span>Source <b id="rm-source">—</b></span>
+      <button class="themetoggle" type="button" id="rm-theme">Switch theme</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="shell band" aria-label="Summary">
+    <div class="headline">
+      <p class="label">Overall progress</p>
+      <p class="headline__value"><span id="rm-overall">0</span><span
+         class="headline__unit">%</span></p>
+      <div class="gauge gauge--tall" id="rm-overall-gauge" style="--pct:0%">
+        <div class="gauge__fill"></div>
+      </div>
+      <p class="headline__note" id="rm-overall-note"></p>
+    </div>
+
+    <div>
+      <p class="label">Where the work stands</p>
+      <div class="tiles" id="rm-tiles"></div>
+      <div class="split" id="rm-split" role="img" aria-label="Distribution of items by state"></div>
+      <ul class="split__key" id="rm-key"></ul>
+    </div>
+  </section>
+
+  <div class="shell">
+    <div class="controls">
+      <label class="skip" for="rm-search">Search roadmap items</label>
+      <input class="search" id="rm-search" type="search"
+             placeholder="Search all fields…" autocomplete="off">
+      <div class="chips" id="rm-stream-chips"></div>
+      <button class="chip" type="button" id="rm-rationale" aria-pressed="true">Rationale</button>
+      <button class="chip" type="button" id="rm-collapse" aria-pressed="false">Collapse all</button>
+      <span class="controls__count" id="rm-count"></span>
+    </div>
+
+    <div class="streams" id="streams"></div>
+    <p class="empty" id="rm-empty" hidden>
+      No items match that filter. Clear the search box or re-select a state above.
+    </p>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="shell">
+    <p id="rm-foot"></p>
+  </div>
+</footer>
+
+<!-- ROADMAP-DATA:BEGIN -->
+<script id="roadmap-data" type="application/json">
+{
+  "title": "PYRAMID — contracts, bindings and transports",
+  "subtitle": "Generated component bindings over the PCL component layer, with pluggable codecs and transports. This dashboard tracks the open workstreams, the known defects, and the work that is deliberately waiting on a trigger.",
+  "updated": "2026-08-01",
+  "source": "doc/todo/PYRAMID/TODO.md",
+  "streams": [
+    {
+      "code": "DONE",
+      "name": "Delivered",
+      "summary": "Context rather than work in hand. These workstreams are closed and their detail has been folded into the tracker's \"Delivered\" section.",
+      "items": [
+        {
+          "id": "DONE-1",
+          "title": "Codec and transport plugin binding",
+          "description": "Codec plugins for JSON, FlatBuffers and Protobuf, and transports over sockets, shared memory, UDP, gRPC and ROS2, all loaded as shared libraries that refuse to run rather than guess when something does not match.",
+          "rationale": "Refusing on mismatch, rather than falling back to a default, is what keeps a misconfigured peer from producing plausible but wrong data.",
+          "progress": 100
+        },
+        {
+          "id": "DONE-2",
+          "title": "Contract-derived topics and ROS2 marshalling",
+          "description": "Publish and subscribe topics derived from the contract itself, with quality-of-service settings carried in the contract, and round-trip verified translation between the domain model and ROS2 message types on a live wire.",
+          "rationale": "Deriving topics from the contract removes the class of bug where two sides agree on the message but not on where it is published.",
+          "progress": 100
+        },
+        {
+          "id": "DONE-3",
+          "title": "Port-grammar rename to Entity",
+          "description": "The Request-port result and update role was renamed from Requirement to Entity across the wrapper type, the derived topic, the configuration leg, and the generated C++ and Ada interfaces, with all contracts regenerated together.",
+          "rationale": "The old name collided with genuine domain requirements, so readers could not tell a grammar role from a mission concept. Those domain requirement types were deliberately left untouched.",
+          "progress": 100
+        },
+        {
+          "id": "DONE-4",
+          "title": "Codec selection at process startup",
+          "description": "A generated component's codec can be chosen when the process starts rather than when it is compiled, proven end to end with FlatBuffers.",
+          "rationale": "Deployments differ in what they can carry on the wire. Choosing at startup means one build serves all of them.",
+          "progress": 100
+        }
+      ]
+    },
+    {
+      "code": "AGRA",
+      "name": "Formal A-GRA OMS codec closure",
+      "summary": "Generating and validating the A-GRA profile of the UCI message set, using an external validator as the independent check.",
+      "items": [
+        {
+          "id": "AGRA-G1",
+          "title": "Generate and validate the A-GRA P2 OMS and CAL profile",
+          "description": "The first three prerequisites are discharged, the approved root message list has grown to twenty, and the validator leg is proven live: Sleet loads the pinned A-GRA schema, accepts the session handshake, routes traffic, and validates payloads against the schema.",
+          "rationale": "A validator written by someone else, checking against the published schema, is the strongest available evidence that the generated codec is conformant rather than merely self-consistent.",
+          "progress": 45,
+          "effort": "Large",
+          "owner": "In progress"
+        },
+        {
+          "id": "AGRA-G2",
+          "title": "Bring the P3 Core MMS contract into the tracker",
+          "description": "A P3 profile, the seam overlay, and the generated tree were committed and are in the repository, but nothing in the tracker describes them, and the workstream above still lists full P3 coverage as out of scope.",
+          "rationale": "The tracker currently contradicts the tree. Anyone planning from it would either redo delivered work or assume coverage that was never agreed.",
+          "progress": 0,
+          "status": "at-risk"
+        }
+      ]
+    },
+    {
+      "code": "FACADE",
+      "name": "Interaction facade follow-ons",
+      "summary": "The C++ and Ada interaction facades work in a single process. What remains is proving them across process boundaries and closing two narrow gaps.",
+      "items": [
+        {
+          "id": "FACADE-F1a",
+          "title": "Cross-process transport proof for the Ada facade",
+          "description": "Mirror the existing C++ interchange test across real shared memory, covering request/reply on both sides, publish/subscribe on both sides, and the mixed case. The Ada bind calls currently hardcode local routing, so a transport configuration parameter has to be threaded through first.",
+          "rationale": "Local routing never leaves the process, so it exercises none of the serialisation and transport code that a deployed system depends on. The change itself is mechanical rather than a design question.",
+          "progress": 0,
+          "effort": "Medium"
+        },
+        {
+          "id": "FACADE-F1b",
+          "title": "Re-send to an open read stream after a late state change",
+          "description": "When a command realised over publish/subscribe changes the state of an object that an already-open request stream is watching, the Ada side does not re-send. C++ handles this in its inbound command path; Ada has no equivalent yet.",
+          "rationale": "A reader that opened its stream first would silently miss the update. The gap is written into the generated code comments, so it is known rather than wrong, but a consumer relying on it would still be misled.",
+          "progress": 0,
+          "effort": "Small"
+        },
+        {
+          "id": "FACADE-F1c",
+          "title": "Wire the Ada facade proof into continuous integration",
+          "description": "The proof runs today as a standalone script, like the other harness proofs. Detect the Ada toolchain and register the proof so it runs with the standing regression checks.",
+          "rationale": "A proof that only runs when someone remembers to run it stops being evidence the moment the code around it changes.",
+          "progress": 0,
+          "effort": "Small"
+        },
+        {
+          "id": "FACADE-F2b",
+          "title": "Convert the Tactical Objects showcase to the port abstraction",
+          "description": "The showcase still uses legacy create-read-update-delete services, which are not shapes the port grammar recognises. The conversion rides on the split and migration plan that makes its contract conforming.",
+          "rationale": "It is the example most people read first. Leaving it on the legacy shape teaches the pattern the project is moving away from.",
+          "progress": 0,
+          "effort": "Medium",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "code": "BRIDGE",
+      "name": "Facade closure",
+      "summary": "One item remains from the in-process facade workstream.",
+      "items": [
+        {
+          "id": "BRIDGE-E5",
+          "title": "Classify or migrate the StandardBridge raw PCL wiring",
+          "description": "Either move `StandardBridge` onto the generated service and topic facade where that is practical, or record the calls that stay raw as framework-adapter exceptions, with a source guard that keeps the list honest.",
+          "rationale": "An adapter is allowed to reach below the facade; ordinary components are not. Writing down which calls are which is what lets the guard catch the next one that should not be there.",
+          "progress": 0,
+          "effort": "Medium"
+        }
+      ]
+    },
+    {
+      "code": "DEFECT",
+      "name": "Known defects",
+      "summary": "Problems found during review that are understood, reproduced, and not yet fixed. They are listed here so that they are not rediscovered as surprises.",
+      "items": [
+        {
+          "id": "DEFECT-1",
+          "title": "Six pre-existing CTest failures on a clean main",
+          "description": "Five Ada Tactical Objects end-to-end tests and the bridge end-to-end test fail on a clean checkout, with 804 of 810 tests passing. The bridge test reports repeated publish failures and a stub that receives nothing. The failures were confirmed pre-existing by reverting the working tree and re-running.",
+          "rationale": "Because they are not caused by current work, they are easy to step over, and that is the problem: a suite that is never green cannot tell anyone whether the next change broke something. Nobody has diagnosed them yet.",
+          "progress": 0,
+          "status": "blocked"
+        },
+        {
+          "id": "DEFECT-2",
+          "title": "Generated JSON codec accepts input that is not JSON",
+          "description": "Handed a FlatBuffers payload, the generated JSON codec reports success and fills the target with default values instead of rejecting it. The permissive parse reads the first FlatBuffers byte as a bare JSON value, so nothing downstream notices.",
+          "rationale": "A peer configured with the wrong codec should fail at startup. Instead it produces silently empty data, which is the failure mode the fail-closed design exists to prevent.",
+          "progress": 0,
+          "status": "at-risk"
+        },
+        {
+          "id": "DEFECT-3",
+          "title": "Non-deterministic typedef order in generated C headers",
+          "description": "The generic container typedefs are emitted in an order that varies between two runs of the same generator, because the dependency sort walks an unordered set whose iteration order depends on the string hash seed. Sorting that one iteration fixes it.",
+          "rationale": "The output is functionally identical, but the instability breaks the rule that generated output must be byte-for-byte reproducible, and it shows up as noise whenever a packaged SDK is regenerated. The fix is deferred only because it requires refreshing the recorded baselines.",
+          "progress": 0
+        }
+      ]
+    },
+    {
+      "code": "TRIGGER",
+      "name": "Deferred, waiting on a trigger",
+      "summary": "Work that is understood and deliberately not scheduled. Each item names the event that should start it, so nothing drops silently.",
+      "items": [
+        {
+          "id": "TRIGGER-1",
+          "title": "ROS2 actions",
+          "description": "A contract construct for actions mapping to a reserved capability, with generated interface definitions and an adapter action server and client. Starts when a production user needs actions.",
+          "rationale": "Actions are a first-class part of the model by decision, and the capability is already reserved. Building the runtime before anyone consumes it would fix an interface with no user to check it against.",
+          "progress": 0,
+          "status": "planned"
+        },
+        {
+          "id": "TRIGGER-2",
+          "title": "FlatBuffers codec plugin independence",
+          "description": "FlatBuffers plugins currently need the generated JSON codec alongside them as a conversion bridge. Starts before binary codecs are described as fully independent plugin artefacts.",
+          "rationale": "Until then the claim that codecs are independent plugins is not quite true, and someone will eventually deploy on the strength of it.",
+          "progress": 0,
+          "status": "planned"
+        },
+        {
+          "id": "TRIGGER-3",
+          "title": "Ada ROS2 runtime",
+          "description": "Ada has generated ROS2 constants and specifications but no runtime equivalent to the C++ client library. Starts when there is an Ada consumer of the ROS2 transport.",
+          "rationale": "The generated declarations are cheap to keep; the runtime behind them is not, and its shape should be set by a real consumer.",
+          "progress": 0,
+          "status": "planned"
+        },
+        {
+          "id": "TRIGGER-4",
+          "title": "AME contract canonicalization",
+          "description": "Publish the AME interface as a canonical PYRAMID contract. Starts when AME is ready to expose it that way.",
+          "rationale": "It would let AME consume the generated ROS2 bindings directly instead of maintaining its own, which is also the fourth item on the AME roadmap's PCL compliance stream.",
+          "progress": 0,
+          "status": "planned"
+        },
+        {
+          "id": "TRIGGER-5",
+          "title": "Plugin-level threading conformance harness",
+          "description": "The in-tree transports pass the threading tests, and the ROS2 and gRPC plugins satisfy the executor-threading contract in code, but neither has plugin-level harness coverage. Starts at the first production user of either, or at any threading regression.",
+          "rationale": "Conformance argued from reading the code is weaker than conformance demonstrated by a harness, and threading defects are the ones least likely to be found by chance.",
+          "progress": 0,
+          "status": "planned"
+        },
+        {
+          "id": "TRIGGER-6",
+          "title": "Routing manifest support for real transports",
+          "description": "The generated routing manifest only emits configuration for the stub transport. Real transports need bus and participant identifiers for shared memory, and host, port and peer identifiers for UDP. Starts when a generated manifest has to target one.",
+          "rationale": "The manifest is the piece that would let a deployment be described entirely by generated configuration, which is the point of generating it at all.",
+          "progress": 0,
+          "status": "planned"
+        }
+      ]
+    }
+  ]
+}
+</script>
+<!-- ROADMAP-DATA:END -->
+
+<script>
+(function () {
+  "use strict";
+
+  /* Item state. Order matters: it is the order tiles, chips and the
+     distribution bar are drawn in, running from finished to urgent. */
+  var STATES = [
+    { key: "done",    label: "Complete",  glyph: "■", hue: "var(--state-done)" },
+    { key: "active",  label: "In flight", glyph: "◐", hue: "var(--state-active)" },
+    { key: "planned", label: "Planned",   glyph: "○", hue: "var(--state-planned)" },
+    { key: "at-risk", label: "At risk",   glyph: "▲", hue: "var(--state-risk)" },
+    { key: "blocked", label: "Blocked",   glyph: "✖", hue: "var(--state-blocked)" }
+  ];
+  var STATE_BY_KEY = {};
+  STATES.forEach(function (s) { STATE_BY_KEY[s.key] = s; });
+
+  var data = JSON.parse(document.getElementById("roadmap-data").textContent);
+  var streams = (data.streams || []).map(function (stream, si) {
+    var items = (stream.items || []).map(function (item, ii) {
+      var progress = clamp(Number(item.progress) || 0);
+      var state = STATE_BY_KEY[item.status] ? item.status : deriveState(progress);
+      return {
+        id: item.id || (stream.code || "S" + si) + "-" + (ii + 1),
+        title: item.title || "Untitled item",
+        description: item.description || "",
+        rationale: item.rationale || "",
+        progress: progress,
+        state: state,
+        owner: item.owner || "",
+        effort: item.effort || "",
+        target: item.target || "",
+        tags: item.tags || [],
+        links: item.links || []
+      };
+    });
+    return {
+      code: stream.code || "S" + (si + 1),
+      name: stream.name || "Stream " + (si + 1),
+      summary: stream.summary || "",
+      items: items,
+      progress: mean(items.map(function (i) { return i.progress; }))
+    };
+  });
+
+  var allItems = streams.reduce(function (acc, s) { return acc.concat(s.items); }, []);
+  var filters = { text: "", states: {}, stream: null };
+
+  function clamp(n) { return Math.max(0, Math.min(100, Math.round(n))); }
+  function mean(xs) { return xs.length ? xs.reduce(function (a, b) { return a + b; }, 0) / xs.length : 0; }
+  function deriveState(p) { return p >= 100 ? "done" : (p > 0 ? "active" : "planned"); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) { n.className = cls; }
+    if (text !== undefined && text !== null) { n.textContent = text; }
+    return n;
+  }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+
+  /* Prose fields may mark identifiers with `backticks`. Split on them and
+     build the nodes directly, so roadmap text is never treated as markup. */
+  function prose(tag, cls, text) {
+    var node = el(tag, cls);
+    String(text).split("`").forEach(function (part, index) {
+      if (!part) { return; }
+      node.appendChild(index % 2 ? el("code", null, part) : document.createTextNode(part));
+    });
+    return node;
+  }
+
+  /* -- Masthead and footer ----------------------------------------- */
+  document.title = data.title ? data.title + " — roadmap" : "Roadmap";
+  document.getElementById("rm-title").textContent = data.title || "Roadmap";
+  var sub = document.getElementById("rm-sub");
+  if (data.subtitle) { sub.textContent = data.subtitle; } else { sub.hidden = true; }
+  document.getElementById("rm-updated").textContent = data.updated || "not stated";
+  document.getElementById("rm-source").textContent = data.source || "not stated";
+  document.getElementById("rm-foot").textContent =
+    "Progress figures are the plain mean of item progress, so every item counts the same. " +
+    "Edit the data block in this file, or regenerate the page from its roadmap file with " +
+    "tools/roadmap/generate_roadmap.py.";
+
+  /* -- Summary band ------------------------------------------------- */
+  var counts = {};
+  STATES.forEach(function (s) { counts[s.key] = 0; });
+  allItems.forEach(function (i) { counts[i.state] += 1; });
+
+  var overall = Math.round(mean(allItems.map(function (i) { return i.progress; })));
+  document.getElementById("rm-overall").textContent = overall;
+  var og = document.getElementById("rm-overall-gauge");
+  og.style.setProperty("--pct", overall + "%");
+  og.appendChild(el("div", "gauge__fill"));
+  document.getElementById("rm-overall-note").textContent =
+    plural(allItems.length, "item", "items") + " across " +
+    plural(streams.length, "stream", "streams") + ", " +
+    counts.done + " complete and " + (counts["at-risk"] + counts.blocked) +
+    " needing attention.";
+
+  var tiles = document.getElementById("rm-tiles");
+  STATES.forEach(function (s) {
+    var b = el("button", "tile");
+    b.type = "button";
+    b.style.setProperty("--tile-hue", s.hue);
+    b.setAttribute("aria-pressed", "false");
+    b.dataset.state = s.key;
+    b.appendChild(el("span", "tile__count mono", String(counts[s.key])));
+    b.appendChild(el("span", "tile__label", s.label));
+    b.addEventListener("click", function () { toggleState(s.key); });
+    tiles.appendChild(b);
+  });
+
+  var split = document.getElementById("rm-split");
+  var key = document.getElementById("rm-key");
+  STATES.forEach(function (s) {
+    if (!counts[s.key]) { return; }
+    var hollow = s.key === "planned" ? " hatch" : "";
+    var seg = el("div", "split__seg" + hollow);
+    seg.style.flex = counts[s.key];
+    seg.style.backgroundColor = s.hue;
+    split.appendChild(seg);
+
+    var li = el("li");
+    var swatch = el("i", hollow ? "hatch" : null);
+    swatch.style.backgroundColor = s.hue;
+    li.appendChild(swatch);
+    li.appendChild(el("b", null, String(counts[s.key])));
+    li.appendChild(el("span", null, s.label));
+    key.appendChild(li);
+  });
+
+  /* -- Stream filter chips ------------------------------------------ */
+  var streamChips = document.getElementById("rm-stream-chips");
+  streams.forEach(function (s) {
+    var b = el("button", "chip");
+    b.type = "button";
+    b.setAttribute("aria-pressed", "false");
+    b.appendChild(el("span", null, s.code));
+    b.appendChild(el("span", "chip__n", String(s.items.length)));
+    b.addEventListener("click", function () {
+      filters.stream = filters.stream === s.code ? null : s.code;
+      syncChips();
+      apply();
+    });
+    b.dataset.stream = s.code;
+    streamChips.appendChild(b);
+  });
+
+  /* -- Streams and items -------------------------------------------- */
+  var host = document.getElementById("streams");
+  streams.forEach(function (stream) {
+    var section = el("section", "stream");
+    section.dataset.stream = stream.code;
+
+    var head = el("button", "stream__head");
+    head.type = "button";
+    head.setAttribute("aria-expanded", "true");
+    head.appendChild(el("span", "stream__code", stream.code));
+
+    var mid = el("div");
+    mid.appendChild(el("h2", "stream__name", stream.name));
+    head.appendChild(mid);
+
+    var right = el("div", "stream__right");
+    var openCount = stream.items.filter(function (i) { return i.state !== "done"; }).length;
+    var counter = el("span", null, openCount + " of " + stream.items.length + " open");
+    right.appendChild(counter);
+    var g = el("div", "gauge");
+    g.style.setProperty("--pct", Math.round(stream.progress) + "%");
+    g.appendChild(el("div", "gauge__fill"));
+    right.appendChild(g);
+    right.appendChild(el("span", "stream__pct", Math.round(stream.progress) + "%"));
+    right.appendChild(el("span", "stream__caret", "▾"));
+    head.appendChild(right);
+    section.appendChild(head);
+
+    var panel = el("div", "stream__panel");
+    if (stream.summary) { panel.appendChild(prose("p", "stream__summary", stream.summary)); }
+
+    var list = el("ol", "items");
+    stream.items.forEach(function (item) {
+      list.appendChild(renderItem(item, stream));
+    });
+    panel.appendChild(list);
+    section.appendChild(panel);
+
+    head.addEventListener("click", function () {
+      var open = head.getAttribute("aria-expanded") === "true";
+      head.setAttribute("aria-expanded", open ? "false" : "true");
+      panel.hidden = open;
+    });
+
+    host.appendChild(section);
+  });
+
+  function renderItem(item, stream) {
+    var state = STATE_BY_KEY[item.state];
+    var li = el("li", "item");
+    li.id = "item-" + item.id;
+    li.dataset.state = item.state;
+    li.dataset.stream = stream.code;
+    li.style.setProperty("--state-hue", state.hue);
+    li.style.setProperty("--gauge-hue", state.hue);
+    li.dataset.haystack = [item.id, item.title, item.description, item.rationale,
+                           item.owner, (item.tags || []).join(" ")].join(" ").toLowerCase();
+
+    var mark = el("div", "item__mark");
+    mark.appendChild(el("span", "item__id", item.id));
+    var pill = el("span", "pill");
+    pill.appendChild(el("span", "pill__glyph", state.glyph));
+    pill.appendChild(el("span", null, state.label));
+    mark.appendChild(pill);
+    li.appendChild(mark);
+
+    var body = el("div", "item__body");
+    body.appendChild(el("h3", "item__title", item.title));
+    if (item.description) { body.appendChild(prose("p", "item__desc", item.description)); }
+    if (item.rationale) {
+      var why = el("div", "item__why");
+      why.appendChild(el("p", "label", "Rationale"));
+      why.appendChild(prose("p", null, item.rationale));
+      body.appendChild(why);
+    }
+    if (item.links && item.links.length) {
+      var links = el("ul", "item__links");
+      item.links.forEach(function (link) {
+        var a = el("a", null, link.label || link.url);
+        a.href = link.url;
+        var li2 = el("li");
+        li2.appendChild(a);
+        links.appendChild(li2);
+      });
+      body.appendChild(links);
+    }
+    li.appendChild(body);
+
+    var gaugeCell = el("div", "item__gauge");
+    var pct = el("span", "item__pct", String(item.progress));
+    pct.appendChild(el("span", null, "%"));
+    gaugeCell.appendChild(pct);
+    var g = el("div", "gauge");
+    g.style.setProperty("--pct", item.progress + "%");
+    g.appendChild(el("div", "gauge__fill"));
+    gaugeCell.appendChild(g);
+
+    var facts = el("div", "item__facts");
+    if (item.effort) { facts.appendChild(fact("Effort", item.effort)); }
+    if (item.owner) { facts.appendChild(fact("Owner", item.owner)); }
+    if (item.target) { facts.appendChild(fact("Target", item.target)); }
+    if (facts.childNodes.length) { gaugeCell.appendChild(facts); }
+    li.appendChild(gaugeCell);
+
+    return li;
+  }
+
+  function fact(name, value) {
+    var s = el("span");
+    s.appendChild(document.createTextNode(name + " "));
+    s.appendChild(el("b", null, value));
+    return s;
+  }
+
+  /* -- Filtering ----------------------------------------------------- */
+  function activeStates() {
+    return Object.keys(filters.states).filter(function (k) { return filters.states[k]; });
+  }
+
+  function toggleState(k) {
+    filters.states[k] = !filters.states[k];
+    syncChips();
+    apply();
+  }
+
+  function syncChips() {
+    Array.prototype.forEach.call(tiles.children, function (b) {
+      b.setAttribute("aria-pressed", filters.states[b.dataset.state] ? "true" : "false");
+    });
+    Array.prototype.forEach.call(streamChips.children, function (b) {
+      b.setAttribute("aria-pressed", filters.stream === b.dataset.stream ? "true" : "false");
+    });
+  }
+
+  function apply() {
+    var wanted = activeStates();
+    var text = filters.text;
+    var shown = 0;
+
+    Array.prototype.forEach.call(host.querySelectorAll(".item"), function (li) {
+      var ok = true;
+      if (wanted.length && wanted.indexOf(li.dataset.state) === -1) { ok = false; }
+      if (ok && filters.stream && li.dataset.stream !== filters.stream) { ok = false; }
+      if (ok && text && li.dataset.haystack.indexOf(text) === -1) { ok = false; }
+      li.hidden = !ok;
+      if (ok) { shown += 1; }
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll(".stream"), function (section) {
+      var any = section.querySelector(".item:not([hidden])");
+      section.hidden = !any;
+    });
+
+    document.getElementById("rm-empty").hidden = shown !== 0;
+    document.getElementById("rm-count").textContent =
+      shown === allItems.length
+        ? plural(allItems.length, "item", "items")
+        : shown + " of " + allItems.length + " items";
+  }
+
+  document.getElementById("rm-search").addEventListener("input", function (e) {
+    filters.text = e.target.value.trim().toLowerCase();
+    apply();
+  });
+
+  var rationaleBtn = document.getElementById("rm-rationale");
+  rationaleBtn.addEventListener("click", function () {
+    var on = rationaleBtn.getAttribute("aria-pressed") === "true";
+    rationaleBtn.setAttribute("aria-pressed", on ? "false" : "true");
+    document.body.dataset.rationale = on ? "off" : "on";
+  });
+
+  var collapseBtn = document.getElementById("rm-collapse");
+  collapseBtn.addEventListener("click", function () {
+    var collapse = collapseBtn.getAttribute("aria-pressed") === "false";
+    collapseBtn.setAttribute("aria-pressed", collapse ? "true" : "false");
+    collapseBtn.textContent = collapse ? "Expand all" : "Collapse all";
+    Array.prototype.forEach.call(host.querySelectorAll(".stream"), function (section) {
+      section.querySelector(".stream__head").setAttribute("aria-expanded", collapse ? "false" : "true");
+      section.querySelector(".stream__panel").hidden = collapse;
+    });
+  });
+
+  /* -- Theme ---------------------------------------------------------- */
+  var root = document.documentElement;
+  try {
+    var saved = window.localStorage.getItem("roadmap-theme");
+    if (saved) { root.setAttribute("data-theme", saved); }
+  } catch (e) { /* storage unavailable; the media query still applies */ }
+
+  document.getElementById("rm-theme").addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme")
+      ? root.getAttribute("data-theme") === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { window.localStorage.setItem("roadmap-theme", next); } catch (e) { /* ignore */ }
+  });
+
+  document.body.dataset.rationale = "on";
+  apply();
+
+  if (window.location.hash) {
+    var target = document.getElementById(window.location.hash.slice(1));
+    if (target) { target.scrollIntoView({ block: "center" }); }
+  }
+})();
+</script>
+<!-- BODY:END -->
+</body>
+</html>
