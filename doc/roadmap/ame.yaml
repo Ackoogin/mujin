@@ -1,0 +1,539 @@
+title: AME — Autonomous Mission Engine
+subtitle: >-
+  PDDL planning compiled into behaviour trees, executed with replan-on-failure
+  and a full observability stack. This dashboard tracks the work that remains.
+updated: "2026-08-01"
+source: doc/todo/AME/TODO.md
+
+streams:
+  - code: CORE
+    name: Delivered pipeline
+    summary: >-
+      The end-to-end vertical slice and extensions 1 to 6 are finished. These
+      items are here for context, not as work in hand.
+    items:
+      - id: CORE-1
+        title: Plan-to-behaviour-tree vertical slice
+        description: >-
+          The eight steps of the original vertical slice are complete: a PDDL
+          mission is parsed, grounded against the world model, solved with the
+          LAPKT classical planner, compiled into a behaviour tree, and executed
+          with replanning when an action fails.
+        rationale: >-
+          This is the pipeline everything else extends. Until a mission could go
+          from formal description to running behaviour tree without manual steps,
+          no later extension could be demonstrated end to end.
+        progress: 100
+      - id: CORE-2
+        title: Multi-agent planning and ROS2 wiring
+        description: >-
+          Extensions 1 to 6 are delivered, including planning for several agents
+          at once and the ROS2 lifecycle nodes that host the world model, the
+          planner, and the executor as separate processes.
+        rationale: >-
+          Missions in the target environment involve more than one vehicle, and
+          the surrounding systems speak ROS2. Without both, the engine only
+          works in a single-process demonstration.
+        progress: 100
+      - id: CORE-3
+        title: Observability stack
+        description: >-
+          Behaviour tree events, world model changes, plan decisions, and neural
+          advisory calls are all recorded through the layered observability
+          stack, with a Foxglove bridge for live viewing.
+        rationale: >-
+          An autonomous system that cannot show why it did something cannot be
+          assured, reviewed after an incident, or trusted by an operator. The
+          audit trail is a safety argument, not a debugging convenience.
+        progress: 100
+      - id: CORE-4
+        title: Contingency verifier
+        description: >-
+          A tool that exhaustively checks whether a safe state can still be
+          reached from every state the mission can get into, with pruning to
+          keep the search tractable.
+        rationale: >-
+          Testing samples the state space; this proves the property across all
+          of it for the domains it covers, which is the kind of evidence a
+          safety case can cite.
+        progress: 100
+
+  - code: PCL
+    name: PCL integration compliance
+    summary: >-
+      The component-layer migration to PCL is done. What remains is the gap left
+      by the direct-call bridges in the ROS2 wrappers, which still reach past the
+      component model. Detail and definition-of-done are in the PCL migration plan.
+    items:
+      - id: PCL-1
+        title: Fix the ExecutorNode ingress race
+        description: >-
+          The `~/load_bt` and `~/stop_execution` services call `loadAndExecute()`
+          and `haltExecution()` straight from the ROS2 service callback, while
+          `on_tick()` runs on the PCL executor thread. Add `enqueueBtXml()` and
+          `enqueueHalt()` to `ExecutorComponent`, drain them in `on_tick()`, and
+          drop the `exec_mutex_` that is papering over the problem.
+        rationale: >-
+          Two threads touch executor state with no ordering between them, so a
+          service call arriving mid-tick can leave the running behaviour tree in
+          an inconsistent state. This is a correctness defect in the execution
+          path, which is the part of the system that moves the vehicle.
+        progress: 0
+        status: at-risk
+        effort: Small
+      - id: PCL-2
+        title: Route ROS2 world-model writes through PCL ingress
+        description: >-
+          `WorldModelComponent::setFact()` is protected by a mutex, but that
+          sidesteps the single-writer model PCL is built around. Writes arriving
+          over ROS2 should enter through the component's ingress queue like every
+          other message.
+        rationale: >-
+          A mutex makes each write atomic but leaves their order undefined
+          relative to the component's own processing. The single-writer model is
+          what makes world model state reproducible when replaying an audit log.
+        progress: 0
+      - id: PCL-3
+        title: Remove the PlannerNode detached planning thread
+        description: >-
+          The ROS2 planning action currently spawns its own detached thread.
+          Route it to the `plan` service that already exists on the PCL planner
+          component instead.
+        rationale: >-
+          A detached thread has no lifecycle tie to the node that started it, so
+          shutdown and cancellation are unreliable, and the work bypasses the
+          component boundary that the rest of the system is verified against.
+        progress: 0
+      - id: PCL-4
+        title: AME ROS2 PCL transport
+        description: >-
+          Implement a `pcl_transport_t` backed by ROS2 so that AME's PCL ports
+          appear as ordinary ROS2 topics and services, then remove the bypass
+          services and publishers that exist only because that transport is
+          missing.
+        rationale: >-
+          Every bypass is a second way into the system that has to be reviewed,
+          tested, and kept in step with the first. One transport removes the
+          whole category.
+        progress: 0
+        effort: Large
+      - id: PCL-5
+        title: Compatibility test focus
+        description: >-
+          Cover the parts the migration changes: executor enqueue ordering, the
+          compatibility bridges running over ingress rather than direct calls,
+          transport mapping, and a smoke test of `combined_main`.
+        rationale: >-
+          The migration moves calls from one path to another without changing
+          what they do, so the risk is regression rather than new behaviour.
+          Tests aimed at the seams are what catch that.
+        progress: 0
+
+  - code: TEMPORAL
+    name: Extension 7 — temporal planning
+    summary: >-
+      Support PDDL 2.1 durative actions, converted into a simple temporal
+      network so that overlapping, timed activity can be planned and executed.
+      OPTIC is the recommended first planner, with Aries evaluated later; LAPKT
+      stays in place for domains without durations.
+    items:
+      - id: TEMPORAL-7a
+        title: PDDL 2.1 parser support
+        description: >-
+          Extend the parser to accept `:durative-action` and `:functions`, so
+          domains can express how long an action takes and what numbers it reads
+          and changes.
+        rationale: >-
+          Nothing else in the temporal extension can be built or tested until the
+          planner can read a domain that states durations.
+        progress: 0
+        effort: Medium
+      - id: TEMPORAL-7b
+        title: World model numeric fluent store
+        description: >-
+          Hold numeric state such as fuel, battery charge, or elapsed time in the
+          world model alongside the true-or-false facts it stores today, with the
+          same audit trail.
+        rationale: >-
+          Durative domains reason about quantities, not just facts. Without a
+          place to keep them, timing and resource constraints cannot be checked
+          during execution.
+        progress: 0
+        effort: Medium
+      - id: TEMPORAL-7c
+        title: Planner backend abstraction and OPTIC
+        description: >-
+          Introduce an `IPlannerBackend` interface and add an implementation that
+          invokes OPTIC as a subprocess, so the engine can choose a solver by
+          domain rather than being wired to one.
+        rationale: >-
+          Temporal solvers are research tools with short lifetimes and different
+          licences. An interface means swapping one for another is a contained
+          change instead of a rewrite.
+        progress: 0
+        effort: Medium
+      - id: TEMPORAL-7d
+        title: Simple temporal network and consistency check
+        description: >-
+          Add the data structure that holds the timing constraints between plan
+          steps, and the check that decides whether those constraints can all be
+          satisfied at once.
+        rationale: >-
+          A temporal plan that is internally inconsistent cannot be executed. It
+          is far cheaper to reject it before compilation than to discover the
+          conflict on the vehicle.
+        progress: 0
+        effort: Low
+      - id: TEMPORAL-7e
+        title: PlanCompiler temporal mode
+        description: >-
+          Compile a timing network into behaviour tree structure, mapping
+          concurrent activity onto `Parallel` nodes and deadlines onto `Timeout`
+          decorators.
+        rationale: >-
+          This is where the temporal extension either works or does not. The
+          existing compiler assumes one action follows another, and concurrency
+          changes how failure and halting propagate through the tree.
+        progress: 0
+        effort: High
+      - id: TEMPORAL-7f
+        title: VAL plan validation
+        description: >-
+          Run generated temporal plans through VAL, the standard PDDL plan
+          validator, as an independent check that the plan achieves the goal
+          under the domain's own rules.
+        rationale: >-
+          Checking the solver's output with a tool that was not written by the
+          same project is one of the cheapest pieces of evidence available.
+        progress: 0
+        effort: Low
+      - id: TEMPORAL-7g
+        title: Temporal invariant monitoring
+        description: >-
+          Use `ReactiveSequence` nodes to keep checking, throughout an action's
+          duration, the conditions that must hold for the whole of it.
+        rationale: >-
+          A durative action states conditions that must remain true while it
+          runs. If nothing re-checks them, the plan is only valid at the moment
+          it was made.
+        progress: 0
+        effort: Low
+      - id: TEMPORAL-7h
+        title: End-to-end temporal tests
+        description: >-
+          Take a durative domain from parsing through planning, compilation, and
+          execution, including the cases where a deadline is missed and where an
+          invariant is broken partway through.
+        rationale: >-
+          The pieces above can each pass in isolation and still not compose. The
+          end-to-end path is what the mission actually exercises.
+        progress: 0
+        effort: Medium
+      - id: TEMPORAL-7i
+        title: Aries evaluation
+        description: >-
+          Assess Aries, a Rust planner with a built-in temporal network solver
+          and support for hierarchical domains, as a replacement for the OPTIC
+          subprocess.
+        rationale: >-
+          OPTIC is the pragmatic first choice, not the intended destination.
+          Aries removes the subprocess boundary and handles hierarchy, but the
+          cost of moving is only knowable after the backend interface exists.
+        progress: 0
+        effort: Medium
+
+  - code: NEURO
+    name: Extension 8 — neuro-symbolic integration
+    summary: >-
+      Neural components advise; the symbolic system stays authoritative. Every
+      neural suggestion is checked by the existing planner and world model before
+      it can affect a mission.
+    items:
+      - id: NEURO-1
+        title: State-authority semantics
+        description: >-
+          Distinguish in the world model between facts believed because a plan
+          step was expected to make them true, and facts confirmed by perception.
+        rationale: >-
+          Once a neural component can assert something about the world, the
+          engine has to know whether a fact came from a model's guess or from a
+          sensor. Without that distinction there is no principled way to decide
+          which one wins.
+        progress: 0
+        status: planned
+      - id: NEURO-2
+        title: Neural acceptance criteria
+        description: >-
+          Fix the terms a neural component runs under: a latency budget of around
+          500 milliseconds, a fall back to the LAPKT planner on timeout or error,
+          and an audit record of every call.
+        rationale: >-
+          Written limits are what make a neural component reviewable. They also
+          define the fallback path, so a slow or failing model degrades the
+          mission rather than stopping it.
+        progress: 0
+        status: planned
+      - id: NEURO-3
+        title: Goal interpreter
+        description: >-
+          Turn a natural-language instruction into grounded PDDL goals, with the
+          symbolic layer rejecting any goal that names fluents or objects that do
+          not exist.
+        rationale: >-
+          This is the lowest-risk place to start, because the output is checked
+          completely before use: an invalid goal is rejected outright, so a
+          wrong suggestion costs a retry rather than a mission.
+        progress: 0
+      - id: NEURO-4
+        title: Mission analyst
+        description: >-
+          Analyse audit logs after a mission and produce explanations that cite
+          the specific log evidence behind each statement.
+        rationale: >-
+          It runs offline and touches nothing live, so it carries no execution
+          risk, and it makes the audit logs useful to people who did not write
+          the system.
+        progress: 0
+      - id: NEURO-5
+        title: Planner-adjacent and data-driven components
+        description: >-
+          Deferred work: a learned search heuristic, plan repair, an anomaly
+          detector, and neural help with authoring PDDL domains.
+        rationale: >-
+          These sit closer to decisions that matter, so they are held back until
+          the envelope of checks and fallbacks from the earlier items is proven
+          on the low-risk cases.
+        progress: 0
+        status: planned
+
+  - code: ASSURE
+    name: Autonomy assurance gaps
+    summary: >-
+      Gaps identified by the SACE Stage 8 analysis. High-priority items first,
+      then the medium-priority set.
+    items:
+      - id: ASSURE-1
+        title: Property-based planner testing
+        description: >-
+          Generate random but valid PDDL domains with a fuzzer, and assert that
+          simulating the returned plan actually reaches the goal.
+        rationale: >-
+          Hand-written tests cover the domains someone thought of. Property-based
+          testing attacks the claim that the solver is sound across the space of
+          domains, which is what the safety argument depends on.
+        progress: 0
+      - id: ASSURE-2
+        title: Adversarial perception testing
+        description: >-
+          Inject malicious, stale, and self-contradictory data through the ROS2
+          `setFact()` service and confirm it is rejected.
+        rationale: >-
+          The world model believes what perception tells it. If bad input is
+          accepted, the planner will produce a technically correct plan for a
+          world that does not exist.
+        progress: 0
+      - id: ASSURE-3
+        title: Safe-state integration tests
+        description: >-
+          End-to-end tests that force a planning timeout, a loss of
+          communications, and an action with no registered implementation, and
+          check that each ends in the fallback behaviour tree.
+        rationale: >-
+          Degrading to a safe state is claimed behaviour. Until the tests drive
+          the system into those conditions, the claim rests on code reading.
+        progress: 0
+      - id: ASSURE-4
+        title: Out-of-context detection
+        description: >-
+          Bounds-checking in the world model plus a `CheckContext` behaviour tree
+          node, so a mission can be held to a geographic boundary.
+        rationale: >-
+          The engine should stop when it is operating outside the conditions it
+          was assured for, and a geofence is the clearest case of that.
+        progress: 0
+        status: planned
+      - id: ASSURE-5
+        title: Threat model
+        description: >-
+          Write `threat_model.md` covering perception spoofing, injection of
+          hostile PDDL, and denial of planning.
+        rationale: >-
+          The system takes formal input from outside and acts on it physically.
+          Naming the threats is the step that turns scattered concerns into
+          testable requirements.
+        progress: 0
+        status: planned
+      - id: ASSURE-6
+        title: Performance benchmarks
+        description: >-
+          Put thresholds on LAPKT solve time in continuous integration, and
+          stress the behaviour tree at a 50 Hz tick rate.
+        rationale: >-
+          Planning latency is a safety property once the vehicle is moving, and
+          performance regressions arrive quietly unless something measures them
+          on every change.
+        progress: 0
+        status: planned
+      - id: ASSURE-7
+        title: Compiler correctness checks
+        description: >-
+          Verify that a compiled behaviour tree can be read back as the linear
+          sequence of actions it came from.
+        rationale: >-
+          The compiler sits between a plan that has been validated and the tree
+          that actually runs. A round-trip check is the direct test that nothing
+          is lost or reordered in between.
+        progress: 0
+        status: planned
+
+  - code: HARDEN
+    name: Hardening for production
+    summary: >-
+      The work that turns a demonstrable pipeline into something that can be
+      deployed, configured, and diagnosed by people who did not build it.
+    items:
+      - id: HARDEN-1
+        title: Solver portfolio and budgets
+        description: >-
+          Try a fast heuristic search first and fall back to a complete search if
+          it fails, under a configurable time and node budget with proper timeout
+          handling.
+        rationale: >-
+          Most missions are solved quickly by a heuristic; a few need the slow
+          complete search. A fixed choice is either too slow in the common case
+          or gives up in the hard one.
+        progress: 0
+      - id: HARDEN-2
+        title: ActionRegistry configuration and validation
+        description: >-
+          Register actions from a YAML or JSON configuration file, type-check
+          parameter binding against the PDDL schema, and validate at startup that
+          every action in the domain has an implementation.
+        rationale: >-
+          A missing action implementation currently surfaces as a failure partway
+          through a mission. It should be caught before the vehicle moves.
+        progress: 0
+      - id: HARDEN-3
+        title: Failure taxonomy and new behaviour tree nodes
+        description: >-
+          Classify failures as transient, permanent, or fatal, and add the
+          `WaitForFact` node, a `Timeout` decorator, and a `RetryWithBackoff`
+          node.
+        rationale: >-
+          Today every failure triggers the same response. Retrying a momentary
+          radio dropout and replanning around a broken effector are different
+          problems, and treating them alike wastes time on one and hides the other.
+        progress: 0
+      - id: HARDEN-4
+        title: PlanCompiler inspection output
+        description: >-
+          Write the compiled behaviour tree to a file, emit a DOT graph of the
+          causal structure, and handle synchronisation where parallel branches
+          rejoin.
+        rationale: >-
+          The compiler's output is currently only visible by running it. Being
+          able to look at the tree is what makes compilation reviewable during
+          an investigation.
+        progress: 0
+      - id: HARDEN-5
+        title: Progressive replanning
+        description: >-
+          Escalate through retry, local replan, full replan, goal relaxation, and
+          finally abort, with a cap on how many replans a mission may use and a
+          world model consistency check before each one.
+        rationale: >-
+          Replanning from scratch for a small local failure is slow and can loop.
+          A ladder of responses spends the least effort that resolves the problem
+          and puts a bound on the worst case.
+        progress: 0
+      - id: HARDEN-6
+        title: PDDL parser diagnostics
+        description: >-
+          Report errors with line and column, and validate predicate arities,
+          type consistency, and goals that cannot be reached.
+        rationale: >-
+          Domain authors are the parser's users. An error that names the line is
+          the difference between a minute and an afternoon.
+        progress: 0
+      - id: HARDEN-7
+        title: Configuration and packaging
+        description: >-
+          A YAML configuration for domain paths, solver selection, action
+          mappings, and logging; graceful ROS2 lifecycle shutdown with state
+          preserved; and Debian, colcon, Docker, and continuous integration
+          packaging.
+        rationale: >-
+          Deployment currently depends on knowing which paths are compiled in.
+          Configuration and packaging are what let someone else run the system.
+        progress: 0
+      - id: HARDEN-8
+        title: Test depth
+        description: >-
+          Property-based and fuzz tests for registration ordering, systematic
+          fault injection, planning time against domain size, and a GitHub
+          Actions build matrix with CTest and coverage.
+        rationale: >-
+          The suite is broad but was written alongside the features. These tests
+          attack the system rather than confirm it, which is where the remaining
+          defects are.
+        progress: 0
+
+  - code: FUTURE
+    name: Beyond the extensions
+    summary: >-
+      Work that is understood and wanted, but not scheduled. Listed so that it is
+      not rediscovered later as though it were new.
+    items:
+      - id: FUTURE-1
+        title: Plan quality optimisation
+        description: >-
+          Anytime search that keeps improving a plan while time allows, and local
+          improvement in the style of the LPG planner.
+        rationale: >-
+          The engine currently returns the first plan that works. Fuel and time
+          budgets make the difference between a working plan and a good one worth
+          having.
+        progress: 0
+        status: planned
+      - id: FUTURE-2
+        title: Advanced heuristics
+        description: >-
+          Landmark-based heuristics, which guide search using facts every valid
+          plan must pass through, for domains larger than those handled today.
+        rationale: >-
+          Search cost grows sharply with domain size, and heuristics are the
+          lever that moves it most.
+        progress: 0
+        status: planned
+      - id: FUTURE-3
+        title: Dynamic object lifecycle
+        description: >-
+          Allow objects to be created and destroyed during a mission rather than
+          fixed when the problem is grounded.
+        rationale: >-
+          Real missions discover things that were not in the problem file. Today
+          the grounded set is closed once planning begins.
+        progress: 0
+        status: planned
+      - id: FUTURE-4
+        title: Resource-aware scheduling and coordination
+        description: >-
+          Schedule around shared resources that only one agent may hold at a
+          time, add synchronisation barriers, and re-allocate work when an agent
+          fails.
+        rationale: >-
+          Multi-agent planning currently assumes agents do not contend for the
+          same resources, which stops being true as soon as they share a corridor
+          or a charging point.
+        progress: 0
+        status: planned
+      - id: FUTURE-5
+        title: Simulator integration
+        description: >-
+          Connect the engine to Gazebo or Isaac Sim.
+        rationale: >-
+          A physics simulator is where the assurance tests above can be run at
+          volume without a vehicle, and where timing assumptions meet something
+          closer to reality.
+        progress: 0
+        status: planned

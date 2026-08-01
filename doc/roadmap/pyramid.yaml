@@ -1,0 +1,293 @@
+title: PYRAMID — contracts, bindings and transports
+subtitle: >-
+  Generated component bindings over the PCL component layer, with pluggable
+  codecs and transports. This dashboard tracks the open workstreams, the known
+  defects, and the work that is deliberately waiting on a trigger.
+updated: "2026-08-01"
+source: doc/todo/PYRAMID/TODO.md
+
+streams:
+  - code: DONE
+    name: Delivered
+    summary: >-
+      Context rather than work in hand. These workstreams are closed and their
+      detail has been folded into the tracker's "Delivered" section.
+    items:
+      - id: DONE-1
+        title: Codec and transport plugin binding
+        description: >-
+          Codec plugins for JSON, FlatBuffers and Protobuf, and transports over
+          sockets, shared memory, UDP, gRPC and ROS2, all loaded as shared
+          libraries that refuse to run rather than guess when something does not
+          match.
+        rationale: >-
+          Refusing on mismatch, rather than falling back to a default, is what
+          keeps a misconfigured peer from producing plausible but wrong data.
+        progress: 100
+      - id: DONE-2
+        title: Contract-derived topics and ROS2 marshalling
+        description: >-
+          Publish and subscribe topics derived from the contract itself, with
+          quality-of-service settings carried in the contract, and round-trip
+          verified translation between the domain model and ROS2 message types
+          on a live wire.
+        rationale: >-
+          Deriving topics from the contract removes the class of bug where two
+          sides agree on the message but not on where it is published.
+        progress: 100
+      - id: DONE-3
+        title: Port-grammar rename to Entity
+        description: >-
+          The Request-port result and update role was renamed from Requirement to
+          Entity across the wrapper type, the derived topic, the configuration
+          leg, and the generated C++ and Ada interfaces, with all contracts
+          regenerated together.
+        rationale: >-
+          The old name collided with genuine domain requirements, so readers
+          could not tell a grammar role from a mission concept. Those domain
+          requirement types were deliberately left untouched.
+        progress: 100
+      - id: DONE-4
+        title: Codec selection at process startup
+        description: >-
+          A generated component's codec can be chosen when the process starts
+          rather than when it is compiled, proven end to end with FlatBuffers.
+        rationale: >-
+          Deployments differ in what they can carry on the wire. Choosing at
+          startup means one build serves all of them.
+        progress: 100
+
+  - code: AGRA
+    name: Formal A-GRA OMS codec closure
+    summary: >-
+      Generating and validating the A-GRA profile of the UCI message set, using
+      an external validator as the independent check.
+    items:
+      - id: AGRA-G1
+        title: Generate and validate the A-GRA P2 OMS and CAL profile
+        description: >-
+          The first three prerequisites are discharged, the approved root message
+          list has grown to twenty, and the validator leg is proven live: Sleet
+          loads the pinned A-GRA schema, accepts the session handshake, routes
+          traffic, and validates payloads against the schema.
+        rationale: >-
+          A validator written by someone else, checking against the published
+          schema, is the strongest available evidence that the generated codec
+          is conformant rather than merely self-consistent.
+        progress: 45
+        effort: Large
+        owner: In progress
+      - id: AGRA-G2
+        title: Bring the P3 Core MMS contract into the tracker
+        description: >-
+          A P3 profile, the seam overlay, and the generated tree were committed
+          and are in the repository, but nothing in the tracker describes them,
+          and the workstream above still lists full P3 coverage as out of scope.
+        rationale: >-
+          The tracker currently contradicts the tree. Anyone planning from it
+          would either redo delivered work or assume coverage that was never
+          agreed.
+        progress: 0
+        status: at-risk
+
+  - code: FACADE
+    name: Interaction facade follow-ons
+    summary: >-
+      The C++ and Ada interaction facades work in a single process. What remains
+      is proving them across process boundaries and closing two narrow gaps.
+    items:
+      - id: FACADE-F1a
+        title: Cross-process transport proof for the Ada facade
+        description: >-
+          Mirror the existing C++ interchange test across real shared memory,
+          covering request/reply on both sides, publish/subscribe on both sides,
+          and the mixed case. The Ada bind calls currently hardcode local
+          routing, so a transport configuration parameter has to be threaded
+          through first.
+        rationale: >-
+          Local routing never leaves the process, so it exercises none of the
+          serialisation and transport code that a deployed system depends on.
+          The change itself is mechanical rather than a design question.
+        progress: 0
+        effort: Medium
+      - id: FACADE-F1b
+        title: Re-send to an open read stream after a late state change
+        description: >-
+          When a command realised over publish/subscribe changes the state of an
+          object that an already-open request stream is watching, the Ada side
+          does not re-send. C++ handles this in its inbound command path; Ada has
+          no equivalent yet.
+        rationale: >-
+          A reader that opened its stream first would silently miss the update.
+          The gap is written into the generated code comments, so it is known
+          rather than wrong, but a consumer relying on it would still be misled.
+        progress: 0
+        effort: Small
+      - id: FACADE-F1c
+        title: Wire the Ada facade proof into continuous integration
+        description: >-
+          The proof runs today as a standalone script, like the other harness
+          proofs. Detect the Ada toolchain and register the proof so it runs with
+          the standing regression checks.
+        rationale: >-
+          A proof that only runs when someone remembers to run it stops being
+          evidence the moment the code around it changes.
+        progress: 0
+        effort: Small
+      - id: FACADE-F2b
+        title: Convert the Tactical Objects showcase to the port abstraction
+        description: >-
+          The showcase still uses legacy create-read-update-delete services,
+          which are not shapes the port grammar recognises. The conversion rides
+          on the split and migration plan that makes its contract conforming.
+        rationale: >-
+          It is the example most people read first. Leaving it on the legacy
+          shape teaches the pattern the project is moving away from.
+        progress: 0
+        effort: Medium
+        status: planned
+
+  - code: BRIDGE
+    name: Facade closure
+    summary: >-
+      One item remains from the in-process facade workstream.
+    items:
+      - id: BRIDGE-E5
+        title: Classify or migrate the StandardBridge raw PCL wiring
+        description: >-
+          Either move `StandardBridge` onto the generated service and topic
+          facade where that is practical, or record the calls that stay raw as
+          framework-adapter exceptions, with a source guard that keeps the list
+          honest.
+        rationale: >-
+          An adapter is allowed to reach below the facade; ordinary components
+          are not. Writing down which calls are which is what lets the guard
+          catch the next one that should not be there.
+        progress: 0
+        effort: Medium
+
+  - code: DEFECT
+    name: Known defects
+    summary: >-
+      Problems found during review that are understood, reproduced, and not yet
+      fixed. They are listed here so that they are not rediscovered as surprises.
+    items:
+      - id: DEFECT-1
+        title: Six pre-existing CTest failures on a clean main
+        description: >-
+          Five Ada Tactical Objects end-to-end tests and the bridge end-to-end
+          test fail on a clean checkout, with 804 of 810 tests passing. The
+          bridge test reports repeated publish failures and a stub that receives
+          nothing. The failures were confirmed pre-existing by reverting the
+          working tree and re-running.
+        rationale: >-
+          Because they are not caused by current work, they are easy to step
+          over, and that is the problem: a suite that is never green cannot tell
+          anyone whether the next change broke something. Nobody has diagnosed
+          them yet.
+        progress: 0
+        status: blocked
+      - id: DEFECT-2
+        title: Generated JSON codec accepts input that is not JSON
+        description: >-
+          Handed a FlatBuffers payload, the generated JSON codec reports success
+          and fills the target with default values instead of rejecting it. The
+          permissive parse reads the first FlatBuffers byte as a bare JSON value,
+          so nothing downstream notices.
+        rationale: >-
+          A peer configured with the wrong codec should fail at startup. Instead
+          it produces silently empty data, which is the failure mode the
+          fail-closed design exists to prevent.
+        progress: 0
+        status: at-risk
+      - id: DEFECT-3
+        title: Non-deterministic typedef order in generated C headers
+        description: >-
+          The generic container typedefs are emitted in an order that varies
+          between two runs of the same generator, because the dependency sort
+          walks an unordered set whose iteration order depends on the string hash
+          seed. Sorting that one iteration fixes it.
+        rationale: >-
+          The output is functionally identical, but the instability breaks the
+          rule that generated output must be byte-for-byte reproducible, and it
+          shows up as noise whenever a packaged SDK is regenerated. The fix is
+          deferred only because it requires refreshing the recorded baselines.
+        progress: 0
+
+  - code: TRIGGER
+    name: Deferred, waiting on a trigger
+    summary: >-
+      Work that is understood and deliberately not scheduled. Each item names the
+      event that should start it, so nothing drops silently.
+    items:
+      - id: TRIGGER-1
+        title: ROS2 actions
+        description: >-
+          A contract construct for actions mapping to a reserved capability, with
+          generated interface definitions and an adapter action server and
+          client. Starts when a production user needs actions.
+        rationale: >-
+          Actions are a first-class part of the model by decision, and the
+          capability is already reserved. Building the runtime before anyone
+          consumes it would fix an interface with no user to check it against.
+        progress: 0
+        status: planned
+      - id: TRIGGER-2
+        title: FlatBuffers codec plugin independence
+        description: >-
+          FlatBuffers plugins currently need the generated JSON codec alongside
+          them as a conversion bridge. Starts before binary codecs are described
+          as fully independent plugin artefacts.
+        rationale: >-
+          Until then the claim that codecs are independent plugins is not quite
+          true, and someone will eventually deploy on the strength of it.
+        progress: 0
+        status: planned
+      - id: TRIGGER-3
+        title: Ada ROS2 runtime
+        description: >-
+          Ada has generated ROS2 constants and specifications but no runtime
+          equivalent to the C++ client library. Starts when there is an Ada
+          consumer of the ROS2 transport.
+        rationale: >-
+          The generated declarations are cheap to keep; the runtime behind them
+          is not, and its shape should be set by a real consumer.
+        progress: 0
+        status: planned
+      - id: TRIGGER-4
+        title: AME contract canonicalization
+        description: >-
+          Publish the AME interface as a canonical PYRAMID contract. Starts when
+          AME is ready to expose it that way.
+        rationale: >-
+          It would let AME consume the generated ROS2 bindings directly instead
+          of maintaining its own, which is also the fourth item on the AME
+          roadmap's PCL compliance stream.
+        progress: 0
+        status: planned
+      - id: TRIGGER-5
+        title: Plugin-level threading conformance harness
+        description: >-
+          The in-tree transports pass the threading tests, and the ROS2 and gRPC
+          plugins satisfy the executor-threading contract in code, but neither has
+          plugin-level harness coverage. Starts at the first production user of
+          either, or at any threading regression.
+        rationale: >-
+          Conformance argued from reading the code is weaker than conformance
+          demonstrated by a harness, and threading defects are the ones least
+          likely to be found by chance.
+        progress: 0
+        status: planned
+      - id: TRIGGER-6
+        title: Routing manifest support for real transports
+        description: >-
+          The generated routing manifest only emits configuration for the stub
+          transport. Real transports need bus and participant identifiers for
+          shared memory, and host, port and peer identifiers for UDP. Starts when
+          a generated manifest has to target one.
+        rationale: >-
+          The manifest is the piece that would let a deployment be described
+          entirely by generated configuration, which is the point of generating
+          it at all.
+        progress: 0
+        status: planned
