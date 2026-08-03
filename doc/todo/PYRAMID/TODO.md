@@ -607,6 +607,240 @@ its ports with `application/json` and fails the codec-registry check.
 
 ---
 
+## WS-J — A-GRA message types as PYRAMID component port payloads (via the MBSE model)
+
+**Opened 2026-07-24.** This workstream lets a native PYRAMID component,
+authored in the SysML model, type one of its ports directly with an A-GRA
+message, so the component contract is *realised with* the A-GRA data model
+rather than using an invented local type that is later bridged to A-GRA at the
+edge. The worked example is Mission Autonomy's `Objectives` component
+publishing an action plan on a Provided Planning port whose payload is the
+A-GRA `MA_ActionPlanMT` message.
+
+The message bodies stay owned by `pim/xsd2proto.py` (the XSD-to-proto
+converter), which remains authoritative for A-GRA per drop; the model owns only
+the architecture — which component provides or consumes which port, and in
+which direction. The two meet at the `pyramid.data_model.agra` proto module: a
+component service file imports it and references its messages, exactly as the
+`pim/agra_p3_seam/` interface services already do.
+
+**Why A-GRA does not simply flow through the normal MBSE path.** A-GRA is
+imported into SysML by the Open Arsenal XSD importer as blocks stereotyped
+`OpenArsenal_XSDComponent` (carrying `qName`, `namespace`, `uciVersion`,
+`xsdKind`, `xsdCompositor`, `xsdSequencePosition` tags) — a different shape
+from PIM blocks, and 2856 messages across externally-versioned drops. Modelling
+those natively would make the generator redefine every message from the model,
+forking the XSD's authority and losing the byte-for-byte regeneration guard.
+So A-GRA blocks are referenced, not re-authored. Full background and the
+options considered are in the design discussion that opened this workstream.
+
+### J1. Generator resolver branch — DONE (prototype in place, 2026-07-24)
+
+`pim/mbse/proto_generator.py` now recognises A-GRA external blocks (marked with
+the `xsdComponent` stereotype) and, instead of emitting a message body for
+them, routes references to the `pyramid.data_model.agra` package and imports
+that module. The change is additive and guarded on the new stereotype, so
+models without it produce byte-identical output; the existing generator tests
+(`test_proto_generator.py`, `test_oms_json_gen.py`, `test_agra_example.py`,
+`test_component_skeleton_gen.py`) still pass.
+
+Proven end to end with a hand-authored parsed-model fixture (one `Objectives`
+block, a Provided Planning port, an `MA_ActionPlanMT` external block):
+
+- the generator emits `pyramid.components.mission_autonomy.services.provided`
+  with the port payload typed as `pyramid.data_model.agra.MA_ActionPlanMT`, a
+  PUBLISH interaction, and a contract topic — no local redefinition of the
+  message;
+- running `generate_bindings.py` over that service proto plus the real
+  `agra_p3_seam` A-GRA data-model proto binds with no unresolved type; the
+  manifest carries the planning topic with
+  `payload_type: pyramid.data_model.agra.MA_ActionPlanMT`, and the generated
+  C++ facade marshals `pyramid::domain_model::agra::MA_ActionPlanMT`.
+
+The spike fixture and driver that proved this are not yet in the repository
+(they were run from a scratch directory); promoting them into `pim/` as a
+committed test is part of J3.
+
+### J2. Real parser and join map — mostly DONE (the "real XMI" step, 2026-07-24)
+
+Driven from the actual Cameo exports (`PRA_NA_PYRAMID_PIM.xml` referencing
+`A-GRA_Domain_Model.xml`), which model an `Objectives` component whose provided
+`MAAction` interface block pairs `command → MA_Action` and
+`status → MA_ActionStatus`.
+
+1. **Reference resolution in `pim/mbse/sysml_parser.py` — DONE.** In these
+   exports an A-GRA-typed property does not point at a local
+   `OpenArsenal_XSDComponent` block; it carries a cross-file type reference,
+   `<type href='A-GRA_Domain_Model.xml#id'>` with a `referenceExtension`
+   whose `referentPath` names the element (for example
+   `…::uci::Messages::MA_Action`). `_parse_property` now extracts that
+   reference (name from the `referentPath`), and `resolve_references`
+   materialises one `xsdComponent` proxy class per distinct referenced element,
+   which the J1 generator branch already consumes. This means the 50 MB A-GRA
+   XMI does not need to be parsed at all — the PIM export carries the identity.
+   The change is additive; the existing parser/generator tests still pass
+   (48 passed). Recognising a *local* `OpenArsenal_XSDComponent` block (the
+   shape the original scope assumed) is still worth adding for models that embed
+   A-GRA blocks directly rather than by cross-file reference.
+
+2. **Authoritative join map from `pim/xsd2proto.py` — still TODO.** The element
+   name from the `referentPath` (`MA_Action`) is the XSD element, whereas the
+   proto message is its complexType (`MA_ActionMT`). The generator resolves that
+   with an injected `agra_type_map` (element → message name); for the real-XMI
+   run it was passed `agra_p3_seam/wire_names.json` `roots`. The authoritative
+   source remains a sidecar emitted by `xsd2proto` (see the note below on the
+   suffix convention) — that is the piece still outstanding.
+
+3. **Guard the join — still TODO.** Add a test that every referenced A-GRA
+   element resolves to a message that actually exists in the A-GRA proto,
+   failing closed on a miss, keeping the two independent importers from
+   diverging across drops.
+
+### J4. Command/status port inference — DONE (interim, 2026-07-24)
+
+The modelled `MAAction` interface block generalises neither `RequestService`
+nor `ProviderService`, so the existing port-kind resolver returned `None` and
+the port was dropped. Strictly this wants a **new `CommandStatus` port kind** (a
+base service block that command/status interface blocks generalise, alongside
+`RequestService`/`ProviderService`); that port-grammar work is not yet done.
+
+As an approved interim, the tooling **infers** the kind:
+`sysml_parser._infer_command_status` treats an interface block that pairs a
+command payload with a status payload — both external A-GRA references — as a
+`command_status` port, and `proto_generator._write_command_status_services`
+emits the A-GRA CommandStatusPort shape (a Command leg and a CommandStatus leg,
+each a one-way streaming `Read`, tied by a shared `command_status` name with
+`COMMAND`/`STATUS` legs; on the provided side Command is SUBSCRIBE and
+CommandStatus is PUBLISH). Proven end to end on the real export: the generator
+emits `pyramid.components.pim_proteus.objectives.services.provided` with
+`MAAction_Command_Service` (SUBSCRIBE, payload `pyramid.data_model.agra.MA_ActionMT`)
+and `MAAction_CommandStatus_Service` (PUBLISH, payload
+`…MA_ActionStatusMT`), and `generate_bindings.py` binds it with the
+`command_status` pairing carried into the manifest. When the real `CommandStatus`
+port grammar lands, only the upstream classification changes; the emission stays.
+
+### J5. Promote the real-XMI proof to a committed test — TODO
+
+Fold the parser + generator + bind assertions (run from a scratch directory
+against the real exports) into a committed `pim/` test, ideally from a small
+extracted XMI fragment so the 21 MB export is not a test input.
+
+### J3. Promote the spike to a committed test — TODO
+
+Move the fixture and assertions from the scratch spike into `pim/` as a proper
+test (for example `test_agra_component_port.py`): a small parsed-model input
+plus the checks that the emitted component service imports and references
+`pyramid.data_model.agra` and does not redefine the message. Once J2(1) lands,
+re-point it at the parser output from the real XMI fragment rather than a
+hand-authored model.
+
+### J6. Assembly step: two front-ends into one contract tree — TODO (sketch)
+
+The pipeline assumes the A-GRA data model is generated **separately**: the MBSE
+generator emits component service protos that import
+`pyramid/data_model/pyramid.data_model.agra.proto` and reference its `*MT`
+messages, but never writes that file. Producing a complete, bindable contract is
+therefore a two-step assembly today, done by hand (copy the A-GRA data model and
+options proto in beside the generated component protos, then run
+`generate_bindings.py`). This item sketches a wrapper that does that assembly in
+one command. It is a convenience/orchestration step — the two-step flow is
+already correct without it.
+
+**Inputs**
+
+- The SysML PIM export (XMI), for example `PRA_NA_PYRAMID_PIM.xml`, whose
+  A-GRA-typed ports reference the A-GRA element identities.
+- The A-GRA data model, supplied one of two ways:
+  - *reuse* a pre-generated A-GRA contract tree (for example `agra_p3_seam/`),
+    which already carries `pyramid.data_model.agra.proto` and `wire_names.json`;
+    or
+  - *regenerate* from the A-GRA XSD via `xsd2proto.py` for a chosen profile/drop.
+
+**Steps**
+
+1. **Obtain the A-GRA data model + join map.** Either copy the pre-generated
+   `pyramid.data_model.agra.proto` and read `wire_names.json`, or run
+   `xsd2proto.py` to produce both. The `roots` map (element name -> message
+   name, for example `MA_Action` -> `MA_ActionMT`) is the interim
+   `agra_type_map`; the authoritative source is the xsd2proto sidecar once J2(2)
+   lands.
+2. **Model -> component protos.** Parse and resolve the PIM XMI
+   (`sysml_parser`), then run `proto_generator` with `agra_type_map` set from
+   step 1. This emits only `pyramid/components/**.services.*.proto`; it does not
+   emit the A-GRA data model.
+3. **Assemble one tree.** Place the A-GRA data model proto and
+   `pyramid.options.proto` alongside the generated component protos in a single
+   output directory so imports resolve.
+4. **Guard (once J2(3) exists).** Fail closed if any A-GRA element referenced by
+   a component does not resolve to a message present in the A-GRA proto.
+5. **Bindings.** Run `generate_bindings.py` over the assembled tree.
+
+**Output:** one contract tree (component services + A-GRA data model + options)
+plus `binding_manifest.json`, ready to build.
+
+**Design points to decide when implementing**
+
+- **A-GRA source selection:** a `--agra-contract <dir>` (reuse) versus
+  `--agra-xsd <path> --profile <p>` (regenerate); reuse is enough for the
+  current flow.
+- **Drop/version pinning:** record the A-GRA drop and `schema_version` used (from
+  the reused contract's `binding_metadata.json` / `wire_names.json`) in the
+  assembled output, so the model side and data side are known to match. This is
+  the concrete guard against the version-skew fragility noted under J2(2): the
+  model references element identities, and the assembly is where those are tied
+  to a specific A-GRA drop.
+- **Determinism:** the assembly must be byte-stable (standing regression bar #1)
+  so a packaged contract regenerates identically.
+
+**Illustrative shape (not final):**
+
+```
+python pim/assemble_agra_contract.py \
+    --pim-xmi PRA_NA_PYRAMID_PIM.xml \
+    --agra-contract proofs/contracts/agra_p3_seam \
+    --out build/objectives_contract
+# -> build/objectives_contract/pyramid/components/....services.provided.proto (generated)
+# -> build/objectives_contract/pyramid/data_model/pyramid.data_model.agra.proto (copied)
+# -> build/objectives_contract/pyramid/options/pyramid.options.proto (copied)
+# then: python pim/generate_bindings.py build/objectives_contract build/bindings
+```
+
+### Constraints to hold (decided in the opening discussion)
+
+- **Model the A-GRA element, not the `*MT` complexType.** A-GRA/UCI XSD names an
+  outer global **element** (for example `MA_Action`, which Open Arsenal imports
+  with `xsdKind='element'` and `qName='uci:MA_Action'`) and a **complexType**
+  that types it (`MA_ActionMT`, "Message Type"), which in turn contains a
+  "Message Data Type" (`MA_ActionMDT`). `xsd2proto` emits the proto `message`
+  under the complexType name (`MA_ActionMT`); there is no bare `message
+  MA_Action`. The element is the publishable message and carries the wire/topic
+  name, so a port property links the **element** (`MA_Action`), and the tooling
+  applies the element → complexType join (`MA_Action` → `MA_ActionMT`) via the
+  join map. Linking `*MT`/`*MDT` directly would bind the model to xsd2proto's
+  internal type naming and lose the element identity that becomes the topic.
+- **Only named A-GRA roots and complexTypes are referenceable.** `xsd2proto`
+  synthesises messages for anonymous inline complexTypes and list wrappers that
+  have no standalone XSD type, and Open Arsenal models those as nested
+  structure with no corresponding block. A port can therefore be typed only
+  against a named A-GRA message (the 343 roots and the named complexTypes), not
+  against a synthesised inner type.
+- **"Shared surface" is at the namespace and topic level, not the type level.**
+  The A-GRA data model is self-contained: it carries its own UCI equivalents of
+  `Identifier`, `Timestamp`, and the base wrappers, and does not reuse
+  `pyramid.data_model.base`/`common`. An A-GRA-typed port is a first-class
+  provided or consumed PYRAMID port (native package, role, topic, QoS), but its
+  payload is UCI-idiomatic. Decide, per component, whether a component may mix
+  A-GRA-typed and PIM-typed ports or whether A-GRA-typed ports stay on their own
+  components.
+
+**Relationship to WS-G.** WS-G is about the A-GRA OMS/CAL *wire codec* and
+platform-compatibility evidence. WS-J is about *modelling*: using A-GRA message
+types to realise PYRAMID component contracts through the MBSE-to-proto path. The
+two share the `pyramid.data_model.agra` module but make no compliance claim on
+each other.
+
+---
+
 ## WS-D — Deferred, with explicit triggers
 
 No action until the trigger fires; listed so nothing silently drops.
