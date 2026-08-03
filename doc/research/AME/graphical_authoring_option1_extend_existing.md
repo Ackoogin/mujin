@@ -4,6 +4,10 @@
 
 **Status:** Research and recommendation. No implementation started.
 
+**Follow-on:** [`pddl_authoring_usability_and_navigation.md`](pddl_authoring_usability_and_navigation.md)
+covers what this document did not — how to keep a wide domain readable once the node editor is
+in place, and which authoring styles work for people who are not software engineers.
+
 ---
 
 ## 1. Executive Summary

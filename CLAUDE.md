@@ -40,6 +40,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `subprojects/AME/doc/guides/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
 | `subprojects/AME/doc/guides/contingency_verifier.md` | **Contingency verifier tool**: exhaustive safe-state reachability, domains, pruning |
 | `doc/todo/AME/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
+| `doc/roadmap/` + `tools/roadmap/README.md` | **Roadmap dashboards**: roadmap data files, the generator that turns them into standalone HTML pages, and the update flow |
 | `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/plans/AME/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
 | `doc/research/AME/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
