@@ -16,23 +16,42 @@ smoothed over.
 
 ## Progress as of 2026-08-04
 
+**The Windows test suite is green: 828 of 828 pass in a clean shell**
+(measured 2026-08-05, nothing added to `PATH`). Every defect this plan opened
+against the suite is closed. What remains are the two codec defects, D-4 and
+D-5, which were deliberately scheduled after the suite became trustworthy.
+
 | Defect | State |
 |--------|-------|
-| D-1 CTest discovery | **Fixed** for discovery (PYRAMID `de9dfde`). Two Ada tests still need the same treatment — see the note under D-1 |
-| D-2 Bridge plugin path | **Partly fixed** (PYRAMID `de9dfde`). The path defect is gone; a second failure behind it is not |
-| D-3 Ada access violation | **Open, and needs re-scoping** — see the revised note under D-3 |
-| D-4 Codec name collision | Open |
-| D-5 JSON codec fail-closed | Open |
+| D-1 CTest discovery | **Fixed** (PYRAMID `de9dfde`, completed by `d77c7f1`) |
+| D-2 Bridge plugin path | **Fixed** (PYRAMID `de9dfde`, completed by `d77c7f1`) |
+| D-3 Ada failures | **Fixed** (PYRAMID `d77c7f1`) — cause was not what this plan assumed, see below |
+| D-4 Codec name collision | **Open** — now the highest-priority item |
+| D-5 JSON codec fail-closed | **Open** |
 | D-6 Stale baselines | **Fixed** (PYRAMID `e78e0e1`) |
 | D-7 Linux-only tests | **Fixed** (PYRAMID `e78e0e1`) |
 
-**Correction to the measurements below.** The "six failures" this plan
-originally recorded were measured with the generated-codec directory added to
-`PATH` by hand — the D-1 workaround. That masked two further failures. The
-honest clean-shell figures are: before any fix, CTest enumerated **nothing**;
-after D-1 and D-2, the suite runs and reports **8 failures out of 828**. With
-the codec directory on `PATH`, the count is 6 both before and after the fixes,
-which is the like-for-like check confirming no regression.
+**Two corrections to what this plan originally said.**
+
+*The measurements.* The "six failures" recorded below were taken with the
+generated-codec directory added to `PATH` by hand — the D-1 workaround — which
+masked two further failures. The honest clean-shell progression is: CTest
+enumerated **nothing**, then **8 failures out of 828**, then **0**.
+
+*The diagnosis of D-3.* This plan attributed the Ada access violation to the
+C-to-Ada marshalling boundary. That was wrong. The cause was a build-graph
+defect: the Ada custom commands did not depend on the GNAT-built PCL archives
+they link against, so Ada executables were never relinked when the C sources
+changed and ran against stale archives. The same stale archive gave the bridge
+a mismatched shared-memory layout, which is why D-2's "second defect behind the
+first" also disappeared. One root cause, three symptoms, and the symptom that
+looked most like a memory-safety bug was the furthest from one.
+
+**A build quirk worth knowing, found along the way.** The first parallel build
+after a reconfigure exits 1 with no compiler or linker diagnostic; running the
+identical command again succeeds. It is reproducible and unrelated to any
+defect here, but it means a newcomer's first build appears to fail for no
+reason. Worth documenting in the build instructions.
 
 ## Why the suite comes first
 
@@ -207,22 +226,32 @@ binaries are present and running (GNAT 2021 is installed at `C:\GNAT\2021`), and
 they crash after doing real work. A skip would have been silent; this is a
 genuine memory fault.
 
-**Cause: not yet diagnosed, and the premise has changed since this was
-written.** The access violation above was observed with the codec directory on
-`PATH`. After D-1 and D-2 landed, these five were reported as failing *earlier*
-— in their own drivers, unable to load their codec plugin dependencies and
-failing closed — without reaching the access violation at all. That has not been
-independently confirmed, and it matters: if true, the visible fault is another
-instance of the D-1 DLL-resolution problem reaching yet another set of drivers,
-and the access violation is a second layer underneath that may or may not
-survive fixing the first.
+**Cause: stale GNAT-built PCL archives. Fixed 2026-08-05 (PYRAMID `d77c7f1`);
+all five pass.**
 
-So the first step is no longer "get the faulting frame". It is to establish
-which of the two failures is actually in front, by running one of these tests in
-a clean shell and again with the codec directory on `PATH`, and comparing. Only
-once the plugin loading succeeds does chasing the access violation make sense.
+The reasoning below, which pointed at the inbound path and the generated
+marshalling code, was wrong — but wrong in an instructive way, so it is kept
+rather than deleted. The signature genuinely looked like a memory-safety bug:
+the process started, configured, activated, sent its request, and only then
+faulted. What it actually indicated was that the Ada executable had been linked
+against an out-of-date C library and was calling into a layout that no longer
+matched.
 
-The original crash signature, still the likely second layer, is recorded below.
+The Ada custom commands did not list the GNAT-built PCL archives among their
+dependencies, so the executables were never relinked when the C sources
+changed. `pcl_process_runtime.c` — added for the codec-selection work in WS-I —
+was also missing from the archive's own sources. The fix adds those
+dependencies, forces the archive to refresh after a PCL change, and removes the
+Ada executables before relinking.
+
+**The lesson worth carrying forward.** An access violation in a mixed-language
+build is at least as likely to mean "something here is stale" as "something here
+is wrong". Checking that every binary was actually rebuilt is cheaper than
+reading marshalling code, and should come first. The same stale archive was also
+behind the bridge's apparent routing failure under D-2, so one build-graph
+defect produced three unrelated-looking symptoms across six tests.
+
+The original analysis follows.
 
 **Fix.** Investigate in this order:
 
@@ -511,21 +540,26 @@ The first three restore the ability to tell whether anything else worked, so
 they come first regardless of size. D-2 is placed before D-3 because it may
 resolve it.
 
-| Order | Item | Size | Why here |
-|-------|------|------|----------|
-| 1 | D-1 CTest discovery | S | Nothing else is verifiable until this is done |
-| 2 | D-2 Bridge plugin path | S | Mechanical; may also fix D-3 |
-| 3 | D-3 Ada access violation | M–L | Unknown until diagnosed; step 1 is cheap |
-| 4 | D-6 Refresh baselines | S | Clears the way for D-5 |
-| 5 | D-7 Skip Linux-only tests | XS | Makes the Windows bar readable |
-| 6 | D-4 Codec name collision | M | Highest severity; needs a trustworthy suite first |
-| 7 | D-5 JSON codec fail-closed | S | One generator line plus a baseline refresh |
-| 8 | D-8, D-9, D-10 Document fixes | S | Cheap; each currently misleads a reader |
+Items 1 to 5 below are **done**. The suite is green, which was the precondition
+for the rest.
 
-D-4 is the most serious defect but is deliberately sixth. It is a generation-time
-change that moves recorded output across the whole contract set, and doing that
-while the suite cannot report reliably would mean landing the repository's most
-dangerous fix blind.
+| Order | Item | Size | State |
+|-------|------|------|-------|
+| 1 | D-1 CTest discovery | S | Done |
+| 2 | D-2 Bridge plugin path | S | Done |
+| 3 | D-3 Ada failures | S | Done — a build-graph fix, not the M–L investigation estimated here |
+| 4 | D-6 Refresh baselines | S | Done |
+| 5 | D-7 Skip Linux-only tests | XS | Done |
+| 6 | D-4 Codec name collision | M | **Next** |
+| 7 | D-5 JSON codec fail-closed | S | After D-4; shares its baseline refresh |
+| 8 | D-8, D-9, D-10 Document fixes | S | D-8 and D-10 done; D-9 outstanding |
+
+D-4 was deliberately held until last among the defects. It is a generation-time
+change that moves recorded output across the whole contract set, and landing the
+repository's most dangerous fix while the suite could not report reliably would
+have meant doing it blind. That objection no longer applies: the suite now
+answers truthfully on Windows, so a baseline that moves unexpectedly will be
+visible.
 
 ## Deliberately deferred until the above is done
 

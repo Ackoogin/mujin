@@ -52,23 +52,23 @@ Live companion documents:
    from current work.
 3. For generator changes touching Ada: object-compile the generated Ada for
    both trees (`gnatgcc -c -gnat2020`).
-4. **CTest is green on Linux (927 of 927). On Windows it runs and reports 8
-   failures out of 828 (checked 2026-08-04, after the D-1/D-2 fixes).** Before
-   those fixes it could not run on Windows at all — it aborted during test
-   discovery. The remaining eight, and what is known about each, are in
-   [`defect_remediation_plan.md`](../../plans/PYRAMID/defect_remediation_plan.md):
-   two Ada roundtrip tests that cannot resolve their codec plugin libraries in a
-   clean shell, the five `tobj_ada_*` tests, and `pyramid_bridge_e2e`. Treat any
-   *other* Windows failure as breakage from current work, and treat the Linux
-   figure as the bar until the eight are closed.
+4. **CTest is green: 927 of 927 on Linux, and 828 of 828 on Windows in a clean
+   shell (checked 2026-08-05).** Windows was unrunnable until 2026-08-04 — it
+   aborted during test discovery — so any failure now is breakage from current
+   work and should be treated as such. What was fixed to get here is recorded in
+   [`defect_remediation_plan.md`](../../plans/PYRAMID/defect_remediation_plan.md).
 
-   Two cautions when reading any result here. **Build the Ada binaries first**
-   (`cmake --build --preset release --target pyramid_ada_all`): without them the
-   Ada tests skip and report success, which is not the same evidence. And **do
-   not add the generated-codec directory to `PATH` to make things pass** — doing
-   so hides exactly the defects listed above. With it set the Windows count is 6
-   rather than 8, which is why the earlier "six failures" figure in this file was
-   misleading.
+   Three cautions when reading a result here.
+
+   - **Build the Ada binaries first**
+     (`cmake --build --preset release --target pyramid_ada_all`). Without them
+     the Ada tests skip and report success, which is not the same evidence.
+   - **Do not add the generated-codec directory to `PATH` to make something
+     pass.** It masks real defects: that workaround is why this file once
+     reported six Windows failures when there were eight.
+   - **The first parallel build after a reconfigure fails** with exit 1 and no
+     compiler or linker diagnostic. Running the identical command again
+     succeeds. This is reproducible and is not a broken tree.
 5. End-of-workstream (slow): `viability_check.sh`, `build_comms_test.sh`,
    `build_plugin_load_test.sh`, `build_contract_routing_test.sh`, and the
    packaged-SDK import smoke (`package_sdk.sh` then

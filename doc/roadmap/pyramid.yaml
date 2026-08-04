@@ -251,9 +251,10 @@ streams:
           library directory on the search path is enough to prove the cause, and
           discovery then finds 828 tests where it previously found none. Fixed
           on 2026-08-04 by copying the linked runtime libraries beside the
-          executable; two Ada tests that run from a source directory rather than
-          the build tree still need the same treatment.
-        progress: 80
+          executable, and completed by giving the two Ada tests that run from a
+          source directory the same search path. The suite now enumerates and
+          runs on a clean Windows checkout.
+        progress: 100
         effort: Small
         links:
           - label: Defect remediation plan
@@ -272,29 +273,28 @@ streams:
           diagnosis that stopped at the symptom. Passing the paths in from the
           build system, which the neighbouring tests already do, removes the
           assumption that broke silently when the tree moved. Done on
-          2026-08-04, which revealed a second failure the first was hiding: the
-          test now loads its plugins but times out on a missing publish route,
-          a shared-memory routing problem that needs its own diagnosis.
-        progress: 60
-        status: at-risk
+          2026-08-04, which revealed a second failure the first was hiding: a
+          missing publish route. That turned out to be the same stale-archive
+          defect behind the Ada crashes, and both are now fixed.
+        progress: 100
         effort: Small
       - id: DEFECT-3
-        title: Five Ada Tactical Objects tests crash with an access violation
+        title: Five Ada Tactical Objects tests crashed on stale libraries
         description: >-
-          The Ada client starts, configures, sends its request, and then dies
-          with an access violation while waiting for the response. The binaries
-          are present and running, so this is a genuine memory fault rather than
-          the silent skip that happens when they are missing.
+          The Ada client started, configured, sent its request, and then died
+          with an access violation. The cause was not a memory-safety bug in the
+          code but a gap in the build: the Ada programs did not depend on the C
+          libraries they link against, so they were never rebuilt when those
+          libraries changed and ran against out-of-date ones.
         rationale: >-
-          The crash was seen with the library directory on the search path.
-          Since the first two defects were fixed, these five are reported as
-          failing earlier instead, in their own drivers, unable to load their
-          codec plugins. Which failure is actually in front has to be settled
-          before the crash is worth chasing, because the visible one may simply
-          be the first defect reaching another set of drivers.
-        progress: 0
-        status: at-risk
-        effort: Medium
+          The same stale library also gave the bridge test a mismatched
+          shared-memory layout, which looked like a missing publish route. One
+          build defect produced three unrelated-looking symptoms across six
+          tests, and the one that looked most like a memory fault was the
+          furthest from it. Worth remembering: in a mixed-language build, check
+          that everything was actually rebuilt before reading the code.
+        progress: 100
+        effort: Small
       - id: DEFECT-4
         title: Codec dispatch tells contracts apart by unqualified type name
         description: >-
