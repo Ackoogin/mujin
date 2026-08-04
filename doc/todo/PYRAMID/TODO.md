@@ -53,17 +53,35 @@ see below for what's still open).
    acceptance says otherwise.
 2. `python3 -m pytest subprojects/PYRAMID/tests -q` green, plus
    `python3 -m unittest subprojects/PYRAMID/pim/test_proto_parser.py`.
+   **Neither is green today (checked 2026-08-04):** the pytest suite reports
+   6 failed, 58 passed, 1 skipped, and `test_proto_parser` fails 1 of 4. Every
+   one of these is the same kind of staleness — an expectation recorded before
+   the AGRA MA grounding contract was added to
+   `proofs/contracts/proto/pyramid/components/`, which nobody refreshed
+   afterwards. `test_proto_parser` asserts the legacy tree holds 13 proto files
+   when it now holds 14; the pytest failures are the "keeps legacy names"
+   regression tests (`test_generic_grpc_ros2.py`,
+   `test_ros2_codec_plugin_generation.py`,
+   `test_generic_binding_contract.py`) plus the two manifest tests, all
+   comparing against recorded file and symbol lists that predate that
+   contract. Refreshing those recorded lists is the whole of the work; treat a
+   *different* failure as breakage from current work.
 3. For generator changes touching Ada: object-compile the generated Ada for
    both trees (`gnatgcc -c -gnat2020`).
-4. **Known pre-existing CTest failures (as of 2026-07-21):** six tests fail on
-   a clean `main` — `tobj_ada_socket_e2e`, `tobj_ada_active_find_e2e`,
-   `tobj_ada_active_find_flatbuffers_e2e`, `tobj_ada_active_find_app_e2e`,
-   `tobj_ada_active_find_app_flatbuffers_e2e`, and `pyramid_bridge_e2e`
-   (804 of 810 pass). `pyramid_bridge_e2e` fails with repeated
-   `publish standard.object_evidence failed rc=-6` and a stub that receives
-   nothing. These were confirmed pre-existing by reverting the working-tree
-   change and re-running, so do not read them as breakage from current work —
-   but they do mean the suite is not green, and nobody has diagnosed them yet.
+4. **CTest is green (checked 2026-08-04): 927 of 927 pass.** The six failures
+   this entry recorded on 2026-07-21 — `tobj_ada_socket_e2e`,
+   `tobj_ada_active_find_e2e`, `tobj_ada_active_find_flatbuffers_e2e`,
+   `tobj_ada_active_find_app_e2e`,
+   `tobj_ada_active_find_app_flatbuffers_e2e`, and `pyramid_bridge_e2e` — all
+   pass, with the Ada end-to-end tests genuinely running rather than skipping
+   for want of their binaries (build them with
+   `cmake --build --preset release --target pyramid_ada_all`; without them
+   those tests skip and report success, which is not the same evidence). So
+   any CTest failure now is breakage from current work and should be treated
+   as such. Two failures were found and fixed on 2026-08-04 along the way:
+   `PclGeneratedInteractionFacade.SubmitCreateCallbackReceivesRemoteAckOnExecutorThreadWithoutBlocking`
+   and `...SkeletonSubmitAckIdDrivesTransitionsQueryWithoutBlocking`, both
+   caused by the codec-name collision recorded in the WS-D table below.
 5. End-of-workstream (slow): `viability_check.sh`, `build_comms_test.sh`,
    `build_plugin_load_test.sh`, `build_contract_routing_test.sh`, and the
    packaged-SDK import smoke (`package_sdk.sh` then
@@ -861,4 +879,5 @@ No action until the trigger fires; listed so nothing silently drops.
 | Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream ([`standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md), Remaining Design Point). |
 | Interaction-pattern options for the legacy tree / side-table deletion | Only if the frozen-compat stance changes | Resolved as *frozen compat, new consumers forbidden*; `standard_topics.py` stays scoped to the legacy layout. |
 | `cabi_codegen.py` non-deterministic typedef order | Next substantive change to `cabi_codegen.py`, or the first byte-stability guard failure it causes | `pyramid_data_model_generic_*_cabi.h` emits the generic container typedefs (the `*List`/`*Queue` `pyramid_slice_t` wrappers) in an order that varies between two runs of the *same* generator. The output is functionally identical, but the instability undermines standing-regression-bar #1 (byte-for-byte identical output) and shows up as spurious diffs when regenerating a packaged SDK. **Cause located 2026-07-21:** `_toposort` walks `for dep in deps.get(name, set())`, and iteration order over a `set` of strings depends on the per-process string hash seed. The earlier guess that `set(self._aliases.keys())` was responsible is wrong — those three sets are only used for `not in` membership tests, which is order-independent. The fix is to sort that one iteration; a two-run determinism check would guard it. Reproduced by generating the same tree twice with `PYTHONHASHSEED=1` and `PYTHONHASHSEED=99`, which differ in exactly this one file. Left deferred because sorting changes emission order and therefore requires refreshing the recorded generator baselines. |
+| Codec dispatch picks a codec by unqualified type name, so two contracts that share a type name collide | Any process that loads codec plugins generated from two different contracts, or the next hardening pass on codec dispatch | The registry deliberately lets several codecs share one content type and expects dispatch to tell them apart by schema id — but the schema id is the *unqualified* type name (`Ack`, `Query`, `Identifier`), so two contracts that each define a type of that name are indistinguishable. `pyramid_try_registry_encode`/`pyramid_try_registry_decode` in the generated service implementation walk every codec registered for the content type in registration order and use the first one that recognises the name, so whichever plugin was loaded first answers for all of them. Nothing reports a conflict: the value is encoded against the wrong definition, and any field the winning definition does not have is silently dropped. Found 2026-08-04 in `test_pcl_generated_interaction_facade`, which was loading the main contract tree's codec plugins as well as the three A-GRA example plugins it asks for by name. The main tree's `Ack` has only `success`; the A-GRA example's `Ack` also has `identifier`, so the provider's ack arrived at the consumer with an empty identifier, and the transition query keyed on that identifier then matched nothing. That test was fixed on the day by excluding it from the blanket plugin-environment loop in `proofs/tests/CMakeLists.txt` (it now loads only its own three plugins), which restores a green suite but leaves the collision itself untouched — any deployment that mixes contracts still hits it. A real fix is one of: key the registry on a contract-qualified schema id (the proto package is already known at generation time); give each contract its own registry handle and pass it to the generated encode/decode helpers instead of using the process-wide default; or have dispatch check that the value it is handed matches the schema it knows and fail closed on a mismatch rather than losing fields. The last of these also covers the row below, and both are cases of a codec accepting input it should refuse. |
 | Generated JSON codec accepts non-JSON input | Any hardening pass on codec fail-closed behaviour, or the first time a wrong-format payload is silently accepted in a deployment | Handed a FlatBuffers payload for `ObjectDetail`, the generated JSON codec **returns success** and fills the target with default values rather than rejecting the input. Found 2026-07-21 while writing `test_ports_file_codec_selection_e2e.cpp`: an early version of that test asserted "the JSON codec must refuse these bytes" and failed. The permissive JSON parse accepts a leading FlatBuffers byte as a bare JSON value, so nothing downstream notices. This matters because a peer misconfigured to the wrong codec then produces silently empty data instead of a startup error. Note the contrast with the schema-drop mismatch negatives in WS-G step 4, where the OMS codec is explicitly required to fail closed in both directions. The e2e test was written to compare the *decoded value* rather than the decode status, so it does not depend on this behaviour either way and will keep passing once it is fixed. |
