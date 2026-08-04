@@ -11,6 +11,8 @@ namespace ame {
 enum class AutonomyBackendState {
   IDLE,
   READY,
+  PENDING_APPROVAL,
+  EXECUTING,
   WAITING_FOR_RESULTS,
   COMPLETE,
   FAILED,
@@ -68,6 +70,7 @@ struct AgentState {
 struct PolicyEnvelope {
   unsigned max_replans = 3;
   bool enable_goal_dispatch = false;
+  bool require_plan_approval = false;
 };
 
 /// \brief Session bootstrap parameters for a backend run.
@@ -82,6 +85,8 @@ struct SessionRequest {
 struct AutonomyBackendCapabilities {
   std::string backend_id;
   bool supports_batch_planning = true;
+  bool supports_requirement_management = true;
+  bool supports_plan_validation = true;
   bool supports_external_command_dispatch = true;
   bool supports_replanning = true;
 };
@@ -106,6 +111,7 @@ struct GoalDispatch {
 /// \brief Decision/audit record emitted when the backend forms a new plan.
 struct DecisionRecord {
   std::string session_id;
+  std::string plan_id;
   std::string backend_id;
   uint64_t world_version = 0;
   unsigned replan_count = 0;
@@ -141,6 +147,7 @@ struct AutonomyBackendSnapshot {
   std::vector<ActionCommand> outstanding_commands;
   std::vector<GoalDispatch> outstanding_goal_dispatches;
   std::vector<DecisionRecord> decision_history;
+  std::vector<CommandResult> command_result_history;
 };
 
 /// \brief Whole-system swap surface that wraps both state ingress and action egress.
@@ -171,6 +178,13 @@ public:
 
   /// \brief Pull decision records generated since the previous read.
   virtual std::vector<DecisionRecord> pullDecisionRecords() = 0;
+
+  /// \brief Approve the current held plan by its addressable identity.
+  virtual void approvePlan(const std::string& plan_id) = 0;
+
+  /// \brief Reject the current held plan by identity and return to planning.
+  virtual void rejectPlan(const std::string& plan_id,
+                          const std::string& reason) = 0;
 
   /// \brief Push an externally observed command result back into the backend.
   virtual void pushCommandResult(const CommandResult& result) = 0;

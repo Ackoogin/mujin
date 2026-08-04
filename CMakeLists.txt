@@ -16,6 +16,17 @@ option(UNMANNED_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
 option(UNMANNED_BUILD_AME "Build the AME subproject and AME-only dependencies" OFF)
 option(PYRAMID_ENABLE_FLATBUFFERS "Enable FlatBuffers codec/transport for PYRAMID" ON)
 option(PYRAMID_ENABLE_OWP "Enable the PYRAMID OMS WebSocket Protocol client" ON)
+option(AME_BUILD_AGRA_MA_BRIDGE
+    "Build the AME bridge against the generated A-GRA P3 C2 seam"
+    OFF)
+if(AME_BUILD_AGRA_MA_BRIDGE)
+    if(NOT UNMANNED_BUILD_PYRAMID)
+        message(FATAL_ERROR
+            "AME_BUILD_AGRA_MA_BRIDGE requires UNMANNED_BUILD_PYRAMID=ON")
+    endif()
+    set(PYRAMID_ENABLE_AGRA_P3_BINDINGS ON CACHE BOOL
+        "Generate A-GRA P3 C++ bindings without full proof targets" FORCE)
+endif()
 
 # ---------------------------------------------------------------------------
 # Shared third-party dependencies

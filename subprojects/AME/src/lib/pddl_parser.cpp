@@ -284,6 +284,24 @@ static std::string readFile(const std::string& path) {
     return ss.str();
 }
 
+// Returns true when `name` is already declared with exactly `type`, so the
+// caller should skip re-adding it. Re-grounding a live WorldModel may
+// legitimately re-declare an object, but changing its type remains an error.
+static bool declareObject(WorldModel& wm,
+                          const std::string& name,
+                          const std::string& type,
+                          const std::string& context) {
+    if (!wm.typeSystem().hasObject(name)) return false;
+    const std::string existing = wm.typeSystem().getObjectType(name);
+    if (existing != type) {
+        throw std::runtime_error("PDDL: " + context + " '" + name +
+                                 "' is declared as type '" + type +
+                                 "' but already exists as type '" + existing +
+                                 "'. Each object has exactly one type.");
+    }
+    return true;
+}
+
 void PddlParser::parse(const std::string& domain_path,
                         const std::string& problem_path,
                         WorldModel& wm) {
@@ -353,6 +371,7 @@ void PddlParser::parseFromString(const std::string& domain_pddl,
     if (obj_section) {
         auto typed = parseTypedList(obj_section->children, 1);
         for (auto& [name, type] : typed) {
+            if (declareObject(wm, name, type, "problem object")) continue;
             wm.addObject(name, type);
         }
     }

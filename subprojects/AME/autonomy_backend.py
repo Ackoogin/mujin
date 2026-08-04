@@ -17,6 +17,8 @@ class FactAuthorityLevel(Enum):
 class AutonomyBackendState(Enum):
     IDLE = "IDLE"
     READY = "READY"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    EXECUTING = "EXECUTING"
     WAITING_FOR_RESULTS = "WAITING_FOR_RESULTS"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
@@ -66,6 +68,7 @@ class AgentState:
 class PolicyEnvelope:
     max_replans: int = 3
     enable_goal_dispatch: bool = False
+    require_plan_approval: bool = False
 
 
 @dataclass(slots=True)
@@ -80,6 +83,8 @@ class SessionRequest:
 class AutonomyBackendCapabilities:
     backend_id: str
     supports_batch_planning: bool = True
+    supports_requirement_management: bool = True
+    supports_plan_validation: bool = True
     supports_external_command_dispatch: bool = True
     supports_replanning: bool = True
 
@@ -104,6 +109,7 @@ class GoalDispatch:
 @dataclass(slots=True)
 class DecisionRecord:
     session_id: str
+    plan_id: str
     backend_id: str
     world_version: int
     replan_count: int
@@ -139,6 +145,7 @@ class AutonomyBackendSnapshot:
     outstanding_commands: List[ActionCommand] = field(default_factory=list)
     outstanding_goal_dispatches: List[GoalDispatch] = field(default_factory=list)
     decision_history: List[DecisionRecord] = field(default_factory=list)
+    command_result_history: List[CommandResult] = field(default_factory=list)
 
 
 class AutonomyBackend(ABC):
@@ -177,6 +184,14 @@ class AutonomyBackend(ABC):
 
     @abstractmethod
     def pull_decision_records(self) -> List[DecisionRecord]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def approve_plan(self, plan_id: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def reject_plan(self, plan_id: str, reason: str) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -224,6 +239,7 @@ def _to_cpp_policy(policy: PolicyEnvelope):
     cpp_policy = _ame_py.PolicyEnvelope()
     cpp_policy.max_replans = policy.max_replans
     cpp_policy.enable_goal_dispatch = policy.enable_goal_dispatch
+    cpp_policy.require_plan_approval = policy.require_plan_approval
     return cpp_policy
 
 
@@ -272,6 +288,10 @@ def _from_cpp_capabilities(capabilities) -> AutonomyBackendCapabilities:
     return AutonomyBackendCapabilities(
         backend_id=capabilities.backend_id,
         supports_batch_planning=capabilities.supports_batch_planning,
+        supports_requirement_management=(
+            capabilities.supports_requirement_management
+        ),
+        supports_plan_validation=capabilities.supports_plan_validation,
         supports_external_command_dispatch=capabilities.supports_external_command_dispatch,
         supports_replanning=capabilities.supports_replanning,
     )
@@ -307,6 +327,7 @@ def _from_cpp_agent_state(agent) -> AgentState:
 def _from_cpp_decision_record(record) -> DecisionRecord:
     return DecisionRecord(
         session_id=record.session_id,
+        plan_id=record.plan_id,
         backend_id=record.backend_id,
         world_version=record.world_version,
         replan_count=record.replan_count,
@@ -314,6 +335,23 @@ def _from_cpp_decision_record(record) -> DecisionRecord:
         solve_time_ms=record.solve_time_ms,
         planned_action_signatures=list(record.planned_action_signatures),
         compiled_bt_xml=record.compiled_bt_xml,
+    )
+
+
+def _from_cpp_command_result(result) -> CommandResult:
+    return CommandResult(
+        command_id=result.command_id,
+        status=CommandStatus[result.status.name],
+        observed_updates=[
+            FactUpdate(
+                key=update.key,
+                value=update.value,
+                source=update.source,
+                authority=FactAuthorityLevel[update.authority.name],
+            )
+            for update in result.observed_updates
+        ],
+        source=result.source,
     )
 
 
@@ -338,6 +376,10 @@ def _from_cpp_snapshot(snapshot) -> AutonomyBackendSnapshot:
         decision_history=[
             _from_cpp_decision_record(record)
             for record in snapshot.decision_history
+        ],
+        command_result_history=[
+            _from_cpp_command_result(result)
+            for result in snapshot.command_result_history
         ],
     )
 
@@ -389,6 +431,12 @@ class AmeAutonomyBackend(AutonomyBackend):
             _from_cpp_decision_record(r)
             for r in self._impl.pull_decision_records()
         ]
+
+    def approve_plan(self, plan_id: str) -> None:
+        self._impl.approve_plan(plan_id)
+
+    def reject_plan(self, plan_id: str, reason: str) -> None:
+        self._impl.reject_plan(plan_id, reason)
 
     def push_command_result(self, result: CommandResult) -> None:
         self._impl.push_command_result(_to_cpp_command_result(result))

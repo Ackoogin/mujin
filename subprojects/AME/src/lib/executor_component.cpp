@@ -1,6 +1,8 @@
 #include <ame/executor_component.h>
 #include <ame/pcl_msg_json.h>
 
+#include <ame/action_registry.h>
+#include <ame/bt_nodes/ame_dispatch_node.h>
 #include <ame/bt_nodes/check_world_predicate.h>
 #include <ame/bt_nodes/set_world_predicate.h>
 
@@ -15,6 +17,14 @@ ExecutorComponent::ExecutorComponent()
 
 void ExecutorComponent::setInProcessWorldModel(WorldModel* wm) {
   inprocess_wm_ = wm;
+}
+
+void ExecutorComponent::setActionSink(IExecutionSink* sink) {
+  action_sink_ = sink;
+}
+
+void ExecutorComponent::setActionRegistry(const ActionRegistry* registry) {
+  action_registry_ = registry;
 }
 
 void ExecutorComponent::setBlackboardInitializer(BlackboardInitializer initializer) {
@@ -44,11 +54,15 @@ void ExecutorComponent::loadAndExecute(const std::string& bt_xml) {
   }
 
   resetExecutionState();
+  registerDispatchNodesFromRegistry();
   tree_ = std::make_unique<BT::Tree>(factory_.createTreeFromText(bt_xml));
 
   const auto blackboard = tree_->rootBlackboard();
   if (inprocess_wm_ != nullptr) {
     blackboard->set("world_model", inprocess_wm_);
+  }
+  if (action_sink_ != nullptr) {
+    blackboard->set("action_sink", action_sink_);
   }
   if (blackboard_initializer_) {
     blackboard_initializer_(blackboard);
@@ -259,6 +273,19 @@ void ExecutorComponent::resetExecutionState() {
   last_status_ = BT::NodeStatus::IDLE;
   tree_.reset();
   bt_logger_.reset();
+}
+
+void ExecutorComponent::registerDispatchNodesFromRegistry() {
+  if (!action_registry_) {
+    return;
+  }
+
+  const auto& builders = factory_.builders();
+  for (const auto& verb : action_registry_->registeredNames()) {
+    if (builders.find(verb) == builders.end()) {
+      factory_.registerNodeType<AmeDispatchNode>(verb);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

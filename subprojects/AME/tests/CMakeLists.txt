@@ -31,6 +31,46 @@ target_link_libraries(test_ame_autonomy_contract
 )
 gtest_discover_tests(test_ame_autonomy_contract DISCOVERY_MODE PRE_TEST)
 
+if(AME_BUILD_AGRA_MA_BRIDGE)
+    add_executable(test_agra_ma_bridge test_agra_ma_bridge.cpp)
+    add_dependencies(test_agra_ma_bridge pyramid_agra_p3_bindings_codegen)
+    target_link_libraries(test_agra_ma_bridge PRIVATE ame_core GTest::gtest_main)
+    gtest_discover_tests(test_agra_ma_bridge DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_agra_ma_grounding_component
+        test_agra_ma_grounding_component.cpp)
+    add_dependencies(test_agra_ma_grounding_component
+        pyramid_agra_p3_bindings_codegen
+        pyramid_cpp_bindings_codegen)
+    target_link_libraries(test_agra_ma_grounding_component
+        PRIVATE ame_core GTest::gtest_main)
+    gtest_discover_tests(test_agra_ma_grounding_component DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_agra_ma_grounding_port_round_trip
+        test_agra_ma_grounding_port_round_trip.cpp
+        ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp)
+    add_dependencies(test_agra_ma_grounding_port_round_trip
+        pyramid_agra_p3_bindings_codegen
+        pyramid_cpp_bindings_codegen)
+    set_source_files_properties(
+        ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp
+        PROPERTIES COMPILE_OPTIONS
+        "-include;${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_agra_ma_grounding_services_provided_types.hpp")
+    target_link_libraries(test_agra_ma_grounding_port_round_trip
+        PRIVATE ame_core GTest::gtest_main)
+    target_compile_definitions(test_agra_ma_grounding_port_round_trip PRIVATE
+        AGRA_MA_GROUNDING_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_ma_grounding>")
+    gtest_discover_tests(test_agra_ma_grounding_port_round_trip DISCOVERY_MODE PRE_TEST)
+endif()
+
+add_executable(test_agra_oms_uuid test_agra_oms_uuid.cpp)
+target_link_libraries(test_agra_oms_uuid PRIVATE ame_core GTest::gtest_main)
+gtest_discover_tests(test_agra_oms_uuid DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_agra_native_json_uuid test_agra_native_json_uuid.cpp)
+target_link_libraries(test_agra_native_json_uuid PRIVATE ame_core GTest::gtest_main)
+gtest_discover_tests(test_agra_native_json_uuid DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_plan_compiler test_plan_compiler.cpp)
 target_link_libraries(test_plan_compiler PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_plan_compiler DISCOVERY_MODE PRE_TEST)

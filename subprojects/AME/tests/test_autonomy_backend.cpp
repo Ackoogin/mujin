@@ -113,6 +113,32 @@ TEST(AutonomyBackend, SuccessfulResultsAdvanceWorldStateAndCompleteSession) {
   EXPECT_EQ(backend.readSnapshot().state, ame::AutonomyBackendState::COMPLETE);
 }
 
+TEST(AutonomyBackend, NativeActionResultBypassesLegacyServiceCorrelation) {
+  auto wm = buildDomain();
+  wm.setFact("(at uav1 sector_a)", true, "init",
+             ame::FactAuthority::CONFIRMED);
+  ame::ActionRegistry registry;
+  registry.registerAction("search", "search");
+
+  ame::CurrentAmeBackendAdapter backend(wm, registry);
+  backend.start({"native-action", {{"(searched sector_a)"}}, {3}});
+  backend.step();
+
+  auto commands = backend.pullCommands();
+  ASSERT_EQ(commands.size(), 1u);
+  EXPECT_EQ(commands.front().action_name, "search");
+  EXPECT_EQ(commands.front().operation, "search");
+
+  backend.pushCommandResult(
+      {commands.front().command_id, ame::CommandStatus::SUCCEEDED,
+       {}, "native-action-test"});
+  backend.step();
+
+  EXPECT_TRUE(wm.getFact("(searched sector_a)"));
+  EXPECT_EQ(backend.readSnapshot().state,
+            ame::AutonomyBackendState::COMPLETE);
+}
+
 TEST(AutonomyBackend, ConfirmedObservedUpdatesOverridePredictedEffects) {
   auto wm = buildDomain();
   wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::CONFIRMED);

@@ -191,3 +191,43 @@ TEST(PddlParser, ParseFromFile) {
     EXPECT_EQ(wm.numGroundActions(), 13u);
     EXPECT_TRUE(wm.getFact("(at uav1 base)"));
 }
+
+TEST(PddlParser, ReparseIntoLiveSessionReDeclaresObjectsIdempotently) {
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    const unsigned fluents = wm.numFluents();
+    const unsigned actions = wm.numGroundActions();
+
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+
+    EXPECT_TRUE(wm.typeSystem().hasObject("uav1"));
+    EXPECT_EQ(wm.typeSystem().getObjectType("uav1"), "robot");
+    EXPECT_EQ(wm.numFluents(), fluents);
+    EXPECT_EQ(wm.numGroundActions(), actions);
+}
+
+TEST(PddlParser, ObjectRedeclaredWithDifferentTypeIsRejected) {
+    const char* conflicting = R"(
+(define (problem uav-search-2)
+  (:domain uav-search)
+  (:objects
+    uav1 - sector
+  )
+  (:init)
+  (:goal (searched sector_a))
+)
+)";
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+
+    try {
+        ame::PddlParser::parseFromString(UAV_DOMAIN, conflicting, wm);
+        FAIL() << "conflicting re-declaration was accepted";
+    } catch (const std::runtime_error& err) {
+        const std::string message = err.what();
+        EXPECT_NE(message.find("uav1"), std::string::npos);
+        EXPECT_NE(message.find("robot"), std::string::npos);
+        EXPECT_NE(message.find("sector"), std::string::npos);
+    }
+}

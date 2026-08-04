@@ -32,6 +32,9 @@ public:
     // Check if an action is registered
     bool hasAction(const std::string& pddl_name) const;
 
+    // Return all registered PDDL action names.
+    std::vector<std::string> registeredNames() const;
+
     // Get the reactive flag for an action
     bool isReactive(const std::string& pddl_name) const;
 

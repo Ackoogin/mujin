@@ -41,6 +41,9 @@ public:
   std::vector<ActionCommand> pullCommands() override;
   std::vector<GoalDispatch> pullGoalDispatches() override;
   std::vector<DecisionRecord> pullDecisionRecords() override;
+  void approvePlan(const std::string& plan_id) override;
+  void rejectPlan(const std::string& plan_id,
+                  const std::string& reason) override;
   void pushCommandResult(const CommandResult& result) override;
   void pushDispatchResult(const DispatchResult& result) override;
   void requestStop(StopMode mode) override;
@@ -66,6 +69,8 @@ private:
   void resetTransientQueues();
   void resetExecutionForReplan();
   void loadAndStartExecution(const std::string& bt_xml);
+  void validatePendingPlanId(const std::string& plan_id,
+                             const std::string& operation) const;
   bool maybeEmitGoalDispatches();
   void restoreDispatchedAgents();
   bool goalsSatisfied() const;
@@ -88,6 +93,9 @@ private:
   std::vector<GoalDispatch> pending_goal_dispatch_queue_;
   std::vector<DecisionRecord> pending_decision_records_;
   std::vector<DecisionRecord> decision_history_;
+  std::vector<CommandResult> command_result_history_;
+  std::string pending_plan_id_;
+  std::string pending_plan_bt_xml_;
   uint64_t command_counter_ = 0;
   uint64_t dispatch_counter_ = 0;
 };

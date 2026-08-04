@@ -12,6 +12,9 @@
 
 namespace ame {
 
+class ActionRegistry;
+class IExecutionSink;
+
 /// \brief PCL-backed BT execution component.
 ///
 /// Ports created during on_configure():
@@ -53,6 +56,12 @@ public:
   /// \brief Inject direct world model access for in-process execution.
   void setInProcessWorldModel(WorldModel* wm);
 
+  /// \brief Inject the execution sink used by native action leaves.
+  void setActionSink(IExecutionSink* sink);
+
+  /// \brief Inject the registry that defines allowed dispatch action verbs.
+  void setActionRegistry(const ActionRegistry* registry);
+
   /// \brief Customize blackboard initialization for transport-specific handles.
   void setBlackboardInitializer(BlackboardInitializer initializer);
 
@@ -93,6 +102,7 @@ protected:
 
 private:
   void resetExecutionState();
+  void registerDispatchNodesFromRegistry();
 
   /// \brief Emit one BT event line via both EventSink and PCL port.
   void emitEvent(const std::string& json_line);
@@ -101,6 +111,8 @@ private:
   std::unique_ptr<BT::Tree> tree_;
   std::unique_ptr<AmeBTLogger> bt_logger_;
   WorldModel* inprocess_wm_ = nullptr;
+  IExecutionSink* action_sink_ = nullptr;
+  const ActionRegistry* action_registry_ = nullptr;
 #if defined(AME_NEURO)
   RepairHook repair_hook_;
 #endif

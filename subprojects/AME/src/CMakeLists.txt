@@ -18,6 +18,7 @@ add_library(ame_core STATIC
     lib/execution_sink.cpp
     nodes/check_world_predicate.cpp
     nodes/set_world_predicate.cpp
+    nodes/ame_dispatch_node.cpp
     nodes/invoke_service.cpp
     nodes/execute_phase_action.cpp
     nodes/delegate_to_agent.cpp
@@ -45,6 +46,20 @@ target_link_libraries(ame_core
         pyramid_generated_codecs
 )
 add_dependencies(ame_core pyramid_cpp_bindings_codegen)
+
+if(AME_BUILD_AGRA_MA_BRIDGE)
+    target_sources(ame_core PRIVATE lib/agra_ma_bridge.cpp)
+    if(NOT TARGET pyramid_agra_profile_data_model)
+        message(FATAL_ERROR
+            "AME_BUILD_AGRA_MA_BRIDGE requires "
+            "PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR to point at checked-in "
+            "A-GRA data-model bindings")
+    endif()
+    add_dependencies(ame_core pyramid_agra_p3_bindings_codegen)
+    target_link_libraries(ame_core PUBLIC pyramid_agra_profile_data_model)
+    target_include_directories(ame_core PUBLIC ${PYRAMID_AGRA_P3_BINDINGS_DIR})
+    target_compile_definitions(ame_core PUBLIC AME_BUILD_AGRA_MA_BRIDGE=1)
+endif()
 
 # ---------------------------------------------------------------------------
 # Foxglove WebSocket bridge (optional)
@@ -232,6 +247,31 @@ endif()
 if(AME_BUILD_PYTHON)
     pybind11_add_module(_ame_py bindings/ame_py.cpp)
     target_link_libraries(_ame_py PRIVATE ame_core)
+    if(AME_BUILD_AGRA_MA_BRIDGE)
+        set(_AME_PY_AGRA_PORT_SOURCES
+            ${PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR}/pyramid_services_agra_c2_provided.cpp
+            ${PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR}/pyramid_services_agra_c2_consumed.cpp
+            ${PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR}/pyramid_components_agra_c2_services_provided_codec.cpp
+            ${PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR}/pyramid_components_agra_c2_services_provided_cabi_marshal.cpp
+            ${PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR}/pyramid_components_agra_c2_services_consumed_codec.cpp
+            ${PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR}/pyramid_components_agra_c2_services_consumed_cabi_marshal.cpp)
+        set_source_files_properties(
+            ${_AME_PY_AGRA_PORT_SOURCES}
+            PROPERTIES GENERATED TRUE)
+        target_sources(_ame_py PRIVATE
+            ${_AME_PY_AGRA_PORT_SOURCES}
+            ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp)
+        add_dependencies(_ame_py
+            pyramid_cpp_bindings_codegen
+            pyramid_codec_json_agra_ma_grounding)
+        set_source_files_properties(
+            ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp
+            PROPERTIES COMPILE_OPTIONS
+            "-include;${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_agra_ma_grounding_services_provided_types.hpp")
+        target_compile_definitions(_ame_py PRIVATE
+            PYRAMID_AGRA_OMS_JSON_CODEC_PATH="$<TARGET_FILE:pyramid_codec_oms_json_agra_profile>"
+            AGRA_MA_GROUNDING_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_ma_grounding>")
+    endif()
     
     # Install Python module to a predictable location
     install(TARGETS _ame_py

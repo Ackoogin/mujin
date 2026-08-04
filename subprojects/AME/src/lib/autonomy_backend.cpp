@@ -184,6 +184,20 @@ CurrentAmeBackendAdapter::CurrentAmeBackendAdapter(
   pyramid_proxy_ =
       std::make_unique<BackendPyramidServiceProxy>("", execution_sink_);
   executor_.setInProcessWorldModel(&world_model_);
+  executor_.setActionRegistry(&action_registry_);
+  // AmeDispatchNode (registered per-verb in ExecutorComponent::on_configure
+  // for every action the compiled BT can leaf out to -- navigate-to-waypoint,
+  // search-area, classify-target, etc., the shape every current production
+  // registry (automtk.ai.pyramid.ame_planner.build_ame_action_registry)
+  // actually compiles to) reads IExecutionSink* from the blackboard key
+  // "action_sink", set here by loadAndExecute() only when an action sink has
+  // been configured. Without this call every such leaf's onStart() catches
+  // the missing key, sets sink_ = nullptr, and returns FAILURE silently on
+  // its very first tick -- no exception, no log, and no ActionCommand is
+  // ever produced. Sharing execution_sink_ (already wired to the legacy
+  // InvokeService path via pyramid_proxy_ below) means both dispatch paths
+  // drain through the same queue pullCommands() already reads.
+  executor_.setActionSink(execution_sink_.get());
   executor_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
     blackboard->set("pyramid_service",
                     static_cast<IPyramidService*>(pyramid_proxy_.get()));
@@ -202,7 +216,7 @@ CurrentAmeBackendAdapter::~CurrentAmeBackendAdapter() {
 }
 
 AutonomyBackendCapabilities CurrentAmeBackendAdapter::describeCapabilities() const {
-  return {"ame.current_stack", true, true, true};
+  return {"ame.current_stack", true, true, true, true, true};
 }
 
 void CurrentAmeBackendAdapter::start(const SessionRequest& request) {
@@ -217,6 +231,9 @@ void CurrentAmeBackendAdapter::start(const SessionRequest& request) {
   pending_goal_dispatch_queue_.clear();
   pending_decision_records_.clear();
   decision_history_.clear();
+  command_result_history_.clear();
+  pending_plan_id_.clear();
+  pending_plan_bt_xml_.clear();
   pyramid_proxy_->reset(session_id_);
   executor_.haltExecution();
   for (const auto& agent : request.available_agents) {
@@ -253,6 +270,10 @@ void CurrentAmeBackendAdapter::step() {
     return;
   }
 
+  if (state_ == AutonomyBackendState::PENDING_APPROVAL) {
+    return;
+  }
+
   if (goalsSatisfied()) {
     state_ = AutonomyBackendState::COMPLETE;
     return;
@@ -285,6 +306,8 @@ void CurrentAmeBackendAdapter::step() {
     auto result = planner_.solve(world_model_);
     DecisionRecord record;
     record.session_id = session_id_;
+    record.plan_id = session_id_ + "/plan/" + std::to_string(replan_count_) +
+                     "/world/" + std::to_string(world_model_.version());
     record.backend_id = describeCapabilities().backend_id;
     record.world_version = world_model_.version();
     record.replan_count = replan_count_;
@@ -304,6 +327,13 @@ void CurrentAmeBackendAdapter::step() {
       if (replan_count_ >= policy_.max_replans) {
         state_ = AutonomyBackendState::FAILED;
       }
+      return;
+    }
+
+    if (policy_.require_plan_approval) {
+      pending_plan_id_ = record.plan_id;
+      pending_plan_bt_xml_ = record.compiled_bt_xml;
+      state_ = AutonomyBackendState::PENDING_APPROVAL;
       return;
     }
 
@@ -378,17 +408,48 @@ std::vector<DecisionRecord> CurrentAmeBackendAdapter::pullDecisionRecords() {
   return records;
 }
 
+void CurrentAmeBackendAdapter::approvePlan(const std::string& plan_id) {
+  validatePendingPlanId(plan_id, "approvePlan");
+  const auto bt_xml = pending_plan_bt_xml_;
+  pending_plan_id_.clear();
+  pending_plan_bt_xml_.clear();
+  loadAndStartExecution(bt_xml);
+  state_ = AutonomyBackendState::EXECUTING;
+}
+
+void CurrentAmeBackendAdapter::rejectPlan(const std::string& plan_id,
+                                          const std::string& reason) {
+  validatePendingPlanId(plan_id, "rejectPlan");
+  if (reason.empty()) {
+    throw std::invalid_argument(
+        "rejectPlan refused plan_id '" + plan_id +
+        "': rejection reason is empty");
+  }
+
+  pending_plan_id_.clear();
+  pending_plan_bt_xml_.clear();
+  ++replan_count_;
+  state_ = AutonomyBackendState::READY;
+}
+
 void CurrentAmeBackendAdapter::pushCommandResult(const CommandResult& result) {
   auto it = command_tracking_.find(result.command_id);
   if (it == command_tracking_.end()) {
-    throw std::invalid_argument("Unknown command_id in pushCommandResult");
+    throw std::invalid_argument(
+        "Unknown command_id '" + result.command_id +
+        "' in pushCommandResult");
   }
 
   it->second.status = result.status;
+  command_result_history_.push_back(result);
   if (!result.observed_updates.empty()) {
     pushState({result.observed_updates});
   }
-  pyramid_proxy_->submitResult(result);
+  // Both InvokeService and native AmeDispatchNode leaves submit into the
+  // shared execution sink. command_tracking_ above is the authoritative
+  // correlation check for both paths; the service proxy only knows about
+  // InvokeService request IDs and therefore cannot validate native commands.
+  execution_sink_->pushResult(result);
 }
 
 void CurrentAmeBackendAdapter::pushDispatchResult(const DispatchResult& result) {
@@ -462,6 +523,7 @@ AutonomyBackendSnapshot CurrentAmeBackendAdapter::readSnapshot() const {
       snapshot.outstanding_goal_dispatches.push_back(tracking.dispatch);
     }
   }
+  snapshot.command_result_history = command_result_history_;
   return snapshot;
 }
 
@@ -523,6 +585,8 @@ void CurrentAmeBackendAdapter::resetTransientQueues() {
   pending_command_queue_.clear();
   pending_goal_dispatch_queue_.clear();
   pending_decision_records_.clear();
+  pending_plan_id_.clear();
+  pending_plan_bt_xml_.clear();
   pyramid_proxy_->reset(session_id_);
 }
 
@@ -533,12 +597,30 @@ void CurrentAmeBackendAdapter::resetExecutionForReplan() {
   dispatch_tracking_.clear();
   pending_command_queue_.clear();
   pending_goal_dispatch_queue_.clear();
+  pending_plan_id_.clear();
+  pending_plan_bt_xml_.clear();
   pyramid_proxy_->reset(session_id_);
 }
 
 void CurrentAmeBackendAdapter::loadAndStartExecution(const std::string& bt_xml) {
   pyramid_proxy_->reset(session_id_);
   executor_.loadAndExecute(bt_xml);
+}
+
+void CurrentAmeBackendAdapter::validatePendingPlanId(
+    const std::string& plan_id,
+    const std::string& operation) const {
+  if (state_ != AutonomyBackendState::PENDING_APPROVAL ||
+      pending_plan_id_.empty()) {
+    throw std::invalid_argument(
+        operation + " refused plan_id '" + plan_id +
+        "': there is no plan pending approval");
+  }
+  if (plan_id != pending_plan_id_) {
+    throw std::invalid_argument(
+        operation + " refused unknown or stale plan_id '" + plan_id +
+        "'; current pending plan_id is '" + pending_plan_id_ + "'");
+  }
 }
 
 bool CurrentAmeBackendAdapter::maybeEmitGoalDispatches() {

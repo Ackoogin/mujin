@@ -64,6 +64,15 @@ bool ActionRegistry::hasAction(const std::string& pddl_name) const {
     return registry_.count(pddl_name) > 0;
 }
 
+std::vector<std::string> ActionRegistry::registeredNames() const {
+    std::vector<std::string> names;
+    names.reserve(registry_.size());
+    for (const auto& entry : registry_) {
+        names.push_back(entry.first);
+    }
+    return names;
+}
+
 bool ActionRegistry::isReactive(const std::string& pddl_name) const {
     auto it = registry_.find(pddl_name);
     if (it == registry_.end()) {
