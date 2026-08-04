@@ -3,7 +3,7 @@ subtitle: >-
   Generated component bindings over the PCL component layer, with pluggable
   codecs and transports. This dashboard tracks the open workstreams, the known
   defects, and the work that is deliberately waiting on a trigger.
-updated: "2026-08-01"
+updated: "2026-08-04"
 source: doc/todo/PYRAMID/TODO.md
 
 streams:
@@ -56,6 +56,45 @@ streams:
           Deployments differ in what they can carry on the wire. Choosing at
           startup means one build serves all of them.
         progress: 100
+      - id: DONE-5
+        title: PCL and PYRAMID split into standalone repositories
+        description: >-
+          Both are now their own repositories, included here as submodules, each
+          independently buildable and testable, with dependencies vendored and
+          references to the containing repository removed.
+        rationale: >-
+          The split is what lets either be consumed without taking the whole
+          workspace. It also moved most paths in the tree, which is worth knowing
+          when reading any document written before it.
+        progress: 100
+      - id: DONE-6
+        title: Native in-process payload path
+        description: >-
+          A payload can now be handed between components in the same process
+          without being serialised. The contract, the guards that refuse a native
+          payload anywhere it could escape the process, the port surface, and the
+          opt-in generator support for publish and subscribe are all in place.
+        rationale: >-
+          The typed facades used to serialise even when both ends were in the
+          same process. The guards matter as much as the fast path: a native
+          payload is refused before the local leg runs, so a mixed local and
+          remote route cannot leak a pointer.
+        progress: 85
+        effort: Large
+      - id: DONE-7
+        title: Deterministic generated C headers
+        description: >-
+          The generic container typedefs in the generated C headers were emitted
+          in an order that changed between two runs of the same generator,
+          because the dependency sort walked an unordered set. Both generators
+          now sort that iteration, and a test pins it.
+        rationale: >-
+          The output was always functionally identical, but the instability broke
+          the rule that generated output is reproducible byte for byte, and
+          showed up as noise whenever a packaged kit was regenerated. Fixing it
+          also caught the same mistake in the Ada generator, which the original
+          diagnosis had missed.
+        progress: 100
 
   - code: AGRA
     name: Formal A-GRA OMS codec closure
@@ -74,21 +113,41 @@ streams:
           A validator written by someone else, checking against the published
           schema, is the strongest available evidence that the generated codec
           is conformant rather than merely self-consistent.
-        progress: 45
+        progress: 65
         effort: Large
         owner: In progress
       - id: AGRA-G2
         title: Bring the P3 Core MMS contract into the tracker
         description: >-
-          A P3 profile, the seam overlay, and the generated tree were committed
-          and are in the repository, but nothing in the tracker describes them,
-          and the workstream above still lists full P3 coverage as out of scope.
+          A P3 profile, the seam overlay, and the generated tree are committed,
+          but nothing in the tracker describes them. The seam's own README now
+          supplies what the entry needs: 343 roots, 2,856 messages, and 951
+          services derived from Table 3-1, with every element represented by a
+          one-way Information service and Command and Status elements paired
+          into generated facades.
         rationale: >-
-          The tracker currently contradicts the tree. Anyone planning from it
-          would either redo delivered work or assume coverage that was never
-          agreed.
+          The README also states the evidence boundary, which is the part that
+          resolves the apparent contradiction with the workstream above: unlike
+          the P1 and P2 seams, this one has no offline fidelity or live interop
+          evidence and makes no compliance claim. Writing that down stops a
+          reader assuming coverage that was never agreed.
         progress: 0
-        status: at-risk
+        effort: Small
+      - id: AGRA-G3
+        title: Correct the A-GRA support statement to match what is proven
+        description: >-
+          The one-page status table in the compatibility document still records
+          the formal A-GRA codec as not generated and its Ada codec and
+          interaction facade as not attempted, while the tracker records all
+          three as built and proven offline.
+        rationale: >-
+          This document is named in both the repository guide and the tracker as
+          the statement of what is actually supported, so it is what an outside
+          reader consults. It errs towards understating rather than overclaiming,
+          which is the safer direction, but someone planning from it would still
+          conclude the work has not started.
+        progress: 0
+        effort: Small
 
   - code: FACADE
     name: Interaction facade follow-ons
@@ -169,50 +228,205 @@ streams:
   - code: DEFECT
     name: Known defects
     summary: >-
-      Problems found during review that are understood, reproduced, and not yet
-      fixed. They are listed here so that they are not rediscovered as surprises.
+      Problems that are understood, reproduced, and not yet fixed, listed so that
+      they are not rediscovered as surprises. The first three stop the test suite
+      being usable evidence on Windows and come before everything else; the next
+      two are codecs accepting data they should refuse, which is the most
+      dangerous kind of defect here because neither reports an error. Reproduced
+      2026-08-04; the ordering and the proposed fixes are in the defect
+      remediation plan.
     items:
       - id: DEFECT-1
-        title: Six pre-existing CTest failures on a clean main
+        title: The test suite cannot start on a clean Windows build
         description: >-
-          Five Ada Tactical Objects end-to-end tests and the bridge end-to-end
-          test fail on a clean checkout, with 804 of 810 tests passing. The
-          bridge test reports repeated publish failures and a stub that receives
-          nothing. The failures were confirmed pre-existing by reverting the
-          working tree and re-running.
+          Running the documented test command after a clean build fails before
+          any test executes. One test binary cannot start because a generated
+          codec library is written to a different directory from the binaries
+          that link it, and the Windows loader searches only the directory of the
+          executable. Test discovery runs each binary to enumerate its cases, so
+          one binary that cannot start aborts discovery for the whole project.
         rationale: >-
-          Because they are not caused by current work, they are easy to step
-          over, and that is the problem: a suite that is never green cannot tell
-          anyone whether the next change broke something. Nobody has diagnosed
-          them yet.
-        progress: 0
-        status: blocked
+          This is not one broken test but the loss of the whole signal: nothing
+          can be verified while the suite refuses to enumerate. Putting the
+          library directory on the search path is enough to prove the cause, and
+          discovery then finds 828 tests where it previously found none. Fixed
+          on 2026-08-04 by copying the linked runtime libraries beside the
+          executable; two Ada tests that run from a source directory rather than
+          the build tree still need the same treatment.
+        progress: 80
+        effort: Small
+        links:
+          - label: Defect remediation plan
+            url: ../../plans/PYRAMID/defect_remediation_plan.md
       - id: DEFECT-2
+        title: The bridge end-to-end test looks for codec plugins in the wrong place
+        description: >-
+          The test driver works out where the codec plugins live by counting
+          directories upwards from the application binary. The July split moved
+          that binary one level deeper, so the count now lands one directory
+          short, the plugin list comes out empty, and the bridge refuses to start
+          because no codec is registered for its content type.
+        rationale: >-
+          The repeated publish failures this produces are the same symptoms
+          recorded against this test in July, so the defect has survived a
+          diagnosis that stopped at the symptom. Passing the paths in from the
+          build system, which the neighbouring tests already do, removes the
+          assumption that broke silently when the tree moved. Done on
+          2026-08-04, which revealed a second failure the first was hiding: the
+          test now loads its plugins but times out on a missing publish route,
+          a shared-memory routing problem that needs its own diagnosis.
+        progress: 60
+        status: at-risk
+        effort: Small
+      - id: DEFECT-3
+        title: Five Ada Tactical Objects tests crash with an access violation
+        description: >-
+          The Ada client starts, configures, sends its request, and then dies
+          with an access violation while waiting for the response. The binaries
+          are present and running, so this is a genuine memory fault rather than
+          the silent skip that happens when they are missing.
+        rationale: >-
+          The crash was seen with the library directory on the search path.
+          Since the first two defects were fixed, these five are reported as
+          failing earlier instead, in their own drivers, unable to load their
+          codec plugins. Which failure is actually in front has to be settled
+          before the crash is worth chasing, because the visible one may simply
+          be the first defect reaching another set of drivers.
+        progress: 0
+        status: at-risk
+        effort: Medium
+      - id: DEFECT-4
+        title: Codec dispatch tells contracts apart by unqualified type name
+        description: >-
+          The registry lets several codecs share one content type and expects
+          dispatch to separate them by schema identifier, but that identifier is
+          the bare type name. Two contracts that each define a type called `Ack`
+          are indistinguishable, so whichever plugin loaded first answers for
+          both, and any field the winning definition does not have is dropped.
+        rationale: >-
+          Nothing reports a conflict, so the value is encoded against the wrong
+          definition and simply arrives incomplete. Any deployment that loads
+          plugins generated from two contracts hits this. One test was narrowed
+          to avoid it, which restored a green run without touching the defect.
+        progress: 0
+        status: at-risk
+        effort: Medium
+      - id: DEFECT-5
         title: Generated JSON codec accepts input that is not JSON
         description: >-
           Handed a FlatBuffers payload, the generated JSON codec reports success
           and fills the target with default values instead of rejecting it. The
-          permissive parse reads the first FlatBuffers byte as a bare JSON value,
-          so nothing downstream notices.
+          parse reads the first FlatBuffers byte as a bare JSON number, and every
+          field lookup then returns nothing because the parsed value is not an
+          object.
         rationale: >-
           A peer configured with the wrong codec should fail at startup. Instead
           it produces silently empty data, which is the failure mode the
-          fail-closed design exists to prevent.
+          fail-closed design exists to prevent. The array and scalar paths
+          already refuse the same input, so the fix is one check on the one path
+          that is missing it.
         progress: 0
         status: at-risk
-      - id: DEFECT-3
-        title: Non-deterministic typedef order in generated C headers
+        effort: Small
+      - id: DEFECT-6
+        title: Recorded test baselines predate the A-GRA grounding contract
         description: >-
-          The generic container typedefs are emitted in an order that varies
-          between two runs of the same generator, because the dependency sort
-          walks an unordered set whose iteration order depends on the string hash
-          seed. Sorting that one iteration fixes it.
+          Six Python tests and one parser test compare against recorded file and
+          symbol lists written before a contract was added, and nobody refreshed
+          them afterwards. The parser test expects thirteen files where there are
+          now fourteen.
         rationale: >-
-          The output is functionally identical, but the instability breaks the
-          rule that generated output must be byte-for-byte reproducible, and it
-          shows up as noise whenever a packaged SDK is regenerated. The fix is
-          deferred only because it requires refreshing the recorded baselines.
+          Refreshing the lists was the whole of the work, and doing it first
+          clears the way for the JSON codec fix, which moves the same baselines.
+          Done 2026-08-04. One assertion needed a real change rather than a new
+          list, and now covers slightly less than it did.
+        progress: 100
+        effort: Small
+      - id: DEFECT-7
+        title: Linux-only packaging tests fail on Windows instead of skipping
+        description: >-
+          Six tests invoke Linux packager shell scripts through a subprocess and
+          fail on Windows with an operating-system error. They are testing the
+          Linux packager and cannot pass on Windows, but they report failure
+          rather than skipping.
+        rationale: >-
+          A Windows developer saw twelve failures where six were expected and
+          six were real, with nothing distinguishing them. That is how a genuine
+          regression gets waved through. Done 2026-08-04: the suite now reports
+          59 passed and 6 skipped on Windows.
+        progress: 100
+        effort: Small
+
+  - code: MBSE
+    name: A-GRA message types as component port payloads
+    summary: >-
+      Opened 2026-07-24. Lets a component authored in the systems model type one
+      of its ports directly with an A-GRA message, so the contract is built from
+      the A-GRA data model rather than from a local invention bridged at the
+      edge. The message bodies stay owned by the schema converter; the model owns
+      only which component provides or consumes which port.
+    items:
+      - id: MBSE-J1
+        title: Generator recognises externally defined A-GRA types
+        description: >-
+          The generator now spots A-GRA blocks and, rather than emitting a
+          message body for them, points references at the shared A-GRA module and
+          imports it. Models without those blocks generate byte-identical output.
+        rationale: >-
+          Re-authoring 2,856 messages from the model would fork the schema's
+          authority and lose the guard that regeneration reproduces the tree
+          exactly. Referencing them keeps one source of truth.
+        progress: 100
+      - id: MBSE-J2
+        title: Resolve model references against the real exports
+        description: >-
+          Reference resolution against the actual model exports is done. What
+          remains is the authoritative join between the element name the model
+          carries and the message name the converter emits, plus a check that
+          every referenced element resolves to a message that exists.
+        rationale: >-
+          The join is currently taken from a file that happens to contain it. The
+          converter should publish it instead, and the check is what stops the
+          two importers drifting apart across schema drops.
+        progress: 60
+        effort: Medium
+      - id: MBSE-J3
+        title: Promote the proofs to committed tests
+        description: >-
+          Both the first prototype and the run against the real exports were
+          driven from scratch directories. Neither is in the repository, so
+          neither will notice if it stops working.
+        rationale: >-
+          A proof that lives outside the tree is evidence of a moment, not of the
+          code. A small extracted fragment would avoid making a very large export
+          into a test input.
         progress: 0
+        effort: Medium
+      - id: MBSE-J4
+        title: Command and status port kind
+        description: >-
+          An interface block pairing a command with a status matches neither
+          existing port kind, so the port was being dropped. The tooling now
+          infers the pairing as an approved interim, and emits the right shape.
+        rationale: >-
+          Strictly this wants a new port kind in the grammar rather than an
+          inference. When that lands only the classification changes, so the
+          interim does not have to be unpicked.
+        progress: 70
+      - id: MBSE-J6
+        title: Assemble both front ends into one contract tree
+        description: >-
+          Producing a complete contract today means copying the A-GRA data model
+          in beside the generated component files by hand before running the
+          binding generator. This would do it in one command, and record which
+          schema drop the result was built against.
+        rationale: >-
+          Convenience rather than correctness, since the two-step flow already
+          works. Recording the drop is the part with real value: it ties the
+          model side and the data side to a known version.
+        progress: 0
+        effort: Medium
+        status: planned
 
   - code: TRIGGER
     name: Deferred, waiting on a trigger
@@ -276,6 +490,21 @@ streams:
           Conformance argued from reading the code is weaker than conformance
           demonstrated by a harness, and threading defects are the ones least
           likely to be found by chance.
+        progress: 0
+        status: planned
+      - id: TRIGGER-7
+        title: FlatBuffers at full A-GRA P3 scope on the Windows toolchain
+        description: >-
+          A Windows import library holds at most 65,535 symbols, and the
+          FlatBuffers wrapper codecs for the four P3 interfaces exceed that
+          together. Splitting them into their own library was tried and does not
+          help. Starts if a Windows deployment needs FlatBuffers at full seam
+          scope.
+        rationale: >-
+          Nothing is broken today: the JSON path builds cleanly and the P3
+          example selects it by design. But it is a real limit on a supported
+          toolchain, and it is currently recorded only in an architecture
+          document that a planner is unlikely to read.
         progress: 0
         status: planned
       - id: TRIGGER-6

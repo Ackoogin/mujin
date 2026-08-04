@@ -1,50 +1,41 @@
 # PYRAMID — Consolidated TODO & Plan
 
-**Last consolidated: 2026-07-21.** This is the single tracker for remaining
-PCL/PYRAMID work. Completed workstreams have been folded into "Delivered"
-below; the executed plans, reviews, and status reports that used to carry
-their detail were removed in the 2026-07-10 doc review — their design
-intents are summarised in
-[`doc/plans/PYRAMID/README.md`](../../plans/PYRAMID/README.md) and their
-full text is in git history.
+**Last consolidated: 2026-08-04.** This is the single tracker for **remaining**
+PCL/PYRAMID work.
+
+Finished work is no longer listed here. It is tracked on the roadmap dashboard
+([`doc/roadmap/pyramid.yaml`](../../roadmap/pyramid.yaml), rendered to
+`doc/roadmap/site/pyramid.html`), whose "Delivered" stream carries the same
+context this file used to hold in prose. Anything removed from here remains in
+git history, and the design intents of the plans retired in the 2026-07-10 doc
+review are summarised in
+[`doc/plans/PYRAMID/README.md`](../../plans/PYRAMID/README.md).
+
+**Open defects are ordered in
+[`defect_remediation_plan.md`](../../plans/PYRAMID/defect_remediation_plan.md)**,
+which takes priority over the feature workstreams below. The first three defects
+concern the test suite itself, so until they are fixed no acceptance criterion in
+this file can be demonstrated on Windows.
+
+**A note on paths.** PCL and PYRAMID became standalone submodules on 2026-07-22
+and most paths moved: what was `pim/agra_p2_seam/` is now
+`proofs/contracts/agra_p2_seam/`, and `subprojects/PYRAMID/tests/` is now
+`proofs/tests/`. Paths in the WS-G checkpoint log below are pre-split and left as
+written, because they record what was true at the time.
 
 Live companion documents:
 
 | Document | Role |
 |----------|------|
-| [`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md) | **Live plan (2026-07-17, proposed):** coordinated breaking rename of the Request-port result/update role, wrapper, topic, manifest leg, and generated APIs from `Requirement` to `Entity`, while retaining legitimate domain requirements |
-| [`high_efficiency_process_bindings_plan.md`](../../plans/PYRAMID/high_efficiency_process_bindings_plan.md) | **Live plan (2026-07-19, proposed):** gap analysis + TODO for a native in-process payload path in the generated port bindings — distinguishes Tier A (same executor, zero-copy pointer handoff, PCL.022) from Tier B (sibling executor, native transfer over cross-thread ingress, PCL.025/026); the typed facades serialize even on local routes today |
+| [`defect_remediation_plan.md`](../../plans/PYRAMID/defect_remediation_plan.md) | **Live plan (2026-08-04):** the open defects, ordered, with a proposed fix and acceptance for each. Takes priority over the workstreams below |
+| [`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md) | **Delivered (2026-07-17):** retained for its impact analysis, compatibility policy, and validation matrix |
+| [`high_efficiency_process_bindings_plan.md`](../../plans/PYRAMID/high_efficiency_process_bindings_plan.md) | **Live plan (2026-07-19), largely delivered:** a native in-process payload path in the generated port bindings, distinguishing Tier A (same executor, pointer handoff) from Tier B (sibling executor, native transfer over cross-thread ingress). Everything except the generator emission for native *services* is done; the plan's own status line still reads "first cut scheduled" and understates it |
 | [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md) | **Live plan (2026-07-06, not yet scheduled):** capability/consumers subproject split + Tactical Objects migration onto the PIM Osprey port-grammar contract; subsumes E5 when executed |
 | [`uci_mms_conversion_plan.md`](../../plans/PYRAMID/uci_mms_conversion_plan.md) | **Live plan:** XSD-to-proto profile ladder; Phase 3/P1 is live-proven, while Phase 4/P2 supplies the detailed background for WS-G below |
 | [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/oms_agra_compatibility.md) | Proof support boundary and evidence for UCI 2.5/AMS-GRA versus formal A-GRA |
 | [`pyramid_user_guide.md`](../../../subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Single high-level user guide (design intent, usage, diagrams) |
 | [`standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md) | Stable design reference for shipped Tactical Objects; one open design point (D-list row below) |
 | [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) / [`ros2_transport_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md) | How the plugin/codec system and the ROS2 mapping work |
-
-## Delivered (context, not work)
-
-Plugin binding v1 (fail-closed codec/transport `.so` plugins, C++ + Ada);
-json/flatbuffers/protobuf codec plugins; socket/shm/udp decoupled transports;
-gRPC and ROS2 coupled plugins (both directions); the transport capability
-model with compose-time fail-closed routing; native ROS2 IDL + round-trip
-verified `domain_model`↔`pyramid_msgs` marshalling, typed on the live wire
-with a plain-rclcpp interop proof (WS-A, closed 2026-07-04); contract-derived
-pub/sub topics (MBSE-stamped `pyramid.options.Interaction` + port-grammar
-fallback, QoS in the contract, correlated request/requirement pairs proven
-over PCL and a PUBSUB-only route); the generator monolith split (`pim/cpp/`,
-`pim/ada/`, no module globals, deterministic emission); manifest-driven CMake
-source selection (opt-in via `-DPYRAMID_BINDING_SOURCE_MODE=manifest`);
-domain literals confined to `PyramidCompatNamingPolicy`; `cpp_codegen.py`/
-`ada_codegen.py` compat shims retired; Windows `.bat` harness suite verified
-(WS-C, closed 2026-07-04); the in-process/local-peer C++ facade (explicit
-local routing, facade-owned pub/sub, both proven same-executor with no
-transport adapter — WS-E E1–E4/E6, closed 2026-07-04); the C++ interaction
-facade (`RequestPortClient`/`RequestPortProvider`/`InformationPortSink`/
-`InformationPortSource`, proven cross-process over real SHM by
-`agra_seam_interchange_test`); an A-GRA facade example in `examples/cpp/`
-(F2(a)) and `examples/ada/` (F2(c)), both done 2026-07-10; the Ada
-interaction facade's single-process runtime dispatch (F1, done 2026-07-10 —
-see below for what's still open).
 
 ## Standing regression bar (applies to every item below)
 
@@ -53,35 +44,31 @@ see below for what's still open).
    acceptance says otherwise.
 2. `python3 -m pytest subprojects/PYRAMID/tests -q` green, plus
    `python3 -m unittest subprojects/PYRAMID/pim/test_proto_parser.py`.
-   **Neither is green today (checked 2026-08-04):** the pytest suite reports
-   6 failed, 58 passed, 1 skipped, and `test_proto_parser` fails 1 of 4. Every
-   one of these is the same kind of staleness — an expectation recorded before
-   the AGRA MA grounding contract was added to
-   `proofs/contracts/proto/pyramid/components/`, which nobody refreshed
-   afterwards. `test_proto_parser` asserts the legacy tree holds 13 proto files
-   when it now holds 14; the pytest failures are the "keeps legacy names"
-   regression tests (`test_generic_grpc_ros2.py`,
-   `test_ros2_codec_plugin_generation.py`,
-   `test_generic_binding_contract.py`) plus the two manifest tests, all
-   comparing against recorded file and symbol lists that predate that
-   contract. Refreshing those recorded lists is the whole of the work; treat a
-   *different* failure as breakage from current work.
+   **Both are green (checked 2026-08-04 on Windows):** the pytest suite reports
+   59 passed and 6 skipped, and `test_proto_parser` runs 4 tests with no
+   failures. The six skips are the `test_sdk_packaging_contract.py` cases that
+   exercise the Linux packager shell scripts and cannot run on Windows; they
+   skip with that reason rather than failing. Any *failure* here is now breakage
+   from current work.
 3. For generator changes touching Ada: object-compile the generated Ada for
    both trees (`gnatgcc -c -gnat2020`).
-4. **CTest is green (checked 2026-08-04): 927 of 927 pass.** The six failures
-   this entry recorded on 2026-07-21 — `tobj_ada_socket_e2e`,
-   `tobj_ada_active_find_e2e`, `tobj_ada_active_find_flatbuffers_e2e`,
-   `tobj_ada_active_find_app_e2e`,
-   `tobj_ada_active_find_app_flatbuffers_e2e`, and `pyramid_bridge_e2e` — all
-   pass, with the Ada end-to-end tests genuinely running rather than skipping
-   for want of their binaries (build them with
-   `cmake --build --preset release --target pyramid_ada_all`; without them
-   those tests skip and report success, which is not the same evidence). So
-   any CTest failure now is breakage from current work and should be treated
-   as such. Two failures were found and fixed on 2026-08-04 along the way:
-   `PclGeneratedInteractionFacade.SubmitCreateCallbackReceivesRemoteAckOnExecutorThreadWithoutBlocking`
-   and `...SkeletonSubmitAckIdDrivesTransitionsQueryWithoutBlocking`, both
-   caused by the codec-name collision recorded in the WS-D table below.
+4. **CTest is green on Linux (927 of 927). On Windows it runs and reports 8
+   failures out of 828 (checked 2026-08-04, after the D-1/D-2 fixes).** Before
+   those fixes it could not run on Windows at all — it aborted during test
+   discovery. The remaining eight, and what is known about each, are in
+   [`defect_remediation_plan.md`](../../plans/PYRAMID/defect_remediation_plan.md):
+   two Ada roundtrip tests that cannot resolve their codec plugin libraries in a
+   clean shell, the five `tobj_ada_*` tests, and `pyramid_bridge_e2e`. Treat any
+   *other* Windows failure as breakage from current work, and treat the Linux
+   figure as the bar until the eight are closed.
+
+   Two cautions when reading any result here. **Build the Ada binaries first**
+   (`cmake --build --preset release --target pyramid_ada_all`): without them the
+   Ada tests skip and report success, which is not the same evidence. And **do
+   not add the generated-codec directory to `PATH` to make things pass** — doing
+   so hides exactly the defects listed above. With it set the Windows count is 6
+   rather than 8, which is why the earlier "six failures" figure in this file was
+   misleading.
 5. End-of-workstream (slow): `viability_check.sh`, `build_comms_test.sh`,
    `build_plugin_load_test.sh`, `build_contract_routing_test.sh`, and the
    packaged-SDK import smoke (`package_sdk.sh` then
@@ -91,20 +78,31 @@ see below for what's still open).
 
 ## Execution order
 
+**Defects come first (added 2026-08-04).** The items below are features; the
+open defects are ordered separately in
+[`defect_remediation_plan.md`](../../plans/PYRAMID/defect_remediation_plan.md),
+and the first three of those should be done before anything in this table. The
+reason is bar item 4: the suite cannot currently report whether a change broke
+something on Windows, so no acceptance below can be demonstrated there. The
+plan's order is: restore the suite (discovery, the bridge plugin path, the Ada
+crash), refresh the stale baselines, then the two codec defects that accept data
+they should refuse — the unqualified-schema-id collision recorded in WS-D and
+the JSON codec's permissive parse.
+
 | Order | Item | Size |
 |-------|------|------|
 | 1 | G1 Formal A-GRA P2 OMS codec and CAL validation (in progress; reach a stable checkpoint before changing generated contracts) | L |
 | 2 | F1 remainder: cross-process/remote-transport proof, D4 narrow case, CI wiring | M |
 | 3 | F2(b) Tactical Objects example (rides on the PIM migration plan) | S/M |
 | 4 | E5 Classify or migrate `StandardBridge` raw PCL wiring | S/M |
-
-H1 and I1 are delivered; see WS-H and WS-I below.
+| 5 | G2 Write the P3 tracker entry (editing only; the source material exists) | S |
+| 6 | WS-J remainder: the join map and its guard, the two committed tests, the assembly step | M |
 
 ---
 
 ## WS-E — In-process service/pub/sub facade closure
 
-E1–E4 and E6 are done (see Delivered). E5 remains open.
+E1–E4 and E6 are delivered. E5 remains open.
 
 ### E5. Classify or migrate `StandardBridge` raw PCL wiring
 
@@ -122,8 +120,8 @@ E1–E4 and E6 are done (see Delivered). E5 remains open.
 ### F1. Ada interaction-facade runtime parity — remaining scope
 
 Single-process runtime dispatch (both `rpc` and `pubsub` realizations,
-`submit()`/`transitions()`, D1/D2/D3/D4-primary) is done — see Delivered.
-Remaining, not blockers:
+`submit()`/`transitions()`, D1/D2/D3/D4-primary) is delivered. Remaining, not
+blockers:
 
 - **Cross-process/remote-transport proof** mirroring `agra_seam_interchange_test`
   (rpc/rpc, pubsub/pubsub, mixed, over real SHM). `Client_Bind`/
@@ -143,19 +141,14 @@ Remaining, not blockers:
   aren't CTest-registered; wiring GNAT detection + the proof into the
   standing regression bar is unstarted.
 
-### F2. Convert extant examples to the port abstraction
+### F2(b). Convert the Tactical Objects showcase to the port abstraction
 
-`examples/cpp/agra_interaction_facade_example.cpp` (F2(a)) and
-`examples/ada/agra_interaction_facade_example.adb` (F2(c), done 2026-07-10 —
-`--binding=rpc|pubsub`, built via `build_agra_interaction_facade_example.sh`,
-mirrors the C++ example using F1's Client_Bind/Provider_Bind/Handlers
-pattern) are done — see Delivered. Remaining:
-
-- **(b)** convert the Tactical Objects showcase when its contract becomes
-  grammar-conforming — rides on
-  [`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
-  (the legacy CRUD services are not port-grammar shapes today). This no longer
-  waits on H1, which is delivered.
+The C++ and Ada facade examples (F2(a) and F2(c)) are delivered. What remains is
+the Tactical Objects showcase, which can only be converted once its contract
+becomes grammar-conforming — its legacy create/read/update/delete services are
+not port-grammar shapes today. This rides on
+[`pyramid_split_and_tobj_pim_migration_plan.md`](../../plans/PYRAMID/pyramid_split_and_tobj_pim_migration_plan.md)
+and no longer waits on the `Entity` rename, which is delivered.
 
 ---
 
@@ -378,21 +371,48 @@ pattern) are done — see Delivered. Remaining:
 - Remaining: step 6 (bidirectional Sleet interop + fail-closed negatives),
   step 7 (evidence publication; the compatibility matrix and user guide still
   describe P2 as offline-only until then).
+- **Defect found 2026-08-04: the compatibility matrix understates step 4 and
+  step 5.** The one-page status table in
+  [`oms_agra_compatibility.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/oms_agra_compatibility.md)
+  (lines 32–34) still records the formal A-GRA column as "Not generated — the P2
+  tree exists only as an offline conversion artifact" for the C++ OMS-JSON
+  codec, and "Not attempted" for both the Ada codec and the interaction facade.
+  All three exist and are recorded above as proven offline: the codec target
+  `pyramid_codec_oms_json_agra` builds and is packaged by `--gra`, all 20 roots
+  round-trip, the Ada encoder object-compiles over the full closure and matches
+  the C++ wire bytes, and the overlay is at `proofs/contracts/agra_p2_seam/`.
+  The error understates rather than overclaims, which is the safer direction,
+  but this document is named in `CLAUDE.md` and above as the live support
+  statement, so it is what an outside reader consults. The three rows should
+  state what is proven offline while leaving the live-interop claim untouched,
+  since steps 6 and 7 genuinely have not happened. Correcting them does not
+  require waiting for step 7.
 
-### G2. A-GRA P3 Core MMS contract — no tracker entry
+### G2. Write the A-GRA P3 Core MMS tracker entry
 
-**Status: untracked work found during the 2026-07-21 review.** Commits
-`6d65410` ("P3 Core MMS contract: profile, seam, gated build") and `12e9bf9`
-("Make P3 source-compatible with P2") landed a P3 profile, the
-`pim/agra_p3_seam/` overlay, and `pim/uci_generated_p3/`, all of which are
-tracked in the repository. Nothing in this file describes that work, and WS-G
-above still lists "full P3/Table 3-1 coverage" as a non-goal, which now reads
-as contradicting the tree.
+**Status: open, and now an editing task.** Commits `6d65410` ("P3 Core MMS
+contract: profile, seam, gated build") and `12e9bf9` ("Make P3 source-compatible
+with P2") landed a P3 profile, the `agra_p3_seam/` overlay, and the generated
+tree, all committed. Nothing in this file describes that work, while WS-G above
+lists "full P3/Table 3-1 coverage" as a non-goal — which reads as contradicting
+the tree until you know the evidence boundary.
 
-Someone with the context for that run should write the missing entry: what the
-P3 profile covers, what evidence exists for it, and how its scope relates to
-the P2 non-goal. This review can confirm the artifacts are present and
-committed, but not what was proven about them.
+The 2026-07-21 review concluded this needed someone with the original context.
+It no longer does: the seam's own README supplies what the entry requires.
+[`proofs/contracts/agra_p3_seam/README.md`](../../../subprojects/PYRAMID/proofs/contracts/agra_p3_seam/README.md)
+records that P3 pairs the converted Core MMS data model (2,856 messages from
+343 roots) with per-interface component service protos for the C2, MS, P2P and
+VI interfaces on both provided and consumed sides — 951 services derived from
+Table 3-1 — with topics taken from the schema's global element names and every
+operation reliable and volatile at queue depth 10. Which side a service lands on
+is inferred from the Direction column of Table 3-1 rather than hand-authored.
+
+Crucially, it also states its own evidence boundary, which is what resolves the
+apparent contradiction with the P2 non-goal above: "unlike the P1/P2 seams it
+has no offline fidelity or live interop evidence", and no compliance claim
+follows from the seam existing. So the non-goal is not contradicted — P3 exists
+as a generated contract, not as an evidenced profile. Writing this into WS-G is
+now an editing task.
 
 This workstream closes the gap between the
 offline-convertible formal A-GRA 5.0a/P2 schema and a distributable,
@@ -404,37 +424,13 @@ interaction facade, and LA-CAL deployment profile that can be packaged by the
 offline SDK and validated against an independent conformant endpoint. This is
 codec/transport support, not a claim of full A-GRA platform compliance.
 
-**Prerequisites (must be recorded before implementation starts):**
+**Prerequisites: all three discharged** (schema source and checksum pinned,
+root list and closure budget approved, independent validator designated). The
+detail is in the G1 checkpoint log above.
 
-1. Pin the authorized A-GRA 5.0a schema source and checksum, and resolve the
-   redistribution posture. Raw XSD remains fetch-not-vendor unless its licence
-   explicitly permits redistribution.
-2. Approve the P2 root list and closure budget from
-   `pim/uci_profiles/p2_agra_planning_core.json`, including the exact OMS
-   schema identifier used during LA-CAL `INIT`.
-3. Identify an independent A-GRA-compatible OMS/CAL validator or peer plus
-   authoritative fixtures. UCI 2.5 Sleet evidence cannot validate the UCI 2.3
-   plus `MA_*` A-GRA drop.
+**Plan.** Steps 1–4 are complete; see the checkpoint log above for what each
+produced and the defects each uncovered. Remaining:
 
-**Plan:**
-
-1. **Materialize the contract.** Re-run `xsd2proto --check` for P2, prune the
-   transitive closure deliberately, and produce a deterministic proto tree,
-   closure report, and authoritative `wire_names.json`. No wire name may depend
-   on snake-to-Pascal fallback.
-2. **Add the interaction overlay.** Define the minimum Request/Requirement and
-   Information ports needed by the approved P2 roots, with A-GRA topic names,
-   correlation identifiers, QoS floors, and schema/drop identity explicit in
-   the generated manifest.
-3. **Close generator shapes.** Extend and test the OMS generator only where P2
-   demonstrates a missing XSD shape (choice, enum, attributes, optional/nil,
-   inheritance, or wrapper unwrapping). Generate C++ and Ada bindings/codecs
-   from the same proto plus wire-name sidecar; do not add hand-written `MA_*`
-   encoding tables.
-4. **Prove offline fidelity.** Validate representative and boundary instances
-   for every selected global root against the authoritative XSD; add semantic
-   round trips, deterministic goldens, malformed-input negatives, schema-drop
-   mismatch negatives, and C++/Ada wire-parity coverage.
 5. **Create a distinct runtime profile.** Build a profile-specific
    `application/oms-json` codec plugin whose artifact/schema identity cannot be
    confused with `pyramid_codec_oms_json_uci`. Pair it with the existing
@@ -478,153 +474,6 @@ Phase 4; the live support statement remains
 
 ---
 
-## WS-H — Port-grammar terminology
-
-### H1. Rename the Request-port result/update role to `Entity`
-
-**Status: delivered.** Landed in commit `57eb50f` ("Complete the port-grammar
-requirement->entity rename"); the tracker entry had not been updated and was
-found stale during the 2026-07-21 review.
-
-The grammar wrapper `_Service_Requirement` is now `_Service_Entity`, the
-derived topic is `.entity`, and the interaction/configuration leg is
-`entity_leg`. The PIM, P1, P2, and P3 contracts and the C++/Ada APIs were
-regenerated together.
-
-Audit performed on 2026-07-21 against the plan's completion criteria: no
-tracked file under `subprojects/PYRAMID/` or `subprojects/PCL/` still contains
-`_Service_Requirement`, `requirement_leg`, or a derived `.requirement` topic.
-The remaining matches are all under
-`subprojects/PYRAMID/proofs/harness/generated/`, which is stale local output
-excluded by that directory's own `.gitignore`. Legitimate domain requirements
-were preserved as intended, including `ObjectDetailRequirement`,
-`AUTDependencyRequirement`, and the `*Requirement_Service` names whose
-`_Service_Entity` wrappers now sit beside them.
-
-The impact analysis, compatibility policy, implementation plan, and validation
-matrix remain in
-[`port_grammar_entity_rename_plan.md`](../../plans/PYRAMID/port_grammar_entity_rename_plan.md)
-for reference.
-
----
-
-## WS-I — Generated component codec selection
-
-### I1. Make the generated component codec selectable at process startup
-
-**Status: delivered (2026-07-21).** The mechanism landed in the C++ toolchain
-on 2026-07-20; the FlatBuffers end-to-end proof, the direct generator test, and
-the packaged-example and documentation refresh closed on 2026-07-21.
-
-Implemented so far (tracked source; the regenerated `pcl_pyramid_sdk_pim_test`
-SDK is git-ignored, so its refreshed skeletons/scaffolds are on disk only):
-
-- The `.ports` format was **deliberately extended and documented** (the option
-  this item left open): a `codec CONTENT_TYPE PLUGIN` line loads a codec and
-  sets the process default content type (first line wins), and a `port_codec
-  PORT CONTENT_TYPE` line overrides one port so a process can speak several
-  codecs. Parsed and validated in `pcl_process_runtime.c`; exposed as
-  `pcl_process_runtime_content_type` / `pcl_process_runtime_port_content_type`
-  and `ProcessRuntime::contentType()` / `contentTypeFor()`.
-- The generated skeleton ctor now takes a `ContentTypeResolver` and threads a
-  per-port content type into every port facade it owns (see
-  `pim/cpp/component_skeleton_gen.py`). Default stays `application/json`.
-- The generated scaffold self-wires: the component builds its own handler set,
-  and `main` passes `runtime.contentTypeFor(port)` so each port uses the codec
-  its `codec`/`port_codec` line selected.
-- Fail-closed: a `port_codec` naming an unknown port or an unloaded codec is
-  rejected with a clear error; the process-default codec load tolerates a codec
-  a build-time fallback already registered. Pinned by
-  `test_pcl_process_runtime.cpp` (`SelectsCodecFromPortsFile`,
-  `SelectsPerPortCodecFromPortsFile`, `RejectsInvalidPortCodecLines`) and the
-  regenerated component-skeleton baseline; JSON verified end-to-end by building
-  and running the `pim_osprey_sensors` scaffold.
-
-Closed on 2026-07-21:
-
-- **FlatBuffers proven end-to-end, with the wire bytes checked.** Bringing a
-  scaffold up is not by itself evidence of which codec was chosen, because a
-  process that silently kept the JSON default binds its ports and runs exactly
-  the same way. Two things were done instead. First,
-  `subprojects/PYRAMID/tests/test_ports_file_codec_selection_e2e.cpp` carries
-  the content type a `.ports` file selects through `ProcessRuntime` into a
-  generated port facade and over a real socket transport, then confirms the
-  received payload is FlatBuffers by checking that the FlatBuffers codec
-  recovers the published value and the JSON codec does not. The JSON case is
-  covered the same way. Second, the packaged `pim_osprey_sensors` scaffold was
-  built and run against the SDK under four configurations: JSON, FlatBuffers,
-  a mixed file (FlatBuffers default with one `port_codec` JSON override), and
-  a negative control that asks for FlatBuffers while naming the JSON plugin.
-  The first three bind all 15 ports and exit 0; the negative control exits 1.
-  That negative control is what makes the FlatBuffers run meaningful.
-- **A fail-closed gap found and fixed while doing this.** A `codec` line whose
-  plugin loaded but provided a *different* content type was accepted at
-  startup. The process then failed later, at port bind, with a bare
-  `PCL_ERR_INVALID` and no indication that the codec was the cause. This is
-  the realistic deployment typo, since both plugin files exist and both load.
-  `pcl_process_runtime.c` now requires the named content type to be in the
-  registry once its `codec` line has been processed, and reports a startup
-  error naming the plugin, the content type, and the config line.
-- **Generator test.** `ContentTypePropagationTest` in
-  `pim/test_component_skeleton_gen.py` asserts the rule rather than the bytes:
-  every port of every component in the contract is constructed with
-  `resolveContentType(codec_for, "<its own port name>")`, and the call count
-  matches the port count. A per-port lookup is what allows one process to speak
-  several codecs, so a single process-wide answer would be wrong even though it
-  would still satisfy a single-codec golden diff.
-- **Packaged SDK and docs refreshed.** The `pcl_pyramid_sdk_pim_test`
-  distribution was rebuilt through its own documented scripts
-  (`scripts/generate_bindings.bat --skeletons --scaffold-dir ...` then
-  `scripts/build_plugins.bat`), and
-  [`component_skeletons.md`](../../../subprojects/PYRAMID/doc/architecture/component_skeletons.md)
-  now documents that a `.ports` file selects the codec as well as the
-  transport, including the per-port override, the fail-closed cases, and how
-  the build-time fallback plugin relates to a `codec` line.
-
-Two findings from this work are recorded as separate rows in the deferred
-table below: the generated JSON codec accepts non-JSON input rather than
-rejecting it, and the `cabi_codegen.py` emission-order non-determinism was
-traced to its cause.
-
-Original analysis follows.
-
-The generated C++ service and port facades accept a content type, but default
-it to `application/json`. The generated component skeleton constructs every
-port facade without passing a content type, so the default becomes fixed for
-the component. The generated application scaffold reinforces that choice: its
-CMake target embeds and loads the JSON codec plugin only. The `.ports` file
-selects transport plugins and routes; it does not select a codec.
-
-As a result, an SDK can build and package both JSON and FlatBuffers codec
-plugins while an application built from the generated component skeleton
-cannot select FlatBuffers without changing generated code. Loading only the
-FlatBuffers plugin is not sufficient because the skeleton still tries to bind
-its ports with `application/json` and fails the codec-registry check.
-
-- **Plan:** add an explicit component codec setting to the generated C++
-  skeleton constructor or a small process-startup configuration object.
-  Thread the selected content type into every generated port facade owned by
-  the skeleton. Update generated scaffolds to load the matching component
-  codec plugin and pass the same content type to the skeleton. Keep JSON as the
-  compatibility default. Keep codec selection separate from the existing
-  per-port transport selection unless the `.ports` format is deliberately
-  extended and documented.
-- **Fail closed:** startup must report a clear configuration error when the
-  selected content type is empty, unsupported, or has no matching loaded
-  codec. A loaded codec plugin must not silently change the selected content
-  type, and loading both codec plugins must not make registration order choose
-  the component's wire format.
-- **Accept:** the same generated component and application scaffold run with
-  either `application/json` or `application/flatbuffers` without editing
-  generated files. RPC and pub/sub realizations use the selected content type
-  consistently for requests, responses, stream frames, and publications.
-  Add generator tests that pin constructor/configuration propagation and
-  end-to-end scaffold tests for both codecs, including the missing-plugin and
-  content-type/plugin-mismatch failures. Refresh the packaged SDK example and
-  document that `.ports` continues to select transports, not codecs.
-
----
-
 ## WS-J — A-GRA message types as PYRAMID component port payloads (via the MBSE model)
 
 **Opened 2026-07-24.** This workstream lets a native PYRAMID component,
@@ -652,32 +501,14 @@ forking the XSD's authority and losing the byte-for-byte regeneration guard.
 So A-GRA blocks are referenced, not re-authored. Full background and the
 options considered are in the design discussion that opened this workstream.
 
-### J1. Generator resolver branch — DONE (prototype in place, 2026-07-24)
-
-`pim/mbse/proto_generator.py` now recognises A-GRA external blocks (marked with
-the `xsdComponent` stereotype) and, instead of emitting a message body for
-them, routes references to the `pyramid.data_model.agra` package and imports
-that module. The change is additive and guarded on the new stereotype, so
-models without it produce byte-identical output; the existing generator tests
-(`test_proto_generator.py`, `test_oms_json_gen.py`, `test_agra_example.py`,
-`test_component_skeleton_gen.py`) still pass.
-
-Proven end to end with a hand-authored parsed-model fixture (one `Objectives`
-block, a Provided Planning port, an `MA_ActionPlanMT` external block):
-
-- the generator emits `pyramid.components.mission_autonomy.services.provided`
-  with the port payload typed as `pyramid.data_model.agra.MA_ActionPlanMT`, a
-  PUBLISH interaction, and a contract topic — no local redefinition of the
-  message;
-- running `generate_bindings.py` over that service proto plus the real
-  `agra_p3_seam` A-GRA data-model proto binds with no unresolved type; the
-  manifest carries the planning topic with
-  `payload_type: pyramid.data_model.agra.MA_ActionPlanMT`, and the generated
-  C++ facade marshals `pyramid::domain_model::agra::MA_ActionPlanMT`.
-
-The spike fixture and driver that proved this are not yet in the repository
-(they were run from a scratch directory); promoting them into `pim/` as a
-committed test is part of J3.
+**J1 (generator resolver branch) and J4 (command/status port inference) are
+delivered** — see the roadmap's `MBSE-J1` and `MBSE-J4`. Two things about them
+still bear on the open items below. J1's proof ran from a scratch directory and
+is not in the repository, which is what J3 is for. J4 infers the port kind
+rather than reading it from the grammar, because an interface block pairing a
+command with a status generalises neither existing port kind; that inference is
+an approved interim, and when a real `CommandStatus` port kind lands only the
+classification changes, not the emission.
 
 ### J2. Real parser and join map — mostly DONE (the "real XMI" step, 2026-07-24)
 
@@ -686,22 +517,16 @@ Driven from the actual Cameo exports (`PRA_NA_PYRAMID_PIM.xml` referencing
 `MAAction` interface block pairs `command → MA_Action` and
 `status → MA_ActionStatus`.
 
-1. **Reference resolution in `pim/mbse/sysml_parser.py` — DONE.** In these
-   exports an A-GRA-typed property does not point at a local
-   `OpenArsenal_XSDComponent` block; it carries a cross-file type reference,
-   `<type href='A-GRA_Domain_Model.xml#id'>` with a `referenceExtension`
-   whose `referentPath` names the element (for example
-   `…::uci::Messages::MA_Action`). `_parse_property` now extracts that
-   reference (name from the `referentPath`), and `resolve_references`
-   materialises one `xsdComponent` proxy class per distinct referenced element,
-   which the J1 generator branch already consumes. This means the 50 MB A-GRA
-   XMI does not need to be parsed at all — the PIM export carries the identity.
-   The change is additive; the existing parser/generator tests still pass
-   (48 passed). Recognising a *local* `OpenArsenal_XSDComponent` block (the
-   shape the original scope assumed) is still worth adding for models that embed
-   A-GRA blocks directly rather than by cross-file reference.
+Reference resolution against those exports is **done**: an A-GRA-typed property
+carries a cross-file type reference rather than pointing at a local block, and
+the parser now extracts it and materialises one proxy class per referenced
+element, which the J1 branch consumes. This means the 50 MB A-GRA export does
+not need parsing at all, because the PIM export carries the identity.
+Recognising a *local* `OpenArsenal_XSDComponent` block — the shape the original
+scope assumed — is still worth adding for models that embed A-GRA blocks
+directly. Remaining:
 
-2. **Authoritative join map from `pim/xsd2proto.py` — still TODO.** The element
+1. **Authoritative join map from `pim/xsd2proto.py` — still TODO.** The element
    name from the `referentPath` (`MA_Action`) is the XSD element, whereas the
    proto message is its complexType (`MA_ActionMT`). The generator resolves that
    with an injected `agra_type_map` (element → message name); for the real-XMI
@@ -709,33 +534,10 @@ Driven from the actual Cameo exports (`PRA_NA_PYRAMID_PIM.xml` referencing
    source remains a sidecar emitted by `xsd2proto` (see the note below on the
    suffix convention) — that is the piece still outstanding.
 
-3. **Guard the join — still TODO.** Add a test that every referenced A-GRA
+2. **Guard the join — still TODO.** Add a test that every referenced A-GRA
    element resolves to a message that actually exists in the A-GRA proto,
    failing closed on a miss, keeping the two independent importers from
    diverging across drops.
-
-### J4. Command/status port inference — DONE (interim, 2026-07-24)
-
-The modelled `MAAction` interface block generalises neither `RequestService`
-nor `ProviderService`, so the existing port-kind resolver returned `None` and
-the port was dropped. Strictly this wants a **new `CommandStatus` port kind** (a
-base service block that command/status interface blocks generalise, alongside
-`RequestService`/`ProviderService`); that port-grammar work is not yet done.
-
-As an approved interim, the tooling **infers** the kind:
-`sysml_parser._infer_command_status` treats an interface block that pairs a
-command payload with a status payload — both external A-GRA references — as a
-`command_status` port, and `proto_generator._write_command_status_services`
-emits the A-GRA CommandStatusPort shape (a Command leg and a CommandStatus leg,
-each a one-way streaming `Read`, tied by a shared `command_status` name with
-`COMMAND`/`STATUS` legs; on the provided side Command is SUBSCRIBE and
-CommandStatus is PUBLISH). Proven end to end on the real export: the generator
-emits `pyramid.components.pim_proteus.objectives.services.provided` with
-`MAAction_Command_Service` (SUBSCRIBE, payload `pyramid.data_model.agra.MA_ActionMT`)
-and `MAAction_CommandStatus_Service` (PUBLISH, payload
-`…MA_ActionStatusMT`), and `generate_bindings.py` binds it with the
-`command_status` pairing carried into the manifest. When the real `CommandStatus`
-port grammar lands, only the upstream classification changes; the emission stays.
 
 ### J5. Promote the real-XMI proof to a committed test — TODO
 
@@ -878,6 +680,5 @@ No action until the trigger fires; listed so nothing silently drops.
 | `contract_routing_manifest.py` support for real (non-stub) transports | A generated manifest needs to target SHM/UDP/etc. rather than `contract_transport_plugin.c` | Today it only emits `{"mode":"rpc"\|"pubsub"}` config for the NULL-vtable stub. Needs `bus_name`/`participant_id` (SHM) and `remote_host`/`remote_port`/`local_port`/`peer_id` (UDP) config emission, plus the counterpart-participant-id peer-alias convention. |
 | Tactical Objects bulk-detail path | Consumers need full detail in bulk | Decide between a standard batch-detail path vs overloading the match stream ([`standard_alignment.md`](../../../subprojects/PYRAMID/proofs/doc/architecture/tactical_objects/standard_alignment.md), Remaining Design Point). |
 | Interaction-pattern options for the legacy tree / side-table deletion | Only if the frozen-compat stance changes | Resolved as *frozen compat, new consumers forbidden*; `standard_topics.py` stays scoped to the legacy layout. |
-| `cabi_codegen.py` non-deterministic typedef order | Next substantive change to `cabi_codegen.py`, or the first byte-stability guard failure it causes | `pyramid_data_model_generic_*_cabi.h` emits the generic container typedefs (the `*List`/`*Queue` `pyramid_slice_t` wrappers) in an order that varies between two runs of the *same* generator. The output is functionally identical, but the instability undermines standing-regression-bar #1 (byte-for-byte identical output) and shows up as spurious diffs when regenerating a packaged SDK. **Cause located 2026-07-21:** `_toposort` walks `for dep in deps.get(name, set())`, and iteration order over a `set` of strings depends on the per-process string hash seed. The earlier guess that `set(self._aliases.keys())` was responsible is wrong — those three sets are only used for `not in` membership tests, which is order-independent. The fix is to sort that one iteration; a two-run determinism check would guard it. Reproduced by generating the same tree twice with `PYTHONHASHSEED=1` and `PYTHONHASHSEED=99`, which differ in exactly this one file. Left deferred because sorting changes emission order and therefore requires refreshing the recorded generator baselines. |
 | Codec dispatch picks a codec by unqualified type name, so two contracts that share a type name collide | Any process that loads codec plugins generated from two different contracts, or the next hardening pass on codec dispatch | The registry deliberately lets several codecs share one content type and expects dispatch to tell them apart by schema id — but the schema id is the *unqualified* type name (`Ack`, `Query`, `Identifier`), so two contracts that each define a type of that name are indistinguishable. `pyramid_try_registry_encode`/`pyramid_try_registry_decode` in the generated service implementation walk every codec registered for the content type in registration order and use the first one that recognises the name, so whichever plugin was loaded first answers for all of them. Nothing reports a conflict: the value is encoded against the wrong definition, and any field the winning definition does not have is silently dropped. Found 2026-08-04 in `test_pcl_generated_interaction_facade`, which was loading the main contract tree's codec plugins as well as the three A-GRA example plugins it asks for by name. The main tree's `Ack` has only `success`; the A-GRA example's `Ack` also has `identifier`, so the provider's ack arrived at the consumer with an empty identifier, and the transition query keyed on that identifier then matched nothing. That test was fixed on the day by excluding it from the blanket plugin-environment loop in `proofs/tests/CMakeLists.txt` (it now loads only its own three plugins), which restores a green suite but leaves the collision itself untouched — any deployment that mixes contracts still hits it. A real fix is one of: key the registry on a contract-qualified schema id (the proto package is already known at generation time); give each contract its own registry handle and pass it to the generated encode/decode helpers instead of using the process-wide default; or have dispatch check that the value it is handed matches the schema it knows and fail closed on a mismatch rather than losing fields. The last of these also covers the row below, and both are cases of a codec accepting input it should refuse. |
 | Generated JSON codec accepts non-JSON input | Any hardening pass on codec fail-closed behaviour, or the first time a wrong-format payload is silently accepted in a deployment | Handed a FlatBuffers payload for `ObjectDetail`, the generated JSON codec **returns success** and fills the target with default values rather than rejecting the input. Found 2026-07-21 while writing `test_ports_file_codec_selection_e2e.cpp`: an early version of that test asserted "the JSON codec must refuse these bytes" and failed. The permissive JSON parse accepts a leading FlatBuffers byte as a bare JSON value, so nothing downstream notices. This matters because a peer misconfigured to the wrong codec then produces silently empty data instead of a startup error. Note the contrast with the schema-drop mismatch negatives in WS-G step 4, where the OMS codec is explicitly required to fail closed in both directions. The e2e test was written to compare the *decoded value* rather than the decode status, so it does not depend on this behaviour either way and will keep passing once it is fixed. |
