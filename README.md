@@ -1,4 +1,4 @@
-# Mujin Workspace
+# Unmanned Workspace
 
 This repository is organised as a workspace containing three subprojects. PCL
 and PYRAMID have been split into standalone repositories and are included here
@@ -66,7 +66,7 @@ Core dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, GoogleTest, and o
 Clone the workspace with its submodules:
 
 ```bash
-git clone --recurse-submodules git@github.com:Ackoogin/mujin.git
+git clone --recurse-submodules git@github.com:Ackoogin/unmanned.git
 ```
 
 For an existing clone, initialise both submodules before configuring:
@@ -108,7 +108,7 @@ cmake --build --preset all-off-release
 
 ### VS Code / CMake Tools
 
-Open `D:\Dev\repo\mujin` as the workspace folder. In the command palette, run `CMake: Enable CMake Presets integration`, then use `CMake: Select Configure Preset`, `CMake: Select Build Preset`, and `CMake: Select Test Preset`.
+Open `D:\Dev\repo\unmanned` as the workspace folder. In the command palette, run `CMake: Enable CMake Presets integration`, then use `CMake: Select Configure Preset`, `CMake: Select Build Preset`, and `CMake: Select Test Preset`.
 
 If the CMake Tools picker only shows `Release`, `Debug`, or `[Default]`, presets integration is not active yet.
 

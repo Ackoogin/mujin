@@ -108,7 +108,7 @@ Ada targets (`ada_tobj_client_build`, `ada_active_find_e2e_build`, `pyramid_brid
 
 **VS Code / CMake Tools:**
 
-1. Open `D:\Dev\repo\mujin` as the workspace folder.
+1. Open `D:\Dev\repo\unmanned` as the workspace folder.
 2. Run `CMake: Enable CMake Presets integration` from the command palette.
 3. Use `CMake: Select Configure Preset`, `CMake: Select Build Preset`, and `CMake: Select Test Preset`.
 4. If the picker only shows `Release`, `Debug`, or `[Default]`, presets integration is not active yet.

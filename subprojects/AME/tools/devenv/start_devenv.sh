@@ -10,7 +10,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# tools/devenv/ up 4 levels to repo root (devenv -> tools -> AME -> subprojects -> mujin)
+# tools/devenv/ up 4 levels to repo root (devenv -> tools -> AME -> subprojects -> unmanned)
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 PYTHON="${SCRIPT_DIR}/.venv/bin/python"
 
