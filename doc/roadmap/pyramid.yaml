@@ -308,7 +308,9 @@ streams:
           definition and simply arrives incomplete. Any deployment that loads
           plugins generated from two contracts hits this. One test was narrowed
           to avoid it, which restored a green run without touching the defect.
-        progress: 0
+          A fix is in the working tree, uncommitted and entirely unverified: the
+          run that produced it was cancelled part-way through its checks.
+        progress: 40
         status: at-risk
         effort: Medium
       - id: DEFECT-5
@@ -324,8 +326,9 @@ streams:
           it produces silently empty data, which is the failure mode the
           fail-closed design exists to prevent. The array and scalar paths
           already refuse the same input, so the fix is one check on the one path
-          that is missing it.
-        progress: 0
+          that is missing it. That check is written and in the working tree, but
+          uncommitted and unverified alongside the defect above.
+        progress: 60
         status: at-risk
         effort: Small
       - id: DEFECT-6

@@ -841,8 +841,8 @@ body[data-rationale="off"] .item__why { display: none; }
           "id": "DEFECT-4",
           "title": "Codec dispatch tells contracts apart by unqualified type name",
           "description": "The registry lets several codecs share one content type and expects dispatch to separate them by schema identifier, but that identifier is the bare type name. Two contracts that each define a type called `Ack` are indistinguishable, so whichever plugin loaded first answers for both, and any field the winning definition does not have is dropped.",
-          "rationale": "Nothing reports a conflict, so the value is encoded against the wrong definition and simply arrives incomplete. Any deployment that loads plugins generated from two contracts hits this. One test was narrowed to avoid it, which restored a green run without touching the defect.",
-          "progress": 0,
+          "rationale": "Nothing reports a conflict, so the value is encoded against the wrong definition and simply arrives incomplete. Any deployment that loads plugins generated from two contracts hits this. One test was narrowed to avoid it, which restored a green run without touching the defect. A fix is in the working tree, uncommitted and entirely unverified: the run that produced it was cancelled part-way through its checks.",
+          "progress": 40,
           "status": "at-risk",
           "effort": "Medium"
         },
@@ -850,8 +850,8 @@ body[data-rationale="off"] .item__why { display: none; }
           "id": "DEFECT-5",
           "title": "Generated JSON codec accepts input that is not JSON",
           "description": "Handed a FlatBuffers payload, the generated JSON codec reports success and fills the target with default values instead of rejecting it. The parse reads the first FlatBuffers byte as a bare JSON number, and every field lookup then returns nothing because the parsed value is not an object.",
-          "rationale": "A peer configured with the wrong codec should fail at startup. Instead it produces silently empty data, which is the failure mode the fail-closed design exists to prevent. The array and scalar paths already refuse the same input, so the fix is one check on the one path that is missing it.",
-          "progress": 0,
+          "rationale": "A peer configured with the wrong codec should fail at startup. Instead it produces silently empty data, which is the failure mode the fail-closed design exists to prevent. The array and scalar paths already refuse the same input, so the fix is one check on the one path that is missing it. That check is written and in the working tree, but uncommitted and unverified alongside the defect above.",
+          "progress": 60,
           "status": "at-risk",
           "effort": "Small"
         },

@@ -13,9 +13,16 @@ review are summarised in
 
 **Open defects are ordered in
 [`defect_remediation_plan.md`](../../plans/PYRAMID/defect_remediation_plan.md)**,
-which takes priority over the feature workstreams below. The first three defects
-concern the test suite itself, so until they are fixed no acceptance criterion in
-this file can be demonstrated on Windows.
+which takes priority over the feature workstreams below. Five of the seven are
+fixed and the Windows suite is now green at 828 of 828, so acceptance criteria
+in this file can be demonstrated again.
+
+**Two defects are in flight and uncommitted (2026-08-05):** D-4, codec dispatch
+colliding on unqualified type names, and D-5, the generated JSON codec accepting
+input that is not JSON. Changes for both are in the PYRAMID working tree and
+**none of it has been verified** — the run was cancelled during its verification
+step. Read the "In-flight work" section of the plan before touching either, and
+do not commit without running the verification listed there.
 
 **A note on paths.** PCL and PYRAMID became standalone submodules on 2026-07-22
 and most paths moved: what was `pim/agra_p2_seam/` is now
@@ -474,6 +481,39 @@ Phase 4; the live support statement remains
 
 ---
 
+## Scope note: A-GRA does not use the port grammar
+
+**Recorded 2026-08-05**, after transient A-GRA port-grammar files were seen
+being regenerated into the working tree.
+
+The port grammar is for **Request ports**, whose primary realisation is RPC.
+A-GRA is a different shape: it uses **CommandStatus ports**, whose primary
+realisation is publish/subscribe. So A-GRA contracts should not use the port
+grammar at all. This is a statement about which contract uses which construct,
+**not** a deprecation — the port grammar remains the right thing for
+Request-shaped contracts, and nothing outside A-GRA changes.
+
+How that maps onto the tree today. There are three port kinds. `request` and
+`information` are resolved from the grammar, by walking an interface block's
+generalizations to `RequestService` or `ProviderService` respectively.
+`command_status` is not resolved from the grammar: `_infer_command_status` in
+`sysml_parser.py` spots an interface block pairing a command payload with a
+status payload, and `_write_command_status_services` in `proto_generator.py`
+emits the A-GRA `CommandStatusPort` shape. The A-GRA P3 seam already works this
+way, pairing Command/Status elements into `CommandStatusPort` facades and
+publishing everything else as one-way Information services.
+
+What this does and does not affect:
+
+- **E5 and F2(b) are unaffected.** Both move Request-shaped, CRUD-style
+  Tactical Objects services onto the port abstraction, which is exactly what
+  the grammar is for. They should proceed as written.
+- **`agra_example`**, described in WS-G as a non-wire port-grammar fixture, is
+  the one thing that sits on the wrong side of this line: an A-GRA-named fixture
+  built on the Request-port grammar. Worth revisiting, and the likely source of
+  the regenerated files that prompted this note.
+- **J4's interim** looks better than it was recorded as. See below.
+
 ## WS-J — A-GRA message types as PYRAMID component port payloads (via the MBSE model)
 
 **Opened 2026-07-24.** This workstream lets a native PYRAMID component,
@@ -506,9 +546,16 @@ delivered** — see the roadmap's `MBSE-J1` and `MBSE-J4`. Two things about them
 still bear on the open items below. J1's proof ran from a scratch directory and
 is not in the repository, which is what J3 is for. J4 infers the port kind
 rather than reading it from the grammar, because an interface block pairing a
-command with a status generalises neither existing port kind; that inference is
-an approved interim, and when a real `CommandStatus` port kind lands only the
-classification changes, not the emission.
+command with a status generalises neither existing port kind.
+
+J4's inference was recorded as an interim pending a `CommandStatus` base block
+being added to the grammar alongside `RequestService` and `ProviderService`.
+**The scope note above means that base block should not be added**: the grammar
+is for Request ports, and A-GRA is not a Request-port shape, so putting
+CommandStatus into it would mix the two. The inference is therefore nearer the
+intended end state than the interim it was recorded as. If its classification is
+ever made explicit, that belongs in the A-GRA side of the tooling rather than in
+the grammar.
 
 ### J2. Real parser and join map — mostly DONE (the "real XMI" step, 2026-07-24)
 

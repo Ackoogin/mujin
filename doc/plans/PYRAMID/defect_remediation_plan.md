@@ -26,8 +26,8 @@ D-5, which were deliberately scheduled after the suite became trustworthy.
 | D-1 CTest discovery | **Fixed** (PYRAMID `de9dfde`, completed by `d77c7f1`) |
 | D-2 Bridge plugin path | **Fixed** (PYRAMID `de9dfde`, completed by `d77c7f1`) |
 | D-3 Ada failures | **Fixed** (PYRAMID `d77c7f1`) — cause was not what this plan assumed, see below |
-| D-4 Codec name collision | **Open** — now the highest-priority item |
-| D-5 JSON codec fail-closed | **Open** |
+| D-4 Codec name collision | **In flight, uncommitted and unverified** — see below |
+| D-5 JSON codec fail-closed | **In flight, uncommitted and unverified** — see below |
 | D-6 Stale baselines | **Fixed** (PYRAMID `e78e0e1`) |
 | D-7 Linux-only tests | **Fixed** (PYRAMID `e78e0e1`) |
 
@@ -52,6 +52,65 @@ after a reconfigure exits 1 with no compiler or linker diagnostic; running the
 identical command again succeeds. It is reproducible and unrelated to any
 defect here, but it means a newcomer's first build appears to fail for no
 reason. Worth documenting in the build instructions.
+
+## In-flight work, left uncommitted 2026-08-05
+
+**Read this before touching D-4 or D-5.** Changes for both sit in the PYRAMID
+working tree, uncommitted. They were produced in one pass that was **cancelled
+during its verification step**, so *nothing about them has been verified* — not
+the build, not the test suite, not the Python suites. Do not assume they work,
+and do not commit them without running the verification below. They are left in
+place rather than discarded because the approach looks right and re-deriving it
+costs about an hour.
+
+The seven modified files:
+
+| File | Purpose |
+|------|---------|
+| `pim/cpp/json_codec_gen.py` | D-5: the object check |
+| `proofs/tests/test_ports_file_codec_selection_e2e.cpp` | D-5: the restored negative assertion |
+| `pim/cpp/service_impl_gen.py` | D-4: registry dispatch (the largest change, +145/-) |
+| `pim/cpp/codec_plugin_gen.py` | D-4: schema id emission |
+| `proofs/tests/test_codec_registry_bridge.cpp` | D-4: multi-contract dispatch test |
+| `proofs/tests/CMakeLists.txt` | D-4: third contract's plugin added; the interaction-facade workaround removed |
+| `tests/test_flatbuffers_codec_plugin.py` | baseline refresh |
+
+Two things are worth checking specifically when this is picked up.
+
+**The D-5 change is one line and looks correct.** `_write_from_json` now emits
+`if (!j.is_object()) throw nlohmann::json::type_error::create(302, ...)` straight
+after the parse. The surrounding `catch (...)` in the generated plugin turns
+that into `PCL_ERR_CALLBACK`, so the struct path fails closed like the array path
+already did. Worth confirming the resulting status code is the one callers should
+see — `PCL_ERR_INVALID` may be more accurate than `PCL_ERR_CALLBACK` for
+"this is not JSON".
+
+**The D-4 proof is the removed workaround.** `proofs/tests/CMakeLists.txt` no
+longer excludes `test_pcl_generated_interaction_facade` from the blanket
+plugin-loading loop, and the comment explaining the `Ack` collision is deleted.
+That test now loads the main contract tree's plugins alongside the three A-GRA
+example ones. **If it passes, the collision is genuinely fixed rather than
+avoided** — that single test result is the thing to look at first, before the
+suite total.
+
+**The one change to scrutinise.** `tests/test_flatbuffers_codec_plugin.py` moved
+for a JSON and dispatch fix. That is plausible if schema ids changed shape, but
+it is also exactly where a weakened assertion would hide. Check it is a refresh
+and not a loosened check — an earlier run in this series made an assertion-logic
+change and described it as a baseline refresh.
+
+Verification to run before committing any of it, in a clean shell with nothing
+added to `PATH`:
+
+1. `cmake --preset default`, then the parallel build twice (the first exits 1;
+   see the quirk above).
+2. `cmake --build --preset release --target pyramid_ada_all`, without which the
+   Ada tests skip and report success.
+3. `ctest --test-dir build -C Release` — must be **828 of 828**. The suite was
+   green before this work, so any failure is a regression from it.
+4. `python -m pytest subprojects/PYRAMID/tests -q` — expect 59 passed, 6 skipped.
+5. `python -m unittest subprojects.PYRAMID.pim.test_proto_parser` — expect 4, OK.
+6. `python -m pytest subprojects/PYRAMID/pim -q`.
 
 ## Why the suite comes first
 
