@@ -2,6 +2,7 @@
 #include <stb_image_write.h>
 
 #include "app_shell.h"
+#include "imgui_id_audit.h"
 #include "app_theme.h"
 #include "pddl_generator.h"
 
@@ -164,6 +165,16 @@ struct SelfTestReport {
     check(name.c_str(), unique, detail.c_str());
   }
 
+  /// Whole-interface check: no two items drawn in the last frame claimed the
+  /// same identity. Covers every panel at once, unlike a check written against
+  /// one view's own bookkeeping.
+  void checkNoSharedItemIds(const std::string& stage) {
+    const bool clean = imgui_id_audit::duplicates().empty();
+    const std::string name = "no_shared_item_ids_" + stage;
+    const std::string detail = imgui_id_audit::describeFirstDuplicate();
+    check(name.c_str(), clean, detail.c_str());
+  }
+
   // Call after ImGui::Render() — enumerates active windows this frame.
   void collectWindows() {
     windowsFound.clear();
@@ -253,6 +264,7 @@ static void renderAppShellFrame(SDL_Window* window, AppShell& shell,
   while (SDL_PollEvent(&event) != 0) {
     ImGui_ImplSDL2_ProcessEvent(&event);
   }
+  imgui_id_audit::beginFrame();
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplSDL2_NewFrame();
   ImGui::NewFrame();
@@ -395,6 +407,8 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < 3; ++i) {
       renderAppShellFrame(window, shell, clearColor);
     }
+
+    imgui_id_audit::enable();
 
     // Phase 2: inject programmatic actions through the test interface
     shell.selfTestNew();
@@ -754,6 +768,26 @@ int main(int argc, char* argv[]) {
         renderAppShellFrame(window, projectShell, clearColor);
         report.checkItemIdsAreUnique("after_navigation",
                                      projectShell.selfTestNeighbourItemIds());
+
+        // Editing an action, reached by picking one from the palette on the
+        // left. Each action is shown as three groups of sentences -- what must
+        // be true beforehand, what becomes true afterwards, and what becomes
+        // false afterwards -- all drawn by one piece of code that numbers its
+        // rows from zero within each group. An action using the same fact in
+        // all three roles, which is common, therefore drew three rows asking
+        // for the same identities.
+        //
+        // These use the whole-interface check rather than one view's own
+        // bookkeeping, so they cover the palette, the sentence rows, the
+        // dropdowns and everything else on screen at the same time.
+        const size_t actionsToEdit =
+            std::min<size_t>(6U, projectShell.selfTestModel().actions.size());
+        for (size_t actionIndex = 0; actionIndex < actionsToEdit; ++actionIndex) {
+          projectShell.selfTestSelectActionFromPalette(static_cast<int>(actionIndex));
+          renderAppShellFrame(window, projectShell, clearColor);
+          report.checkNoSharedItemIds("editing_action_" +
+                                      std::to_string(actionIndex));
+        }
       }
     }
     report.check("guided_editor_rendered",

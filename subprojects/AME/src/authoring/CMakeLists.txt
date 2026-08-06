@@ -122,6 +122,12 @@ add_library(imgui_lib STATIC
 target_compile_definitions(imgui_lib
   PUBLIC
     IMGUI_ENABLE_DOCKING
+    # Enables the per-item hook Dear ImGui provides for its test framework. The
+    # authoring tool uses it to find items that share an identity, which the
+    # library itself only reports while the mouse is resting on one of them.
+    # The hook functions are defined in imgui_id_audit.cpp. This must be public
+    # so that every translation unit sees the same declarations.
+    IMGUI_ENABLE_TEST_ENGINE
 )
 
 target_include_directories(imgui_lib
@@ -147,6 +153,7 @@ add_executable(ame_authoring_tool
   bt_graph_panel.cpp
   command_stack.cpp
   domain_graph_panel.cpp
+  imgui_id_audit.cpp
   plan_graph_panel.cpp
   type_hierarchy_panel.cpp
   app_theme.cpp

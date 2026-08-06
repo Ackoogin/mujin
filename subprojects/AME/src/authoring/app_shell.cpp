@@ -273,6 +273,17 @@ static void renderGuidedReferenceGroup(const char* visibleTitle,
                                        ProjectModel& model,
                                        CommandStack& stack) {
   ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "%s", visibleTitle);
+  // Everything this function draws is scoped to the group it is drawing.
+  //
+  // The three groups an action shows -- what must be true beforehand, what
+  // becomes true afterwards, and what becomes false afterwards -- are all drawn
+  // by this same function, and each numbers its rows from zero. The controls in
+  // a row are named for their position in the sentence rather than for the fact
+  // they carry, so without this the first row of all three groups asked Dear
+  // ImGui for the same identities. An action that requires a fact, makes it
+  // true and makes it false, which is common, therefore produced three
+  // conflicting items, and typing in one row could change another.
+  ImGui::PushID(tableId);
   ActionDef& action = model.actions[static_cast<size_t>(actionIndex)];
   std::vector<EffectRef>& refs = actionReferences(action, kind);
   for (int reference_index = 0;
@@ -392,7 +403,6 @@ static void renderGuidedReferenceGroup(const char* visibleTitle,
     ImGui::PopID();
   }
 
-  ImGui::PushID(tableId);
   static int selected_predicates[3] = {0, 0, 0};
   const int kind_index = static_cast<int>(kind);
   int& selected_predicate = selected_predicates[kind_index];
