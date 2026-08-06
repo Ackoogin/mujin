@@ -9,11 +9,47 @@
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_services_autonomy_backend_provided.hpp"
 
+#include <pcl/pcl_codec_registry.h>
+#include <pcl/pcl_plugin_loader.h>
+
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
 
 namespace {
+
+// The generated dispatch() encodes and decodes through the process-wide PCL
+// codec registry rather than calling a codec directly. Nothing registers a
+// codec on its own, so a test that dispatches with a content type has to load
+// the matching codec plugin first. Without this, every dispatch produces an
+// empty response and the first attempt to parse one fails with a confusing
+// "attempting to parse an empty input" JSON error rather than anything that
+// points at the missing codec.
+//
+// The plugin is loaded once for the whole process, which is what a deployment
+// does through its configuration. test_agra_ma_grounding_port_round_trip.cpp
+// does the same thing for its own service.
+class CodecLoaderEnvironment : public ::testing::Environment {
+ public:
+  void SetUp() override {
+    pcl_plugin_handle_t* handle = nullptr;
+    const auto status = pcl_plugin_load_codec(AUTONOMY_BACKEND_JSON_CODEC_PLUGIN_PATH,
+                                              nullptr,
+                                              pcl_codec_registry_default(),
+                                              &handle);
+    if (status != PCL_OK) {
+      std::fprintf(stderr,
+                   "Failed to load autonomy_backend JSON codec plugin '%s': %d\n",
+                   AUTONOMY_BACKEND_JSON_CODEC_PLUGIN_PATH,
+                   static_cast<int>(status));
+      std::abort();
+    }
+  }
+};
+
+::testing::Environment* const codec_loader_environment =
+    ::testing::AddGlobalTestEnvironment(new CodecLoaderEnvironment);
 
 namespace autonomy_codec = pyramid::domain_model::autonomy;
 namespace common = pyramid::domain_model::common;

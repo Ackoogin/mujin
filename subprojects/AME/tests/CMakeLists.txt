@@ -42,6 +42,13 @@ target_link_libraries(test_ame_autonomy_contract
         pyramid_generated_codecs
         GTest::gtest_main
 )
+# The generated dispatch() resolves codecs through the process-wide PCL codec
+# registry, and nothing populates that registry on its own. The test loads the
+# JSON codec plugin at start-up, so it needs the plugin built first and needs to
+# be told where it ended up.
+add_dependencies(test_ame_autonomy_contract pyramid_codec_json_autonomy_backend)
+target_compile_definitions(test_ame_autonomy_contract PRIVATE
+    AUTONOMY_BACKEND_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_autonomy_backend>")
 gtest_discover_tests(test_ame_autonomy_contract DISCOVERY_MODE PRE_TEST)
 
 if(AME_BUILD_AGRA_MA_BRIDGE)
