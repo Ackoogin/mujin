@@ -417,12 +417,15 @@ review needs answered. That format worked. It got the wording of the guided edit
 settled before any of it was built, and it found two real properties of the mission
 domain while it was being drawn.
 
-The next pack covers the simulation screens: run controls and the live tree, the fact
-panel and timeline, the fault-injection controls, the abandoned-plan and new-plan
-comparison, and the batch results table. Its review questions are the ones that are
-expensive to change later: what the run controls are called, whether the timeline or
-the tree is the primary view, and how a replan is announced without using the word
-"replan".
+The pack for the simulation screens is written and is at
+[`doc/design/AME/simulation_run_hmi_concepts.html`](../../design/AME/simulation_run_hmi_concepts.html).
+It has six concepts, one for each item from B1 to B7: run controls and the live tree,
+the fact panel and timeline, the fault-injection controls, the abandoned-plan and
+new-plan comparison, the batch results table, and run records with the comparison of two
+runs. It asks six questions, the first three being the ones this plan committed to
+asking — what the run controls are called, whether the timeline or the tree is the
+primary view, and how a change of plan is announced without using the word "replan".
+Those answers are needed before B2, B3 and B4 start.
 
 **Non-specialist acceptance.** A reviewer reads the pack in a browser with no tools
 installed and can answer its questions without asking what anything means.

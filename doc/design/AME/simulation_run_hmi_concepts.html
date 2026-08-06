@@ -1,0 +1,1724 @@
+<title>Simulation Runs — HMI Concepts for Review</title>
+
+<style>
+/* ==========================================================================
+   Tokens. Shared with pddl_authoring_hmi_concepts.html so the two packs read
+   as one set. Mockup chrome reuses the authoring tool's own Holo-Cyan ImGui
+   palette (subprojects/AME/src/authoring/app_theme.cpp) so the concepts read
+   as the application rather than as a website.
+   ========================================================================== */
+:root {
+  --ground:      #E8EBED;
+  --paper:       #F7F9FA;
+  --ink:         #0C1216;
+  --ink-2:       #47555D;
+  --ink-3:       #6F8089;
+  --line:        #C2CDD3;
+  --line-soft:   #D9E0E4;
+  --accent:      #06626F;
+  --accent-line: #00A2C4;
+  --accent-wash: #DCEEF1;
+
+  --req:      #8A6510;   /* waiting     */
+  --req-wash: #F5EAD2;
+  --add:      #1C7A50;   /* finished    */
+  --add-wash: #DBEDE3;
+  --del:      #A93F2B;   /* went wrong  */
+  --del-wash: #F6DFDA;
+
+  /* Application chrome — fixed in both themes. A screenshot does not invert. */
+  --ui-window:  #060A0E;
+  --ui-child:   #0A1016;
+  --ui-popup:   #0E161E;
+  --ui-bar:     #020406;
+  --ui-frame:   #04080E;
+  --ui-button:  #121E28;
+  --ui-header:  #0C1822;
+  --ui-border:  #008CB4;
+  --ui-hair:    #003C55;
+  --ui-text:    #DCF0FA;
+  --ui-dim:     #648296;
+  --ui-cyan:    #00E6FF;
+  --ui-tab-on:  #005A78;
+  --ui-req:     #E0B152;
+  --ui-add:     #52D69A;
+  --ui-del:     #F2836A;
+
+  --font-ui: system-ui, "Segoe UI", "Liberation Sans", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", "DejaVu Sans Mono",
+               "Liberation Mono", Consolas, monospace;
+
+  --measure: 68ch;
+  --col: min(1120px, 100% - 3rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground:      #0A0F13;
+    --paper:       #0F171C;
+    --ink:         #DCE9EF;
+    --ink-2:       #93A8B3;
+    --ink-3:       #6D828E;
+    --line:        #1E313C;
+    --line-soft:   #17262F;
+    --accent:      #45C9DD;
+    --accent-line: #0E7A92;
+    --accent-wash: #0B2A33;
+
+    --req:      #E0B152;
+    --req-wash: #2A2314;
+    --add:      #59CE94;
+    --add-wash: #0F2A20;
+    --del:      #F08C74;
+    --del-wash: #2E1813;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #0A0F13;
+  --paper:       #0F171C;
+  --ink:         #DCE9EF;
+  --ink-2:       #93A8B3;
+  --ink-3:       #6D828E;
+  --line:        #1E313C;
+  --line-soft:   #17262F;
+  --accent:      #45C9DD;
+  --accent-line: #0E7A92;
+  --accent-wash: #0B2A33;
+  --req:      #E0B152;
+  --req-wash: #2A2314;
+  --add:      #59CE94;
+  --add-wash: #0F2A20;
+  --del:      #F08C74;
+  --del-wash: #2E1813;
+}
+
+:root[data-theme="light"] {
+  --ground:      #E8EBED;
+  --paper:       #F7F9FA;
+  --ink:         #0C1216;
+  --ink-2:       #47555D;
+  --ink-3:       #6F8089;
+  --line:        #C2CDD3;
+  --line-soft:   #D9E0E4;
+  --accent:      #06626F;
+  --accent-line: #00A2C4;
+  --accent-wash: #DCEEF1;
+  --req:      #8A6510;
+  --req-wash: #F5EAD2;
+  --add:      #1C7A50;
+  --add-wash: #DBEDE3;
+  --del:      #A93F2B;
+  --del-wash: #F6DFDA;
+}
+
+/* ==========================================================================
+   Page
+   ========================================================================== */
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { width: var(--col); margin-inline: auto; }
+
+p, li { max-width: var(--measure); }
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: break-word; }
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* --- Masthead ------------------------------------------------------------ */
+.masthead {
+  border-top: 2px solid var(--accent-line);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.masthead-inner {
+  width: var(--col);
+  margin-inline: auto;
+  padding: clamp(2.5rem, 6vw, 4.5rem) 0 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.masthead h1 {
+  font-size: clamp(2rem, 4.6vw, 3.15rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  text-wrap: balance;
+  max-width: 20ch;
+}
+.masthead .standfirst {
+  font-size: clamp(1.02rem, 1.6vw, 1.2rem);
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+.masthead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.masthead-meta div { display: flex; flex-direction: column; gap: 2px; padding-top: 0.75rem; }
+.masthead-meta .k {
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3);
+  font-weight: 700;
+}
+.masthead-meta .v { font-family: var(--font-mono); font-size: 12.5px; }
+
+/* --- Direction panel ----------------------------------------------------- */
+.direction {
+  margin-block: clamp(2.5rem, 5vw, 4rem);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-line);
+  background: var(--paper);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.direction h2 { font-size: 1.3rem; letter-spacing: -0.01em; }
+.rules { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); }
+@media (min-width: 800px) { .rules { grid-template-columns: repeat(3, 1fr); } }
+.rule { background: var(--paper); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.rule .k { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--accent); }
+.rule .h { font-weight: 650; font-size: 1rem; }
+.rule p { font-size: 14px; color: var(--ink-2); margin: 0; }
+
+/* --- Concept sections ---------------------------------------------------- */
+.concept {
+  padding-block: clamp(2.5rem, 5vw, 4rem);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.concept-head { display: flex; flex-direction: column; gap: 0.6rem; }
+.concept-head .tagline { display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap; }
+.wi {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  padding: 2px 7px;
+}
+.concept h2 {
+  font-size: clamp(1.45rem, 2.6vw, 2rem);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-wrap: balance;
+  font-weight: 700;
+}
+.concept .intro { color: var(--ink-2); }
+
+/* --- Annotation legend --------------------------------------------------- */
+.notes { display: grid; gap: 0.55rem; padding: 0; list-style: none; }
+@media (min-width: 860px) { .notes { grid-template-columns: 1fr 1fr; gap: 0.55rem 2rem; } }
+.notes li {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 0.6rem;
+  font-size: 14px;
+  color: var(--ink-2);
+  max-width: none;
+}
+.marker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--paper);
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+/* --- Meta strip under each concept --------------------------------------- */
+.meta { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); }
+@media (min-width: 760px) { .meta { grid-template-columns: repeat(3, 1fr); } }
+.meta div { background: var(--paper); padding: 0.85rem 1rem; }
+.meta .k {
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 700; display: block; margin-bottom: 0.25rem;
+}
+.meta .v { font-size: 14px; color: var(--ink-2); }
+
+/* ==========================================================================
+   Application chrome — shared mockup components
+   ========================================================================== */
+.ui {
+  background: var(--ui-window);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-x: auto;
+}
+.ui * { border-radius: 0; }
+
+.ui-tabs { display: flex; background: var(--ui-bar); border-bottom: 2px solid var(--ui-hair); }
+.ui-tab {
+  padding: 6px 18px;
+  font-size: 12px;
+  color: var(--ui-dim);
+  border-right: 1px solid var(--ui-hair);
+  border-top: 2px solid transparent;
+  background: #04080C;
+}
+.ui-tab.on {
+  background: var(--ui-tab-on);
+  color: #EAFBFF;
+  border-top-color: var(--ui-cyan);
+  font-weight: 600;
+}
+
+.ui-body { display: grid; gap: 1px; background: var(--ui-hair); padding: 1px; }
+.ui-pane { background: var(--ui-child); padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.ui-pane-title {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #4FA9C6;
+  font-weight: 700;
+  border-bottom: 1px solid var(--ui-hair);
+  padding-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ui-pane-title .count { color: var(--ui-dim); letter-spacing: 0; font-weight: 400; text-transform: none; }
+.ui-pane-title .grow { margin-left: auto; letter-spacing: 0; font-weight: 400; text-transform: none; }
+
+.ui-status {
+  background: var(--ui-bar);
+  border-top: 1px solid var(--ui-hair);
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--ui-dim);
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.ui-status .ok { color: var(--ui-add); }
+.ui-status .bad { color: var(--ui-del); }
+.ui-status .now { color: var(--ui-cyan); }
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ui-button);
+  border: 1px solid var(--ui-hair);
+  color: var(--ui-text);
+  padding: 3px 9px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ui-btn.ghost { background: transparent; color: var(--ui-dim); }
+.ui-btn.cyan { border-color: var(--ui-border); color: var(--ui-cyan); }
+.ui-btn.on { background: var(--ui-tab-on); border-color: var(--ui-cyan); color: #EAFBFF; }
+.ui-btn.warn { border-color: #6B3025; color: var(--ui-del); }
+
+.ui-list { display: flex; flex-direction: column; }
+.ui-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ui-text);
+  border-bottom: 1px solid rgba(0, 60, 85, 0.4);
+}
+.ui-row.on { background: var(--ui-header); border-left: 2px solid var(--ui-cyan); padding-left: 8px; }
+.ui-row .dim { color: var(--ui-dim); }
+.ui-row .grow { margin-left: auto; }
+
+.combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--ui-frame);
+  border: 1px solid #0A6E8C;
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ui-text);
+  white-space: nowrap;
+}
+.combo::after { content: "▾"; color: var(--ui-cyan); font-size: 10px; }
+.combo.pred { color: var(--ui-cyan); }
+.combo.var  { color: #FFD9A0; }
+.combo.num  { color: #9FD8EA; }
+.combo.plain::after { content: ""; }
+
+.lede-word { color: var(--ui-dim); font-size: 12.5px; }
+.sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 0; }
+
+.group-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6FBCD4;
+  font-weight: 700;
+  padding-top: 6px;
+}
+
+/* In-mockup annotation marker */
+.mk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: var(--ui-cyan);
+  color: #041018;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  flex: none;
+}
+
+.ui-code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #A8CADA;
+  background: var(--ui-frame);
+  border: 1px solid var(--ui-hair);
+  padding: 8px 10px;
+  white-space: pre;
+  overflow-x: auto;
+}
+.ui-code .kw { color: #6FBCD4; }
+.ui-code .pr { color: var(--ui-cyan); }
+
+.check { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--ui-text); }
+.check .g { color: var(--ui-add); }
+.check .r { color: var(--ui-del); }
+.check .y { color: var(--ui-req); }
+
+/* ==========================================================================
+   Simulation-specific chrome
+   ========================================================================== */
+
+/* Transport bar — the run controls */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--ui-bar);
+  border-bottom: 1px solid var(--ui-hair);
+  padding: 7px 10px;
+}
+.transport .spacer { margin-left: auto; }
+.speed { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ui-dim); }
+.speed .track {
+  width: 92px; height: 3px; background: var(--ui-hair); position: relative; display: inline-block;
+}
+.speed .knob {
+  position: absolute; top: -4px; left: 58%; width: 3px; height: 11px; background: var(--ui-cyan);
+}
+
+/* Run state marks — four states, sharing the tool's existing colour language */
+.st { display: inline-flex; align-items: center; justify-content: center; width: 13px; flex: none; font-family: var(--font-mono); font-size: 11px; }
+.st.done { color: var(--ui-add); }
+.st.now  { color: var(--ui-cyan); }
+.st.wait { color: var(--ui-req); }
+.st.bad  { color: var(--ui-del); }
+
+/* Behaviour tree, drawn as an indented list rather than a canvas */
+.tree { display: flex; flex-direction: column; font-family: var(--font-mono); font-size: 12px; }
+.tnode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(0, 60, 85, 0.28);
+  color: var(--ui-text);
+  white-space: nowrap;
+}
+.tnode .rail { color: #1E4A5E; letter-spacing: -1px; flex: none; }
+.tnode.done { color: #8FBFAE; }
+.tnode.wait { color: #5E7686; }
+.tnode.now  { background: var(--ui-header); border-left: 2px solid var(--ui-cyan); padding-left: 4px; }
+.tnode.bad  { background: #1A0B08; border-left: 2px solid var(--ui-del); padding-left: 4px; }
+.tnode .kind {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #3E7A92;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  flex: none;
+}
+.tnode .grow { margin-left: auto; color: var(--ui-dim); font-size: 11px; }
+
+/* Timeline */
+.tl { display: flex; flex-direction: column; gap: 2px; }
+.tl-ruler {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ui-dim);
+  border-bottom: 1px solid var(--ui-hair);
+  padding-bottom: 3px;
+  margin-left: 196px;
+}
+.tl-ruler span { flex: 1 1 0; text-align: left; }
+.tl-row { display: flex; align-items: center; gap: 0; font-family: var(--font-mono); font-size: 11.5px; }
+.tl-lab { width: 196px; flex: none; color: var(--ui-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+.tl-lab .who { color: var(--ui-dim); }
+.tl-track { position: relative; flex: 1 1 auto; height: 19px; background: rgba(0, 60, 85, 0.16); }
+.tl-bar {
+  position: absolute; top: 3px; height: 13px;
+  display: flex; align-items: center; padding-left: 5px;
+  font-size: 10px; color: #041018; overflow: hidden; white-space: nowrap;
+}
+.tl-bar.done { background: #1D6B4C; color: #CFF0E0; }
+.tl-bar.now  { background: var(--ui-cyan); }
+.tl-bar.wait { background: #2A3A46; color: #7D97A6; }
+.tl-bar.bad  { background: #7A2F1E; color: #FBD8CE; }
+.tl-mark { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ui-add); }
+.tl-mark.del { background: var(--ui-del); }
+/* The playhead is deliberately not cyan: the bars for actions running now are,
+   and a playhead that merged with them would be unreadable. */
+.tl-head { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ui-text); }
+.tl-head.top::after {
+  content: ""; position: absolute; top: -5px; left: -3px;
+  border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--ui-text);
+}
+.tl-fault { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ui-del); }
+
+/* Side-by-side plan comparison */
+.two-up { display: grid; gap: 1px; background: var(--ui-hair); }
+@media (min-width: 900px) { .two-up { grid-template-columns: 1fr 1fr; } }
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #1A0F08;
+  border-left: 3px solid var(--ui-req);
+  padding: 9px 11px;
+  font-size: 13px;
+  color: #F2E2C4;
+}
+.banner .what { font-weight: 600; color: #FFE9C2; }
+.banner .why { color: #C8B79A; font-size: 12.5px; }
+
+.strike { text-decoration: line-through; text-decoration-color: var(--ui-del); color: #5E7686; }
+
+/* Results table */
+/* The colour is set explicitly on the cells: this page is opened as a file with
+   no doctype, and in that mode tables do not inherit colour from their parent. */
+.res { border-collapse: collapse; font-family: var(--font-mono); font-size: 11.5px; width: 100%; }
+.res th, .res td {
+  border: 1px solid rgba(0, 80, 110, 0.55);
+  padding: 4px 7px;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--ui-text);
+}
+.res thead th { background: #081018; color: #9FD8EA; font-weight: 600; font-size: 10.5px; letter-spacing: 0.06em; }
+.res tbody tr:nth-child(even) td { background: rgba(8, 16, 24, 0.6); }
+.res td.n { text-align: right; }
+.res .g { color: var(--ui-add); }
+.res .r { color: var(--ui-del); }
+.res .y { color: var(--ui-req); }
+.res td.why { white-space: normal; color: var(--ui-dim); font-family: var(--font-ui); font-size: 11.5px; }
+
+/* Legend under a mockup */
+.legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; font-size: 12.5px; color: var(--ink-2); align-items: center; }
+.legend .swatch { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11.5px; }
+.legend .box { width: 13px; height: 13px; border: 1px solid; display: inline-block; }
+.legend .box.done { border-color: var(--add); background: var(--add-wash); }
+.legend .box.now  { border-color: var(--accent-line); background: var(--accent-wash); }
+.legend .box.wait { border-color: var(--req); background: var(--req-wash); }
+.legend .box.bad  { border-color: var(--del); background: var(--del-wash); }
+
+/* Finding callout — things the mockups surfaced about the real domain */
+.finding {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--req);
+  background: var(--paper);
+  padding: 1rem 1.2rem;
+  font-size: 14.5px;
+  color: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.finding strong { color: var(--ink); font-weight: 650; }
+.finding p { margin: 0; max-width: none; }
+
+/* Closing tables */
+.sched { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sched th, .sched td {
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+  color: var(--ink);
+}
+.sched thead th {
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3); border-bottom: 1px solid var(--line);
+}
+.sched td:first-child { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+.sched td.effort { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+
+.qlist { display: flex; flex-direction: column; gap: 1rem; padding: 0; list-style: none; counter-reset: q; }
+.qlist li {
+  display: grid; grid-template-columns: 2.2rem 1fr; gap: 0.8rem;
+  max-width: none; padding-bottom: 1rem; border-bottom: 1px solid var(--line-soft);
+}
+.qlist li::before {
+  counter-increment: q;
+  content: "Q" counter(q);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--accent);
+  padding-top: 3px;
+}
+.qlist .q { font-weight: 650; }
+.qlist .a { font-size: 14px; color: var(--ink-2); }
+
+footer.page-foot {
+  border-top: 1px solid var(--line);
+  margin-top: 3rem;
+  padding-block: 2rem 3rem;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+footer.page-foot p { max-width: 70ch; }
+</style>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <span class="eyebrow">AME · Graphical authoring tool · Concept review</span>
+    <h1>Simulation runs: what the screens should look like</h1>
+    <p class="standfirst">
+      Six concept mockups for the next phase of the authoring tool. Today it can tell you a
+      plan exists and show you the tree it compiled. It cannot show you that tree
+      <em>running</em>. These screens are how it would.
+    </p>
+    <div class="masthead-meta">
+      <div>
+        <span class="k">Status</span>
+        <span class="v">Concept — for review, nothing built</span>
+      </div>
+      <div>
+        <span class="k">Source plan</span>
+        <span class="v">authoring_tool_plan.md · item C1</span>
+      </div>
+      <div>
+        <span class="k">Domain shown</span>
+        <span class="v">mission-autonomy · 10 facts · 7 actions</span>
+      </div>
+      <div>
+        <span class="k">Work items</span>
+        <span class="v">B1 – B7</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ==================================================================== -->
+  <section class="direction">
+    <div>
+      <span class="eyebrow">The direction being proposed</span>
+      <h2>Watch the mission, not the machinery.</h2>
+      <p style="color:var(--ink-2); margin-top:0.6rem;">
+        A run is the first thing in this tool that a non-specialist can judge without being
+        taught anything: either the mission does what they expected or it does not. That only
+        holds if the screens talk about the mission. The moment they talk about ticks, node
+        status codes and replanning episodes, the advantage is gone.
+      </p>
+    </div>
+
+    <div class="rules">
+      <div class="rule">
+        <span class="k">Rule 1</span>
+        <span class="h">Say what is happening</span>
+        <p>
+          A run always has a one-sentence answer to "what is going on now", in the words of the
+          mission: <em>uav2 is moving from base to sector_b</em>. The tree and the timeline are
+          how you check that sentence, not how you work it out.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Rule 2</span>
+        <span class="h">Nothing to set up first</span>
+        <p>
+          Pressing Run works on a project that has never been near this screen. Every action
+          takes one tick and succeeds until somebody says otherwise. Settings exist for people
+          who want a specific fault, not as a toll on the first run.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Rule 3</span>
+        <span class="h">A simulation is never evidence of field behaviour</span>
+        <p>
+          The real compiled tree, the real world model and the real planner are used. Only the
+          action nodes are stand-ins, and the screen says so, every run, where it cannot be
+          missed. The tool never lets a run look like a test flight.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- 1 · RUN CONTROLS AND THE LIVE TREE                                    -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="run">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">B1 · B2</span>
+        <span class="eyebrow">Concept 1 of 6</span>
+      </div>
+      <h2>Run controls and the live tree</h2>
+      <p class="intro">
+        A new tab beside Domain, PDDL, Plan and BT. The controls sit in one row at the top and
+        never move. The tree is the one already compiled for the Plan tab, with each node
+        showing where the run has got to. The right-hand column answers "what is happening"
+        in a sentence before anyone has to read the tree at all.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-tabs">
+        <span class="ui-tab">Domain</span>
+        <span class="ui-tab">PDDL</span>
+        <span class="ui-tab">Plan</span>
+        <span class="ui-tab">BT</span>
+        <span class="ui-tab on">Run</span>
+      </div>
+
+      <div class="transport">
+        <span class="ui-btn ghost">▸ Run</span>
+        <span class="ui-btn on">❚❚ Hold</span>
+        <span class="ui-btn">▸❙ One step</span>
+        <span class="ui-btn">■ Stop</span>
+        <span class="ui-btn ghost">↺ Start again</span>
+        <span class="mk">A</span>
+        <span class="speed">
+          speed
+          <span class="track"><span class="knob"></span></span>
+          4 ticks / sec
+        </span>
+        <span class="spacer"></span>
+        <span class="lede-word">scenario</span>
+        <span class="combo pred">nominal</span>
+      </div>
+
+      <div class="ui-body" style="grid-template-columns: 1fr 292px;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            The mission, as it is running
+            <span class="grow"><span class="ui-btn ghost">show the real node names</span></span>
+          </div>
+
+          <div class="tree">
+            <div class="tnode done">
+              <span class="st done">✓</span><span class="rail"></span>
+              <span class="kind">stop when</span>
+              <span>all four goals are true</span>
+              <span class="grow">re-checked every tick</span>
+              <span class="mk">B</span>
+            </div>
+            <div class="tnode now">
+              <span class="st now">▸</span><span class="rail"></span>
+              <span class="kind">both at once</span>
+              <span>uav1's sector and uav2's sector</span>
+              <span class="grow">2 of 2 running</span>
+              <span class="mk">C</span>
+            </div>
+
+            <div class="tnode done">
+              <span class="st done">✓</span><span class="rail">│&nbsp;&nbsp;</span>
+              <span class="kind">in order</span><span>uav1 → sector_a</span>
+            </div>
+            <div class="tnode done">
+              <span class="st done">✓</span><span class="rail">│&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+              <span>move uav1 from base to sector_a</span>
+              <span class="grow">ticks 1–6</span>
+            </div>
+            <div class="tnode now">
+              <span class="st now">▸</span><span class="rail">│&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+              <span>search sector_a with uav1</span>
+              <span class="grow">tick 3 of 5</span>
+            </div>
+            <div class="tnode wait">
+              <span class="st wait">·</span><span class="rail">│&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+              <span>classify sector_a with uav1</span>
+              <span class="grow">not started</span>
+            </div>
+
+            <div class="tnode done">
+              <span class="st done">✓</span><span class="rail">│&nbsp;&nbsp;</span>
+              <span class="kind">in order</span><span>uav2 → sector_b</span>
+            </div>
+            <div class="tnode done">
+              <span class="st done">✓</span><span class="rail">│&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+              <span>move uav2 from base to sector_b</span>
+              <span class="grow">ticks 1–6</span>
+            </div>
+            <div class="tnode now">
+              <span class="st now">▸</span><span class="rail">│&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+              <span>search sector_b with uav2</span>
+              <span class="grow">tick 3 of 5</span>
+            </div>
+            <div class="tnode wait">
+              <span class="st wait">·</span><span class="rail">│&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+              <span>classify sector_b with uav2</span>
+              <span class="grow">not started</span>
+            </div>
+          </div>
+
+          <div class="ui-pane-title">The selected step, in full <span class="count">search sector_a with uav1</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="st done">✓</span><span class="dim">checks</span><span>uav1 is at sector_a</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span class="dim">checks</span><span>uav1 is available</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span class="dim">checks</span><span>uav1's sensor is working</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span class="dim">checks</span><span>sector_a is assigned to uav1</span></div>
+            <div class="ui-row on"><span class="st now">▸</span><span class="dim">does</span><span>SearchSector</span><span class="dim grow">stand-in · 5 ticks · succeeds</span><span class="mk">D</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span class="dim">then records</span><span>sector_a has been searched</span></div>
+          </div>
+        </div>
+
+        <div class="ui-pane">
+          <div class="ui-pane-title">What is happening</div>
+          <div style="font-size:14px; line-height:1.5; color:var(--ui-text);">
+            <span style="color:var(--ui-cyan)">uav1</span> is searching
+            <span style="color:var(--ui-cyan)">sector_a</span>, and
+            <span style="color:var(--ui-cyan)">uav2</span> is searching
+            <span style="color:var(--ui-cyan)">sector_b</span>.
+            <span class="mk">E</span>
+          </div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="dim">done</span><span class="grow">2 of 6 actions</span></div>
+            <div class="ui-row"><span class="dim">running</span><span class="grow">2</span></div>
+            <div class="ui-row"><span class="dim">goals met</span><span class="grow">0 of 4</span></div>
+            <div class="ui-row"><span class="dim">gone wrong</span><span class="grow">nothing</span></div>
+          </div>
+
+          <div class="ui-pane-title">Goals</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="st wait">·</span><span>sector_a searched</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span>sector_b searched</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span>sector_a classified</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span>sector_b classified</span></div>
+          </div>
+
+          <div class="ui-pane-title">This run</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="dim">nothing has been made to go wrong</span></div>
+            <div class="ui-row"><span class="ui-btn warn">Make this run go wrong…</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ui-status">
+        <span class="now">tick 9</span>
+        <span>2 of 6 actions done</span>
+        <span>scenario: nominal</span>
+        <span class="bad">SIMULATED — actions are stand-ins, not the real ones</span>
+        <span class="mk">F</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>The controls are the question this pack most wants answered. These are mission words rather than machine words: <em>Hold</em> rather than Pause, <em>One step</em> rather than Tick, <em>Start again</em> rather than Reset. See Q1.</span></li>
+      <li><span class="marker">B</span><span>The compiler wraps every plan in a goal check that runs before the plan does, so the mission stops the instant the goals are true. Shown as one row that says exactly that, rather than as a <span class="mono">ReactiveFallback</span>.</span></li>
+      <li><span class="marker">C</span><span>The two agents' work is compiled into a parallel branch. The tree says "both at once" and the timeline in concept 2 shows it properly.</span></li>
+      <li><span class="marker">D</span><span>Every stand-in action is labelled as one, in place, with its settings beside it. There is no screen you can be looking at and not know the actions are simulated.</span></li>
+      <li><span class="marker">E</span><span>The sentence is generated from the running nodes and the action's own parameters. It is the first thing on the right-hand column because it is the only thing most viewers need.</span></li>
+      <li><span class="marker">F</span><span>The warning in the status bar is fixed, not dismissible, and is included in every screenshot and exported report.</span></li>
+    </ul>
+
+    <div class="legend">
+      <span class="swatch"><span class="box done"></span> finished</span>
+      <span class="swatch"><span class="box now"></span> happening now</span>
+      <span class="swatch"><span class="box wait"></span> waiting</span>
+      <span class="swatch"><span class="box bad"></span> went wrong</span>
+      <span style="color:var(--ink-3); font-size:12px;">— the same four colours the rest of the tool already uses for made true, selected, needed, and made false.</span>
+    </div>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">The tool can say a plan exists but cannot show it working.</span></div>
+      <div><span class="k">Cost</span><span class="v">Large. The engine is the substantial piece; the tree view is a change to the existing one.</span></div>
+      <div><span class="k">Reuses</span><span class="v">The compiled tree, the world model, and the stand-in node pattern from the demo application.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- 2 · FACTS AND TIMELINE                                                -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="timeline">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">B3</span>
+        <span class="eyebrow">Concept 2 of 6</span>
+      </div>
+      <h2>What changed, and when</h2>
+      <p class="intro">
+        A tree answers "where are we". It answers "when did that happen" badly, and it cannot
+        show two things happening at once without the reader already knowing what a parallel
+        branch is. The timeline does both. Clicking anywhere on it moves the whole screen —
+        tree, facts and sentence — to that moment.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-body" style="grid-template-columns: 1fr 300px;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            Timeline
+            <span class="grow"><span class="lede-word">tick</span> <span class="combo num plain" style="color:var(--ui-cyan)">13</span></span>
+          </div>
+
+          <div class="tl">
+            <div class="tl-ruler">
+              <span>1</span><span>4</span><span>7</span><span>10</span><span>13</span><span>16</span><span>19</span>
+            </div>
+
+            <div class="tl-row">
+              <div class="tl-lab">move to sector_a <span class="who">· uav1</span></div>
+              <div class="tl-track">
+                <div class="tl-bar done" style="left:0%; width:30%;">moving</div>
+                <div class="tl-mark" style="left:30%"></div>
+                <div class="tl-head top" style="left:65%"></div>
+              </div>
+            </div>
+            <div class="tl-row">
+              <div class="tl-lab">search sector_a <span class="who">· uav1</span></div>
+              <div class="tl-track">
+                <div class="tl-bar done" style="left:30%; width:25%;">searching</div>
+                <div class="tl-mark" style="left:55%"></div>
+                <div class="tl-head" style="left:65%"></div>
+              </div>
+            </div>
+            <div class="tl-row">
+              <div class="tl-lab">classify sector_a <span class="who">· uav1</span></div>
+              <div class="tl-track">
+                <div class="tl-bar now" style="left:55%; width:20%;">classifying</div>
+                <div class="tl-head" style="left:65%"></div>
+              </div>
+            </div>
+            <div class="tl-row">
+              <div class="tl-lab">move to sector_b <span class="who">· uav2</span></div>
+              <div class="tl-track">
+                <div class="tl-bar done" style="left:0%; width:30%;">moving</div>
+                <div class="tl-mark" style="left:30%"></div>
+                <div class="tl-head" style="left:65%"></div>
+              </div>
+            </div>
+            <div class="tl-row">
+              <div class="tl-lab">search sector_b <span class="who">· uav2</span></div>
+              <div class="tl-track">
+                <div class="tl-bar done" style="left:30%; width:25%;">searching</div>
+                <div class="tl-mark" style="left:55%"></div>
+                <div class="tl-head" style="left:65%"></div>
+              </div>
+            </div>
+            <div class="tl-row">
+              <div class="tl-lab">classify sector_b <span class="who">· uav2</span></div>
+              <div class="tl-track">
+                <div class="tl-bar now" style="left:55%; width:20%;">classifying</div>
+                <div class="tl-head" style="left:65%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sentence">
+            <span class="mk">A</span>
+            <span class="lede-word">the two rows that run together are the two agents. Nothing else in the tool shows that.</span>
+          </div>
+
+          <div class="ui-pane-title">Changes, in order <span class="count">6 so far</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="dim">tick 6</span><span class="st done">+</span><span>uav1 is at sector_a</span><span class="dim grow">and no longer at base</span></div>
+            <div class="ui-row"><span class="dim">tick 6</span><span class="st done">+</span><span>uav2 is at sector_b</span><span class="dim grow">and no longer at base</span></div>
+            <div class="ui-row"><span class="dim">tick 11</span><span class="st done">+</span><span>sector_a has been searched</span><span class="dim grow">goal 1 of 4 met</span></div>
+            <div class="ui-row"><span class="dim">tick 11</span><span class="st done">+</span><span>sector_b has been searched</span><span class="dim grow">goal 2 of 4 met</span></div>
+          </div>
+        </div>
+
+        <div class="ui-pane">
+          <div class="ui-pane-title">Facts <span class="count">at tick 13</span></div>
+          <div class="sentence">
+            <span class="combo plain" style="color:var(--ui-dim)">filter: everything</span>
+            <span class="combo var">uav1</span>
+          </div>
+          <div class="ui-list">
+            <div class="ui-row on"><span class="st done">✓</span><span>uav1 is at sector_a</span><span class="dim grow">tick 6</span><span class="mk">B</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span>uav1 is available</span><span class="dim grow">from the start</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span>uav1's sensor works</span><span class="dim grow">from the start</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span>sector_a assigned to uav1</span><span class="dim grow">from the start</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span>sector_a searched</span><span class="dim grow">tick 11</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span>sector_a classified</span><span class="dim grow">not yet</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span>uav1 is at base</span><span class="dim grow">until tick 6</span></div>
+          </div>
+
+          <div class="ui-pane-title">One fact through the run</div>
+          <div class="ui-code"><span class="pr">uav1 is at …</span>
+ tick  1   base
+ tick  6   sector_a     <span class="kw">← changed</span>
+ tick 13   sector_a</div>
+        </div>
+      </div>
+
+      <div class="ui-status">
+        <span class="now">tick 13 of 15</span>
+        <span>4 of 6 actions done</span>
+        <span>2 of 4 goals met</span>
+        <span class="bad">SIMULATED</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>Two agents working at the same time is the single hardest thing to see in the tree and the easiest to see here. It is the main argument for the timeline being the primary view rather than the tree — see Q2.</span></li>
+      <li><span class="marker">B</span><span>Every fact carries the tick it last changed, so "when did that happen" never needs a separate query. Clicking a fact filters the timeline to the actions that touch it.</span></li>
+    </ul>
+
+    <div class="finding">
+      <strong>Something drawing this surfaced.</strong>
+      <p>
+        In the nominal scenario both agents finish at the same tick, because the two flows are
+        identical in shape. A reviewer looking at the tree would reasonably conclude the mission
+        is sequential. Only the timeline shows that it is not, and only the timeline would show
+        the difference if one agent's sectors were further apart than the other's — which is the
+        first question anyone asks about a two-vehicle mission.
+      </p>
+    </div>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">"When did the vehicle stop being at the base?" currently has no answer anywhere in the tool.</span></div>
+      <div><span class="k">Cost</span><span class="v">Medium. Both panels read the same recorded events as the tree.</span></div>
+      <div><span class="k">Mirrors</span><span class="v">DevEnv's execution and world-model tabs, applied to a simulated run.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- 3 · MAKING IT GO WRONG                                                -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="faults">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">B4 · part 1</span>
+        <span class="eyebrow">Concept 3 of 6</span>
+      </div>
+      <h2>Making a run go wrong</h2>
+      <p class="intro">
+        A mission that only ever works is not worth simulating; the contingency actions in this
+        domain exist precisely for the runs that do not. Two controls, and deliberately only two:
+        make an action fail, or change a fact part-way through to represent something happening
+        outside the mission's control.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-body" style="grid-template-columns: 1fr 300px;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">Make this run go wrong</div>
+
+          <div class="group-label">Something outside the mission</div>
+          <div class="sentence">
+            <span class="lede-word">at tick</span>
+            <span class="combo num">12</span>
+            <span class="lede-word">make it true that</span>
+            <span class="combo pred">uav1's sensor has failed</span>
+            <span class="mk">A</span>
+          </div>
+          <div class="sentence" style="padding-left:14px;">
+            <span class="lede-word">which also makes</span>
+            <span class="combo plain" style="color:var(--ui-del)">uav1's sensor works</span>
+            <span class="lede-word">false, because the two are alternatives</span>
+            <span class="mk">B</span>
+          </div>
+
+          <div class="group-label">An action that will not work</div>
+          <div class="sentence">
+            <span class="lede-word">make</span>
+            <span class="combo pred">classify</span>
+            <span class="lede-word">fail on attempt</span>
+            <span class="combo num">1</span>
+            <span class="lede-word">then work normally</span>
+          </div>
+          <div class="sentence">
+            <span class="ui-btn ghost">+ add another</span>
+            <span class="lede-word">two set for this run</span>
+          </div>
+
+          <div class="ui-pane-title">What this will do, before you run it</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="st wait">!</span><span>At tick 12, uav1 will be part-way through classifying sector_a.</span></div>
+            <div class="ui-row"><span class="st wait">!</span><span><span class="dim">classify</span> needs a working sensor, so uav1 will not be able to finish.</span><span class="mk">C</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span>Three actions in this domain can respond: <span style="color:var(--ui-cyan)">withdraw-agent</span>, <span style="color:var(--ui-cyan)">mark-task-failed</span>, <span style="color:var(--ui-cyan)">reallocate-task</span>.</span></div>
+          </div>
+
+          <div class="ui-pane-title">Repeatable</div>
+          <div class="check">
+            <span class="g">✓</span>
+            <span>Same seed, same run, every time — <span class="mono">seed 4471</span>. Change it only if you want a different draw.</span>
+            <span class="mk">D</span>
+          </div>
+        </div>
+
+        <div class="ui-pane">
+          <div class="ui-pane-title">Per-action settings <span class="count">optional</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span>move</span><span class="dim grow">6 ticks · always works</span></div>
+            <div class="ui-row"><span>search</span><span class="dim grow">5 ticks · always works</span></div>
+            <div class="ui-row on"><span>classify</span><span class="dim grow">4 ticks · fails once</span></div>
+            <div class="ui-row"><span>withdraw-agent</span><span class="dim grow">1 tick · always works</span></div>
+            <div class="ui-row"><span>mark-task-failed</span><span class="dim grow">1 tick · always works</span></div>
+            <div class="ui-row"><span>reallocate-task</span><span class="dim grow">1 tick · always works</span></div>
+            <div class="ui-row"><span>search-degraded</span><span class="dim grow">1 tick · always works</span></div>
+          </div>
+          <div class="check">
+            <span class="y">i</span>
+            <span>Untouched actions take one tick and always work. Nothing here has to be filled in before a first run.</span>
+            <span class="mk">E</span>
+          </div>
+
+          <div class="ui-pane-title">Facts you can change mid-run <span class="count">4</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span>comms are available</span></div>
+            <div class="ui-row"><span>an agent is available</span></div>
+            <div class="ui-row"><span>a sensor works</span></div>
+            <div class="ui-row on"><span>a sensor has failed</span></div>
+            <div class="ui-row"><span class="dim">no action in this domain changes any of these</span><span class="mk">F</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ui-status">
+        <span>2 things set to go wrong</span>
+        <span>seed 4471</span>
+        <span class="bad">SIMULATED</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>Written as a sentence with two blanks, the same shape as the guided action editor. There is no fault language and no scripting.</span></li>
+      <li><span class="marker">B</span><span>The tool already knows which facts are alternatives, from the lifecycle groups the project stores. Setting one clears the other, so a user cannot leave the world in a state the domain treats as impossible.</span></li>
+      <li><span class="marker">C</span><span>The consequence is worked out and stated <em>before</em> the run, from the relation index. A user who set the tick wrong finds out here rather than after watching a run that did nothing.</span></li>
+      <li><span class="marker">D</span><span>A run with a random element that cannot be repeated is not evidence of anything. The seed is shown, saved with the run, and printed in the report.</span></li>
+      <li><span class="marker">E</span><span>The panel is here to be ignored. Everything in it has a working default.</span></li>
+      <li><span class="marker">F</span><span>See the finding below — this list is not arbitrary.</span></li>
+    </ul>
+
+    <div class="finding">
+      <strong>Something drawing this surfaced, and it settles a design question.</strong>
+      <p>
+        The four facts offered for mid-run change are exactly the four that no action in this
+        domain ever makes true: comms being available, an agent being available, a sensor
+        working, and a sensor having failed. The earlier concept pack found them while drawing
+        the failure report, where they showed up as a gap. They are not a gap. They are the
+        domain's boundary — the things that happen <em>to</em> the mission rather than because of
+        it, which is why the domain sets them once in the scenario and never touches them again.
+      </p>
+      <p>
+        That is the argument for putting fault injection at run time rather than modelling it as
+        actions the planner could choose. It also gives the control an honest default: offer the
+        facts nothing produces first, because those are the ones a run cannot otherwise reach.
+      </p>
+    </div>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">Contingency actions can be checked by reading them, and nothing else.</span></div>
+      <div><span class="k">Cost</span><span class="v">Part of B4. The controls are small; the replanning behind them is not.</span></div>
+      <div><span class="k">Held to</span><span class="v">Two mechanisms, fixed now. Anything more expressive is a separate decision.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- 4 · THE MISSION CHANGES COURSE                                        -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="replan">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">B4 · part 2</span>
+        <span class="eyebrow">Concept 4 of 6</span>
+      </div>
+      <h2>When the mission changes course</h2>
+      <p class="intro">
+        This is the screen the whole workstream exists for, and the hardest to word. Something
+        went wrong, the planner produced a different plan, and the tool has to explain that to
+        someone who has never heard the word "replan". The proposal: say what happened, say what
+        it costs, and show the two plans side by side with the change marked.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="transport">
+        <span class="ui-btn">▸ Continue</span>
+        <span class="ui-btn on">❚❚ Holding</span>
+        <span class="ui-btn ghost">↺ Start again</span>
+        <span class="spacer"></span>
+        <span class="lede-word">held automatically when the mission changed course</span>
+        <span class="mk">A</span>
+      </div>
+
+      <div class="ui-body">
+        <div class="ui-pane">
+          <div class="banner">
+            <span style="color:var(--ui-req); font-size:15px;">▲</span>
+            <span>
+              <span class="what">At tick 12, uav1's sensor failed. The mission has taken a different route.</span><br>
+              <span class="why">
+                Classifying a sector needs a working sensor, and uav1 no longer has one. uav2 is
+                the only agent that can finish sector_a, and sector_a has to be reassigned to it
+                first.
+              </span>
+            </span>
+            <span class="mk">B</span>
+          </div>
+
+          <div class="sentence">
+            <span class="lede-word">it was going to finish in</span>
+            <span class="combo plain" style="color:var(--ui-text)">2 more actions</span>
+            <span class="lede-word">· it now needs</span>
+            <span class="combo plain" style="color:var(--ui-req)">6</span>
+            <span class="mk">C</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-up">
+        <div class="ui-pane">
+          <div class="ui-pane-title">What it was going to do</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="st done">✓</span><span class="dim">1–4</span><span class="dim">four actions already finished</span></div>
+            <div class="ui-row"><span class="st bad">✕</span><span class="strike">classify sector_a with uav1</span><span class="dim grow">stopped at tick 12</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span class="strike">classify sector_b with uav2</span><span class="dim grow">not reached</span></div>
+          </div>
+          <div class="check">
+            <span class="r">✕</span>
+            <span>uav1 cannot classify anything now.</span>
+          </div>
+        </div>
+
+        <div class="ui-pane">
+          <div class="ui-pane-title">What it will do now</div>
+          <div class="ui-list">
+            <div class="ui-row on"><span class="st now">▸</span><span>classify sector_b with uav2</span><span class="dim grow">unchanged</span><span class="mk">D</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span style="color:var(--ui-cyan)">take uav1 out of the mission</span><span class="dim grow">new</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span style="color:var(--ui-cyan)">mark sector_a's task as failed</span><span class="dim grow">new</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span style="color:var(--ui-cyan)">give sector_a to uav2</span><span class="dim grow">new</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span style="color:var(--ui-cyan)">move uav2 from sector_b to sector_a</span><span class="dim grow">new</span></div>
+            <div class="ui-row"><span class="st wait">·</span><span style="color:var(--ui-cyan)">classify sector_a with uav2</span><span class="dim grow">new</span></div>
+          </div>
+          <div class="check">
+            <span class="g">✓</span>
+            <span>All four goals are still reachable.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ui-body">
+        <div class="ui-pane">
+          <div class="ui-pane-title">If nothing could have been done</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="dim">the same screen, with the right-hand column replaced by the failure report the tool already has:</span></div>
+            <div class="ui-row"><span class="st bad">✕</span><span>No action makes <span style="color:var(--ui-cyan)">(comms-available)</span> true, and this run does not start with it.</span><span class="mk">E</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ui-status">
+        <span class="now">tick 12</span>
+        <span>4 actions done</span>
+        <span class="bad">1 course change</span>
+        <span class="bad">SIMULATED</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>The run holds itself when the plan changes. A course change that scrolls past at four ticks a second has not been communicated.</span></li>
+      <li><span class="marker">B</span><span>Three sentences, in order: what happened, what it means, what follows. The word "replan" appears nowhere, and neither does "precondition" — the reason is given as "classifying needs a working sensor". See Q3.</span></li>
+      <li><span class="marker">C</span><span>The cost line is the part a reviewer remembers. Two actions became six: this contingency is not cheap, and that is worth knowing at design time rather than in the field.</span></li>
+      <li><span class="marker">D</span><span>Marking what stayed the same matters as much as marking what changed. Most of a replanned mission is usually the old mission.</span></li>
+      <li><span class="marker">E</span><span>When the recovery does not exist, this screen becomes the failure report from the previous pack. Same layout, same words, one less column — a user does not learn a new screen for the worse outcome.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">Replanning is AME's central behaviour and is currently invisible until deployment.</span></div>
+      <div><span class="k">Cost</span><span class="v">Large, with B4. The comparison itself is small; producing it correctly mid-run is not.</span></div>
+      <div><span class="k">Reuses</span><span class="v">The existing failure explainer, unchanged, for the no-recovery case.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- 5 · RUNNING THE WHOLE SET                                             -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="batch">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">B5</span>
+        <span class="eyebrow">Concept 5 of 6</span>
+      </div>
+      <h2>Running the whole set</h2>
+      <p class="intro">
+        The tool already runs every scenario and reports whether a plan was found. Once scenarios
+        can be run rather than only planned, the expectations get more interesting: did it reach
+        the goal, how many actions did it take, how many times did it change course, and did it
+        do that under the fault the scenario is about.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="transport">
+        <span class="ui-btn on">■ Stop</span>
+        <span class="lede-word">running scenario 5 of 6 — both-sensors-degraded</span>
+        <span class="spacer"></span>
+        <span class="ui-btn ghost">Save these results</span>
+        <span class="mk">A</span>
+      </div>
+      <div class="ui-body">
+        <div class="ui-pane">
+          <div class="table-scroll">
+            <table class="res">
+              <thead>
+                <tr>
+                  <th>Scenario</th>
+                  <th>Reached the goal</th>
+                  <th class="n">Actions</th>
+                  <th class="n">Course changes</th>
+                  <th>Expected</th>
+                  <th>Result</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>nominal</td><td class="g">yes</td><td class="n">6</td><td class="n">0</td>
+                  <td>goal reached, no course change</td><td class="g">as expected</td><td class="why"></td>
+                </tr>
+                <tr>
+                  <td>sensor-fail</td><td class="g">yes</td><td class="n">9</td><td class="n">0</td>
+                  <td>goal reached</td><td class="g">as expected</td>
+                  <td class="why">The fault is in the starting facts, so the first plan already handles it.</td>
+                </tr>
+                <tr>
+                  <td>sensor-fails-mid-run</td><td class="g">yes</td><td class="n">10</td><td class="n">1</td>
+                  <td>goal reached, 1 course change, uses reallocate-task</td><td class="g">as expected</td><td class="why"></td>
+                </tr>
+                <tr>
+                  <td>agent-lost</td><td class="g">yes</td><td class="n">11</td><td class="n">0</td>
+                  <td>goal reached</td><td class="g">as expected</td><td class="why"></td>
+                </tr>
+                <tr>
+                  <td>comms-lost-realloc-needed</td><td class="r">no</td><td class="n">—</td><td class="n">—</td>
+                  <td class="y">no plan exists</td><td class="g">as expected</td>
+                  <td class="why">Marked expected-to-fail. Nothing makes comms available and the run does not start with it.</td>
+                </tr>
+                <tr>
+                  <td>both-sensors-degraded</td><td class="y">running…</td><td class="n">—</td><td class="n">—</td>
+                  <td>goal reached</td><td class="y">—</td><td class="why"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="sentence">
+            <span class="mk">B</span>
+            <span class="lede-word">
+              a scenario passes when the run matched what the scenario said it should do — including
+              when what it should do is fail
+            </span>
+          </div>
+
+          <div class="ui-pane-title">If one had not matched</div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="st bad">✕</span><span><span style="color:var(--ui-cyan)">agent-lost</span> reached the goal in <b>14</b> actions. The scenario expects <b>11 or fewer</b>.</span></div>
+            <div class="ui-row"><span class="st bad">✕</span><span>It also used <span style="color:var(--ui-cyan)">search-degraded</span>, which this scenario lists as an action that must not appear.</span><span class="mk">C</span></div>
+            <div class="ui-row"><span class="ui-btn cyan">Open this run</span><span class="ui-btn">Compare with the last saved run</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ui-status">
+        <span>4 finished · 1 running · 1 waiting</span>
+        <span class="ok">4 as expected</span>
+        <span>0 unexplained</span>
+        <span class="bad">SIMULATED</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>A simulated set takes long enough to need a progress line and a stop button, which the planning-only run never did.</span></li>
+      <li><span class="marker">B</span><span>"As expected" rather than "pass". Half of this domain's scenarios are about things going wrong, and a scenario that correctly finds no plan has not failed.</span></li>
+      <li><span class="marker">C</span><span>The failure is reported against the expectation the scenario stated, in the scenario's own words, and both the run and a comparison are one click away.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">Regression currently proves a plan exists, not that the mission behaves.</span></div>
+      <div><span class="k">Cost</span><span class="v">Medium. An extension of the runner that already exists.</span></div>
+      <div><span class="k">Exports as</span><span class="v">The same table, into the review pack.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- 6 · RECORDS AND COMPARISON                                            -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="records">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">B6 · B7</span>
+        <span class="eyebrow">Concept 6 of 6</span>
+      </div>
+      <h2>Runs you can keep, send and compare</h2>
+      <p class="intro">
+        Every run is recorded to the three files the runtime already writes, in the same formats.
+        DevEnv's replay loader reads exactly those three, so a run recorded here opens there with
+        no conversion — and a run recorded from a real system opens here, in the timeline from
+        concept 2. Comparing two runs is then a small addition with a large payoff: it is how a
+        user finds out what their change did.
+      </p>
+    </div>
+
+    <div class="ui">
+      <div class="ui-body" style="grid-template-columns: 296px 1fr;">
+        <div class="ui-pane">
+          <div class="ui-pane-title">Saved runs <span class="count">7</span></div>
+          <div class="ui-list">
+            <div class="ui-row on"><span class="st done">✓</span><span>nominal</span><span class="dim grow">today 14:02</span></div>
+            <div class="ui-row on"><span class="st bad">▲</span><span>nominal</span><span class="dim grow">today 14:19</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span>sensor-fail</span><span class="dim grow">today 11:48</span></div>
+            <div class="ui-row"><span class="st done">✓</span><span>agent-lost</span><span class="dim grow">yesterday</span></div>
+            <div class="ui-row"><span class="dim">flight 07 · real</span><span class="dim grow">3 Aug</span><span class="mk">A</span></div>
+          </div>
+          <div class="check">
+            <span class="y">i</span>
+            <span>Two selected. <span class="mono">Compare</span></span>
+          </div>
+          <div class="ui-pane-title">What a saved run is</div>
+          <div class="ui-code">run_nominal_1419/
+  ame_bt_events.jsonl
+  ame_wm_audit.jsonl
+  ame_plan_audit.jsonl
+  run.json  <span class="kw">← seed, faults</span></div>
+        </div>
+
+        <div class="ui-pane">
+          <div class="ui-pane-title">
+            Comparing two runs
+            <span class="grow">nominal 14:02 &nbsp;vs&nbsp; nominal 14:19</span>
+          </div>
+
+          <div class="banner">
+            <span style="color:var(--ui-req); font-size:15px;">▲</span>
+            <span>
+              <span class="what">The two runs are the same until tick 12.</span><br>
+              <span class="why">The later run had uav1's sensor fail at that point; the earlier one did not.</span>
+            </span>
+            <span class="mk">B</span>
+          </div>
+
+          <div class="ui-list">
+            <div class="ui-row"><span class="dim">actions</span><span class="grow">6 → <span style="color:var(--ui-req)">10</span></span></div>
+            <div class="ui-row"><span class="dim">ticks</span><span class="grow">15 → <span style="color:var(--ui-req)">28</span></span></div>
+            <div class="ui-row"><span class="dim">course changes</span><span class="grow">0 → <span style="color:var(--ui-req)">1</span></span></div>
+            <div class="ui-row"><span class="dim">goals met</span><span class="grow"><span style="color:var(--ui-add)">4 of 4 → 4 of 4</span></span><span class="mk">C</span></div>
+          </div>
+
+          <div class="ui-pane-title">Actions only the later run has <span class="count">4</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span class="st done">+</span><span>take uav1 out of the mission</span></div>
+            <div class="ui-row"><span class="st done">+</span><span>mark sector_a's task as failed</span></div>
+            <div class="ui-row"><span class="st done">+</span><span>give sector_a to uav2</span></div>
+            <div class="ui-row"><span class="st done">+</span><span>move uav2 from sector_b to sector_a</span></div>
+          </div>
+
+          <div class="ui-pane-title">Facts that ended up different <span class="count">3</span></div>
+          <div class="ui-list">
+            <div class="ui-row"><span>uav1 is available</span><span class="grow"><span style="color:var(--ui-add)">true</span> → <span style="color:var(--ui-del)">false</span></span></div>
+            <div class="ui-row"><span>uav1's sensor works</span><span class="grow"><span style="color:var(--ui-add)">true</span> → <span style="color:var(--ui-del)">false</span></span></div>
+            <div class="ui-row"><span>sector_a assigned to</span><span class="grow">uav1 → uav2</span></div>
+            <div class="ui-row"><span class="dim">every goal fact ended the same in both runs</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ui-status">
+        <span>2 runs compared</span>
+        <span>first difference at tick 12</span>
+        <span class="ok">same outcome</span>
+      </div>
+    </div>
+
+    <ul class="notes">
+      <li><span class="marker">A</span><span>A run recorded from the real vehicle sits in the same list and opens in the same timeline. The list marks where each run came from, and a real run never carries the SIMULATED warning.</span></li>
+      <li><span class="marker">B</span><span>"The same until tick 12" is the whole comparison for most pairs. Everything below it is detail for the person who wants it.</span></li>
+      <li><span class="marker">C</span><span>Same outcome, four more actions, thirteen more ticks. That is the sentence a user takes to a review, and it is not available anywhere today.</span></li>
+    </ul>
+
+    <div class="meta">
+      <div><span class="k">What it fixes</span><span class="v">A run that cannot be kept cannot be shown to anybody.</span></div>
+      <div><span class="k">Cost</span><span class="v">Medium for both. The recording is mostly wiring existing loggers to a file.</span></div>
+      <div><span class="k">Interoperates with</span><span class="v">DevEnv replay, in both directions, which is testable.</span></div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <!-- NOT DOING                                                             -->
+  <!-- ==================================================================== -->
+  <section class="concept" id="not-doing">
+    <div class="concept-head">
+      <div class="tagline">
+        <span class="wi">Scope</span>
+        <span class="eyebrow">Deliberately left out</span>
+      </div>
+      <h2>What these concepts do not propose</h2>
+    </div>
+
+    <div class="rules">
+      <div class="rule">
+        <span class="k">Not at all</span>
+        <span class="h">A language for faults</span>
+        <p>
+          Two mechanisms, fixed now: make an action fail on a given attempt, and set a fact at a
+          given tick. Fault scripting grows one reasonable request at a time until the tool has a
+          second modelling language nobody asked for.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Not at all</span>
+        <span class="h">Real time, or real timing</span>
+        <p>
+          Ticks are ticks. A run says an action took five ticks, never five seconds. Anything
+          that looks like a duration invites someone to read a schedule out of it, and this tool
+          has no basis for one.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Not at all</span>
+        <span class="h">A live connection</span>
+        <p>
+          Simulation is in-process against the world model, with no transport involved. Watching
+          a real system remains DevEnv's job. The two meet in the recorded files, not on a wire.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Not now</span>
+        <span class="h">Editing during a run</span>
+        <p>
+          Changing the domain mid-run raises questions about what the running tree then is.
+          Hold, edit, start again — three deliberate steps rather than one ambiguous one.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Not now</span>
+        <span class="h">A map</span>
+        <p>
+          Sectors and locations are names, not places. A picture of two vehicles moving over
+          terrain would be the most persuasive screen in the tool and would be showing spatial
+          information the model does not contain.
+        </p>
+      </div>
+      <div class="rule">
+        <span class="k">Decision needed</span>
+        <span class="h">Where the Run tab lives</span>
+        <p>
+          These mockups add a sixth tab. The alternative is that the existing BT tab gains the
+          controls and becomes the run view. Fewer tabs, but it merges "the tree you compiled"
+          with "the tree that is running". See Q4.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section class="concept" id="sequence">
+    <div class="concept-head">
+      <span class="eyebrow">Suggested build order</span>
+      <h2>Each step is useful on its own</h2>
+      <p class="intro">
+        One piece comes first and everything else reads it: an engine that ticks the compiled
+        tree against the world model and reports what happened. Five of the six concepts above
+        are a view over that event stream. No new third-party dependency is needed, and nothing
+        here invalidates code already written.
+      </p>
+    </div>
+    <div class="table-scroll">
+      <table class="sched">
+        <thead>
+          <tr><th>Item</th><th>What gets built</th><th>What a reviewer sees</th><th>Effort</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>B1</td>
+            <td>Simulation engine and run controls</td>
+            <td>A scenario runs to completion inside the tool</td>
+            <td class="effort">Large</td>
+          </tr>
+          <tr>
+            <td>B2</td>
+            <td>Live tree with per-node state</td>
+            <td>Which part of the mission is happening now</td>
+            <td class="effort">Medium</td>
+          </tr>
+          <tr>
+            <td>B3</td>
+            <td>Facts panel and timeline</td>
+            <td>When each fact changed, and that two agents work at once</td>
+            <td class="effort">Medium</td>
+          </tr>
+          <tr>
+            <td>B4</td>
+            <td>Fault injection and the course-change screen</td>
+            <td>The contingency actions doing their job, or failing to</td>
+            <td class="effort">Large</td>
+          </tr>
+          <tr>
+            <td>B5</td>
+            <td>Simulated scenarios in batch</td>
+            <td>A set that checks behaviour, not just feasibility</td>
+            <td class="effort">Medium</td>
+          </tr>
+          <tr>
+            <td>B6</td>
+            <td>Recorded runs, interchangeable with DevEnv</td>
+            <td>A run that can be sent to someone else</td>
+            <td class="effort">Medium</td>
+          </tr>
+          <tr>
+            <td>B7</td>
+            <td>Comparing two runs</td>
+            <td>What one change did to the mission, in a line</td>
+            <td class="effort">Medium</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================================================================== -->
+  <section class="concept" id="questions">
+    <div class="concept-head">
+      <span class="eyebrow">For this review</span>
+      <h2>Questions these mockups are asking</h2>
+      <p class="intro">
+        These are the decisions that are cheap now and expensive once the screens exist. The
+        first three are the ones the plan committed to asking.
+      </p>
+    </div>
+    <ol class="qlist">
+      <li>
+        <div>
+          <div class="q">Are these the right words for the run controls?</div>
+          <div class="a">
+            The mockups use <span class="mono">Run · Hold · One step · Stop · Start again</span>.
+            The machine words would be Play, Pause, Tick, Stop, Reset. "Hold" and "Start again"
+            are the two doing the most work, and they are the two most likely to be wrong: if the
+            people who will use this say "pause" and "reset" in their own speech, the mockups
+            should say that instead.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">Is the timeline the primary view, or the tree?</div>
+          <div class="a">
+            These mockups lead with the tree because it is what the tool already draws, and put
+            the timeline second. Drawing them argued the other way: two agents working at once is
+            invisible in the tree and obvious on the timeline, and "when did that happen" is the
+            question a reviewer actually asks. Swapping them is cheap now and awkward later.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">How should a change of plan be announced?</div>
+          <div class="a">
+            The proposal is "the mission has taken a different route", with the cause above it and
+            the cost beside it, and the word "replan" nowhere on the screen. The risk is that
+            people who <em>do</em> know the term now have to translate. An alternative is to lead
+            with the plain sentence and put the technical term in the run record and the exported
+            report, where the audience is different.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">A sixth tab, or does the BT tab become the run view?</div>
+          <div class="a">
+            A separate Run tab keeps "the tree you compiled" and "the tree that is running" apart,
+            at the cost of two tabs showing the same tree. Folding them together is tidier and
+            makes the compiled tree feel like a thing that runs rather than a thing you inspect.
+            This is a layout decision, but it changes what the tool appears to be for.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">Should a simulated run and a real run look identical?</div>
+          <div class="a">
+            Concept 6 puts a run recorded from the vehicle in the same list, in the same timeline,
+            with the same controls, and distinguishes them only by the SIMULATED warning and a
+            label on the row. That is either the point — one way of reading a mission, whatever
+            produced it — or it is a confusion waiting to be quoted out of context in a report.
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <div class="q">Are two fault mechanisms enough to check this domain's contingencies?</div>
+          <div class="a">
+            Failing an action and setting a fact mid-run cover every contingency path in
+            mission-autonomy, because the four facts the domain never produces are exactly the
+            levers those paths turn on. Whether that holds for the domains you have in mind is
+            worth checking now: if it does not, the gap is a third mechanism, and it should be
+            named before B4 starts rather than after.
+          </div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <footer class="page-foot">
+    <p>
+      Concept mockups only — no implementation has started, and nothing shown here exists in the
+      tool today. All domain content is taken from
+      <span class="mono">subprojects/AME/domains/mission_autonomy</span>: the plans, action
+      counts, contingency paths and fact names are derived from
+      <span class="mono">domain.pddl</span> and the six problem files, and the tree structure
+      follows what <span class="mono">PlanCompiler</span> actually emits. Tick counts are
+      illustrative. The mockup chrome reuses the tool's own Holo-Cyan theme values. The work
+      items, their acceptance criteria and the surrounding plan are in
+      <span class="mono">doc/plans/AME/authoring_tool_plan.md</span>; the companion pack for the
+      authoring screens is
+      <span class="mono">doc/design/AME/pddl_authoring_hmi_concepts.html</span>.
+    </p>
+  </footer>
+</main>
