@@ -1475,14 +1475,21 @@ void AppShell::renderRelationsPanel() {
         index.predicate(static_cast<size_t>(selected_predicate));
     ImGui::Text("fact  %s", formatPredicateSignature(predicate).c_str());
 
+    // The role is part of the identity deliberately. One action can require a
+    // fact, make it true and make it false, so the same action appears in all
+    // three lists below. Keying only on the action would then give several
+    // items the same identity, which Dear ImGui reports as an error and which
+    // makes clicking one of them select the wrong row.
     const auto render_action_list = [&](const char* title,
                                         const std::vector<PredicateActionRelation>& entries,
                                         ImVec4 colour,
-                                        const char* badge) {
+                                        const char* badge,
+                                        int role_salt) {
       ImGui::TextColored(colour, "%s  %zu", title, entries.size());
       for (const auto& entry : entries) {
         const ActionDef& action = m_model.actions[entry.actionIndex];
-        ImGui::PushID(static_cast<int>(entry.actionIndex * 10U + entry.referenceIndex));
+        ImGui::PushID(role_salt +
+                      static_cast<int>(entry.actionIndex * 10U + entry.referenceIndex));
         ImGui::TextColored(colour, "%s", badge);
         ImGui::SameLine();
         if (ImGui::Selectable(action.name.c_str())) {
@@ -1508,11 +1515,11 @@ void AppShell::renderRelationsPanel() {
       }
     };
     render_action_list("Actions that need this to be true", relations.requiredBy,
-                       amber, "R");
+                       amber, "R", 100000);
     render_action_list("Actions that make it true", relations.madeTrueBy,
-                       green, "+");
+                       green, "+", 200000);
     render_action_list("Actions that make it false", relations.madeFalseBy,
-                       red, "-");
+                       red, "-", 300000);
 
     ImGui::Separator();
     ImGui::TextDisabled("Where it starts out");
@@ -1565,12 +1572,15 @@ void AppShell::renderRelationsPanel() {
       const ActionDef& action = m_model.actions[static_cast<size_t>(selected_action)];
       const ActionRelations& relations = index.action(static_cast<size_t>(selected_action));
       ImGui::Text("action  %s", formatActionSignature(action).c_str());
+      // Salted per role for the same reason as the action lists above: a
+      // predicate can be needed, made true and made false by one action.
       const auto predicate_buttons = [&](const char* title,
                                          const std::vector<ActionPredicateRelation>& entries,
-                                         ImVec4 colour) {
+                                         ImVec4 colour,
+                                         int role_salt) {
         ImGui::TextColored(colour, "%s  %zu", title, entries.size());
         for (const auto& entry : entries) {
-          ImGui::PushID(static_cast<int>(40000 + entry.predicateIndex * 10U +
+          ImGui::PushID(role_salt + static_cast<int>(entry.predicateIndex * 10U +
                                         entry.referenceIndex));
           if (ImGui::Selectable(m_model.predicates[entry.predicateIndex].name.c_str())) {
             m_domainGraph.setSelectedPredicate(static_cast<int>(entry.predicateIndex));
@@ -1578,9 +1588,9 @@ void AppShell::renderRelationsPanel() {
           ImGui::PopID();
         }
       };
-      predicate_buttons("It needs", relations.requires, amber);
-      predicate_buttons("It makes true", relations.makesTrue, green);
-      predicate_buttons("It makes false", relations.makesFalse, red);
+      predicate_buttons("It needs", relations.requires, amber, 400000);
+      predicate_buttons("It makes true", relations.makesTrue, green, 500000);
+      predicate_buttons("It makes false", relations.makesFalse, red, 600000);
       ImGui::TextColored(green, "Actions it may enable  %zu", relations.mayEnable.size());
       for (const size_t action_index : relations.mayEnable) {
         ImGui::PushID(static_cast<int>(50000 + action_index));
@@ -2768,6 +2778,38 @@ bool AppShell::selfTestSelectionForward() {
 void AppShell::selfTestSetDomainView(int view) {
   m_domainViewMode = std::max(0, std::min(view, 4));
   m_requestedTab = "Domain";
+}
+
+bool AppShell::selfTestLoadProject(const std::string& path) {
+  if (!m_model.load(path)) {
+    return false;
+  }
+  projectName = m_model.projectName;
+  m_commandStack.clear();
+  clearDerivedResults();
+  resetScenarioEditorState();
+  return true;
+}
+
+bool AppShell::selfTestFocusBusiestPredicate() {
+  if (m_model.predicates.empty()) {
+    return false;
+  }
+  const RelationIndex index(m_model);
+  size_t best = 0;
+  size_t best_links = 0;
+  for (size_t i = 0; i < m_model.predicates.size(); ++i) {
+    const PredicateRelations& relations = index.predicate(i);
+    const size_t links = relations.requiredBy.size() +
+                         relations.madeTrueBy.size() +
+                         relations.madeFalseBy.size();
+    if (links > best_links) {
+      best_links = links;
+      best = i;
+    }
+  }
+  m_domainGraph.setSelectedPredicate(static_cast<int>(best));
+  return best_links > 0;
 }
 
 bool AppShell::selfTestDomainViewRendered(int view) const {

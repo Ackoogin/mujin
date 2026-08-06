@@ -114,6 +114,19 @@ public:
   }
   bool selfTestSelectionBack();
   bool selfTestSelectionForward();
+  /// Loads a saved project file, as File > Open does. Used by the offscreen
+  /// self-test to exercise the views against a real domain rather than the
+  /// small model the rest of the self-test builds by hand.
+  bool selfTestLoadProject(const std::string& path);
+  /// Selects the predicate with the most relationships, which is the case most
+  /// likely to expose layout and identity problems in the neighbourhood view.
+  bool selfTestFocusBusiestPredicate();
+  float selfTestWidestNeighbourItemWidth() const {
+    return m_domainGraph.widestNeighbourItemWidth();
+  }
+  const std::vector<std::string>& selfTestNeighbourItemIds() const {
+    return m_domainGraph.neighbourItemIds();
+  }
   void selfTestSetDomainView(int view);
   void selfTestShowPlanTab() { m_requestedTab = "Plan"; }
   bool selfTestDomainViewRendered(int view) const;

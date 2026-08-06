@@ -137,6 +137,33 @@ struct SelfTestReport {
     assertions.push_back(std::move(a));
   }
 
+  /// Dear ImGui identifies a clickable item by its label, so two items drawn
+  /// with the same label and nothing else to tell them apart become the same
+  /// item: clicking one activates the other. This is easy to introduce in the
+  /// domain views, where one action legitimately appears under several
+  /// headings.
+  ///
+  /// Dear ImGui does detect this, but only while the mouse is over one of the
+  /// clashing items, which never happens in a headless run. Checking its
+  /// DebugDrawIdConflicts field here would produce an assertion that always
+  /// passes. The identities the view actually used are compared instead, which
+  /// does not depend on where a pointer is.
+  void checkItemIdsAreUnique(const char* stage,
+                             const std::vector<std::string>& ids) {
+    std::vector<std::string> sorted = ids;
+    std::sort(sorted.begin(), sorted.end());
+    const auto duplicate = std::adjacent_find(sorted.begin(), sorted.end());
+    const bool unique = duplicate == sorted.end();
+    const std::string name = std::string("unique_item_ids_") + stage;
+    std::string detail = "two clickable items shared one identity";
+    if (!unique) {
+      // Single quotes on purpose: this text is emitted inside a JSON string.
+      detail += ", including '" + *duplicate +
+                "'. Give each its own identity with PushID or a ##suffix.";
+    }
+    check(name.c_str(), unique, detail.c_str());
+  }
+
   // Call after ImGui::Render() — enumerates active windows this frame.
   void collectWindows() {
     windowsFound.clear();
@@ -634,6 +661,84 @@ int main(int argc, char* argv[]) {
       report.check(checkName.c_str(),
                    shell.selfTestDomainViewRendered(domainView),
                    "expected every Phase 6 domain view to render");
+    }
+
+    // ---------------------------------------------------------------------
+    // Modelling workflow against a real saved project.
+    //
+    // The hand-built model above has three predicates and three actions, and
+    // no action uses the same predicate in more than one role. Real domains do:
+    // in vehicle-autonomy, seven actions require "at", make it true and make it
+    // false all at once, so each of them appears three times in the
+    // neighbourhood of that one fact. That is the shape that exposed both
+    // conflicting item identities and name labels drawn across the screen, and
+    // it never occurred in the model the rest of the self-test uses.
+    // ---------------------------------------------------------------------
+    {
+      AppShell projectShell;
+      const bool projectLoaded =
+          projectShell.selfTestLoadProject(AME_AUTHORING_SAMPLE_PROJECT);
+      report.check("sample_project_loads",
+                   projectLoaded,
+                   "expected the vehicle-autonomy sample project to load");
+
+      if (projectLoaded) {
+        report.check("sample_project_has_a_real_domain",
+                     projectShell.selfTestModel().predicates.size() >= 10U &&
+                         projectShell.selfTestModel().actions.size() >= 10U,
+                     "expected the sample project to be large enough to be "
+                     "representative");
+
+        const bool focused = projectShell.selfTestFocusBusiestPredicate();
+        report.check("sample_project_has_a_busy_fact",
+                     focused,
+                     "expected at least one fact with relationships to focus on");
+
+        // Walk every view the way someone reviewing a domain would, checking
+        // each rendered frame rather than only the last one.
+        for (int domainView = 0; domainView < 5; ++domainView) {
+          projectShell.selfTestSetDomainView(domainView);
+          renderAppShellFrame(window, projectShell, clearColor);
+          const std::string renderedName =
+              "sample_project_view_" + std::to_string(domainView) + "_rendered";
+          report.check(renderedName.c_str(),
+                       projectShell.selfTestDomainViewRendered(domainView),
+                       "expected the view to render for the sample project");
+          if (domainView == 0) {
+            report.checkItemIdsAreUnique(
+                ("sample_project_view_" + std::to_string(domainView)).c_str(),
+                projectShell.selfTestNeighbourItemIds());
+          }
+        }
+
+        // The neighbourhood view is where the width problem showed up. These
+        // items must be as wide as their text, not as wide as the window.
+        projectShell.selfTestSetDomainView(0);
+        renderAppShellFrame(window, projectShell, clearColor);
+        const float widest = projectShell.selfTestWidestNeighbourItemWidth();
+        report.check("neighbour_labels_are_not_full_width",
+                     widest > 0.0F && widest < 400.0F,
+                     "expected each clickable name in the neighbourhood view to "
+                     "be about as wide as its text; a much larger value means it "
+                     "is stretching to the width of the window");
+
+        // Selecting a neighbour re-centres the view, which is the core of the
+        // navigation loop, so walk a few steps and keep checking.
+        for (int step = 0; step < 3; ++step) {
+          projectShell.selfTestSelectActionFromPalette(step);
+          renderAppShellFrame(window, projectShell, clearColor);
+          report.checkItemIdsAreUnique(
+              ("sample_project_navigation_step_" + std::to_string(step)).c_str(),
+              projectShell.selfTestNeighbourItemIds());
+        }
+
+        // Back to the neighbourhood after navigating, since re-centring
+        // rebuilds the node list and is where a duplicate would reappear.
+        projectShell.selfTestSetDomainView(0);
+        renderAppShellFrame(window, projectShell, clearColor);
+        report.checkItemIdsAreUnique("after_navigation",
+                                     projectShell.selfTestNeighbourItemIds());
+      }
     }
     report.check("guided_editor_rendered",
                  shell.selfTestGuidedEditorRendered(),

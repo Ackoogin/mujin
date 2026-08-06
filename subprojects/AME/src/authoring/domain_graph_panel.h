@@ -31,6 +31,21 @@ public:
   int selectedPredicateIndex() const { return m_selectedPredIdx; }
   int selectedActionIndex() const { return m_selectedActionIdx; }
 
+  /// Width in pixels of the widest clickable name drawn by the last
+  /// neighbourhood render. These items must stay as wide as their text; if one
+  /// stretches to the width of the window it draws a highlight bar across the
+  /// screen. Used by the offscreen self-test to catch that.
+  float widestNeighbourItemWidth() const { return m_widestNeighbourItem; }
+
+  /// The identity string given to each clickable name in the last
+  /// neighbourhood render. These must all differ. Dear ImGui only notices two
+  /// items sharing an identity while the mouse happens to be over one of them,
+  /// which a headless run never does, so the self-test checks this list instead
+  /// of relying on the library to report the problem.
+  const std::vector<std::string>& neighbourItemIds() const {
+    return m_neighbourItemIds;
+  }
+
   /// Programmatic selection used by the palette / cross-view highlights.
   /// The next ed::GetSelectedNodes call inside render() will overwrite these
   /// when the user clicks the canvas — palette selection is one-shot.
@@ -62,6 +77,8 @@ private:
   std::vector<DomainElementRef> m_history;
   int m_historyPosition = -1;
   bool m_morePopupOpen = false;
+  float m_widestNeighbourItem = 0.0F;
+  std::vector<std::string> m_neighbourItemIds;
 
   void select(DomainElementRef element, bool addToHistory);
 };

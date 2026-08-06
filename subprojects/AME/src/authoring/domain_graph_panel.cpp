@@ -387,6 +387,8 @@ void DomainGraphPanel::renderFocused(const ProjectModel& model,
                                      int depth,
                                      uint32_t relationshipFilter,
                                      size_t neighbourCap) {
+  m_widestNeighbourItem = 0.0F;
+  m_neighbourItemIds.clear();
   DomainElementRef focus;
   if (m_selectedPredIdx >= 0 &&
       m_selectedPredIdx < static_cast<int>(model.predicates.size())) {
@@ -437,7 +439,33 @@ void DomainGraphPanel::renderFocused(const ProjectModel& model,
     } else {
       label = "+ " + std::to_string(node.hiddenCount) + " more";
     }
-    if (ImGui::Selectable(label.c_str(), focus_node)) {
+    // Dear ImGui gives a clickable item its identity from its label text, and
+    // it sizes a Selectable to the full width available unless told otherwise.
+    // Neither default suits this view.
+    //
+    // One action often appears in more than one column, because an action can
+    // require a fact, make it true and make it false all at once. Those are
+    // separate nodes showing the same name, so the label on its own is not a
+    // unique identity and Dear ImGui reports the repeats as conflicting items.
+    // The text after "##" is not drawn, so appending the node number keeps the
+    // visible label while making each item distinct.
+    //
+    // The width matters because a node here sits on a canvas rather than inside
+    // a panel, so "all the width available" is the width of the whole window.
+    // A full-width Selectable would draw its highlight across the screen. The
+    // size is therefore fixed to the text it contains.
+    const std::string item_id = label + "##neighbour" + std::to_string(node.id);
+    m_neighbourItemIds.push_back(item_id);
+    const ImVec2 label_size = ImGui::CalcTextSize(label.c_str());
+    const bool node_clicked =
+        ImGui::Selectable(item_id.c_str(), focus_node, ImGuiSelectableFlags_None,
+                          ImVec2(label_size.x, label_size.y));
+    // Recorded so the offscreen self-test can prove these items stay the width
+    // of their text. A regression here is very visible but easy to miss in a
+    // screenshot, because it looks like a highlight rather than a broken node.
+    m_widestNeighbourItem =
+        std::max(m_widestNeighbourItem, ImGui::GetItemRectSize().x);
+    if (node_clicked) {
       if (node.element.kind == DomainElementKind::More) {
         m_morePopupOpen = true;
       } else {
