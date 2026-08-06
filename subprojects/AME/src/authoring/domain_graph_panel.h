@@ -46,6 +46,12 @@ public:
     return m_neighbourItemIds;
   }
 
+  /// Straight links are the default here. The three columns sit in a row, so a
+  /// straight line between two of them is easy to follow; a curve leaves the
+  /// node sideways and can pass under a neighbour on its way across.
+  void setStraightLinks(bool straight) { m_straightLinks = straight; }
+  bool straightLinks() const { return m_straightLinks; }
+
   /// Programmatic selection used by the palette / cross-view highlights.
   /// The next ed::GetSelectedNodes call inside render() will overwrite these
   /// when the user clicks the canvas — palette selection is one-shot.
@@ -77,6 +83,10 @@ private:
   std::vector<DomainElementRef> m_history;
   int m_historyPosition = -1;
   bool m_morePopupOpen = false;
+  /// Matches imgui-node-editor's own default link strength.
+  static constexpr float kCurvedLinkStrength = 100.0F;
+
+  bool m_straightLinks = true;
   float m_widestNeighbourItem = 0.0F;
   std::vector<std::string> m_neighbourItemIds;
 

@@ -715,6 +715,22 @@ int main(int argc, char* argv[]) {
         // items must be as wide as their text, not as wide as the window.
         projectShell.selfTestSetDomainView(0);
         renderAppShellFrame(window, projectShell, clearColor);
+
+        // Saved alongside the main screenshot. How links meet their nodes is
+        // not something the checks below can judge, so this view is captured
+        // for a person to look at when something about the drawing changes.
+        {
+          std::string neighbourhoodShot = selfTestPath;
+          const size_t dot = neighbourhoodShot.find_last_of('.');
+          if (dot != std::string::npos) {
+            neighbourhoodShot.insert(dot, "_neighbourhood");
+          } else {
+            neighbourhoodShot += "_neighbourhood.png";
+          }
+          report.check("neighbourhood_screenshot_written",
+                       captureScreenshot(window, neighbourhoodShot.c_str()),
+                       "expected to capture the neighbourhood view");
+        }
         const float widest = projectShell.selfTestWidestNeighbourItemWidth();
         report.check("neighbour_labels_are_not_full_width",
                      widest > 0.0F && widest < 400.0F,

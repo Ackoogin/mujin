@@ -419,6 +419,16 @@ void DomainGraphPanel::renderFocused(const ProjectModel& model,
   bool has_clicked = false;
   ed::SetCurrentEditor(m_context);
   ed::Begin("FocusedNeighbourhoodCanvas");
+  // A link is drawn as a curve whose bend is set by the "strength" of the pins
+  // at each end. At zero the curve's control points sit on the endpoints and
+  // the link is drawn as a straight line. The value is read when a pin is
+  // declared rather than when the link is drawn, so it has to be pushed around
+  // the nodes below, not around the links further down.
+  //
+  // The library has these two shapes only. There is no right-angled or routed
+  // link style to choose from.
+  ed::PushStyleVar(ed::StyleVar_LinkStrength,
+                   m_straightLinks ? 0.0F : kCurvedLinkStrength);
   for (const NeighbourNode& node : neighbourhood.nodes()) {
     const ed::NodeId node_id = 100000 + node.id;
     ed::SetNodePosition(node_id, ImVec2(node.x, node.y));
@@ -427,6 +437,12 @@ void DomainGraphPanel::renderFocused(const ProjectModel& model,
       ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.0F, 0.9F, 1.0F, 1.0F));
     }
     ed::BeginNode(node_id);
+    // Both pins sit on the row that holds the name, one at each end, so a link
+    // meets the node on the side it comes from. Drawing the input above the
+    // name and the output below it, as this did originally, put every link
+    // ending at a corner: they all converged on the top-left of the node in
+    // focus and left the others from the bottom-left, which made the lines look
+    // unrelated to the boxes they joined.
     ed::BeginPin(200000 + node.id * 2, ed::PinKind::Input);
     ImGui::TextUnformatted(" ");
     ed::EndPin();
@@ -473,17 +489,31 @@ void DomainGraphPanel::renderFocused(const ProjectModel& model,
         has_clicked = true;
       }
     }
-    if (!node.reason.empty()) {
-      ImGui::TextDisabled("%s", node.reason.c_str());
+    // A node is as wide as its widest line, which is usually the reason
+    // underneath rather than the name. Placing the outgoing pin straight after
+    // the name would leave it short of the node's right-hand side, and the link
+    // would then start inside the node and cross its own border on the way out.
+    // Padding the name out to the node's width puts the pin on the edge, so a
+    // link begins where the node visibly ends.
+    const float reason_width =
+        node.reason.empty() ? 0.0F : ImGui::CalcTextSize(node.reason.c_str()).x;
+    if (reason_width > label_size.x) {
+      ImGui::SameLine(0.0F, 0.0F);
+      ImGui::Dummy(ImVec2(reason_width - label_size.x, 1.0F));
     }
+    ImGui::SameLine(0.0F, 0.0F);
     ed::BeginPin(200001 + node.id * 2, ed::PinKind::Output);
     ImGui::TextUnformatted(" ");
     ed::EndPin();
+    if (!node.reason.empty()) {
+      ImGui::TextDisabled("%s", node.reason.c_str());
+    }
     ed::EndNode();
     if (focus_node) {
       ed::PopStyleColor();
     }
   }
+  ed::PopStyleVar();
   for (size_t i = 0; i < neighbourhood.edges().size(); ++i) {
     const NeighbourEdge& edge = neighbourhood.edges()[i];
     ImVec4 colour(0.88F, 0.69F, 0.32F, 1.0F);

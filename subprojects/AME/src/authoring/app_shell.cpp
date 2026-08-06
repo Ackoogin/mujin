@@ -54,6 +54,23 @@ static std::string pickSaveFile(const char* title,
 static void SectionAccent();
 static void StatusPill(const char* text, ImVec4 borderColor, ImVec4 textColor);
 
+// Vertical padding inside the status bar, above and below the row of pills.
+static constexpr float kStatusBarPaddingY = 3.0F;
+// Vertical padding inside each pill, above and below its text.
+static constexpr float kStatusPillPaddingY = 2.0F;
+
+/// Height of the status bar strip along the bottom of the window.
+///
+/// Worked out from the current text height rather than fixed, because a fixed
+/// height has to be guessed and the guess was too small: the pills were taller
+/// than the strip and their lower halves were cut off by the bottom of the
+/// window. Both the status bar and the host window above it, which has to leave
+/// room for it, take the height from here so the two cannot disagree.
+static float statusBarHeight() {
+  return ImGui::GetTextLineHeight() + (kStatusPillPaddingY * 2.0F) +
+         (kStatusBarPaddingY * 2.0F);
+}
+
 static void renderPlanFluentList(const char* title,
                                  const std::vector<unsigned>& fluentIds,
                                  const PlanGraphPanel& graph) {
@@ -992,15 +1009,12 @@ void AppShell::renderPanels() {
   }
 
   // Single full-viewport host window holds the workflow tab bar. The menu bar
-  // and the status-bar overlay carve out the top and bottom margins. The
-  // height must match kStatusBarHeight in renderStatusBar() — keep them in
-  // sync via the same constant.
+  // and the status-bar overlay carve out the top and bottom margins.
   const ImGuiViewport* vp = ImGui::GetMainViewport();
   const float menuH = ImGui::GetFrameHeight();
-  constexpr float kStatusBarHeight = 26.0F;
+  const float statusH = statusBarHeight();
   ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + menuH));
-  ImGui::SetNextWindowSize(ImVec2(vp->Size.x,
-                                  vp->Size.y - menuH - kStatusBarHeight));
+  ImGui::SetNextWindowSize(ImVec2(vp->Size.x, vp->Size.y - menuH - statusH));
   const ImGuiWindowFlags hostFlags =
       ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
@@ -1419,6 +1433,15 @@ void AppShell::renderDomainTab() {
       m_neighbourFilter = show_false
           ? m_neighbourFilter | ShowMakesFalse
           : m_neighbourFilter & ~ShowMakesFalse;
+    }
+    ImGui::SameLine();
+    bool straight_links = m_domainGraph.straightLinks();
+    if (ImGui::Checkbox("straight lines", &straight_links)) {
+      m_domainGraph.setStraightLinks(straight_links);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "Draw links as straight lines between nodes rather than as curves.");
     }
     m_domainGraph.renderFocused(m_model, relation_index, m_neighbourDepth,
                                 m_neighbourFilter, 20U);
@@ -3008,7 +3031,7 @@ static void SectionAccent() {
 
 static void StatusPill(const char* text, ImVec4 borderColor, ImVec4 textColor) {
   ImDrawList* dl = ImGui::GetWindowDrawList();
-  const ImVec2 padding(8.0F, 2.0F);
+  const ImVec2 padding(8.0F, kStatusPillPaddingY);
   const ImVec2 textSize = ImGui::CalcTextSize(text);
   const ImVec2 pos = ImGui::GetCursorScreenPos();
   const ImVec2 rectMax(pos.x + textSize.x + padding.x * 2.0F,
@@ -3024,7 +3047,7 @@ static void StatusPill(const char* text, ImVec4 borderColor, ImVec4 textColor) {
 
 void AppShell::renderStatusBar() {
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
-  constexpr float kStatusBarHeight = 26.0F;  // slightly taller for pill padding
+  const float kStatusBarHeight = statusBarHeight();
   const ImGuiWindowFlags flags =
     ImGuiWindowFlags_NoDecoration |
     ImGuiWindowFlags_NoInputs |
@@ -3046,9 +3069,13 @@ void AppShell::renderStatusBar() {
   ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, kStatusBarHeight));
   ImGui::SetNextWindowBgAlpha(0.85F);
 
+  // A window's default padding is meant for a panel of content and is far too
+  // deep for a single row of pills: it pushed them past the bottom of the strip
+  // and the window, so their lower edges were cut off. The padding here matches
+  // what statusBarHeight() allows for.
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                      ImVec2(8.0F, kStatusBarPaddingY));
   ImGui::Begin("##StatusBar", nullptr, flags);
-  // Pull cursor up a couple px so pills sit nicely centered in the strip.
-  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0F);
 
   const ImVec4 cyan(0.0F, 0.85F, 1.0F, 1.0F);
   const ImVec4 ok(0.2F, 0.9F, 0.4F, 1.0F);
@@ -3086,4 +3113,5 @@ void AppShell::renderStatusBar() {
   StatusPill(lastOperation.c_str(), dim, dim);
 
   ImGui::End();
+  ImGui::PopStyleVar();
 }
