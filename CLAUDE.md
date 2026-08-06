@@ -43,6 +43,8 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `doc/roadmap/` + `tools/roadmap/README.md` | **Roadmap dashboards**: roadmap data files, the generator that turns them into standalone HTML pages, and the update flow |
 | `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/plans/AME/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
+| `doc/plans/AME/authoring_tool_plan.md` | **Authoring tool plan**: what the graphical authoring tool does today, and the remaining work — finishing the authoring surface, simulation runs, review artefacts |
+| `subprojects/AME/doc/guides/authoring_tool_user_guide.md` | How to build, launch and use the graphical authoring tool |
 | `doc/research/AME/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
 | `doc/plans/AME/neuro_symbolic_infrastructure_plan.md` | **Neuro-symbolic core infrastructure work plan**: propose-verify-fallback envelope, backend/verifier abstractions, audit, policy, test harness |
 

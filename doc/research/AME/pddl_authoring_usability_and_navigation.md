@@ -15,7 +15,7 @@ named groups and saved named views remain deferred.
 
 - [`graphical_autonomy_authoring_tool_options.md`](graphical_autonomy_authoring_tool_options.md) — the original product-level options paper
 - [`graphical_authoring_option1_extend_existing.md`](graphical_authoring_option1_extend_existing.md) — the node-editor library assessment that led to the current C++ tool
-- [`doc/plans/AME/graphical_authoring_tool_workplan.md`](../../plans/AME/graphical_authoring_tool_workplan.md) — work items WI-0.1 through WI-5.4, which built what exists today
+- [`doc/plans/AME/authoring_tool_plan.md`](../../plans/AME/authoring_tool_plan.md) — the single plan for the tool: what it can do today and what is left to build
 
 ---
 
@@ -449,9 +449,11 @@ hand-drawn field that has no effect on the generated PDDL will confuse every use
 
 ## 8. Suggested Work Items
 
-These extend
-[`doc/plans/AME/graphical_authoring_tool_workplan.md`](../../plans/AME/graphical_authoring_tool_workplan.md),
-whose phases 0 through 5 are complete.
+These are the items this research proposed, kept here as the record of what was
+recommended. All of them were built except the collapsible named groups in WI-6.7 and
+the saved named views in WI-6.9, which are carried forward as item A6 of
+[`doc/plans/AME/authoring_tool_plan.md`](../../plans/AME/authoring_tool_plan.md). That
+plan, not this table, is where the remaining work is tracked.
 
 | Item | Scope | Depends on | Effort |
 |------|-------|-----------|--------|

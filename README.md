@@ -201,6 +201,8 @@ cmake/                   Shared CMake support files
 | [Planning & Execution User Guide](subprojects/AME/doc/guides/planning_execution_user_guide.md) | Operators, integrators, developers | Mission flow, PDDL terms, BT nodes, and PYRAMID integration |
 | [Remaining Work](doc/todo/AME/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
 | [Assurance Plan](doc/plans/AME/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
+| [Authoring Tool User Guide](subprojects/AME/doc/guides/authoring_tool_user_guide.md) | Mission and systems engineers, reviewers | Build, launch, and use the graphical authoring tool |
+| [Authoring Tool Plan](doc/plans/AME/authoring_tool_plan.md) | Engineers, programme leads | What the authoring tool does today and the remaining work, including simulation runs |
 | [PYRAMID User Guide](subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Engineers, integrators | High-level PYRAMID design/usage with diagrams; entry point to all PYRAMID docs |
 | [PYRAMID Plugin System](subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) | Component authors, deployers | Plugin types, ABI, loading/configuration, routing, capabilities, staging, and known limitations |
 | [PCL/PYRAMID Offline SDK](subprojects/PYRAMID/doc/architecture/sdk_packaging.md) | Maintainers, downstream SDK users | Package and verify a self-contained proto-to-plugin SDK, including custom contracts and the GRA runtime profile |
