@@ -6,6 +6,19 @@ add_executable(test_world_model test_world_model.cpp)
 target_link_libraries(test_world_model PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_world_model DISCOVERY_MODE PRE_TEST)
 
+# Keeps AME's own contract tree honest: every file AME needs is present, its
+# imports resolve within the tree, and the files shared with PYRAMID's proof
+# contracts have not drifted apart. Needs no PYRAMID target, so it runs even in
+# a build with the proof layer switched off.
+add_executable(test_contract_tree test_contract_tree.cpp)
+target_link_libraries(test_contract_tree PRIVATE GTest::gtest_main)
+target_compile_definitions(test_contract_tree
+    PRIVATE
+        "AME_CONTRACT_PROTO_DIR=\"${AME_CONTRACT_PROTO_DIR}\""
+        "PYRAMID_PROOF_PROTO_DIR=\"${PYRAMID_ROOT_DIR}/proofs/contracts/proto\""
+)
+gtest_discover_tests(test_contract_tree DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_action_registry test_action_registry.cpp)
 target_link_libraries(test_action_registry PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_action_registry DISCOVERY_MODE PRE_TEST)
@@ -178,6 +191,26 @@ if(AME_BUILD_AUTHORING)
   add_executable(test_project_model test_project_model.cpp)
   target_link_libraries(test_project_model PRIVATE ame_authoring_project_model GTest::gtest_main)
   gtest_discover_tests(test_project_model DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_relation_index test_relation_index.cpp)
+  target_link_libraries(test_relation_index
+    PRIVATE
+      ame_authoring_project_model
+      GTest::gtest_main
+  )
+  target_compile_definitions(test_relation_index
+    PRIVATE "AME_DOMAINS_DIR=\"${AME_SOURCE_DIR}/domains\"")
+  gtest_discover_tests(test_relation_index DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_authoring_phase6 test_authoring_phase6.cpp)
+  target_link_libraries(test_authoring_phase6
+    PRIVATE
+      ame_authoring_project_model
+      GTest::gtest_main
+  )
+  target_compile_definitions(test_authoring_phase6
+    PRIVATE "AME_DOMAINS_DIR=\"${AME_SOURCE_DIR}/domains\"")
+  gtest_discover_tests(test_authoring_phase6 DISCOVERY_MODE PRE_TEST)
 
   add_executable(test_command_stack
     test_command_stack.cpp

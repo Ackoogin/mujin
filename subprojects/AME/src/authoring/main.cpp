@@ -394,8 +394,6 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddActionParam(1, "?where", "location");
     shell.selfTestAddActionPrecondition(1, "at", {"?r", "?where"});
     shell.selfTestAddActionPrecondition(1, "comms_ok", {"?where"});
-    const bool addCausalLinkOk = shell.selfTestAddCausalLink(0, 0, 1, 0);
-    const bool rejectSelfLinkOk = !shell.selfTestAddCausalLink(0, 0, 0, 0);
     const std::string pddl = PddlGenerator::generateDomain(shell.selfTestModel());
     shell.selfTestValidate();
     report.check("validation_ok_for_valid_model",
@@ -561,6 +559,16 @@ int main(int argc, char* argv[]) {
     report.check("feasibility_infeasible_returns_false",
                  !shell.selfTestLastPlan().success,
                  "expected unreachable connected goal to be infeasible");
+    report.check("failure_panel_has_plain_language_explanation",
+                 shell.selfTestFailureExplanation().available &&
+                     !shell.selfTestFailureExplanation().blockingFact.predicateName.empty(),
+                 "expected the failure panel to identify an unreachable fact");
+    report.check("failure_panel_offers_expected_failure",
+                 std::find(shell.selfTestFailureExplanation().fixes.begin(),
+                           shell.selfTestFailureExplanation().fixes.end(),
+                           "Mark this scenario expected-to-fail") !=
+                     shell.selfTestFailureExplanation().fixes.end(),
+                 "expected failure report to offer expected-to-fail");
     const bool hasScenarioExpectation =
         std::any_of(shell.selfTestModel().scenarios.begin(),
                     shell.selfTestModel().scenarios.end(),
@@ -617,6 +625,20 @@ int main(int argc, char* argv[]) {
                  !importShell.selfTestModel().scenarios.empty() &&
                      importShell.selfTestModel().scenarios.back().goals.size() >= 1U,
                  "expected imported problem scenario to include goals");
+
+    for (int domainView = 0; domainView < 5; ++domainView) {
+      shell.selfTestSetDomainView(domainView);
+      renderAppShellFrame(window, shell, clearColor);
+      const std::string checkName =
+          "domain_view_" + std::to_string(domainView) + "_rendered";
+      report.check(checkName.c_str(),
+                   shell.selfTestDomainViewRendered(domainView),
+                   "expected every Phase 6 domain view to render");
+    }
+    report.check("guided_editor_rendered",
+                 shell.selfTestGuidedEditorRendered(),
+                 "expected the guided sentence editor to render for an action");
+    shell.selfTestShowPlanTab();
 
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);
@@ -675,20 +697,33 @@ int main(int argc, char* argv[]) {
     report.check("search_action_has_matching_precondition",
                  searchPreconditionMatches,
                  "expected search precondition to match move add-effect predicate");
-    report.check("causal_link_added",
-                 addCausalLinkOk,
-                 "expected matching causal link to be accepted");
-    report.check("causal_links_size_one",
-                 model.causalLinks.size() == 1,
-                 "expected exactly 1 causal link");
-    report.check("causal_link_endpoints",
-                 model.causalLinks.size() == 1 &&
-                     model.causalLinks[0].fromAction == 0 &&
-                     model.causalLinks[0].toAction == 1,
-                 "expected causal link from action 0 to action 1");
-    report.check("self_causal_link_rejected",
-                 rejectSelfLinkOk,
-                 "expected self causal link to be rejected");
+    const RelationIndex relationIndex = shell.selfTestRelationIndex();
+    report.check("relation_index_counts_links",
+                 relationIndex.linkCount() == 5U,
+                 "expected five derived fact-to-action links");
+    report.check("derived_causal_relationship_present",
+                 !relationIndex.causalLinks().empty(),
+                 "expected move to be able to enable search");
+    report.check("neighbourhood_panel_has_nodes",
+                 shell.selfTestNeighbourhoodNodeCount(1) > 1U,
+                 "expected the focused neighbourhood panel model to contain neighbours");
+    report.check("matrix_panel_exports_csv",
+                 shell.selfTestMatrixCsv().find("fact \\ action") != std::string::npos,
+                 "expected the matrix panel to produce CSV evidence");
+    shell.selfTestAddStateGroup("position", "robot", {"at"});
+    report.check("lifecycle_panel_derives_transition",
+                 shell.selfTestLifecycleTransitionCount() == 1U,
+                 "expected move to derive an at-to-at lifecycle transition");
+    shell.selfTestSelectPredicateFromPalette(0);
+    shell.selfTestSelectActionFromPalette(0);
+    const bool historyBack = shell.selfTestSelectionBack();
+    const bool historyForward = shell.selfTestSelectionForward();
+    report.check("relations_history_back",
+                 historyBack,
+                 "expected relations selection history to go back");
+    report.check("relations_history_forward",
+                 historyForward,
+                 "expected relations selection history to go forward");
     report.check("pddl_contains_define_domain",
                  pddl.find("(define (domain ") != std::string::npos,
                  "expected generated PDDL to contain domain definition");

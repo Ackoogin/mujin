@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package pyramid.components.agra_ma_grounding.services.provided;
+
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+
+// =============================================================================
+// AGRA MA Composite Grounding Transfer
+// =============================================================================
+// An AutoMTK-private control boundary between a Python host and a standalone
+// AgraMaBridge composite process (see docs/plans/phase3-4-progress-status.md,
+// open item 2). AmeProblemBuilder stays host-side and hands its exact PDDL
+// domain/problem, declarative action bindings, confirmed guard facts and
+// per-action kinematic/command grounding to the authoritative backend in the
+// composite process. Approval request/status payloads share this reliable
+// private control leg. It is not part of A-GRA: nothing here crosses to an
+// external C2 system; the external-facing MA_TaskCommand/MA_ActionCommand
+// seams remain A-GRA.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Grounding and host-control Service
+// -----------------------------------------------------------------------------
+// Service Type: PROVIDED
+service Grounding_Service {
+  // Register the goal-fluent grounding for one already-solved MA_Task,
+  // mirroring AgraMaBridge::registerTaskGrounding.
+  rpc CreateTaskGrounding(TaskGrounding)
+      returns (pyramid.data_model.base.Identifier);
+
+  // Supply the per-action symbolic/kinematic grounding for one
+  // MA_MissionPlanCommand, mirroring AgraMaBridge::supplyPlanGrounding.
+  rpc CreatePlanGrounding(PlanGrounding)
+      returns (pyramid.data_model.base.Identifier);
+
+  // Approval is part of the same private host/composite control leg: the
+  // request remains an A-GRA payload, carried in native JSON solely so this
+  // generated RPC can provide reliable request/status correlation.
+  rpc ReadApprovalRequests(Empty)
+      returns (NativePayload);
+  rpc CreateApprovalStatus(NativePayload)
+      returns (pyramid.data_model.base.Identifier);
+}
+
+message Empty {}
+
+message NativePayload {
+  string payload = 1;
+}
+
+// A resolved lat/lon/altitude waypoint, degrees and metres -- the same units
+// AgraMaComposite.prepare_goal_set already derives from the host's live
+// SimulationWorld.
+message Waypoint {
+  double latitude_deg = 1;
+  double longitude_deg = 2;
+  double altitude_m = 3;
+}
+
+// One command-parameter key/value pair. `map<string, string>` was tried
+// first and silently dropped by this generator's C++ types backend --
+// pim/cpp/types_gen.py never consumes ProtoField.is_map, so a map field
+// vanishes from the generated struct with no error, no warning, and no
+// generated field to catch the mistake at compile time. This is the
+// standard repeated-pair workaround protobuf itself recommends when a
+// target does not support the map wire type.
+message CommandParameter {
+  string key = 1;
+  string value = 2;
+}
+
+// One declarative ActionRegistry entry needed to compile the remotely solved
+// PDDL plan. `binding_kind` is exactly "action" or "subtree"; the receiver
+// rejects every other value.
+message ActionBinding {
+  string pddl_name = 1;
+  string binding_kind = 2;
+  string implementation = 3;
+  bool reactive = 4;
+}
+
+// Externally supplied grounding for one planned action signature.
+message ActionGrounding {
+  string action_signature = 1;
+  // "Native JSON" (base64 UUIDs), not raw protobuf bytes and not genuine
+  // hex-UUID OMS-JSON -- see ame/agra_native_json_uuid.h. The C++ side
+  // decodes with agra_codec::fromJson() then that header's UUID
+  // conversion, exactly like ame_py.cpp's decodeAction() already does.
+  bytes action_payload = 2;
+  bool requires_kinematics = 3;
+  string route_plan_id = 4;
+  repeated Waypoint waypoints = 5;
+  repeated CommandParameter command_parameters = 6;
+}
+
+// Goal-fluent grounding for one already-solved MA_Task.
+message TaskGrounding {
+  // "Native JSON" -- see ActionGrounding.action_payload's comment above;
+  // the same dialect, decoded the same way (agra_codec::fromJson() then
+  // agra_native_json_uuid.h), matching ame_py.cpp's decodeTask().
+  bytes task_payload = 1;
+  repeated string goal_fluents = 2;
+  // The exact host-built PDDL planning inputs. The standalone process owns
+  // the authoritative backend and re-solves these inputs; it must not use a
+  // toy or guessed world.
+  string domain_pddl = 3;
+  string problem_pddl = 4;
+  repeated ActionBinding action_bindings = 5;
+  // True facts whose execution guards require confirmed authority. Ordinary
+  // PDDL initial facts remain believed unless named here.
+  repeated string confirmed_fluents = 6;
+}
+
+// Per-action grounding for one MA_MissionPlanCommand.
+message PlanGrounding {
+  // "Native JSON" (base64, agra_native_json_uuid.h) -- NOT raw bytes.
+  // Checked directly against the generated JSON codec
+  // (pyramid_components_agra_ma_grounding_services_provided_codec.cpp):
+  // `bytes` proto fields are copied straight into an nlohmann::json string
+  // with no base64 step of their own, so raw 16-byte UUIDs (not
+  // guaranteed valid UTF-8) silently break JSON serialization. Confirmed
+  // the hard way: an earlier draft carried this field unconverted since
+  // AgraMaComposite.supply_plan_grounding's Python side also passes it
+  // straight through with no decode step -- true in-process, but wrong
+  // once a real Port/codec is involved, and the direct-call unit test
+  // (test_agra_ma_grounding_component.cpp) could not catch it because it
+  // never serializes to JSON at all. The Port round-trip test
+  // (test_agra_ma_grounding_port_round_trip.cpp) did.
+  bytes mission_plan_command_uuid = 1;
+  repeated ActionGrounding grounding = 2;
+}

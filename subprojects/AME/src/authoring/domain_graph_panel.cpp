@@ -16,28 +16,6 @@ static ed::PinId actionEffectPinId(int actionIdx, int slotIdx) {
   return 5000 + actionIdx * 100 + slotIdx;
 }
 
-static bool decodePreconditionPin(ed::PinId pinId, int& actionIdx, int& slotIdx) {
-  const int id = static_cast<int>(pinId.Get());
-  if (id < 4000 || id >= 5000) {
-    return false;
-  }
-  const int localId = id - 4000;
-  actionIdx = localId / 100;
-  slotIdx = localId % 100;
-  return true;
-}
-
-static bool decodeEffectPin(ed::PinId pinId, int& actionIdx, int& slotIdx) {
-  const int id = static_cast<int>(pinId.Get());
-  if (id < 5000 || id >= 6000) {
-    return false;
-  }
-  const int localId = id - 5000;
-  actionIdx = localId / 100;
-  slotIdx = localId % 100;
-  return true;
-}
-
 static bool containsName(const std::vector<std::string>& names,
                          const std::string& name) {
   return std::find(names.begin(), names.end(), name) != names.end();
@@ -49,6 +27,60 @@ DomainGraphPanel::DomainGraphPanel() {
 
 DomainGraphPanel::~DomainGraphPanel() {
   ed::DestroyEditor(m_context);
+}
+
+void DomainGraphPanel::select(DomainElementRef element, bool addToHistory) {
+  if (element.kind == DomainElementKind::Predicate) {
+    m_selectedPredIdx = static_cast<int>(element.index);
+    m_selectedActionIdx = -1;
+  } else if (element.kind == DomainElementKind::Action) {
+    m_selectedActionIdx = static_cast<int>(element.index);
+    m_selectedPredIdx = -1;
+  } else {
+    return;
+  }
+
+  if (!addToHistory) {
+    return;
+  }
+  if (m_historyPosition >= 0 &&
+      m_historyPosition < static_cast<int>(m_history.size())) {
+    const DomainElementRef& current = m_history[static_cast<size_t>(m_historyPosition)];
+    if (current.kind == element.kind && current.index == element.index) {
+      return;
+    }
+  }
+  if (m_historyPosition + 1 < static_cast<int>(m_history.size())) {
+    m_history.erase(m_history.begin() + m_historyPosition + 1, m_history.end());
+  }
+  m_history.push_back(element);
+  m_historyPosition = static_cast<int>(m_history.size()) - 1;
+}
+
+void DomainGraphPanel::setSelectedPredicate(int idx) {
+  if (idx >= 0) {
+    select({DomainElementKind::Predicate, static_cast<size_t>(idx)}, true);
+  }
+}
+
+void DomainGraphPanel::setSelectedAction(int idx) {
+  if (idx >= 0) {
+    select({DomainElementKind::Action, static_cast<size_t>(idx)}, true);
+  }
+}
+
+void DomainGraphPanel::goBack() {
+  if (canGoBack()) {
+    --m_historyPosition;
+    select(m_history[static_cast<size_t>(m_historyPosition)], false);
+  }
+}
+
+void DomainGraphPanel::goForward() {
+  if (canGoForward()) {
+    ++m_historyPosition;
+    select(m_history[static_cast<size_t>(m_historyPosition)], false);
+  }
 }
 
 void DomainGraphPanel::setHighlightedElements(std::vector<std::string> predicateNames,
@@ -70,6 +102,10 @@ void DomainGraphPanel::setStructuralHighlights(std::vector<std::string> errPreds
 void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   ed::SetCurrentEditor(m_context);
   ed::Begin("DomainGraphCanvas");
+  const float zoom = ed::GetCurrentZoom();
+  const bool showDetails = zoom >= 0.75F;
+  const bool showCounts = zoom >= 0.45F;
+  const RelationIndex relation_index(model);
 
   // ---- Predicate nodes (green) ----------------------------------------
   ed::PushStyleColor(ed::StyleColor_NodeBg,     ImVec4(0.05f, 0.28f, 0.10f, 1.0f));
@@ -78,7 +114,8 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   for (int i = 0; i < static_cast<int>(model.predicates.size()); ++i) {
     PredicateDef& pred = model.predicates[i];
     const ed::NodeId nodeId = 1000 + i;
-    const ed::PinId  pinId  = 2000 + i;
+    const ed::PinId outputPinId = 2000 + i;
+    const ed::PinId inputPinId = 2100 + i;
 
     // Place unpositioned nodes in a row
     if (pred.posX == 0.0f && pred.posY == 0.0f) {
@@ -98,15 +135,26 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     }
     ed::BeginNode(nodeId);
 
-    ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.40f, 1.0f), "[Predicate]");
+    if (showDetails) {
+      ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.40f, 1.0f), "[Fact]");
+    }
     ImGui::Text("%s", pred.name.empty() ? "(unnamed)" : pred.name.c_str());
-    for (const auto& p : pred.params) {
-      ImGui::Text("  %s: %s", p.name.c_str(), p.type.c_str());
+    if (showDetails) {
+      for (const auto& p : pred.params) {
+        ImGui::Text("  %s: %s", p.name.c_str(), p.type.c_str());
+      }
+    } else if (showCounts) {
+      const PredicateRelations& relations = relation_index.predicate(static_cast<size_t>(i));
+      ImGui::TextDisabled("%zu links", relations.requiredBy.size() +
+                          relations.madeTrueBy.size() + relations.madeFalseBy.size());
     }
 
-    // One output pin representing "this predicate is available"
-    ed::BeginPin(pinId, ed::PinKind::Output);
-    ImGui::Text("o");
+    ed::BeginPin(inputPinId, ed::PinKind::Input);
+    ImGui::TextUnformatted(" ");
+    ed::EndPin();
+    ImGui::SameLine();
+    ed::BeginPin(outputPinId, ed::PinKind::Output);
+    ImGui::TextUnformatted(" ");
     ed::EndPin();
 
     ed::EndNode();
@@ -142,13 +190,21 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     }
     ed::BeginNode(nodeId);
 
-    ImGui::TextColored(ImVec4(0.30f, 0.85f, 1.0f, 1.0f), "[Action]");
+    if (showDetails) {
+      ImGui::TextColored(ImVec4(0.30f, 0.85f, 1.0f, 1.0f), "[Action]");
+    }
     ImGui::Text("%s", action.name.empty() ? "(unnamed)" : action.name.c_str());
-    for (const auto& p : action.params) {
-      ImGui::Text("  %s - %s", p.name.c_str(), p.type.c_str());
+    if (showDetails) {
+      for (const auto& p : action.params) {
+        ImGui::Text("  %s - %s", p.name.c_str(), p.type.c_str());
+      }
+    } else if (showCounts) {
+      ImGui::TextDisabled("%zu conditions, %zu outcomes",
+                          action.preconditions.size(),
+                          action.addEffects.size() + action.delEffects.size());
     }
 
-    if (!action.preconditions.empty()) {
+    if (showDetails && !action.preconditions.empty()) {
       // No ImGui::Separator here — it would stretch across the full canvas
       // width inside an ed::BeginNode block. The TextDisabled label alone
       // is enough to demarcate the section.
@@ -158,31 +214,31 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     for (int pi = 0; pi < static_cast<int>(action.preconditions.size()); ++pi) {
       const ed::PinId pinId = actionPreconditionPinId(i, pi);
       ed::BeginPin(pinId, ed::PinKind::Input);
-      const std::string label =
-          authoring::formatEffectRef(action.preconditions[pi]);
-      ImGui::Text("%s", label.c_str());
+      const std::string label = showDetails
+          ? authoring::formatEffectRef(action.preconditions[pi]) : " ";
+      ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F), "%s", label.c_str());
       ed::EndPin();
     }
 
-    if (!action.addEffects.empty() || !action.delEffects.empty()) {
+    if (showDetails && (!action.addEffects.empty() || !action.delEffects.empty())) {
       ImGui::Spacing();
       ImGui::TextDisabled("Effects");
     }
     for (int ai = 0; ai < static_cast<int>(action.addEffects.size()); ++ai) {
       const ed::PinId pinId = actionEffectPinId(i, ai);
       ed::BeginPin(pinId, ed::PinKind::Output);
-      const std::string label =
-          "+" + authoring::formatEffectRef(action.addEffects[ai]);
-      ImGui::Text("%s", label.c_str());
+      const std::string label = showDetails
+          ? "+ " + authoring::formatEffectRef(action.addEffects[ai]) : " ";
+      ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F), "%s", label.c_str());
       ed::EndPin();
     }
     for (int di = 0; di < static_cast<int>(action.delEffects.size()); ++di) {
       const int slotIdx = static_cast<int>(action.addEffects.size()) + di;
       const ed::PinId pinId = actionEffectPinId(i, slotIdx);
       ed::BeginPin(pinId, ed::PinKind::Output);
-      const std::string label =
-          "-" + authoring::formatEffectRef(action.delEffects[di]);
-      ImGui::Text("%s", label.c_str());
+      const std::string label = showDetails
+          ? "- " + authoring::formatEffectRef(action.delEffects[di]) : " ";
+      ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F), "%s", label.c_str());
       ed::EndPin();
     }
 
@@ -194,67 +250,31 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
 
   ed::PopStyleColor(2);
 
-  for (int i = 0; i < static_cast<int>(model.causalLinks.size()); ++i) {
-    const CausalLink& link = model.causalLinks[static_cast<size_t>(i)];
-    const ed::PinId effectPin = actionEffectPinId(link.fromAction, link.fromAddEffectIdx);
-    const ed::PinId precPin = actionPreconditionPinId(link.toAction, link.toPreconditionIdx);
-    ed::Link(6000 + i, effectPin, precPin, ImVec4(0.0f, 1.0f, 1.0f, 1.0f));
-  }
-
-  if (ed::BeginCreate()) {
-    ed::PinId startPinId = 0;
-    ed::PinId endPinId = 0;
-    if (ed::QueryNewLink(&startPinId, &endPinId)) {
-      int startEffectAction = -1;
-      int startEffectSlot = -1;
-      int endEffectAction = -1;
-      int endEffectSlot = -1;
-      int startPreAction = -1;
-      int startPreSlot = -1;
-      int endPreAction = -1;
-      int endPreSlot = -1;
-      const bool startIsEffect = decodeEffectPin(startPinId, startEffectAction, startEffectSlot);
-      const bool endIsEffect = decodeEffectPin(endPinId, endEffectAction, endEffectSlot);
-      const bool startIsPrecondition =
-          decodePreconditionPin(startPinId, startPreAction, startPreSlot);
-      const bool endIsPrecondition = decodePreconditionPin(endPinId, endPreAction, endPreSlot);
-
-      CausalLink candidate;
-      bool hasCandidate = false;
-      if (startIsEffect && endIsPrecondition) {
-        candidate = {startEffectAction, startEffectSlot, endPreAction, endPreSlot};
-        hasCandidate = true;
-      } else if (endIsEffect && startIsPrecondition) {
-        candidate = {endEffectAction, endEffectSlot, startPreAction, startPreSlot};
-        hasCandidate = true;
-      }
-
-      const bool compatible = hasCandidate && causalLinkCompatible(model, candidate);
-      if (compatible) {
-        if (ed::AcceptNewItem(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 2.0f)) {
-          stack.execute(model, "Add causal link", [candidate](ProjectModel& m) {
-            m.causalLinks.push_back(candidate);
-          });
-        }
-      } else if (startPinId && endPinId) {
-        ed::RejectNewItem(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
-      }
+  int link_id = 6000;
+  for (size_t predicate_index = 0; predicate_index < model.predicates.size();
+       ++predicate_index) {
+    const PredicateRelations& relations = relation_index.predicate(predicate_index);
+    for (const auto& relation : relations.requiredBy) {
+      ed::Link(link_id++, 2000 + static_cast<int>(predicate_index),
+               actionPreconditionPinId(static_cast<int>(relation.actionIndex),
+                                       static_cast<int>(relation.referenceIndex)),
+               ImVec4(0.88F, 0.69F, 0.32F, 1.0F));
     }
-    ed::EndCreate();
-  }
-
-  if (ed::BeginDelete()) {
-    ed::LinkId deletedLinkId = 0;
-    while (ed::QueryDeletedLink(&deletedLinkId)) {
-      const int linkIdx = static_cast<int>(deletedLinkId.Get()) - 6000;
-      if (linkIdx >= 0 && linkIdx < static_cast<int>(model.causalLinks.size()) &&
-          ed::AcceptDeletedItem()) {
-        stack.execute(model, "Delete causal link", [linkIdx](ProjectModel& m) {
-          m.causalLinks.erase(m.causalLinks.begin() + linkIdx);
-        });
-      }
+    for (const auto& relation : relations.madeTrueBy) {
+      ed::Link(link_id++,
+               actionEffectPinId(static_cast<int>(relation.actionIndex),
+                                 static_cast<int>(relation.referenceIndex)),
+               2100 + static_cast<int>(predicate_index),
+               ImVec4(0.32F, 0.84F, 0.60F, 1.0F));
     }
-    ed::EndDelete();
+    for (const auto& relation : relations.madeFalseBy) {
+      const ActionDef& action = model.actions[relation.actionIndex];
+      const int slot = static_cast<int>(action.addEffects.size() + relation.referenceIndex);
+      ed::Link(link_id++,
+               actionEffectPinId(static_cast<int>(relation.actionIndex), slot),
+               2100 + static_cast<int>(predicate_index),
+               ImVec4(0.95F, 0.51F, 0.42F, 1.0F));
+    }
   }
 
   // ---- Right-click context menu on empty canvas (must be inside Begin/End)
@@ -291,10 +311,9 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       for (int i = 0; i < cnt; ++i) {
         const int id = static_cast<int>(sel[static_cast<size_t>(i)].Get());
         if (id >= 1000 && id < 2000) {
-          m_selectedPredIdx = id - 1000;
+          setSelectedPredicate(id - 1000);
         } else if (id >= 3000 && id < 4000) {
-          m_selectedActionIdx = id - 3000;
-          m_selectedPredIdx = -1;
+          setSelectedAction(id - 3000);
         }
       }
     }
@@ -361,4 +380,121 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   }
 
   ed::SetCurrentEditor(nullptr);
+}
+
+void DomainGraphPanel::renderFocused(const ProjectModel& model,
+                                     const RelationIndex& index,
+                                     int depth,
+                                     uint32_t relationshipFilter,
+                                     size_t neighbourCap) {
+  DomainElementRef focus;
+  if (m_selectedPredIdx >= 0 &&
+      m_selectedPredIdx < static_cast<int>(model.predicates.size())) {
+    focus = {DomainElementKind::Predicate, static_cast<size_t>(m_selectedPredIdx)};
+  } else if (m_selectedActionIdx >= 0 &&
+             m_selectedActionIdx < static_cast<int>(model.actions.size())) {
+    focus = {DomainElementKind::Action, static_cast<size_t>(m_selectedActionIdx)};
+  } else if (!model.predicates.empty()) {
+    setSelectedPredicate(0);
+    focus = {DomainElementKind::Predicate, 0};
+  } else if (!model.actions.empty()) {
+    setSelectedAction(0);
+    focus = {DomainElementKind::Action, 0};
+  } else {
+    ImGui::TextDisabled("Add a fact or action to explore its neighbourhood.");
+    return;
+  }
+
+  const NeighbourhoodModel neighbourhood(model, index, focus, depth,
+                                         relationshipFilter, neighbourCap);
+  ImGui::TextDisabled("CHANGES IT");
+  ImGui::SameLine(360.0F);
+  ImGui::TextDisabled("IN FOCUS");
+  ImGui::SameLine(690.0F);
+  ImGui::TextDisabled("NEEDS IT");
+
+  DomainElementRef clicked;
+  bool has_clicked = false;
+  ed::SetCurrentEditor(m_context);
+  ed::Begin("FocusedNeighbourhoodCanvas");
+  for (const NeighbourNode& node : neighbourhood.nodes()) {
+    const ed::NodeId node_id = 100000 + node.id;
+    ed::SetNodePosition(node_id, ImVec2(node.x, node.y));
+    const bool focus_node = node.column == NeighbourColumn::InFocus;
+    if (focus_node) {
+      ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.0F, 0.9F, 1.0F, 1.0F));
+    }
+    ed::BeginNode(node_id);
+    ed::BeginPin(200000 + node.id * 2, ed::PinKind::Input);
+    ImGui::TextUnformatted(" ");
+    ed::EndPin();
+    ImGui::SameLine();
+    std::string label;
+    if (node.element.kind == DomainElementKind::Predicate) {
+      label = model.predicates[node.element.index].name;
+    } else if (node.element.kind == DomainElementKind::Action) {
+      label = model.actions[node.element.index].name;
+    } else {
+      label = "+ " + std::to_string(node.hiddenCount) + " more";
+    }
+    if (ImGui::Selectable(label.c_str(), focus_node)) {
+      if (node.element.kind == DomainElementKind::More) {
+        m_morePopupOpen = true;
+      } else {
+        clicked = node.element;
+        has_clicked = true;
+      }
+    }
+    if (!node.reason.empty()) {
+      ImGui::TextDisabled("%s", node.reason.c_str());
+    }
+    ed::BeginPin(200001 + node.id * 2, ed::PinKind::Output);
+    ImGui::TextUnformatted(" ");
+    ed::EndPin();
+    ed::EndNode();
+    if (focus_node) {
+      ed::PopStyleColor();
+    }
+  }
+  for (size_t i = 0; i < neighbourhood.edges().size(); ++i) {
+    const NeighbourEdge& edge = neighbourhood.edges()[i];
+    ImVec4 colour(0.88F, 0.69F, 0.32F, 1.0F);
+    if (edge.kind == PredicateRelationKind::MakesTrue) {
+      colour = ImVec4(0.32F, 0.84F, 0.60F, 1.0F);
+    } else if (edge.kind == PredicateRelationKind::MakesFalse) {
+      colour = ImVec4(0.95F, 0.51F, 0.42F, 1.0F);
+    }
+    ed::Link(300000 + static_cast<int>(i),
+             200001 + edge.fromNode * 2,
+             200000 + edge.toNode * 2, colour, 1.6F);
+  }
+  ed::End();
+  ed::SetCurrentEditor(nullptr);
+
+  if (has_clicked) {
+    select(clicked, true);
+  }
+  if (m_morePopupOpen) {
+    ImGui::OpenPopup("More neighbours##focused");
+    m_morePopupOpen = false;
+  }
+  if (ImGui::BeginPopup("More neighbours##focused")) {
+    const NeighbourhoodModel all(model, index, focus, depth,
+                                 relationshipFilter, 1000U);
+    for (const NeighbourNode& node : all.nodes()) {
+      if (node.element.kind == DomainElementKind::More || node.id == 0) {
+        continue;
+      }
+      const std::string label = node.element.kind == DomainElementKind::Predicate
+          ? model.predicates[node.element.index].name
+          : model.actions[node.element.index].name;
+      ImGui::PushID(node.id);
+      if (ImGui::Selectable(label.c_str())) {
+        select(node.element, true);
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::PopID();
+    }
+    ImGui::EndPopup();
+  }
 }

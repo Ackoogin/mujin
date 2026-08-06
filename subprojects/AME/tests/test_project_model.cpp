@@ -25,7 +25,8 @@ TEST(ProjectModel, RoundTrip) {
     search.params = {{"?r","robot"}, {"?where","location"}};
     search.preconditions.push_back({"at",{"?r","?where"}});
     m.actions.push_back(search);
-    m.causalLinks.push_back({0, 0, 1, 0});
+    m.stateGroups.push_back({"availability", "robot",
+                             {"agent-available", "agent-unavailable"}});
     m.objects.push_back({"uav1","robot"});
     ScenarioDef s; s.name="nominal"; s.goals.push_back({"at",{"uav1","base"}});
     s.expectation.shouldSucceed = true;
@@ -75,11 +76,11 @@ TEST(ProjectModel, RoundTrip) {
     EXPECT_EQ(m2.actions[1].name, "search");
     ASSERT_EQ(m2.actions[1].preconditions.size(), 1u);
     EXPECT_EQ(m2.actions[1].preconditions[0].predicateName, "at");
-    ASSERT_EQ(m2.causalLinks.size(), 1u);
-    EXPECT_EQ(m2.causalLinks[0].fromAction, 0);
-    EXPECT_EQ(m2.causalLinks[0].fromAddEffectIdx, 0);
-    EXPECT_EQ(m2.causalLinks[0].toAction, 1);
-    EXPECT_EQ(m2.causalLinks[0].toPreconditionIdx, 0);
+    ASSERT_EQ(m2.stateGroups.size(), 1u);
+    EXPECT_EQ(m2.stateGroups[0].name, "availability");
+    EXPECT_EQ(m2.stateGroups[0].type, "robot");
+    EXPECT_EQ(m2.stateGroups[0].predicateNames,
+              (std::vector<std::string>{"agent-available", "agent-unavailable"}));
     ASSERT_EQ(m2.objects.size(), 1u); EXPECT_EQ(m2.objects[0].type, "robot");
     ASSERT_EQ(m2.scenarios.size(), 1u);
     EXPECT_TRUE(m2.scenarios[0].expectation.shouldSucceed);
@@ -158,29 +159,7 @@ TEST(ProjectModel, LoadOldScenarioWithoutExpectationDefaults) {
     std::remove(path);
 }
 
-TEST(ProjectModel, CausalLinkValidation) {
-    ProjectModel m;
-    ActionDef move;
-    move.name = "move";
-    move.preconditions.push_back({"at",{"?r","?from"}});
-    move.addEffects.push_back({"at",{"?r","?to"}});
-    m.actions.push_back(move);
-
-    ActionDef search;
-    search.name = "search";
-    search.preconditions.push_back({"at",{"?agent","?where"}});
-    search.preconditions.push_back({"connected",{"?from","?to"}});
-    search.preconditions.push_back({"at",{"?agent"}});
-    m.actions.push_back(search);
-
-    EXPECT_TRUE(causalLinkCompatible(m, {0, 0, 1, 0}));
-    EXPECT_FALSE(causalLinkCompatible(m, {0, 0, 1, 1}));
-    EXPECT_FALSE(causalLinkCompatible(m, {0, 0, 1, 2}));
-    EXPECT_FALSE(causalLinkCompatible(m, {0, 0, 0, 0}));
-    EXPECT_FALSE(causalLinkCompatible(m, {2, 0, 1, 0}));
-}
-
-TEST(ProjectModel, MissingCausalLinksDefaultsEmpty) {
+TEST(ProjectModel, VersionOneWithoutStateGroupsLoads) {
     nlohmann::json j = {
         {"version", 1},
         {"projectName", "OldProject"},
@@ -192,7 +171,25 @@ TEST(ProjectModel, MissingCausalLinksDefaultsEmpty) {
     };
 
     ProjectModel m = j.get<ProjectModel>();
-    EXPECT_TRUE(m.causalLinks.empty());
+    EXPECT_TRUE(m.stateGroups.empty());
+}
+
+TEST(ProjectModel, LegacyCausalLinksAreIgnoredAndNotWritten) {
+    nlohmann::json j = {
+        {"version", 1},
+        {"projectName", "OldProject"},
+        {"types", nlohmann::json::array()},
+        {"predicates", nlohmann::json::array()},
+        {"actions", nlohmann::json::array()},
+        {"causalLinks", {{{"fromAction", 0}, {"fromAddEffectIdx", 0},
+                          {"toAction", 1}, {"toPreconditionIdx", 0}}}},
+        {"objects", nlohmann::json::array()},
+        {"scenarios", nlohmann::json::array()},
+    };
+
+    const ProjectModel model = j.get<ProjectModel>();
+    const nlohmann::json written = model;
+    EXPECT_FALSE(written.contains("causalLinks"));
 }
 
 TEST(ProjectModel, LoadMissingFile) {

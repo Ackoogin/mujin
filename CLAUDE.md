@@ -70,10 +70,26 @@ This project uses CMake, with MSVC/Visual Studio 2022 the primary Windows toolch
 | Configure | `default` | Standard workspace build in `build/` using project default options |
 | Configure | `all-on` | Optional dependencies enabled in `build-all-enabled/`: Foxglove, FlatBuffers, gRPC, Protobuf, ROS2 |
 | Configure | `all-off` | Optional dependencies disabled in `build-all-off/`: Foxglove, FlatBuffers, gRPC, Protobuf, ROS2 |
+| Configure | `authoring` | Graphical authoring tool enabled (`AME_BUILD_AUTHORING=ON`) in `build-authoring/` |
 | Build | `release`, `debug` | Release/Debug builds using the `default` configure preset |
 | Build | `all-on-release` | Release build using `all-on` |
 | Build | `all-off-release`, `all-off-debug` | Release/Debug builds using `all-off` |
+| Build | `authoring-release`, `authoring-debug` | Release/Debug builds using `authoring` |
 | Test | `all-on-release`, `all-off-release`, `all-off-debug` | CTest runs with `outputOnFailure` enabled |
+| Test | `authoring-release`, `authoring-debug` | CTest runs covering the authoring tool's own test suites |
+
+The `authoring` preset has its own build directory on purpose. `AME_BUILD_AUTHORING` is a cached
+CMake option, so if the authoring tool were configured into the shared `build/` tree it would stay
+enabled there even after switching back to the `default` preset.
+
+### Contract tree
+
+PYRAMID generates AME's C++ bindings from a single contract tree named by `PYRAMID_PROTO_DIR`.
+AME owns the contracts it needs in `subprojects/AME/contracts/proto`, so AME can be built with
+PYRAMID's proof layer switched off (`PYRAMID_BUILD_PROOFS=OFF`), which drops roughly 40% of the
+build's targets. With the proof layer on, its contracts are used instead, and they are a superset.
+The `AmeContractTree` tests check that the files common to both copies have not drifted apart. See
+[`subprojects/AME/contracts/README.md`](subprojects/AME/contracts/README.md).
 
 The presets currently do not force a generator or architecture. On Windows, use a Visual Studio 2022 x64 developer environment or select the Visual Studio 2022 x64 kit/generator in your CMake frontend.
 

@@ -19,11 +19,10 @@ struct ActionDef {
     float posX=0,posY=0;
     BtBinding btBinding;
 };
-struct CausalLink {
-    int fromAction = -1;
-    int fromAddEffectIdx = -1;
-    int toAction = -1;
-    int toPreconditionIdx = -1;
+struct StateGroupDef {
+    std::string name;
+    std::string type;
+    std::vector<std::string> predicateNames;
 };
 struct ObjectDef { std::string name, type; };
 struct FactRef { std::string predicateName; std::vector<std::string> objectNames; };
@@ -46,7 +45,7 @@ struct ProjectModel {
     std::vector<TypeDef> types;
     std::vector<PredicateDef> predicates;
     std::vector<ActionDef> actions;
-    std::vector<CausalLink> causalLinks;
+    std::vector<StateGroupDef> stateGroups;
     std::vector<ObjectDef> objects;
     std::vector<ScenarioDef> scenarios;
 
@@ -67,8 +66,8 @@ void to_json(nlohmann::json&, const BtBinding&);
 void from_json(const nlohmann::json&, BtBinding&);
 void to_json(nlohmann::json&, const ActionDef&);
 void from_json(const nlohmann::json&, ActionDef&);
-void to_json(nlohmann::json&, const CausalLink&);
-void from_json(const nlohmann::json&, CausalLink&);
+void to_json(nlohmann::json&, const StateGroupDef&);
+void from_json(const nlohmann::json&, StateGroupDef&);
 void to_json(nlohmann::json&, const ObjectDef&);
 void from_json(const nlohmann::json&, ObjectDef&);
 void to_json(nlohmann::json&, const FactRef&);
@@ -79,4 +78,3 @@ void to_json(nlohmann::json&, const ScenarioDef&);
 void from_json(const nlohmann::json&, ScenarioDef&);
 void to_json(nlohmann::json&, const ProjectModel&);
 void from_json(const nlohmann::json&, ProjectModel&);
-bool causalLinkCompatible(const ProjectModel& model, const CausalLink& link);

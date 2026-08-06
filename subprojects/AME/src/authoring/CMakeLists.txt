@@ -85,10 +85,16 @@ endif()
 
 add_library(ame_authoring_project_model STATIC
     contingency_analyser.cpp
+    fact_action_matrix.cpp
+    failure_explainer.cpp
+    guided_editor_model.cpp
+    lifecycle_model.cpp
+    neighbourhood_model.cpp
     project_model.cpp
     pddl_generator.cpp
     pddl_importer.cpp
     pddl_validator.cpp
+    relation_index.cpp
     scenario_runner.cpp
     structural_validator.cpp
 )

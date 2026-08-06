@@ -200,6 +200,38 @@ if(NOT GPRBUILD)
 endif()
 
 # ---------------------------------------------------------------------------
+# Contract tree selection
+# ---------------------------------------------------------------------------
+# PYRAMID generates its C++ bindings from a single contract tree named by
+# PYRAMID_PROTO_DIR. PYRAMID's own CAL has no product contract, so when its
+# proof layer is enabled it defaults that variable to the proof contracts.
+#
+# AME is a product consumer, not part of the proof layer, and it needs only a
+# small closure of contracts: the options file, the base, common and autonomy
+# data models, and the autonomy_backend and agra_ma_grounding component
+# services. Those are checked in under subprojects/AME/contracts/proto so that
+# AME can be built with PYRAMID's proof layer switched off. This is the
+# "external contract tree" arrangement PYRAMID's own generated-bindings guide
+# describes.
+#
+# When the proof layer is on, its contract tree is a superset of AME's and is
+# used for both. The ame_contract_tree_matches_pyramid test asserts that the two
+# copies of the shared files are identical, so which one a given build uses
+# never changes the generated bindings.
+set(AME_CONTRACT_PROTO_DIR "${AME_ROOT_DIR}/contracts/proto"
+    CACHE PATH "Contract tree owned by AME, used when PYRAMID's proof contracts are not built")
+
+if(UNMANNED_BUILD_AME AND UNMANNED_BUILD_PYRAMID AND NOT PYRAMID_BUILD_PROOFS)
+    if(NOT DEFINED PYRAMID_PROTO_DIR OR PYRAMID_PROTO_DIR STREQUAL "")
+        set(PYRAMID_PROTO_DIR "${AME_CONTRACT_PROTO_DIR}" CACHE PATH
+            "PYRAMID proto IDL source directory" FORCE)
+        message(STATUS
+            "AME: PYRAMID proof contracts are not built, so binding generation "
+            "uses AME's own contract tree at ${AME_CONTRACT_PROTO_DIR}")
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # Component subprojects
 # ---------------------------------------------------------------------------
 add_subdirectory(subprojects/PCL)

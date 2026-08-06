@@ -4,14 +4,19 @@
 #include "command_stack.h"
 #include "contingency_analyser.h"
 #include "domain_graph_panel.h"
+#include "fact_action_matrix.h"
+#include "failure_explainer.h"
+#include "lifecycle_model.h"
 #include "pddl_validator.h"
 #include "plan_graph_panel.h"
 #include "scenario_runner.h"
 #include "structural_validator.h"
+#include "relation_index.h"
 #include "type_hierarchy_panel.h"
 
 #include <ame/planner.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -74,10 +79,6 @@ public:
   void selfTestRunFeasibility(const std::string& scenarioName);
   void selfTestRunAllScenarios();
   void selfTestRunContingencyAnalysis();
-  bool selfTestAddCausalLink(int fromAction,
-                             int fromAddEffectIdx,
-                             int toAction,
-                             int toPreconditionIdx);
   bool selfTestUndo();
   bool selfTestRedo();
   void selfTestValidate();
@@ -101,6 +102,22 @@ public:
   size_t selfTestPlanGraphStepCount() const { return m_planGraph.stepCount(); }
   size_t selfTestBtNodeCount() const { return m_btGraph.nodeCount(); }
   const StructuralReport& selfTestStructuralReport() const { return m_structuralReport; }
+  RelationIndex selfTestRelationIndex() const { return RelationIndex(m_model); }
+  size_t selfTestNeighbourhoodNodeCount(int depth = 1) const;
+  std::string selfTestMatrixCsv() const;
+  size_t selfTestLifecycleTransitionCount() const;
+  void selfTestAddStateGroup(std::string name,
+                             std::string type,
+                             std::vector<std::string> predicates);
+  const FailureExplanation& selfTestFailureExplanation() const {
+    return m_lastFailureExplanation;
+  }
+  bool selfTestSelectionBack();
+  bool selfTestSelectionForward();
+  void selfTestSetDomainView(int view);
+  void selfTestShowPlanTab() { m_requestedTab = "Plan"; }
+  bool selfTestDomainViewRendered(int view) const;
+  bool selfTestGuidedEditorRendered() const { return m_guidedEditorRendered; }
 
 private:
   void renderDomainTab();
@@ -108,6 +125,9 @@ private:
   void renderPlanTab();
   void renderBtTab();
   void renderSelectedElementEditor();
+  void renderRelationsPanel();
+  void renderMatrixPanel();
+  void renderLifecyclePanel();
   void clearDerivedResults();
   void resetScenarioEditorState();
   void runValidation();
@@ -125,6 +145,7 @@ private:
   StructuralReport m_structuralReport;
   ScenarioBatchReport m_lastBatchReport;
   ContingencyReport m_lastContingencyReport;
+  FailureExplanation m_lastFailureExplanation;
   ame::PlanResult m_lastPlan;
   ProjectModel m_model;
   TypeHierarchyPanel m_typeHierarchy;
@@ -136,6 +157,11 @@ private:
   bool m_autoValidateOnSave = true;
   bool m_hasLastPlan = false;
   bool showAboutModal = false;
+  int m_domainViewMode = 0;
+  int m_neighbourDepth = 1;
+  uint32_t m_neighbourFilter = ShowEverything;
+  std::array<bool, 5> m_domainViewsRendered{};
+  bool m_guidedEditorRendered = false;
 
   char m_scenarioNameInput[64] = {};
   char m_renameScenarioNameInput[64] = {};
@@ -144,6 +170,12 @@ private:
   int m_goalPredIdx = 0;
   char m_initArgsInput[128] = {};
   char m_goalArgsInput[128] = {};
+  char m_stateGroupNameInput[64] = {};
+  char m_stateGroupTypeInput[64] = {};
+  char m_stateGroupPredicatesInput[256] = {};
+  std::array<char, 65536> m_pddlEditorBuffer{};
+  bool m_pddlEditorInitialised = false;
+  bool m_pddlEditorDirty = false;
   std::string m_renameScenarioSource;
 
   // Palette quick-add state (WI-5.2)

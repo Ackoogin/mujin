@@ -16,7 +16,7 @@ navigation for wide domains and guided authoring for non-programmers
 **Deliverables:**
 - [x] `subprojects/AME/src/authoring/CMakeLists.txt` with FetchContent for Dear ImGui, imgui-node-editor, SDL2/GLFW
 - [x] Minimal `main.cpp` that opens an empty ImGui window with docking enabled
-- [~] Build succeeds on Windows (MSVC 2022) and Linux (GCC/Clang) — Windows MSVC 2022 verified across every WI; Linux untested but no platform-specific code paths introduced (SDL2/imgui-node-editor are cross-platform via FetchContent)
+- [x] Build succeeds on Windows (MSVC 2022) and Linux (GCC/Clang) — Windows MSVC 2022 verified across every WI. Linux verified during Phase 6: `ame_authoring_tool` builds with GCC against SDL2 (built from source by FetchContent, with X11 and OpenGL support), and the `--self-test` run passes with zero failures under `SDL_VIDEODRIVER=offscreen`, which is how the tool can be exercised on a machine with no display attached.
 - [x] New configure preset `authoring` or integrated into existing `default` preset (gated by `AME_BUILD_AUTHORING=ON`)
 
 **Bonus (agent self-test):**
@@ -480,6 +480,201 @@ navigation for wide domains and guided authoring for non-programmers
 
 ---
 
+## Phase 6: Usable Navigation and Guided Authoring
+
+### WI-6.1: Relation Index
+
+**Description:** Build a read-only index of every fact-to-action relationship and every
+type-compatible action-to-action enabling relationship.
+
+**Deliverables:**
+- [x] Predicate lookups for actions that need it, make it true, or make it false
+- [x] Action lookups for required facts, outcomes, and actions that may enable one another
+- [x] Counts for predicates, actions, and direct links
+- [x] List of facts that no action makes true
+- [x] Mission-autonomy tests for 10 predicates, 7 actions, 34 links, and 4 unproduced facts
+
+**Acceptance criteria:** The reviewed mission-autonomy figures are reproduced from imported
+PDDL without stored or hand-authored relationship data.
+
+**Dependencies:** WI-1.4
+**Effort:** Small
+
+---
+
+### WI-6.2: Relations Panel
+
+**Description:** Let a user walk between a selected fact, every action that touches it, and
+the related facts and actions.
+
+**Deliverables:**
+- [x] Separate lists for actions that need a fact, make it true, and make it false
+- [x] Plain-language reasons beside action entries
+- [x] Back and forward selection history with a breadcrumb
+- [x] Scenario starting-state counts, same-shape facts, and jump-to-view buttons
+- [x] Actions that have two relationships with a fact appear in both lists
+
+**Acceptance criteria:** Selecting `task-assigned` shows `mark-task-failed` in both the
+"needs" and "makes false" lists, and every entry can become the new selection.
+
+**Dependencies:** WI-6.1, WI-5.2
+**Effort:** Small
+
+---
+
+### WI-6.3: Focused Neighbourhood Canvas
+
+**Description:** Make the primary graph show one selected element and its immediate
+neighbours with computed positions.
+
+**Deliverables:**
+- [x] Three-column `CHANGES IT / IN FOCUS / NEEDS IT` layout
+- [x] One-step and two-step depth control
+- [x] Relationship filters using amber, green, and red-orange
+- [x] Back and forward selection history
+- [x] Twenty-neighbour limit and a `+ n more` list
+- [x] Explicit whole-domain mode retained for small domains
+- [x] Layout positions are computed and are not stored for this view
+
+**Acceptance criteria:** Clicking a neighbour recentres the computed view, while the whole
+domain remains available as a separate read-only view.
+
+**Dependencies:** WI-6.1, WI-1.1
+**Effort:** Medium
+
+---
+
+### WI-6.4: Guided Sentence Editor
+
+**Description:** Replace the technical action editor with the reviewed sentence-based
+editing surface.
+
+**Deliverables:**
+- [x] `It involves`, `Before it can happen`, and `Afterwards` sentence groups
+- [x] Delete outcomes shown as `becomes false` on the fact row
+- [x] Type-aware dropdowns that keep illegal choices visible and explain why
+- [x] Live generated PDDL and structural checks
+- [x] Behaviour Tree node type, reactive setting, and subtree binding remain on the panel
+
+**Acceptance criteria:** A user can edit an action without the planning terms used by the
+stored PDDL lists appearing as form labels, while the generated PDDL remains visible.
+
+**Dependencies:** WI-1.4, WI-1.2
+**Effort:** Medium
+
+---
+
+### WI-6.5: Fact-by-Action Matrix
+
+**Description:** Show the complete domain as facts by actions with `R`, `+`, and `-` marks.
+
+**Deliverables:**
+- [x] Scrollable ImGui table using the shared colour language
+- [x] Cells can contain more than one relationship mark
+- [x] CSV export
+- [x] Markdown export
+
+**Acceptance criteria:** The `at` by `move` cell contains all three marks and both assurance
+export formats contain the full table.
+
+**Dependencies:** WI-6.1
+**Effort:** Small
+
+---
+
+### WI-6.6: Object Lifecycle View
+
+**Description:** Derive per-type state transitions from user-declared groups of alternative
+facts.
+
+**Deliverables:**
+- [x] `stateGroups` project field with JSON round-trip support
+- [x] Existing version-1 project files remain loadable without the new field
+- [x] A transition is derived when one action removes one group member and adds another
+- [x] A group with no changing action shows an explicit empty result
+- [x] No automatic grouping or invariant synthesis
+
+**Acceptance criteria:** The agent availability group derives the `withdraw-agent`
+transition, while a sensor-state group correctly has no transitions.
+
+**Dependencies:** WI-6.1, WI-1.2
+**Effort:** Medium
+
+---
+
+### WI-6.7: Semantic Zoom and Collapsible Groups
+
+**Description:** Simplify the whole-domain canvas as the user zooms out and support curated
+collapsible presentation groups.
+
+**Deliverables:**
+- [x] Close, medium, and far node detail levels on the whole-domain canvas
+- [~] Collapsible named groups were deferred; the focused view already limits the visible
+  set, but it does not provide presentation group boxes
+
+**Acceptance criteria:** Node detail changes with zoom. Collapsible group acceptance remains
+open.
+
+**Dependencies:** WI-6.3
+**Effort:** Small to medium
+
+---
+
+### WI-6.8: Plain-Language Failure Report
+
+**Description:** Replace the generic planner failure with a backward explanation from the
+failed goal to the first fact no action can produce.
+
+**Deliverables:**
+- [x] Grounded chain of producer, requirement, removal, and restoration rows
+- [x] Specific conclusion naming the first unproducible fact
+- [x] Buttons to add the starting fact, add a restoring action, or jump to the relevant action
+- [x] First-class `Mark this scenario expected-to-fail` action
+- [x] Side list of every fact no action produces
+
+**Acceptance criteria:** `comms-lost-realloc-needed` produces the reviewed five-row chain and
+concludes that no action makes `(comms-available)` true and the scenario does not start with
+it.
+
+**Dependencies:** WI-6.1, WI-2.4
+**Effort:** Small to medium
+
+---
+
+### WI-6.9: Saved Named Views
+
+**Description:** Save a focus, depth, and relationship filter under a review-friendly name.
+
+**Deliverables:**
+- [~] Deferred. Selection history is available during a session, but named views are not
+  stored in the project model.
+
+**Acceptance criteria:** Still open.
+
+**Dependencies:** WI-6.3
+**Effort:** Small
+
+---
+
+### WI-6.10: Derived Causal Relationships
+
+**Description:** Remove the hand-drawn relationship interaction and derive action enabling
+relationships from action facts and compatible parameter types.
+
+**Deliverables:**
+- [x] Whole-domain and neighbourhood relationships are derived and read-only
+- [x] Hand-drawing and link deletion interactions removed
+- [x] New project files do not write `causalLinks`
+- [x] Existing version-1 files containing `causalLinks` load without error and ignore them
+
+**Acceptance criteria:** No editable field remains for relationship data that the PDDL
+generator, validators, and planner ignore.
+
+**Dependencies:** WI-6.1
+**Effort:** Small
+
+---
+
 ## Summary & Milestones
 
 | Milestone | Work Items | Delivers | Target Readiness |
@@ -490,6 +685,7 @@ navigation for wide domains and guided authoring for non-programmers
 | **M3: Visual preview** | WI-3.1 – WI-3.3 | Plan & BT visualisation alongside authoring | Review-ready |
 | **M4: Scenario management** | WI-4.1 – WI-4.4 | Regression packs, import, contingency | Engineering-complete |
 | **M5: Production polish** | WI-5.1 – WI-5.4 | Action registry, palette, shortcuts, theme | Release-ready |
+| **M6: Usable authoring and navigation** | WI-6.1 – WI-6.10 | Guided action editing, computed navigation, review views, useful failure reports | Implemented; named views and collapsible groups remain |
 
 ---
 
@@ -516,6 +712,17 @@ WI-0.1 ──> WI-0.2 ──> WI-1.1 ──> WI-1.3 ──> WI-1.4 ──> WI-1.
          WI-5.2 <── WI-1.4
          WI-5.3 <── WI-1.6 + WI-5.2
          WI-5.4 <── WI-1.4
+
+         WI-6.1 <── WI-1.4
+           ├──> WI-6.2 <── WI-5.2
+           ├──> WI-6.3 ──> WI-6.7
+           │               └──> WI-6.9
+           ├──> WI-6.5
+           ├──> WI-6.6 <── WI-1.2
+           ├──> WI-6.8 <── WI-2.4
+           └──> WI-6.10
+
+         WI-6.4 <── WI-1.4 + WI-1.2
 ```
 
 ---

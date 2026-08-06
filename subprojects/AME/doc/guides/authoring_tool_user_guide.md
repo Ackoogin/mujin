@@ -24,22 +24,55 @@ The tool is offline and local. It does not replace the AME DevEnv, ROS2 nodes, o
 
 ## 2) Build and launch
 
-The tool is gated behind `AME_BUILD_AUTHORING=ON` and is included in the `authoring` configure preset.
+The tool is gated behind `AME_BUILD_AUTHORING=ON`, and the `authoring` preset turns that on for
+you. The preset configures into its own `build-authoring/` directory and has matching build and
+test presets, `authoring-release` and `authoring-debug`.
 
 From the repository root on Windows:
 
 ```bat
 cmake --preset authoring
-cmake --build build --config Release --target ame_authoring_tool --parallel %NUMBER_OF_PROCESSORS%
-build\subprojects\AME\src\Release\ame_authoring_tool.exe
+cmake --build --preset authoring-release --target ame_authoring_tool --parallel %NUMBER_OF_PROCESSORS%
+build-authoring\subprojects\AME\src\Release\ame_authoring_tool.exe
 ```
 
-Equivalent explicit configure:
+From the repository root on Linux, using GCC or Clang:
 
-```bat
-cmake --preset default -DAME_BUILD_AUTHORING=ON
-cmake --build build --config Release --target ame_authoring_tool
+```bash
+cmake --preset authoring -DCMAKE_BUILD_TYPE=Release
+cmake --build --preset authoring-release --target ame_authoring_tool --parallel $(nproc)
+build-authoring/subprojects/AME/src/ame_authoring_tool
 ```
+
+Run the tool's own test suites with the matching test preset:
+
+```bash
+ctest --preset authoring-release
+```
+
+The same `authoring` preset serves both platforms. Two details differ on Linux. The build type has
+to be given explicitly, because the generators normally used there choose one configuration at
+configure time rather than at build time. The executable also lands directly in
+`build-authoring/subprojects/AME/src/` rather than in a `Release` subdirectory, for the same reason.
+
+If you would rather configure by hand than use the preset, note that **two** options are needed,
+not one:
+
+```bash
+cmake -S . -B build-authoring -DUNMANNED_BUILD_AME=ON -DAME_BUILD_AUTHORING=ON
+```
+
+`AME_BUILD_AUTHORING` is declared inside the AME subproject, and `UNMANNED_BUILD_AME` defaults to
+off. Setting only `AME_BUILD_AUTHORING` means the AME subdirectory is never processed, so the
+option is never declared and CMake discards the setting with nothing more than a
+"Manually-specified variables were not used by the project" warning. The configure then succeeds
+and produces no authoring tool at all.
+
+The tool is supported equally on both platforms and contains no platform-specific code. SDL2,
+Dear ImGui, and imgui-node-editor are cross-platform, and the Linux build compiles SDL2 from
+source with X11 and OpenGL support. Building on Linux therefore needs the OpenGL and X11
+development headers present (on Debian and Ubuntu these come from `libgl1-mesa-dev` and
+`xorg-dev`); everything else is fetched by CMake.
 
 The first configure downloads the GUI dependencies through CMake `FetchContent`, including Dear ImGui, imgui-node-editor, SDL2, stb, JetBrains Mono, and tinyfiledialogs.
 
@@ -53,6 +86,12 @@ build\subprojects\AME\src\Release\ame_authoring_tool.exe --self-test ame_authori
 
 The command creates a hidden window, drives the real application shell, writes a PNG screenshot, and prints a JSON result to stdout. A successful run exits with code `0`.
 
+On a Linux machine without a display server, use SDL's offscreen backend:
+
+```bash
+SDL_VIDEODRIVER=offscreen build/subprojects/AME/src/ame_authoring_tool --self-test ame_authoring_self_test.png
+```
+
 ---
 
 ## 3) Main screen
@@ -62,11 +101,33 @@ The application has four workflow tabs:
 | Tab | Purpose |
 |-----|---------|
 | `Domain` | Main authoring surface for palette, types, objects, scenarios, properties, and the node graph |
-| `PDDL` | Generated domain PDDL, validation output, grounding report, regression results, and contingency results |
+| `PDDL` | Editable domain PDDL, validation output, grounding report, regression results, and contingency results |
 | `Plan` | Read-only plan graph after a successful feasibility check |
 | `BT` | Read-only Behavior Tree graph after a successful plan compile |
 
 The status bar shows the current project name, validation state, and last operation. The layout is saved to `ame_authoring_tool.ini` during normal interactive use.
+
+The PDDL tab starts from the generated domain text. Edit it directly and select `Apply edited
+PDDL to project` to round-trip it through the same importer used for PDDL files. Objects,
+scenarios, and lifecycle groupings are retained when the edited domain is applied. Select
+`Reload generated PDDL` to discard un-applied text edits.
+
+### Domain views
+
+The right side of the `Domain` tab has five views over the same project model:
+
+| View | Purpose |
+|------|---------|
+| `Neighbourhood` | Shows the selected fact or action and only its nearby relationships |
+| `Relations` | Lists everything that needs, makes true, or makes false the selection |
+| `Matrix` | Shows all facts against all actions as `R`, `+`, and `-` marks |
+| `Lifecycles` | Shows transitions within user-declared state groups for each object type |
+| `Whole domain` | Retains the complete canvas for small domains and presentation use |
+
+Use the back and forward buttons to retrace selections made in the palette, relation lists,
+or graph. The neighbourhood view has one-step and two-step depth settings and filters for the
+three relationship kinds. It shows at most twenty neighbours; select the `+ n more` node to
+open the complete list.
 
 ---
 
@@ -89,12 +150,16 @@ The project stores:
 - type hierarchy,
 - predicates,
 - action schemas,
-- causal links,
+- user-declared lifecycle state groups,
 - objects,
 - scenarios,
 - scenario expected outcomes,
 - per-action Behavior Tree bindings,
-- graph node positions.
+- graph node positions used by the optional whole-domain view.
+
+Action-to-action relationships are derived from action outcomes and requirements. They are
+not stored or drawn by hand. Older version-1 files that contain `causalLinks` still load, but
+that legacy field is ignored and is not written when the project is saved again.
 
 PDDL remains an import/export artefact. The structured project is the better format for ongoing graphical editing.
 
@@ -151,12 +216,19 @@ Create actions from either:
 
 Select an action node to edit:
 
-- action name,
-- typed parameters,
-- preconditions,
-- add effects,
-- delete effects,
-- Behavior Tree binding.
+- what the action involves,
+- what must be true before it can happen,
+- what becomes true or false afterwards,
+- its Behavior Tree binding.
+
+The editor presents these as the sentence groups `It involves`, `Before it can happen`, and
+`Afterwards`. Fact names and action parameter names are selected from dropdowns. Choices that
+do not fit the required type remain visible in grey with a short reason, such as `applies to
+a sector`. This makes the type rule visible without allowing the illegal choice.
+
+An outcome that removes a fact is shown as `becomes false` on the same row. The generated PDDL
+and current checks remain visible below the sentences, and the PDDL tab remains the editable
+text path for experienced authors.
 
 Example action:
 
@@ -169,13 +241,32 @@ Example action:
     (not (at ?r ?from))))
 ```
 
-Preconditions and effects are entered by choosing a predicate and providing argument names. For an action schema, use action parameter names such as `?r` and `?to`; for scenario facts, use object names such as `uav1` and `sector_a`.
+For scenario facts, use object names such as `uav1` and `sector_a`. The action editor uses action
+parameter names such as `?r` and `?to` in its dropdowns.
 
-### Causal links
+### Derived relationships
 
-Drag from an action add-effect output pin to another action precondition input pin to create an informational causal link. The tool accepts the link only when the predicate signatures are compatible.
+Amber means an action needs a fact, green means an action makes a fact true, and red-orange
+means it makes a fact false. The same colours are used in the relations panel, both graph
+views, the matrix, and the failure report.
 
-Causal links help reviewers understand flow, but formal semantics still come from the PDDL precondition and effect lists.
+The tool also derives that action A may enable action B when A makes a fact true that B needs
+and their parameter types can describe at least one common grounded value. These relationships
+are read-only because the PDDL action definitions are authoritative.
+
+### Fact-by-action matrix export
+
+Open the `Matrix` view and use `Export CSV` or `Export Markdown`. Both formats include the
+complete table and preserve cells with more than one mark. Use these exports as review or
+assurance evidence alongside the generated PDDL.
+
+### Lifecycle groupings
+
+Open `Lifecycles`, enter a grouping name, object type, and space-separated fact names, then
+select `Add state grouping`. A transition appears when one action makes one group member false
+and another member true. If no action makes that change, the view says so; an empty lifecycle
+is valid information rather than a rendering error. Automatic grouping suggestion is not
+implemented.
 
 ---
 
@@ -264,6 +355,17 @@ On success, the `Plan` tab shows:
 - expanded/generated search counts,
 - solve time,
 - read-only causal plan graph.
+
+When no plan exists, the `Plan` tab names a failed goal and walks backwards through the domain
+until it reaches the first fact that no action can make true. The report offers direct actions:
+
+- add the missing fact to the scenario's starting facts,
+- add an action that restores it,
+- jump to the relevant action,
+- mark the scenario as expected to fail.
+
+Expected failure is useful for contingency scenarios where infeasibility is the behavior under
+test. The right side of the report also lists every fact that no action produces.
 
 ### Plan & Preview
 
@@ -388,6 +490,8 @@ For an existing PDDL model:
 - Scenario facts are entered as predicate plus argument text, not as generated fluent checkboxes.
 - The canvas `Add Type` context menu item is a placeholder; add types through the sidebar.
 - Plan and BT views are read-only previews.
+- Semantic zoom is available in the whole-domain canvas, but collapsible named groups are not yet implemented.
+- Selection history is available during exploration, but saved named views are not yet stored.
 - The tool performs design-time validation only; live ROS2 execution monitoring remains in DevEnv/Foxglove.
 
 ---
@@ -396,11 +500,11 @@ For an existing PDDL model:
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| `ame_authoring_tool` target is missing | Configure was run without authoring enabled | Run `cmake --preset authoring` or configure with `-DAME_BUILD_AUTHORING=ON` |
+| `ame_authoring_tool` target is missing | Configure was run without authoring enabled | Run `cmake --preset authoring`. If configuring by hand, pass both `-DUNMANNED_BUILD_AME=ON` and `-DAME_BUILD_AUTHORING=ON` — see section 2 |
+| Configure reports "Manually-specified variables were not used by the project: AME_BUILD_AUTHORING" | `UNMANNED_BUILD_AME` was off, so the option was never declared and the setting was discarded | Add `-DUNMANNED_BUILD_AME=ON`, or use the `authoring` preset, which sets both |
 | First configure fails while fetching dependencies | Network or Git access issue during `FetchContent` | Retry from a network-enabled developer environment |
 | Window opens but font differs | `JetBrainsMono-Regular.ttf` was not copied next to the executable | Rebuild the `ame_authoring_tool` target |
 | Export is refused | Structural validation has errors | Open the `PDDL` tab, fix `ERR` entries, then export again |
 | Planner returns no plan | Scenario goal is unreachable from the initial state, or action preconditions/effects are incomplete | Inspect generated PDDL, run validation, and check action schemas |
 | Grounding report shows zero ground actions | Missing objects or parameter types do not match | Add objects for each action parameter type and revalidate |
 | Imported problem fails | Problem does not match the imported domain | Import the matching domain first and check predicate/object names |
-

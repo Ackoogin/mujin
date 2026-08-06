@@ -1,6 +1,7 @@
 #include "app_shell.h"
 
 #include "authoring_utils.h"
+#include "guided_editor_model.h"
 #include "imgui.h"
 #include "pddl_generator.h"
 #include "pddl_importer.h"
@@ -193,6 +194,231 @@ static void renderActionRefSection(const char* title,
       refs.push_back(ref);
     });
     argBuffer[0] = '\0';
+  }
+  ImGui::PopID();
+}
+
+static const PredicateDef* predicateByName(const ProjectModel& model,
+                                           const std::string& name) {
+  const auto found = std::find_if(model.predicates.begin(), model.predicates.end(),
+                                  [&name](const PredicateDef& predicate) {
+                                    return predicate.name == name;
+                                  });
+  return found == model.predicates.end() ? nullptr : &*found;
+}
+
+static std::vector<EffectRef>& actionReferences(ActionDef& action,
+                                                PredicateRelationKind kind) {
+  if (kind == PredicateRelationKind::Requires) {
+    return action.preconditions;
+  }
+  if (kind == PredicateRelationKind::MakesTrue) {
+    return action.addEffects;
+  }
+  return action.delEffects;
+}
+
+static const std::vector<EffectRef>& actionReferences(const ActionDef& action,
+                                                      PredicateRelationKind kind) {
+  if (kind == PredicateRelationKind::Requires) {
+    return action.preconditions;
+  }
+  if (kind == PredicateRelationKind::MakesTrue) {
+    return action.addEffects;
+  }
+  return action.delEffects;
+}
+
+static bool predicateHasLegalArguments(const ProjectModel& model,
+                                       const ActionDef& action,
+                                       const PredicateDef& predicate) {
+  const auto choices = guidedPredicateChoices(model, action);
+  const auto found = std::find_if(
+      choices.begin(), choices.end(), [&predicate](const GuidedEditorChoice& choice) {
+        return choice.name == predicate.name;
+      });
+  return found != choices.end() && found->legal;
+}
+
+static EffectRef defaultReference(const ProjectModel& model,
+                                  const ActionDef& action,
+                                  const PredicateDef& predicate) {
+  return makeGuidedReference(model, action, predicate);
+}
+
+static void renderGuidedReferenceGroup(const char* visibleTitle,
+                                       const char* tableId,
+                                       const char* addLabel,
+                                       const char* rowVerb,
+                                       const char* outcome,
+                                       int actionIndex,
+                                       PredicateRelationKind kind,
+                                       ProjectModel& model,
+                                       CommandStack& stack) {
+  ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "%s", visibleTitle);
+  ActionDef& action = model.actions[static_cast<size_t>(actionIndex)];
+  std::vector<EffectRef>& refs = actionReferences(action, kind);
+  for (int reference_index = 0;
+       reference_index < static_cast<int>(refs.size());
+       ++reference_index) {
+    ImGui::PushID(reference_index);
+    EffectRef& reference = refs[static_cast<size_t>(reference_index)];
+    const PredicateDef* predicate = predicateByName(model, reference.predicateName);
+
+    if (!reference.argNames.empty()) {
+      ImGui::SetNextItemWidth(90.0F);
+      if (ImGui::BeginCombo("##subject", reference.argNames.front().c_str())) {
+        const std::string expected =
+            predicate != nullptr && !predicate->params.empty()
+                ? predicate->params.front().type : std::string{};
+        for (const Parameter& parameter : action.params) {
+          const bool legal = guidedTypeCompatible(model, parameter.type, expected);
+          if (ImGui::Selectable(parameter.name.c_str(),
+                                parameter.name == reference.argNames.front(),
+                                legal ? ImGuiSelectableFlags_None
+                                      : ImGuiSelectableFlags_Disabled)) {
+            const std::string argument = parameter.name;
+            stack.execute(model, "Choose guided fact name",
+                          [actionIndex, reference_index, kind, argument](ProjectModel& target) {
+              actionReferences(target.actions[static_cast<size_t>(actionIndex)], kind)
+                  [static_cast<size_t>(reference_index)].argNames[0] = argument;
+            });
+          }
+          if (!legal) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("needs a %s", expected.c_str());
+          }
+        }
+        ImGui::EndCombo();
+      }
+      ImGui::SameLine();
+    }
+    ImGui::TextUnformatted(rowVerb);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(145.0F);
+    if (ImGui::BeginCombo("##predicate", reference.predicateName.c_str())) {
+      for (const PredicateDef& candidate : model.predicates) {
+        const bool legal = predicateHasLegalArguments(model, action, candidate);
+        if (ImGui::Selectable(candidate.name.c_str(),
+                              candidate.name == reference.predicateName,
+                              legal ? ImGuiSelectableFlags_None
+                                    : ImGuiSelectableFlags_Disabled)) {
+          const EffectRef replacement = defaultReference(model, action, candidate);
+          stack.execute(model, "Choose guided fact",
+                        [actionIndex, reference_index, kind, replacement](ProjectModel& target) {
+            actionReferences(target.actions[static_cast<size_t>(actionIndex)], kind)
+                [static_cast<size_t>(reference_index)] = replacement;
+          });
+        }
+        if (!legal) {
+          ImGui::SameLine();
+          const std::string applies_to = candidate.params.empty()
+              ? "no object" : candidate.params.front().type;
+          ImGui::TextDisabled("applies to a %s", applies_to.c_str());
+        }
+      }
+      ImGui::EndCombo();
+    }
+
+    predicate = predicateByName(model, reference.predicateName);
+    for (size_t argument_index = 1;
+         argument_index < reference.argNames.size();
+         ++argument_index) {
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(90.0F);
+      const std::string expected =
+          predicate != nullptr && argument_index < predicate->params.size()
+              ? predicate->params[argument_index].type : std::string{};
+      const std::string combo_id = "##arg" + std::to_string(argument_index);
+      if (ImGui::BeginCombo(combo_id.c_str(), reference.argNames[argument_index].c_str())) {
+        for (const Parameter& parameter : action.params) {
+          const bool legal = guidedTypeCompatible(model, parameter.type, expected);
+          if (ImGui::Selectable(parameter.name.c_str(),
+                                parameter.name == reference.argNames[argument_index],
+                                legal ? ImGuiSelectableFlags_None
+                                      : ImGuiSelectableFlags_Disabled)) {
+            const std::string argument = parameter.name;
+            stack.execute(model, "Choose guided fact name",
+                          [actionIndex, reference_index, argument_index,
+                           kind, argument](ProjectModel& target) {
+              actionReferences(target.actions[static_cast<size_t>(actionIndex)], kind)
+                  [static_cast<size_t>(reference_index)].argNames[argument_index] = argument;
+            });
+          }
+          if (!legal) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("needs a %s", expected.c_str());
+          }
+        }
+        ImGui::EndCombo();
+      }
+    }
+    if (outcome != nullptr && outcome[0] != '\0') {
+      ImGui::SameLine();
+      const ImVec4 colour = kind == PredicateRelationKind::MakesTrue
+          ? ImVec4(0.32F, 0.84F, 0.60F, 1.0F)
+          : ImVec4(0.95F, 0.51F, 0.42F, 1.0F);
+      ImGui::TextColored(colour, "%s", outcome);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Remove")) {
+      stack.execute(model, "Remove guided fact",
+                    [actionIndex, reference_index, kind](ProjectModel& target) {
+        std::vector<EffectRef>& target_refs =
+            actionReferences(target.actions[static_cast<size_t>(actionIndex)], kind);
+        target_refs.erase(target_refs.begin() + reference_index);
+      });
+      ImGui::PopID();
+      --reference_index;
+      continue;
+    }
+    ImGui::PopID();
+  }
+
+  ImGui::PushID(tableId);
+  static int selected_predicates[3] = {0, 0, 0};
+  const int kind_index = static_cast<int>(kind);
+  int& selected_predicate = selected_predicates[kind_index];
+  if (!model.predicates.empty()) {
+    selected_predicate = std::max(0, std::min(
+        selected_predicate, static_cast<int>(model.predicates.size()) - 1));
+    const PredicateDef& selected = model.predicates[static_cast<size_t>(selected_predicate)];
+    ImGui::SetNextItemWidth(145.0F);
+    if (ImGui::BeginCombo("##new-guided-fact", selected.name.c_str())) {
+      for (int i = 0; i < static_cast<int>(model.predicates.size()); ++i) {
+        const PredicateDef& candidate = model.predicates[static_cast<size_t>(i)];
+        const bool legal = predicateHasLegalArguments(model, action, candidate);
+        if (ImGui::Selectable(candidate.name.c_str(), i == selected_predicate,
+                              legal ? ImGuiSelectableFlags_None
+                                    : ImGuiSelectableFlags_Disabled)) {
+          selected_predicate = i;
+        }
+        if (!legal) {
+          ImGui::SameLine();
+          ImGui::TextDisabled("applies to a %s",
+                              candidate.params.empty()
+                                  ? "fact with no object"
+                                  : candidate.params.front().type.c_str());
+        }
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    const bool legal = predicateHasLegalArguments(model, action, selected);
+    if (!legal) {
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button(addLabel)) {
+      const EffectRef reference = defaultReference(model, action, selected);
+      stack.execute(model, "Add guided fact",
+                    [actionIndex, kind, reference](ProjectModel& target) {
+        actionReferences(target.actions[static_cast<size_t>(actionIndex)], kind)
+            .push_back(reference);
+      });
+    }
+    if (!legal) {
+      ImGui::EndDisabled();
+    }
   }
   ImGui::PopID();
 }
@@ -854,7 +1080,7 @@ static std::string formatActionSignature(const ActionDef& a) {
 
 void AppShell::renderDomainTab() {
   // Left sidebar: palette + type hierarchy + selected-element editor.
-  ImGui::BeginChild("##DomainSidebar", ImVec2(420.0F, 0.0F),
+  ImGui::BeginChild("##DomainSidebar", ImVec2(520.0F, 0.0F),
                     ImGuiChildFlags_Border);
 
   // ---- Palette ----------------------------------------------------------
@@ -1138,11 +1364,372 @@ void AppShell::renderDomainTab() {
 
   ImGui::SameLine();
 
-  // Right area: node-editor canvas.
+  // Right area: the five complementary navigation and review views.
   ImGui::BeginChild("##DomainCanvas", ImVec2(0.0F, 0.0F),
                     ImGuiChildFlags_Border);
-  m_domainGraph.render(m_model, m_commandStack);
+  if (m_domainGraph.canGoBack()) {
+    if (ImGui::Button("< back")) {
+      m_domainGraph.goBack();
+    }
+  } else {
+    ImGui::BeginDisabled();
+    ImGui::Button("< back");
+    ImGui::EndDisabled();
+  }
+  ImGui::SameLine();
+  if (m_domainGraph.canGoForward()) {
+    if (ImGui::Button("forward >")) {
+      m_domainGraph.goForward();
+    }
+  } else {
+    ImGui::BeginDisabled();
+    ImGui::Button("forward >");
+    ImGui::EndDisabled();
+  }
+  ImGui::SameLine();
+  static constexpr const char* kDomainViews[] = {
+      "Neighbourhood", "Relations", "Matrix", "Lifecycles", "Whole domain"};
+  ImGui::SetNextItemWidth(150.0F);
+  ImGui::Combo("View##domain", &m_domainViewMode, kDomainViews,
+               static_cast<int>(std::size(kDomainViews)));
+  ImGui::Separator();
+
+  const RelationIndex relation_index(m_model);
+  if (m_domainViewMode == 0) {
+    m_domainViewsRendered[0] = true;
+    ImGui::SetNextItemWidth(90.0F);
+    ImGui::SliderInt("steps", &m_neighbourDepth, 1, 2);
+    ImGui::SameLine();
+    bool show_requires = (m_neighbourFilter & ShowRequires) != 0U;
+    bool show_true = (m_neighbourFilter & ShowMakesTrue) != 0U;
+    bool show_false = (m_neighbourFilter & ShowMakesFalse) != 0U;
+    if (ImGui::Checkbox("needs it", &show_requires)) {
+      m_neighbourFilter = show_requires
+          ? m_neighbourFilter | ShowRequires
+          : m_neighbourFilter & ~ShowRequires;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("makes true", &show_true)) {
+      m_neighbourFilter = show_true
+          ? m_neighbourFilter | ShowMakesTrue
+          : m_neighbourFilter & ~ShowMakesTrue;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("makes false", &show_false)) {
+      m_neighbourFilter = show_false
+          ? m_neighbourFilter | ShowMakesFalse
+          : m_neighbourFilter & ~ShowMakesFalse;
+    }
+    m_domainGraph.renderFocused(m_model, relation_index, m_neighbourDepth,
+                                m_neighbourFilter, 20U);
+  } else if (m_domainViewMode == 1) {
+    m_domainViewsRendered[1] = true;
+    renderRelationsPanel();
+  } else if (m_domainViewMode == 2) {
+    m_domainViewsRendered[2] = true;
+    renderMatrixPanel();
+  } else if (m_domainViewMode == 3) {
+    m_domainViewsRendered[3] = true;
+    renderLifecyclePanel();
+  } else {
+    m_domainViewsRendered[4] = true;
+    ImGui::TextDisabled("Derived relationships are read-only. Zoom out for compact nodes.");
+    m_domainGraph.render(m_model, m_commandStack);
+  }
   ImGui::EndChild();
+}
+
+void AppShell::renderRelationsPanel() {
+  const RelationIndex index(m_model);
+  const ImVec4 amber(0.88F, 0.69F, 0.32F, 1.0F);
+  const ImVec4 green(0.32F, 0.84F, 0.60F, 1.0F);
+  const ImVec4 red(0.95F, 0.51F, 0.42F, 1.0F);
+
+  ImGui::TextDisabled("Selected");
+  const auto& history = m_domainGraph.selectionHistory();
+  for (size_t i = 0; i < history.size(); ++i) {
+    if (i > 0) {
+      ImGui::SameLine();
+      ImGui::TextDisabled(">");
+      ImGui::SameLine();
+    }
+    const DomainElementRef& element = history[i];
+    const std::string label = element.kind == DomainElementKind::Predicate
+        ? (element.index < m_model.predicates.size()
+               ? m_model.predicates[element.index].name : "?")
+        : (element.index < m_model.actions.size()
+               ? m_model.actions[element.index].name : "?");
+    ImGui::TextColored(static_cast<int>(i) == m_domainGraph.historyPosition()
+                           ? ImVec4(0.0F, 0.9F, 1.0F, 1.0F)
+                           : ImVec4(0.39F, 0.51F, 0.59F, 1.0F),
+                       "%s", label.c_str());
+  }
+  ImGui::Separator();
+
+  const int selected_predicate = m_domainGraph.selectedPredicateIndex();
+  if (selected_predicate >= 0 &&
+      selected_predicate < static_cast<int>(m_model.predicates.size())) {
+    const PredicateDef& predicate =
+        m_model.predicates[static_cast<size_t>(selected_predicate)];
+    const PredicateRelations& relations =
+        index.predicate(static_cast<size_t>(selected_predicate));
+    ImGui::Text("fact  %s", formatPredicateSignature(predicate).c_str());
+
+    const auto render_action_list = [&](const char* title,
+                                        const std::vector<PredicateActionRelation>& entries,
+                                        ImVec4 colour,
+                                        const char* badge) {
+      ImGui::TextColored(colour, "%s  %zu", title, entries.size());
+      for (const auto& entry : entries) {
+        const ActionDef& action = m_model.actions[entry.actionIndex];
+        ImGui::PushID(static_cast<int>(entry.actionIndex * 10U + entry.referenceIndex));
+        ImGui::TextColored(colour, "%s", badge);
+        ImGui::SameLine();
+        if (ImGui::Selectable(action.name.c_str())) {
+          m_domainGraph.setSelectedAction(static_cast<int>(entry.actionIndex));
+        }
+        ImGui::SameLine();
+        std::string reason;
+        for (const EffectRef& condition : action.preconditions) {
+          if (condition.predicateName != predicate.name) {
+            reason = "also needs " + condition.predicateName;
+            break;
+          }
+        }
+        if (reason.empty() && entry.kind == PredicateRelationKind::MakesFalse &&
+            std::any_of(relations.requiredBy.begin(), relations.requiredBy.end(),
+                        [&](const PredicateActionRelation& required) {
+                          return required.actionIndex == entry.actionIndex;
+                        })) {
+          reason = "also appears above";
+        }
+        ImGui::TextDisabled("%s", reason.c_str());
+        ImGui::PopID();
+      }
+    };
+    render_action_list("Actions that need this to be true", relations.requiredBy,
+                       amber, "R");
+    render_action_list("Actions that make it true", relations.madeTrueBy,
+                       green, "+");
+    render_action_list("Actions that make it false", relations.madeFalseBy,
+                       red, "-");
+
+    ImGui::Separator();
+    ImGui::TextDisabled("Where it starts out");
+    for (const ScenarioDef& scenario : m_model.scenarios) {
+      const size_t count = static_cast<size_t>(std::count_if(
+          scenario.initialState.begin(), scenario.initialState.end(),
+          [&](const FactRef& fact) { return fact.predicateName == predicate.name; }));
+      ImGui::Text("%s", scenario.name.c_str());
+      ImGui::SameLine();
+      ImGui::TextDisabled("%zu facts", count);
+    }
+    ImGui::TextDisabled("Same shape");
+    for (size_t i = 0; i < m_model.predicates.size(); ++i) {
+      if (static_cast<int>(i) == selected_predicate) {
+        continue;
+      }
+      const PredicateDef& other = m_model.predicates[i];
+      const bool same_shape = other.params.size() == predicate.params.size() &&
+          std::equal(other.params.begin(), other.params.end(), predicate.params.begin(),
+                     [](const Parameter& first, const Parameter& second) {
+                       return first.type == second.type;
+                     });
+      if (same_shape) {
+        ImGui::PushID(static_cast<int>(30000 + i));
+        if (ImGui::SmallButton(other.name.c_str())) {
+          m_domainGraph.setSelectedPredicate(static_cast<int>(i));
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+      }
+    }
+    ImGui::NewLine();
+    if (ImGui::Button("Neighbourhood view")) {
+      m_domainViewMode = 0;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Lifecycle of type")) {
+      m_domainViewMode = 3;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Row in matrix")) {
+      m_domainViewMode = 2;
+    }
+  } else {
+    const int selected_action = m_domainGraph.selectedActionIndex();
+    if (selected_action < 0 ||
+        selected_action >= static_cast<int>(m_model.actions.size())) {
+      ImGui::TextDisabled("Select a fact or action to inspect its relations.");
+    } else {
+      const ActionDef& action = m_model.actions[static_cast<size_t>(selected_action)];
+      const ActionRelations& relations = index.action(static_cast<size_t>(selected_action));
+      ImGui::Text("action  %s", formatActionSignature(action).c_str());
+      const auto predicate_buttons = [&](const char* title,
+                                         const std::vector<ActionPredicateRelation>& entries,
+                                         ImVec4 colour) {
+        ImGui::TextColored(colour, "%s  %zu", title, entries.size());
+        for (const auto& entry : entries) {
+          ImGui::PushID(static_cast<int>(40000 + entry.predicateIndex * 10U +
+                                        entry.referenceIndex));
+          if (ImGui::Selectable(m_model.predicates[entry.predicateIndex].name.c_str())) {
+            m_domainGraph.setSelectedPredicate(static_cast<int>(entry.predicateIndex));
+          }
+          ImGui::PopID();
+        }
+      };
+      predicate_buttons("It needs", relations.requires, amber);
+      predicate_buttons("It makes true", relations.makesTrue, green);
+      predicate_buttons("It makes false", relations.makesFalse, red);
+      ImGui::TextColored(green, "Actions it may enable  %zu", relations.mayEnable.size());
+      for (const size_t action_index : relations.mayEnable) {
+        ImGui::PushID(static_cast<int>(50000 + action_index));
+        if (ImGui::Selectable(m_model.actions[action_index].name.c_str())) {
+          m_domainGraph.setSelectedAction(static_cast<int>(action_index));
+        }
+        ImGui::PopID();
+      }
+      ImGui::TextColored(amber, "Actions that may enable it  %zu",
+                         relations.mayBeEnabledBy.size());
+      for (const size_t action_index : relations.mayBeEnabledBy) {
+        ImGui::PushID(static_cast<int>(60000 + action_index));
+        if (ImGui::Selectable(m_model.actions[action_index].name.c_str())) {
+          m_domainGraph.setSelectedAction(static_cast<int>(action_index));
+        }
+        ImGui::PopID();
+      }
+    }
+  }
+  ImGui::Separator();
+  ImGui::TextDisabled("relation index: %zu predicates, %zu actions, %zu links",
+                      index.predicateCount(), index.actionCount(), index.linkCount());
+}
+
+void AppShell::renderMatrixPanel() {
+  const RelationIndex index(m_model);
+  const FactActionMatrix matrix(m_model, index);
+  ImGui::Text("%s - %zu facts x %zu actions", m_model.projectName.c_str(),
+              m_model.predicates.size(), m_model.actions.size());
+  ImGui::SameLine();
+  if (ImGui::Button("Export CSV")) {
+    const std::string path = pickSaveFile("Export fact-by-action matrix",
+                                          m_model.projectName + "_matrix.csv",
+                                          "*.csv", "CSV matrix (*.csv)");
+    if (!path.empty()) {
+      lastOperation = matrix.exportCsv(m_model, path)
+          ? "Wrote " + path : "Failed to write " + path;
+    }
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Export Markdown")) {
+    const std::string path = pickSaveFile("Export fact-by-action matrix",
+                                          m_model.projectName + "_matrix.md",
+                                          "*.md", "Markdown table (*.md)");
+    if (!path.empty()) {
+      lastOperation = matrix.exportMarkdown(m_model, path)
+          ? "Wrote " + path : "Failed to write " + path;
+    }
+  }
+
+  if (ImGui::BeginTable("##fact-action-matrix",
+                        static_cast<int>(m_model.actions.size() + 1U),
+                        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                            ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY)) {
+    ImGui::TableSetupColumn("fact \\ action", ImGuiTableColumnFlags_WidthFixed, 150.0F);
+    for (const ActionDef& action : m_model.actions) {
+      ImGui::TableSetupColumn(action.name.c_str(), ImGuiTableColumnFlags_WidthFixed, 95.0F);
+    }
+    ImGui::TableHeadersRow();
+    for (size_t predicate_index = 0;
+         predicate_index < m_model.predicates.size(); ++predicate_index) {
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      if (ImGui::Selectable(m_model.predicates[predicate_index].name.c_str())) {
+        m_domainGraph.setSelectedPredicate(static_cast<int>(predicate_index));
+      }
+      for (size_t action_index = 0; action_index < m_model.actions.size(); ++action_index) {
+        ImGui::TableSetColumnIndex(static_cast<int>(action_index + 1U));
+        const FactActionCell& cell = matrix.cell(predicate_index, action_index);
+        if (cell.requires) {
+          ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F), "R");
+          ImGui::SameLine();
+        }
+        if (cell.makesTrue) {
+          ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F), "+");
+          ImGui::SameLine();
+        }
+        if (cell.makesFalse) {
+          ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F), "-");
+        }
+      }
+    }
+    ImGui::EndTable();
+  }
+  ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F),
+                     "%zu facts no action ever makes true",
+                     index.factsNoActionMakesTrue().size());
+}
+
+void AppShell::renderLifecyclePanel() {
+  ImGui::TextDisabled("Groupings are declared by hand; automatic suggestion is a later step.");
+  ImGui::InputText("Grouping name", m_stateGroupNameInput,
+                   sizeof(m_stateGroupNameInput));
+  ImGui::InputText("Object type", m_stateGroupTypeInput,
+                   sizeof(m_stateGroupTypeInput));
+  ImGui::InputText("Alternative fact names", m_stateGroupPredicatesInput,
+                   sizeof(m_stateGroupPredicatesInput));
+  if (ImGui::Button("Add state grouping") &&
+      m_stateGroupNameInput[0] != '\0' && m_stateGroupTypeInput[0] != '\0') {
+    const StateGroupDef group{m_stateGroupNameInput, m_stateGroupTypeInput,
+                              parseArgList(m_stateGroupPredicatesInput)};
+    m_commandStack.execute(m_model, "Add lifecycle grouping",
+                           [group](ProjectModel& model) {
+      model.stateGroups.push_back(group);
+    });
+    m_stateGroupNameInput[0] = '\0';
+    m_stateGroupTypeInput[0] = '\0';
+    m_stateGroupPredicatesInput[0] = '\0';
+  }
+  ImGui::Separator();
+  const RelationIndex index(m_model);
+  const LifecycleModel lifecycles(m_model, index);
+  if (lifecycles.diagrams().empty()) {
+    ImGui::TextDisabled("No lifecycle groupings have been declared.");
+  }
+  for (const LifecycleDiagram& diagram : lifecycles.diagrams()) {
+    const StateGroupDef& group = m_model.stateGroups[diagram.groupIndex];
+    ImGui::PushID(static_cast<int>(diagram.groupIndex));
+    ImGui::TextColored(ImVec4(0.0F, 0.9F, 1.0F, 1.0F), "%s", group.type.c_str());
+    ImGui::SameLine();
+    ImGui::Text("grouped by: %s", group.name.c_str());
+    for (const size_t predicate_index : diagram.predicateIndices) {
+      ImGui::Button(m_model.predicates[predicate_index].name.c_str(), ImVec2(150.0F, 0.0F));
+      ImGui::SameLine();
+    }
+    ImGui::NewLine();
+    if (diagram.transitions.empty()) {
+      ImGui::TextDisabled("No action changes one declared state into another.");
+    } else {
+      for (const LifecycleTransition& transition : diagram.transitions) {
+        ImGui::Text("%s  -- %s -->  %s",
+                    m_model.predicates[transition.fromPredicateIndex].name.c_str(),
+                    m_model.actions[transition.actionIndex].name.c_str(),
+                    m_model.predicates[transition.toPredicateIndex].name.c_str());
+      }
+    }
+    if (ImGui::SmallButton("Remove grouping")) {
+      const size_t remove_index = diagram.groupIndex;
+      m_commandStack.execute(m_model, "Remove lifecycle grouping",
+                             [remove_index](ProjectModel& model) {
+        model.stateGroups.erase(model.stateGroups.begin() +
+                                static_cast<std::ptrdiff_t>(remove_index));
+      });
+      ImGui::PopID();
+      break;
+    }
+    ImGui::Separator();
+    ImGui::PopID();
+  }
 }
 
 void AppShell::renderPddlTab() {
@@ -1150,7 +1737,45 @@ void AppShell::renderPddlTab() {
   ImGui::BeginChild("##PddlPreview", ImVec2(0.0F, halfH),
                     ImGuiChildFlags_Border);
   const std::string pddl = PddlGenerator::generateDomain(m_model);
-  renderPddlText(pddl);
+  const auto load_generated = [&]() {
+    const size_t length = std::min(pddl.size(), m_pddlEditorBuffer.size() - 1U);
+    std::copy_n(pddl.data(), length, m_pddlEditorBuffer.data());
+    m_pddlEditorBuffer[length] = '\0';
+    m_pddlEditorInitialised = true;
+    m_pddlEditorDirty = false;
+  };
+  if (!m_pddlEditorInitialised || !m_pddlEditorDirty) {
+    load_generated();
+  }
+  if (ImGui::Button("Reload generated PDDL")) {
+    load_generated();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Apply edited PDDL to project")) {
+    const PddlImportResult imported =
+        PddlImporter::importDomain(m_pddlEditorBuffer.data());
+    if (imported.ok) {
+      ProjectModel replacement = imported.model;
+      replacement.objects = m_model.objects;
+      replacement.scenarios = m_model.scenarios;
+      replacement.stateGroups = m_model.stateGroups;
+      m_commandStack.execute(m_model, "Apply edited PDDL",
+                             [replacement](ProjectModel& model) {
+        model = replacement;
+      });
+      projectName = m_model.projectName;
+      clearDerivedResults();
+      m_requestedTab = "PDDL";
+      lastOperation = "Applied edited PDDL";
+    } else {
+      lastOperation = "PDDL edit failed: " + imported.error;
+    }
+  }
+  if (ImGui::InputTextMultiline("##editable-pddl", m_pddlEditorBuffer.data(),
+                                m_pddlEditorBuffer.size(), ImVec2(-FLT_MIN, -FLT_MIN),
+                                ImGuiInputTextFlags_AllowTabInput)) {
+    m_pddlEditorDirty = true;
+  }
   ImGui::EndChild();
   ImGui::BeginChild("##ValidationOutput", ImVec2(0.0F, 0.0F),
                     ImGuiChildFlags_Border);
@@ -1373,14 +1998,127 @@ void AppShell::renderPlanTab() {
     return;
   }
 
-  if (!m_lastPlan.error_msg.empty()) {
-    ImGui::TextColored(ImVec4(1.0F, 0.4F, 0.4F, 1.0F),
-                       "Infeasible: %s",
+  ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F),
+                     "Scenario: %s - no plan", m_lastPlanScenarioName.c_str());
+  if (!m_lastFailureExplanation.available) {
+    ImGui::TextWrapped("The tool could not identify one unreachable fact. %s",
                        m_lastPlan.error_msg.c_str());
-  } else {
-    ImGui::TextColored(ImVec4(1.0F, 0.4F, 0.4F, 1.0F),
-                       "Infeasible: no plan exists");
+    return;
   }
+
+  ImGui::BeginChild("##failure-explanation", ImVec2(-270.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  ImGui::TextDisabled("the goal it could not reach");
+  const std::string failed_goal =
+      FailureExplainer::formatFact(m_lastFailureExplanation.failedGoal);
+  ImGui::TextColored(ImVec4(0.0F, 0.9F, 1.0F, 1.0F), "%s", failed_goal.c_str());
+  ImGui::Separator();
+  ImGui::TextDisabled("Why");
+  for (const FailureExplanationRow& row : m_lastFailureExplanation.rows) {
+    ImVec4 colour(0.88F, 0.69F, 0.32F, 1.0F);
+    const char* badge = "R";
+    if (row.kind == FailureExplanationKind::Producer) {
+      colour = ImVec4(0.32F, 0.84F, 0.60F, 1.0F);
+      badge = "+";
+    } else if (row.kind == FailureExplanationKind::RemovedAndRestored) {
+      colour = ImVec4(0.95F, 0.51F, 0.42F, 1.0F);
+      badge = "-";
+    } else if (row.kind == FailureExplanationKind::Conclusion) {
+      colour = ImVec4(0.95F, 0.51F, 0.42F, 1.0F);
+      badge = ">";
+    }
+    ImGui::TextColored(colour, "%s", badge);
+    ImGui::SameLine();
+    ImGui::TextWrapped("%s", row.text.c_str());
+  }
+
+  ImGui::Separator();
+  ImGui::TextDisabled("What would fix it");
+  const std::string blocking_fact =
+      FailureExplainer::formatFact(m_lastFailureExplanation.blockingFact);
+  if (ImGui::Button(("Add " + blocking_fact +
+                     " to this scenario's starting facts").c_str())) {
+    const auto found = std::find_if(
+        m_model.scenarios.begin(), m_model.scenarios.end(),
+        [&](const ScenarioDef& scenario) { return scenario.name == m_lastPlanScenarioName; });
+    if (found != m_model.scenarios.end()) {
+      const size_t scenario_index = static_cast<size_t>(
+          std::distance(m_model.scenarios.begin(), found));
+      const FactRef fact = m_lastFailureExplanation.blockingFact;
+      m_commandStack.execute(m_model, "Add suggested starting fact",
+                             [scenario_index, fact](ProjectModel& model) {
+        model.scenarios[scenario_index].initialState.push_back(fact);
+      });
+    }
+  }
+  if (ImGui::Button(("Add an action that restores " +
+                     m_lastFailureExplanation.blockingFact.predicateName).c_str())) {
+    const std::string predicate_name =
+        m_lastFailureExplanation.blockingFact.predicateName;
+    ActionDef action;
+    action.name = "restore-" + predicate_name;
+    const PredicateDef* predicate = predicateByName(m_model, predicate_name);
+    if (predicate != nullptr) {
+      action.params = predicate->params;
+      EffectRef effect;
+      effect.predicateName = predicate_name;
+      for (const Parameter& parameter : predicate->params) {
+        effect.argNames.push_back(parameter.name);
+      }
+      action.addEffects.push_back(std::move(effect));
+    }
+    m_commandStack.execute(m_model, "Add suggested restoring action",
+                           [action](ProjectModel& model) {
+      model.actions.push_back(action);
+    });
+    m_domainGraph.setSelectedAction(static_cast<int>(m_model.actions.size()) - 1);
+    m_requestedTab = "Domain";
+  }
+  const auto jump_row = std::find_if(
+      m_lastFailureExplanation.rows.begin(), m_lastFailureExplanation.rows.end(),
+      [](const FailureExplanationRow& row) {
+        return row.kind == FailureExplanationKind::RemovedAndRestored;
+      });
+  if (jump_row != m_lastFailureExplanation.rows.end() &&
+      ImGui::Button(("Show me " + jump_row->actionName).c_str())) {
+    const int action_index = RelationIndex(m_model).actionIndex(jump_row->actionName);
+    if (action_index >= 0) {
+      m_domainGraph.setSelectedAction(action_index);
+      m_requestedTab = "Domain";
+    }
+  }
+
+  ImGui::Separator();
+  ImGui::TextDisabled("If this is intended");
+  if (ImGui::Button("Mark this scenario expected-to-fail")) {
+    const auto found = std::find_if(
+        m_model.scenarios.begin(), m_model.scenarios.end(),
+        [&](const ScenarioDef& scenario) { return scenario.name == m_lastPlanScenarioName; });
+    if (found != m_model.scenarios.end()) {
+      const size_t scenario_index = static_cast<size_t>(
+          std::distance(m_model.scenarios.begin(), found));
+      m_commandStack.execute(m_model, "Mark scenario expected to fail",
+                             [scenario_index](ProjectModel& model) {
+        model.scenarios[scenario_index].expectation.shouldSucceed = false;
+      });
+    }
+  }
+  ImGui::EndChild();
+  ImGui::SameLine();
+  ImGui::BeginChild("##unproduced-facts", ImVec2(0.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  const RelationIndex index(m_model);
+  ImGui::Text("Facts no action produces  %zu",
+              index.factsNoActionMakesTrue().size());
+  for (const size_t predicate_index : index.factsNoActionMakesTrue()) {
+    ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F), "-");
+    ImGui::SameLine();
+    if (ImGui::Selectable(m_model.predicates[predicate_index].name.c_str())) {
+      m_domainGraph.setSelectedPredicate(static_cast<int>(predicate_index));
+      m_requestedTab = "Domain";
+    }
+  }
+  ImGui::EndChild();
 }
 
 void AppShell::renderBtTab() {
@@ -1440,111 +2178,104 @@ void AppShell::renderSelectedElementEditor() {
     }
   }
 
-  // Selected action editor
+  // Selected action editor uses the reviewed guided sentence wording.
   const int selAction = m_domainGraph.selectedActionIndex();
   if (selAction >= 0 && selAction < static_cast<int>(m_model.actions.size())) {
+    m_guidedEditorRendered = true;
     ActionDef& action = m_model.actions[selAction];
     ImGui::Separator();
-    ImGui::TextColored(ImVec4(0.30f, 0.85f, 1.0f, 1.0f),
-                       "Action: %s", action.name.c_str());
-    if (ImGui::BeginTable("##actionparams", 2,
-                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-      ImGui::TableSetupColumn("Param name");
-      ImGui::TableSetupColumn("Type");
-      ImGui::TableHeadersRow();
-      for (int pi = 0; pi < static_cast<int>(action.params.size()); ++pi) {
-        ImGui::TableNextRow();
-        ImGui::PushID(pi);
+    ImGui::TextColored(ImVec4(0.30F, 0.85F, 1.0F, 1.0F),
+                       "Editing an action");
+    ImGui::Text("Action");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.0F, 0.9F, 1.0F, 1.0F), "%s", action.name.c_str());
+    ImGui::SameLine();
+    ImGui::TextDisabled("- described as an action in %s", m_model.projectName.c_str());
 
-        char name[64] = {};
-        char type[64] = {};
-        std::snprintf(name, sizeof(name), "%s", action.params[pi].name.c_str());
-        std::snprintf(type, sizeof(type), "%s", action.params[pi].type.c_str());
-
-        ImGui::TableSetColumnIndex(0);
-        if (ImGui::InputText("##name", name, sizeof(name))) {
-          const int paramIdx = pi;
-          const std::string newName = name;
-          m_commandStack.execute(m_model, "Rename action parameter",
-                                 [selAction, paramIdx, newName](ProjectModel& model) {
-            model.actions[static_cast<size_t>(selAction)]
-                .params[static_cast<size_t>(paramIdx)].name = newName;
-          });
+    ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "It involves");
+    for (int parameter_index = 0;
+         parameter_index < static_cast<int>(action.params.size());
+         ++parameter_index) {
+      Parameter& parameter = action.params[static_cast<size_t>(parameter_index)];
+      ImGui::PushID(parameter_index);
+      ImGui::TextUnformatted("a");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(120.0F);
+      if (ImGui::BeginCombo("##involves-type", parameter.type.c_str())) {
+        for (const TypeDef& type : m_model.types) {
+          if (ImGui::Selectable(type.name.c_str(), type.name == parameter.type)) {
+            const std::string selected_type = type.name;
+            m_commandStack.execute(m_model, "Choose involved type",
+                                   [selAction, parameter_index,
+                                    selected_type](ProjectModel& model) {
+              model.actions[static_cast<size_t>(selAction)]
+                  .params[static_cast<size_t>(parameter_index)].type = selected_type;
+            });
+          }
         }
-        ImGui::TableSetColumnIndex(1);
-        if (ImGui::InputText("##type", type, sizeof(type))) {
-          const int paramIdx = pi;
-          const std::string newType = type;
-          m_commandStack.execute(m_model, "Retype action parameter",
-                                 [selAction, paramIdx, newType](ProjectModel& model) {
-            model.actions[static_cast<size_t>(selAction)]
-                .params[static_cast<size_t>(paramIdx)].type = newType;
-          });
-        }
-        ImGui::PopID();
+        ImGui::EndCombo();
       }
-      ImGui::EndTable();
+      ImGui::SameLine();
+      ImGui::TextUnformatted("called");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(90.0F);
+      if (ImGui::BeginCombo("##involves-name", parameter.name.c_str())) {
+        for (const Parameter& candidate : action.params) {
+          ImGui::Selectable(candidate.name.c_str(), candidate.name == parameter.name,
+                            ImGuiSelectableFlags_Disabled);
+        }
+        ImGui::EndCombo();
+      }
+      ImGui::PopID();
     }
-
     static char s_aname[32] = {};
-    static char s_atype[32] = {};
-    ImGui::InputText("Param##apn", s_aname, sizeof(s_aname));
-    ImGui::InputText("Type##apt",  s_atype, sizeof(s_atype));
-    if (ImGui::Button("Add Param##action") &&
-        s_aname[0] != '\0' && s_atype[0] != '\0') {
-      const std::string paramName = s_aname;
-      const std::string paramType = s_atype;
-      m_commandStack.execute(m_model, "Add action parameter",
-                             [selAction, paramName, paramType](ProjectModel& model) {
-        model.actions[static_cast<size_t>(selAction)].params.push_back({paramName, paramType});
-      });
-      s_aname[0] = s_atype[0] = '\0';
-    }
-
-    static int s_prePredIdx = 0;
-    static int s_addPredIdx = 0;
-    static int s_delPredIdx = 0;
-    static char s_preArgs[128] = {};
-    static char s_addArgs[128] = {};
-    static char s_delArgs[128] = {};
-
-    ImGui::Separator();
-    renderActionRefSection("Preconditions", "##preconditions", "Add Precondition",
-                           "Remove precondition", "Add precondition",
-                           action.preconditions, m_model, m_commandStack, s_prePredIdx,
-                           s_preArgs, sizeof(s_preArgs));
-    ImGui::Separator();
-    renderActionRefSection("Add-effects", "##addeffects", "Add Add-effect",
-                           "Remove add-effect", "Add add-effect",
-                           action.addEffects, m_model, m_commandStack, s_addPredIdx,
-                           s_addArgs, sizeof(s_addArgs));
-    ImGui::Separator();
-    renderActionRefSection("Del-effects", "##deleffects", "Add Del-effect",
-                           "Remove del-effect", "Add del-effect",
-                           action.delEffects, m_model, m_commandStack, s_delPredIdx,
-                           s_delArgs, sizeof(s_delArgs));
-
-    if (!action.preconditions.empty() ||
-        !action.addEffects.empty() ||
-        !action.delEffects.empty()) {
-      ImGui::Separator();
-      ImGui::TextDisabled("Templates");
-      for (const auto& ref : action.preconditions) {
-        const std::string label = authoring::formatEffectRef(ref);
-        ImGui::Text("%s", label.c_str());
+    static int s_new_type = 0;
+    if (!m_model.types.empty()) {
+      s_new_type = std::max(0, std::min(
+          s_new_type, static_cast<int>(m_model.types.size()) - 1));
+      ImGui::InputText("called##new-involves", s_aname, sizeof(s_aname));
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(120.0F);
+      if (ImGui::BeginCombo("##new-involves-type",
+                            m_model.types[static_cast<size_t>(s_new_type)].name.c_str())) {
+        for (int i = 0; i < static_cast<int>(m_model.types.size()); ++i) {
+          if (ImGui::Selectable(m_model.types[static_cast<size_t>(i)].name.c_str(),
+                                i == s_new_type)) {
+            s_new_type = i;
+          }
+        }
+        ImGui::EndCombo();
       }
-      for (const auto& ref : action.addEffects) {
-        const std::string label = "+" + authoring::formatEffectRef(ref);
-        ImGui::Text("%s", label.c_str());
-      }
-      for (const auto& ref : action.delEffects) {
-        const std::string label = "-" + authoring::formatEffectRef(ref);
-        ImGui::Text("%s", label.c_str());
+      ImGui::SameLine();
+      if (ImGui::Button("+ add something else it involves") && s_aname[0] != '\0') {
+        const std::string name = s_aname;
+        const std::string type = m_model.types[static_cast<size_t>(s_new_type)].name;
+        m_commandStack.execute(m_model, "Add involved name",
+                               [selAction, name, type](ProjectModel& model) {
+          model.actions[static_cast<size_t>(selAction)].params.push_back({name, type});
+        });
+        s_aname[0] = '\0';
       }
     }
 
     ImGui::Separator();
-    ImGui::TextDisabled("BT binding");
+    renderGuidedReferenceGroup("Before it can happen", "##before-guided",
+                               "+ add a condition", "must be", "",
+                               selAction, PredicateRelationKind::Requires,
+                               m_model, m_commandStack);
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "Afterwards");
+    renderGuidedReferenceGroup("", "##after-true-guided",
+                               "+ add an outcome", "is", "becomes true",
+                               selAction, PredicateRelationKind::MakesTrue,
+                               m_model, m_commandStack);
+    renderGuidedReferenceGroup("", "##after-false-guided",
+                               "+ add an outcome", "is", "becomes false",
+                               selAction, PredicateRelationKind::MakesFalse,
+                               m_model, m_commandStack);
+
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "When it runs");
     static int s_lastBtSelAction = -1;
     static std::string s_lastBtNodeType;
     static std::string s_lastBtSubtreeXml;
@@ -1566,7 +2297,7 @@ void AppShell::renderSelectedElementEditor() {
       s_lastBtSubtreeXml = action.btBinding.subtreeXml;
     }
 
-    if (ImGui::InputText("Node type##bt", s_nodeType, sizeof(s_nodeType))) {
+    if (ImGui::InputText("behaviour tree node##bt", s_nodeType, sizeof(s_nodeType))) {
       const std::string nodeType = s_nodeType;
       m_commandStack.execute(m_model, "Set BT node type",
                              [selAction, nodeType](ProjectModel& model) {
@@ -1576,14 +2307,14 @@ void AppShell::renderSelectedElementEditor() {
       s_lastBtNodeType = nodeType;
     }
     bool reactive = action.btBinding.reactive;
-    if (ImGui::Checkbox("Reactive##bt", &reactive)) {
+    if (ImGui::Checkbox("reactive##bt", &reactive)) {
       m_commandStack.execute(m_model, "Set BT reactive binding",
                              [selAction, reactive](ProjectModel& model) {
         model.actions[static_cast<size_t>(selAction)].btBinding.reactive =
             reactive;
       });
     }
-    if (ImGui::InputTextMultiline("Subtree XML##bt",
+    if (ImGui::InputTextMultiline("subtree XML##bt",
                                   s_subtreeXml,
                                   sizeof(s_subtreeXml),
                                   ImVec2(-FLT_MIN, 120.0F))) {
@@ -1612,6 +2343,28 @@ void AppShell::renderSelectedElementEditor() {
       }
       ImGui::TextWrapped("%s", resolved.c_str());
     }
+
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "Reads as");
+    const ProjectModel selected_model = [&]() {
+      ProjectModel copy = m_model;
+      copy.actions = {action};
+      return copy;
+    }();
+    renderPddlText(PddlGenerator::generateDomain(selected_model));
+    ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "Checks");
+    const StructuralReport checks = StructuralValidator::check(m_model);
+    if (checks.hasErrors()) {
+      ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F),
+                         "! Fix %zu structural checks", checks.errorCount);
+    } else {
+      ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
+                         "Every name has a type");
+      ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
+                         "Parses as STRIPS");
+      ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
+                         "Grounds against %zu objects", m_model.objects.size());
+    }
   }
 }
 
@@ -1621,6 +2374,9 @@ void AppShell::clearDerivedResults() {
   m_lastBatchReport = ScenarioBatchReport{};
   m_lastContingencyReport = ContingencyReport{};
   m_lastPlan = ame::PlanResult{};
+  m_lastFailureExplanation = FailureExplanation{};
+  m_pddlEditorInitialised = false;
+  m_pddlEditorDirty = false;
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
   m_requestedTab.clear();
@@ -1869,24 +2625,6 @@ void AppShell::selfTestRunContingencyAnalysis() {
   runContingencyAnalysis();
 }
 
-bool AppShell::selfTestAddCausalLink(int fromAction,
-                                     int fromAddEffectIdx,
-                                     int toAction,
-                                     int toPreconditionIdx) {
-  CausalLink link;
-  link.fromAction = fromAction;
-  link.fromAddEffectIdx = fromAddEffectIdx;
-  link.toAction = toAction;
-  link.toPreconditionIdx = toPreconditionIdx;
-  if (!causalLinkCompatible(m_model, link)) {
-    return false;
-  }
-  m_commandStack.execute(m_model, "Add causal link", [link](ProjectModel& model) {
-    model.causalLinks.push_back(link);
-  });
-  return true;
-}
-
 bool AppShell::selfTestUndo() {
   return m_commandStack.undo(m_model);
 }
@@ -1970,6 +2708,73 @@ const BtBinding& AppShell::selfTestActionBtBinding(int actionIdx) const {
   return m_model.actions[static_cast<size_t>(actionIdx)].btBinding;
 }
 
+size_t AppShell::selfTestNeighbourhoodNodeCount(int depth) const {
+  DomainElementRef focus;
+  if (m_domainGraph.selectedPredicateIndex() >= 0) {
+    focus = {DomainElementKind::Predicate,
+             static_cast<size_t>(m_domainGraph.selectedPredicateIndex())};
+  } else if (m_domainGraph.selectedActionIndex() >= 0) {
+    focus = {DomainElementKind::Action,
+             static_cast<size_t>(m_domainGraph.selectedActionIndex())};
+  } else if (!m_model.predicates.empty()) {
+    focus = {DomainElementKind::Predicate, 0};
+  } else {
+    return 0U;
+  }
+  return NeighbourhoodModel(m_model, RelationIndex(m_model), focus, depth).nodes().size();
+}
+
+std::string AppShell::selfTestMatrixCsv() const {
+  const RelationIndex index(m_model);
+  return FactActionMatrix(m_model, index).toCsv(m_model);
+}
+
+size_t AppShell::selfTestLifecycleTransitionCount() const {
+  const RelationIndex index(m_model);
+  const LifecycleModel lifecycles(m_model, index);
+  size_t count = 0;
+  for (const LifecycleDiagram& diagram : lifecycles.diagrams()) {
+    count += diagram.transitions.size();
+  }
+  return count;
+}
+
+void AppShell::selfTestAddStateGroup(std::string name,
+                                     std::string type,
+                                     std::vector<std::string> predicates) {
+  m_commandStack.execute(m_model, "Add lifecycle grouping",
+                         [name = std::move(name), type = std::move(type),
+                          predicates = std::move(predicates)](ProjectModel& model) {
+    model.stateGroups.push_back({name, type, predicates});
+  });
+}
+
+bool AppShell::selfTestSelectionBack() {
+  if (!m_domainGraph.canGoBack()) {
+    return false;
+  }
+  m_domainGraph.goBack();
+  return true;
+}
+
+bool AppShell::selfTestSelectionForward() {
+  if (!m_domainGraph.canGoForward()) {
+    return false;
+  }
+  m_domainGraph.goForward();
+  return true;
+}
+
+void AppShell::selfTestSetDomainView(int view) {
+  m_domainViewMode = std::max(0, std::min(view, 4));
+  m_requestedTab = "Domain";
+}
+
+bool AppShell::selfTestDomainViewRendered(int view) const {
+  return view >= 0 && view < static_cast<int>(m_domainViewsRendered.size()) &&
+         m_domainViewsRendered[static_cast<size_t>(view)];
+}
+
 void AppShell::runValidation() {
   m_lastValidation = PddlValidator::validate(m_model, m_validationScenario);
 
@@ -2036,11 +2841,24 @@ void AppShell::runFeasibilityCheck() {
   m_hasLastPlan = true;
 
   if (m_lastPlan.success) {
+    m_lastFailureExplanation = FailureExplanation{};
     m_planGraph.setPlan(m_lastPlan, wm, scenarioName);
     validationState =
         "Feasible (" + std::to_string(m_lastPlan.steps.size()) + " steps)";
   } else {
     m_planGraph.clear();
+    const ScenarioDef& scenario =
+        m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)];
+    const RelationIndex relation_index(m_model);
+    m_lastFailureExplanation = FailureExplanation{};
+    for (size_t goal_index = 0; goal_index < scenario.goals.size(); ++goal_index) {
+      FailureExplanation candidate = FailureExplainer::explain(
+          m_model, relation_index, scenario, goal_index);
+      if (!candidate.blockingFact.predicateName.empty() &&
+          candidate.rows.size() > m_lastFailureExplanation.rows.size()) {
+        m_lastFailureExplanation = std::move(candidate);
+      }
+    }
     const std::string error =
         m_lastPlan.error_msg.empty() ? "no plan exists" : m_lastPlan.error_msg;
     validationState = "Infeasible: " + error;

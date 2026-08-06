@@ -6,7 +6,10 @@ questions that the earlier option papers did not cover: how to make a large PDDL
 navigable when the whole thing does not fit on one canvas, and what authoring styles
 (block-based editors and similar) actually help people who are not software engineers.
 
-**Status:** Research and recommendation. No implementation started.
+**Status:** Phase 6 implemented in the AME authoring tool. The relation index, relations
+panel, guided editor, focused neighbourhood, fact-by-action matrix, lifecycle view, failure
+explanation, semantic zoom, and derived read-only causal relationships are complete. Collapsible
+named groups and saved named views remain deferred.
 
 **Related documents:**
 

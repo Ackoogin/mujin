@@ -8,10 +8,12 @@
         },
         {
             "name": "authoring",
-            "inherits": "default",
             "displayName": "Authoring Tool",
-            "description": "Builds the graphical authoring tool alongside the default configuration",
+            "description": "Builds the graphical authoring tool. UNMANNED_BUILD_AME must be ON as well, because AME_BUILD_AUTHORING is declared inside the AME subproject and is silently ignored when that subproject is not built. Uses its own build directory so that turning the tool on does not leave AME_BUILD_AUTHORING set in the default build tree.",
+            "binaryDir": "${sourceDir}/build-authoring",
             "cacheVariables": {
+                "UNMANNED_BUILD_PYRAMID": "ON",
+                "UNMANNED_BUILD_AME": "ON",
                 "AME_BUILD_AUTHORING": "ON"
             }
         },
@@ -99,6 +101,16 @@
             "configuration": "Debug"
         },
         {
+            "name": "authoring-release",
+            "configurePreset": "authoring",
+            "configuration": "Release"
+        },
+        {
+            "name": "authoring-debug",
+            "configurePreset": "authoring",
+            "configuration": "Debug"
+        },
+        {
             "name": "all-on-release",
             "configurePreset": "all-on",
             "configuration": "Release"
@@ -145,6 +157,22 @@
         }
     ],
     "testPresets": [
+        {
+            "name": "authoring-release",
+            "configurePreset": "authoring",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "authoring-debug",
+            "configurePreset": "authoring",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
         {
             "name": "all-on-release",
             "configurePreset": "all-on",
