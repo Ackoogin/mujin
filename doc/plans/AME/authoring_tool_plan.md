@@ -70,8 +70,9 @@ before it is measured against anything else. In practice it means five rules.
 **How this is checked.** Each work item below carries a *non-specialist acceptance*
 line: a task, phrased as a mission question, that someone with no planning background
 must be able to complete unaided. These are not a substitute for unit tests; they are
-the acceptance criteria that decide whether the item is done. Section 9 collects them
-into a single walkthrough that can be run end to end before any release.
+the acceptance criteria that decide whether the item is done. Section 9 collects every
+one of them into a walkthrough, and that walkthrough is a release gate. Section 9 also
+states the single exception, which needs a named person to accept it in writing.
 
 ---
 
@@ -103,8 +104,9 @@ rather than a file dialog. Text edits are not undoable, only additions and delet
 Validation messages name the offending element but are not clickable. Importing a
 domain replaces the project rather than merging. Problem export writes only the first
 scenario. Scenario facts are typed as text rather than chosen from the grounded set.
-Named presentation groups and saved named views were both deferred. These are picked up
-in workstream A.
+Types cannot be renamed and action parameters cannot be reordered. Named presentation
+groups and saved named views were both deferred. Workstream A picks these up; section 11
+lists every unfinished item from the previous plan and says where each one went.
 
 **The largest gap is not in that list.** The tool can tell you that a plan exists and
 show you the tree it compiled. It cannot show you that tree running. That is
@@ -197,7 +199,9 @@ that does not exist.
 
 **Build.** On importing a domain into a non-empty project, show what would be added,
 what would be replaced and what would conflict, and let the user choose per group.
-Export every scenario as its own problem file rather than only the first.
+Export every scenario as its own problem file rather than only the first. Lay imported
+elements out by following the relationships between them, rather than the two long rows
+of facts and actions that import produces today.
 
 **Non-specialist acceptance.** A user imports a second domain file into an existing
 project and can see, before committing, exactly which of their existing actions it
@@ -216,6 +220,38 @@ which is how stakeholders will actually use it.
 
 **Non-specialist acceptance.** A reviewer opens a project, picks the saved view called
 "communications loss", and sees the same picture the author saw when they saved it.
+
+**Effort.** Medium.
+
+### A7. Editing operations that are still missing
+
+**Build.** Seven small things a user reasonably expects and cannot currently do:
+rename a type; reorder an action's parameters; add a type from the canvas menu, where
+the entry exists today but does nothing; copy and paste facts and actions, rather than
+only duplicate; fit the canvas to its contents with a key; open the quick-add box from
+the canvas rather than only from the palette; and expand or collapse a subtree in the
+behaviour-tree view, so a large tree can be read a branch at a time.
+
+Together these also finish the keyboard-only path, which the previous plan claimed and
+did not deliver: with them in place, a user can create, edit, navigate and check a
+domain without reaching for the mouse.
+
+**Non-specialist acceptance.** A user renames a type that is already used by four
+actions and by objects in two scenarios, and nothing else in the project breaks.
+
+**Effort.** Medium.
+
+### A8. Contingency analysis the user controls
+
+**Build.** Let the user say, per scenario, which facts represent a contingency and
+which represent a safe state, instead of the tool inferring them from where they appear
+in the model. Keep the inference as the starting suggestion. Add monotonicity pruning to
+the search so the analysis is not limited to eight facts at a time, and say in the
+results how much of the space was covered.
+
+**Non-specialist acceptance.** A user marks "communications lost" as a contingency and
+"at the recovery point" as a safe state, runs the analysis, and reads whether the safe
+state is reachable from the contingency.
 
 **Effort.** Medium.
 
@@ -325,7 +361,9 @@ by a different route, and can say in their own words why the new plan is differe
 execution as well as planning: whether the run reached the goal, how many actions ran,
 which actions must or must not appear, how many replans were acceptable, and how the
 run behaved under a named fault. Running the set produces a pass or fail per scenario
-with the reason for each failure written out.
+with the reason for each failure written out. Because a simulated run takes longer than
+a planning check, the run reports progress as it goes and can be stopped part-way, which
+the current planning-only batch run does not need to do and does not do.
 
 **Non-specialist acceptance.** A reviewer runs the whole scenario set, sees eight
 passes and one failure, and can read what the failing scenario expected and what it
@@ -430,14 +468,14 @@ tool and can tell which parts of the mission have been checked and which have no
 | **M3 — It is legible** | B3, A3, A4 | Facts and timing are visible; problems and scenarios are workable without planning knowledge |
 | **M4 — It survives contact** | B4, B5 | Faults, replanning and batch expectations |
 | **M5 — It is shareable** | B6, B7, C2 | Recorded runs, comparison, and a one-action review pack |
-| **M6 — Finished surface** | A1, A2, A5, A6 | The remaining authoring gaps closed |
+| **M6 — Finished surface** | A1, A2, A5, A6, A7, A8 | The remaining authoring gaps closed |
 | **M7 — Evidence** | C3 | Generated assurance material |
 
 The ordering is deliberate. C1 comes first because the wording and layout decisions in
-it are cheap now and expensive after the screens exist. A1, A2, A5 and A6 sit late
-because they are irritations rather than obstacles, and because a user who can simulate
-a mission but has to type a file path is better off than one with polished file
-handling and no way to see their mission run. A3 and A4 are pulled forward into M3
+it are cheap now and expensive after the screens exist. The rest of workstream A sits
+late because those items are irritations rather than obstacles, and because a user who
+can simulate a mission but has to type a file path is better off than one with polished
+file handling and no way to see their mission run. A3 and A4 are pulled forward into M3
 because they block the non-specialist acceptance for everything else: a user who cannot
 build a starting situation cannot run a simulation.
 
@@ -452,33 +490,58 @@ B1 ──> B2 ──> B3 ──> B4 ──> B5
  └──> A4 (scenario facts feed the run)
 
 C1 precedes B2, B3 and B4
-A1, A2, A3, A5, A6 are independent
+A1, A2, A3, A5, A6, A7, A8 are independent
 ```
 
 ---
 
 ## 9. The walkthrough
 
-This is the acceptance test for the requirement in section 2. It is run by someone who
-does not write software, with no help and no documentation open, and it should be run
-before any release. Each step is one of the non-specialist acceptance lines above,
-placed in the order a real user would meet them.
+This is the acceptance test for the requirement in section 2. It collects the
+non-specialist acceptance line from every work item in this plan, so that no item can be
+called done without its own line having been checked. Steps 2 and 3 exercise parts of the
+tool that already exist, and are included because the rest of the walkthrough depends on
+them working.
 
-1. Open the tool and open an existing mission project from the recent list. **(A1)**
-2. Find the action that makes a sector count as searched, using the relations panel.
-   *(Exists today.)*
-3. Add a new action, using the guided editor, that the domain did not previously have.
-   *(Exists today.)*
-4. Fix the three problems the tool reports, by clicking each one. **(A3)**
-5. Build a starting situation of six facts for a scenario. **(A4)**
-6. Run the scenario and watch it complete. **(B1, B2)**
-7. Answer a question about when a particular fact changed. **(B3)**
-8. Make one action fail, run again, and explain why the mission took a different
-   route. **(B4)**
-9. Run the whole scenario set and say which one failed and why. **(B5)**
-10. Export a review pack and name what is in it. **(C2)**
+**Who runs it, and what it decides.** It is run by someone who does not write software,
+working alone, with no help and no documentation open. It is a release gate: a release
+does not go ahead until every step covering an item in that release has been completed by
+such a person. A step that needs help is a defect against the item in brackets, not
+against the user, and the release waits for the fix. The one exception is stated in
+section 10 and requires a named person to accept it in writing; a developer running the
+steps themselves is not an acceptable substitute, because a developer cannot tell whether
+a screen makes sense to someone who has never seen a planning model.
 
-A step that needs help is a defect against the item in brackets, not against the user.
+**The main session.** One sitting, in the order a real user meets these tasks.
+
+| Step | Task | Item |
+|------|------|------|
+| 1 | Open the tool and open a mission project saved yesterday, from the recent list | A1 |
+| 2 | Find the action that makes a sector count as searched, using the relations panel | Exists today |
+| 3 | Add an action the domain did not previously have, using the guided editor | Exists today |
+| 4 | Rename a type that four actions and two scenarios already use, and check nothing broke | A7 |
+| 5 | Rename the new action, decide against it, and undo with one keystroke | A2 |
+| 6 | Fix the three problems the tool reports, by clicking each one | A3 |
+| 7 | Build a starting situation of six facts for a scenario | A4 |
+| 8 | Run the scenario and watch it complete | B1, B2 |
+| 9 | Say when a particular fact stopped being true | B3 |
+| 10 | Make one action fail, run again, and explain why the mission took a different route | B4 |
+| 11 | Run the whole scenario set and say which one failed and why | B5 |
+| 12 | Change one action, re-run, and say from the comparison what the change did | B7 |
+| 13 | Export a review pack and name what each file in it is | C2 |
+
+**Separate checks.** These do not fit one sitting, either because they need a second
+person, a second machine, or a document read away from the tool. Each is still run by
+someone who does not write software.
+
+| Check | Task | Item |
+|-------|------|------|
+| 14 | Import a second domain into the project and see, before committing, which existing actions it would overwrite | A5 |
+| 15 | Open a saved view by name and get the picture the author saved | A6 |
+| 16 | Mark a fact as a contingency and another as a safe state, run the analysis, and read whether the safe state is reachable | A8 |
+| 17 | Save a run, send the folder to a colleague, and have the colleague step through the same mission | B6 |
+| 18 | Read a concept mockup pack in a browser and answer its questions without asking what anything means | C1 |
+| 19 | Read the generated assurance report without opening the tool and say which parts of the mission have been checked | C3 |
 
 ---
 
@@ -492,7 +555,7 @@ A step that needs help is a defect against the item in brackets, not against the
 | The timeline and tree views drift apart from DevEnv's, so the two tools disagree | Low | Medium | Both read the same three JSONL schemas. B6 makes the files interchangeable in both directions, which is testable |
 | Concept mockups become documentation nobody reads | Medium | Low | Each pack ends with specific questions and is reviewed before the corresponding build starts. A pack with no answered questions has failed and should not be repeated |
 | The upstream node-editor library stays quiet | Medium | Low | It is MIT-licensed and stable, the fork maintained as part of ImGui Bundle is the more active line, and nothing in this plan needs new features from it |
-| Non-specialist acceptance is signed off by developers | Medium | High | The walkthrough in section 9 is run by someone who does not write software. If nobody is available to run it, the release is not blocked but the walkthrough is recorded as not run |
+| Non-specialist acceptance is signed off by developers | Medium | High | The walkthrough in section 9 is a release gate and is run by someone who does not write software. If nobody suitable is available, the release does not proceed on a developer's run of the same steps. It waits, or the person who owns the release accepts the gap in writing, naming which steps were not run and why. That waiver is the single exception, it is recorded with the release, and it does not carry over to the next one |
 
 ---
 
@@ -503,8 +566,48 @@ and, in many cases, a note explaining what had been deferred or done differently
 record was useful while the tool was being built and is preserved in the repository
 history; the commit that introduced this document removes the file.
 
-Anything from it that was still open has been carried into workstream A, restated as
-what the user is missing rather than as an unticked box. Everything that was finished
-is described in section 3 as a capability. The rationale that the old plan referenced
-in passing lives in the research documents, which remain the place to look for why the
-tool is shaped this way.
+Everything the old plan recorded as finished is described in section 3 as a capability.
+The rationale it referenced in passing lives in the research documents, which remain the
+place to look for why the tool is shaped this way.
+
+Everything it recorded as unfinished is listed below, so that deleting the file does not
+quietly lose work. Each entry is either carried into an item of this plan or dropped on
+purpose with the reason given. Nothing is left implicit, and no reader should have to
+open the repository history to find out what happened to a deferral.
+
+**Carried forward.**
+
+| Unfinished in the old plan | Now |
+|----------------------------|-----|
+| File open and save-as stubbed; hard-coded paths | A1 |
+| Undo does not cover text edits | A2 |
+| Validation messages name an element but are not clickable | A3 |
+| Scenario facts typed as text rather than chosen | A4 |
+| Domain import overwrites the project; no merge choice | A5 |
+| Problem export writes only the first scenario | A5 |
+| Imported elements laid out as two long rows | A5 |
+| Collapsible named groups | A6 |
+| Saved named views | A6 |
+| Types cannot be renamed | A7 |
+| Action parameters cannot be reordered | A7 |
+| The canvas "Add Type" menu entry does nothing | A7 |
+| No copy and paste, only duplicate | A7 |
+| No fit-canvas-to-contents key | A7 |
+| Quick-add reachable only from the palette, not the canvas or the keyboard | A7 |
+| Behaviour-tree subtrees cannot be expanded or collapsed | A7 |
+| Keyboard-only workflow claimed but incomplete | A7, which is what completes it |
+| Contingency and safe-state facts inferred, not declared per scenario | A8 |
+| Contingency search limited to eight facts; no monotonicity pruning | A8 |
+| Batch runs show no progress and cannot be stopped | B5, where a simulated run makes it matter |
+
+**Dropped, with the reason.**
+
+| Dropped | Why |
+|---------|-----|
+| Light theme | One dark theme is the house style across DevEnv and this tool. It would be reopened by a user asking for it, not by the plan |
+| Icon set for node types | Text labels read correctly in review. Icons would add a legend to learn, which works against the rule that a view should be readable without training |
+| Drag from the palette onto the canvas | The canvas is not where authoring happens, which is a stated non-goal in section 4. Clicking a palette entry to select and edit is the right interaction, and the quick-add work in A7 covers creating things |
+| Per-flow colour-coding in the plan view | The neighbourhood and matrix views established one colour language for relationships. A second, unrelated colour language in the plan view would teach users a rule that holds on one screen only |
+| Layout presets and a docking arrangement menu | The tool moved to fixed tabs, so there is no arrangement to preset. A6's saved views cover the underlying need, which was returning to a particular picture |
+| A custom animation layer for canvas navigation | The node editor already animates panning and zooming. Nothing was missing |
+| Building the importer on the PDDL parser rather than its own reader | Settled during the build, not deferred. The parser discards names and structure the importer needs; the dedicated reader is tested for round-trip against the generator |
