@@ -1,5 +1,6 @@
 #include "ame/bt_nodes/goal_reached.h"
 
+#include "ame/bt_nodes/planned_action_node.h"
 #include "ame/world_model.h"
 #include "ame/world_state_access.h"
 
@@ -12,7 +13,12 @@ GoalReached::GoalReached(const std::string& name,
     : BT::ConditionNode(name, config) {}
 
 BT::PortsList GoalReached::providedPorts() {
-  return {BT::InputPort<std::string>("goals", "Grounded goal facts")};
+  return {
+      BT::InputPort<std::string>("goals", "Grounded goal facts"),
+      BT::InputPort<std::string>("ame_required_authority", "any",
+                                 "Authority goal facts must carry: "
+                                 "'any' (default) or 'confirmed'"),
+  };
 }
 
 BT::NodeStatus GoalReached::tick() {
@@ -37,6 +43,9 @@ BT::NodeStatus GoalReached::tick() {
     }
   }
 
+  const bool require_confirmed =
+      PlannedActionNode::requiresConfirmedPreconditions(*this);
+
   std::istringstream stream(encoded.value());
   std::string fact;
   while (std::getline(stream, fact, ';')) {
@@ -45,7 +54,8 @@ BT::NodeStatus GoalReached::tick() {
       continue;
     }
     const auto last = fact.find_last_not_of(" \t\r\n");
-    if (!access->getFact(fact.substr(first, last - first + 1))) {
+    if (!PlannedActionNode::factSatisfies(
+            *access, fact.substr(first, last - first + 1), require_confirmed)) {
       return BT::NodeStatus::FAILURE;
     }
   }

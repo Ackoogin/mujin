@@ -25,6 +25,8 @@ struct GetFactResult {
   bool found = false;
   bool value = false;
   uint64_t wm_version = 0;
+  /// Whether the value was predicted from a plan effect or observed.
+  FactAuthority authority = FactAuthority::BELIEVED;
 };
 
 struct SetFactResult {

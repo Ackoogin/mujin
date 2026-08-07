@@ -4,3 +4,7 @@ string key
 bool   found       # false if key is not a registered fluent
 bool   value
 uint64 wm_version
+uint8  authority   # AUTHORITY_BELIEVED or AUTHORITY_CONFIRMED, see below
+
+uint8 AUTHORITY_BELIEVED=0    # value came from a plan effect (predicted)
+uint8 AUTHORITY_CONFIRMED=1   # value came from perception (observed)

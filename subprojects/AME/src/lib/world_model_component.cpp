@@ -21,10 +21,12 @@ GetFactResult WorldModelComponent::getFact(const std::string& key) const {
   result.wm_version = wm_.version();
   try {
     result.value = wm_.getFact(key);
+    result.authority = wm_.getFactMetadata(key).authority;
     result.found = true;
   } catch (...) {
     result.found = false;
     result.value = false;
+    result.authority = FactAuthority::BELIEVED;
   }
   return result;
 }

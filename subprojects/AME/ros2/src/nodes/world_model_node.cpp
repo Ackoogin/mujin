@@ -58,6 +58,10 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
         resp->found      = r.found;
         resp->value      = r.value;
         resp->wm_version = r.wm_version;
+        resp->authority  =
+            (r.authority == ame::FactAuthority::CONFIRMED)
+                ? ame_ros2::srv::GetFact::Response::AUTHORITY_CONFIRMED
+                : ame_ros2::srv::GetFact::Response::AUTHORITY_BELIEVED;
         RCLCPP_DEBUG(get_logger(), "get_fact: found=%d value=%d v%lu",
                      resp->found, resp->value, resp->wm_version);
       });

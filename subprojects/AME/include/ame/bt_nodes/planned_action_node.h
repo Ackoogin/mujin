@@ -21,6 +21,12 @@ namespace ame {
 /// the state that its external system or sensors actually confirmed. Confirmed
 /// state enforcement is deliberately outside this base class.
 ///
+/// The ame_required_authority port decides what a precondition must carry
+/// before the action will start. The default, "any", accepts a fact whether it
+/// was predicted by a plan effect or observed. Setting it to "confirmed"
+/// accepts only observed facts, which is how a deployment, or a tool driving
+/// one, asks for execution to proceed on evidence rather than on prediction.
+///
 /// Derived synchronous actions implement onActionStart() and return SUCCESS or
 /// FAILURE without ever returning RUNNING.
 class PlannedActionNode : public BT::StatefulActionNode {
@@ -33,6 +39,16 @@ public:
 
   /// \brief Merge planned-action ports into ports declared by a derived node.
   static BT::PortsList withBasePorts(BT::PortsList ports);
+
+  /// \brief Whether a node's ame_required_authority port demands confirmed
+  /// state. Shared with the PlannedAction decorator, which applies the same
+  /// contract to a registered subtree.
+  static bool requiresConfirmedPreconditions(const BT::TreeNode& node);
+
+  /// \brief Whether one precondition holds, given the authority requirement.
+  static bool factSatisfies(IWorldStateAccess& world_state,
+                            const std::string& fact,
+                            bool require_confirmed);
 
   BT::NodeStatus onStart() final;
   BT::NodeStatus onRunning() final;

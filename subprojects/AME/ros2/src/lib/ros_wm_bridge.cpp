@@ -65,6 +65,24 @@ bool RosWorldStateAccess::getFact(const std::string& key) {
   return response->found && response->value;
 }
 
+ame::FactAuthority RosWorldStateAccess::factAuthority(const std::string& key) {
+  if (!get_fact_client_) {
+    return ame::FactAuthority::BELIEVED;
+  }
+  auto request = std::make_shared<ame_ros2::srv::GetFact::Request>();
+  request->key = key;
+  auto future = get_fact_client_->async_send_request(request);
+  if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
+    return ame::FactAuthority::BELIEVED;
+  }
+  const auto response = future.get();
+  if (!response->found ||
+      response->authority != ame_ros2::srv::GetFact::Response::AUTHORITY_CONFIRMED) {
+    return ame::FactAuthority::BELIEVED;
+  }
+  return ame::FactAuthority::CONFIRMED;
+}
+
 bool RosWorldStateAccess::setFact(const std::string& key,
                                   bool value,
                                   const std::string& source) {

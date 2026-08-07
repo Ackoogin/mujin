@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ame/fact_authority.h"
 #include "ame/type_system.h"
 
 #include <atomic>
@@ -19,13 +20,6 @@ class State;
 }
 
 namespace ame {
-
-/// State authority classification for facts.
-/// Used to distinguish perception-sourced facts from plan-applied predictions.
-enum class FactAuthority {
-    BELIEVED,   ///< Fact value derived from plan effects (predicted)
-    CONFIRMED   ///< Fact value derived from perception (observed)
-};
 
 /// Metadata associated with each fact.
 struct FactMetadata {

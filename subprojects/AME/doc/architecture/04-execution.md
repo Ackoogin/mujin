@@ -45,7 +45,8 @@ entry. For compatibility with existing in-process trees, they fall back to the
 
 Concrete planned actions derive from `PlannedActionNode` and merge
 `withBasePorts(...)` into their own `providedPorts()`. The base ports are
-`ame_preconditions`, `ame_add_effects`, `ame_del_effects`, and `ame_reactive`.
+`ame_preconditions`, `ame_add_effects`, `ame_del_effects`, `ame_reactive`, and
+`ame_required_authority`.
 
 The base checks all preconditions before calling `onActionStart()`. When the
 reactive port is true, it checks them again before each call to
@@ -56,6 +57,17 @@ delete effects as false with `BELIEVED` authority.
 A deployed action can override `commitEffects()` to record what it actually
 confirmed. The core does not enforce confirmed state. A synchronous action
 only needs to implement `onActionStart()` and return a final status.
+
+`ame_required_authority` decides what a precondition has to carry before the
+action will start. The default, `any`, accepts a fact whether it was predicted
+by a plan effect or observed by perception. Set to `confirmed`, the action
+starts only when every precondition carries `CONFIRMED` authority, which is how
+a deployment, or a tool driving one, asks for execution to proceed on evidence
+rather than on prediction. The plan compiler does not emit this attribute; it is
+set by whoever loads the tree, as DevEnv does from its "Preconditions" control.
+An `IWorldStateAccess` implementation that cannot report authority answers
+`BELIEVED`, so such an action refuses to run rather than proceeding on a fact
+that cannot be judged.
 
 ### PlannedAction (Decorator)
 

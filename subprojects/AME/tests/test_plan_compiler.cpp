@@ -238,6 +238,97 @@ TEST(PlanCompiler, UnregisteredActionUsesSimulatedAction) {
     EXPECT_NE(xml.find("name=\"move(uav1,base,sector_a)\""), std::string::npos);
 }
 
+// A planned action defaults to accepting a precondition whichever way it was
+// established. Asking for confirmed state makes it wait for an observation.
+TEST(PlannedActionAuthority, ConfirmedRequirementRejectsBelievedPrecondition) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true, "planner_init", ame::FactAuthority::BELIEVED);
+
+    BT::BehaviorTreeFactory factory;
+    registerCoreNodes(factory);
+    factory.registerNodeType<StubAction>("StubMoveAction");
+
+    const std::string xml =
+        "<root BTCPP_format=\"4\"><BehaviorTree ID=\"MainTree\">"
+        "<StubMoveAction name=\"move\" ame_preconditions=\"(at uav1 base)\""
+        " ame_add_effects=\"(at uav1 sector_a)\""
+        " ame_required_authority=\"confirmed\"/>"
+        "</BehaviorTree></root>";
+
+    auto tree = factory.createTreeFromText(xml);
+    tree.rootBlackboard()->set("world_model", &wm);
+    EXPECT_EQ(tree.tickWhileRunning(), BT::NodeStatus::FAILURE);
+    EXPECT_FALSE(wm.getFact("(at uav1 sector_a)"));
+
+    // The same fact, once observed rather than predicted, lets the action run.
+    wm.setFact("(at uav1 base)", true, "perception", ame::FactAuthority::CONFIRMED);
+    auto confirmed_tree = factory.createTreeFromText(xml);
+    confirmed_tree.rootBlackboard()->set("world_model", &wm);
+    EXPECT_EQ(confirmed_tree.tickWhileRunning(), BT::NodeStatus::SUCCESS);
+    EXPECT_TRUE(wm.getFact("(at uav1 sector_a)"));
+}
+
+TEST(PlannedActionAuthority, DefaultAcceptsBelievedPrecondition) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true, "planner_init", ame::FactAuthority::BELIEVED);
+
+    BT::BehaviorTreeFactory factory;
+    registerCoreNodes(factory);
+    factory.registerNodeType<StubAction>("StubMoveAction");
+
+    auto tree = factory.createTreeFromText(
+        "<root BTCPP_format=\"4\"><BehaviorTree ID=\"MainTree\">"
+        "<StubMoveAction name=\"move\" ame_preconditions=\"(at uav1 base)\"/>"
+        "</BehaviorTree></root>");
+    tree.rootBlackboard()->set("world_model", &wm);
+    EXPECT_EQ(tree.tickWhileRunning(), BT::NodeStatus::SUCCESS);
+}
+
+// The goal guard is held to the same standard, so a mission is not declared
+// complete on predicted facts when the run asked for observed ones.
+TEST(PlannedActionAuthority, GoalReachedHonoursConfirmedRequirement) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(searched sector_a)", true, "planner_init",
+               ame::FactAuthority::BELIEVED);
+
+    BT::BehaviorTreeFactory factory;
+    registerCoreNodes(factory);
+
+    const std::string xml =
+        "<root BTCPP_format=\"4\"><BehaviorTree ID=\"MainTree\">"
+        "<GoalReached goals=\"(searched sector_a)\""
+        " ame_required_authority=\"confirmed\"/>"
+        "</BehaviorTree></root>";
+
+    auto tree = factory.createTreeFromText(xml);
+    tree.rootBlackboard()->set("world_model", &wm);
+    EXPECT_EQ(tree.tickWhileRunning(), BT::NodeStatus::FAILURE);
+
+    wm.setFact("(searched sector_a)", true, "perception",
+               ame::FactAuthority::CONFIRMED);
+    auto confirmed_tree = factory.createTreeFromText(xml);
+    confirmed_tree.rootBlackboard()->set("world_model", &wm);
+    EXPECT_EQ(confirmed_tree.tickWhileRunning(), BT::NodeStatus::SUCCESS);
+}
+
+// The decorator applies the same rule to a registered subtree.
+TEST(PlannedActionAuthority, DecoratorHonoursConfirmedRequirement) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true, "planner_init", ame::FactAuthority::BELIEVED);
+
+    BT::BehaviorTreeFactory factory;
+    registerCoreNodes(factory);
+
+    auto tree = factory.createTreeFromText(
+        "<root BTCPP_format=\"4\"><BehaviorTree ID=\"MainTree\">"
+        "<PlannedAction name=\"move\" ame_preconditions=\"(at uav1 base)\""
+        " ame_required_authority=\"confirmed\">"
+        "<AlwaysSuccess/></PlannedAction>"
+        "</BehaviorTree></root>");
+    tree.rootBlackboard()->set("world_model", &wm);
+    EXPECT_EQ(tree.tickWhileRunning(), BT::NodeStatus::FAILURE);
+}
+
 TEST(PlanCompiler, SubtreeIsWrappedInPlannedAction) {
     auto wm = buildUAVDomain();
     ame::ActionRegistry registry;

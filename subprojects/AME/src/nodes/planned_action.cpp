@@ -96,8 +96,10 @@ bool PlannedAction::preconditionsMet() {
   if (world_state == nullptr) {
     return false;
   }
+  const bool require_confirmed =
+      PlannedActionNode::requiresConfirmedPreconditions(*this);
   for (const auto& fact : facts) {
-    if (!world_state->getFact(fact)) {
+    if (!PlannedActionNode::factSatisfies(*world_state, fact, require_confirmed)) {
       return false;
     }
   }

@@ -106,6 +106,12 @@ subtree is wrapped in the `PlannedAction` decorator. If an action is not
 registered, the compiler emits a `SimulatedAction` with the same contract.
 The goal guard contains one `GoalReached` condition for the whole mission.
 
+Planned actions accept a fifth port, `ame_required_authority`, which the
+compiler does not emit. It defaults to `any`, meaning a precondition counts
+whether it was predicted by a plan effect or observed. Whoever loads the tree
+can set it to `confirmed` to make the action start only on observed facts;
+DevEnv's "Preconditions" control does exactly that before it loads a tree.
+
 ### Step D: Execute and monitor
 
 Each planned action checks its own preconditions and applies effects only after

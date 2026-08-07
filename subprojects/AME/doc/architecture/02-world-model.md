@@ -90,11 +90,20 @@ public:
     virtual bool getFact(const std::string& key) = 0;
     virtual bool setFact(const std::string& key, bool value,
                          const std::string& source) = 0;
+    virtual FactAuthority factAuthority(const std::string& key);
 };
 ```
 
 The local and ROS2 implementations record writes made by the default planned
 action behavior as `BELIEVED` facts.
+
+`factAuthority()` is only consulted by an action whose `ame_required_authority`
+port asks for confirmed preconditions. It is the one method with a default
+implementation, which answers `BELIEVED`, so an implementation that cannot
+report authority causes such an action to refuse to run rather than to proceed
+on a fact whose provenance is unknown. The local implementation reads
+`WorldModel::getFactMetadata()`; the ROS2 one reads the authority field of the
+`GetFact` service response.
 
 ## Error Model
 

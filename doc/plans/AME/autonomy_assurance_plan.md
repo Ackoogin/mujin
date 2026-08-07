@@ -146,7 +146,7 @@ Per the DSTL biscuit book *"Assurance of Requirements"* dimension:
 | H2 | **Incomplete plan** | Plan missing critical actions (solver terminated early) | LAPKT Planner |
 | H3 | **Stale world model** | Plan based on perception data that no longer reflects reality | WorldModel |
 | H4 | **Causal misordering** | Compiler produces BT with incorrect dependency structure | Plan-to-BT Compiler |
-| H5 | **Effect misattribution** | BT node applies wrong PDDL effects to WorldModel | SetWorldPredicate nodes |
+| H5 | **Effect misattribution** | BT node applies wrong PDDL effects to WorldModel | `PlannedActionNode::commitEffects()` |
 | H6 | **Replan livelock** | System cycles between failing plans without converging | MissionExecutor |
 | H7 | **Timing violation** | Planning or BT tick exceeds real-time budget | Planner + Executor |
 | H8 | **Action-BT mismatch** | ActionRegistry maps PDDL action to wrong BT implementation | ActionRegistry |
@@ -212,7 +212,8 @@ Mapped to UK MOD Joint Doctrine Note (JDN) autonomy levels:
 | SR-02 | Planner SHALL terminate within N ms or return NO_PLAN | H2, H7 | Unit test with timeout; metric logged via PlanAuditLog |
 | SR-03 | WorldModel SHALL reject `setFact()` calls with timestamps older than T seconds when freshness-checking is enabled | H3 | Unit test + integration test with stale perception |
 | SR-04 | Causal graph extraction SHALL preserve all add-effect -> precondition dependencies | H4 | Property-based test: compiled BT re-checked against original plan |
-| SR-05 | `SetWorldPredicate` BT nodes SHALL only modify the facts specified in the PDDL action's effect list | H5 | Static analysis of action-node binding; integration test |
+| SR-05 | A planned action SHALL only modify the facts specified in the PDDL action's effect list, which reach it as the `ame_add_effects` and `ame_del_effects` ports the plan compiler emits | H5 | Static analysis of action-node binding; integration test |
+| SR-05a | A deployed action that overrides `commitEffects()` SHALL record only state its own system or sensors confirmed, and SHALL record it with `FactAuthority::CONFIRMED` | H3, H5 | Integration test per deployment; authority conflicts surfaced by `WorldModel::hasAuthorityConflict()` |
 | SR-06 | `MissionExecutor` SHALL cease replanning after K consecutive failures and enter safe state | H6 | Unit test |
 | SR-07 | BT tick period SHALL not exceed T ms (e.g. 20 ms for 50 Hz) | H7 | Performance test + runtime monitoring |
 | SR-08 | `ActionRegistry.resolve()` SHALL fail loudly if no mapping exists for a PDDL action name | H8 | Unit test; compile-time assertion where possible |

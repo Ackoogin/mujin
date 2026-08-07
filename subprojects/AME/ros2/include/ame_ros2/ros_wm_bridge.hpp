@@ -34,6 +34,7 @@ public:
   bool setFact(const std::string& key,
                bool value,
                const std::string& source) override;
+  ame::FactAuthority factAuthority(const std::string& key) override;
 
 private:
   rclcpp::Client<ame_ros2::srv::GetFact>::SharedPtr get_fact_client_;

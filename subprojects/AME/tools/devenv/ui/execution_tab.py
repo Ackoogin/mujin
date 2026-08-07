@@ -44,6 +44,7 @@ class ExecutionTab:
         self._tick_label: int = 0
         self._mode_combo: int = 0
         self._interval_input: int = 0
+        self._authority_combo: int = 0
         self._load_start_btn: int = 0
         self._stop_btn: int = 0
         self._tick_once_btn: int = 0
@@ -93,6 +94,16 @@ class ExecutionTab:
                         step=0.01,
                         format="%.3f",
                         width=90,
+                    )
+
+                    dpg.add_spacer(width=16)
+
+                    dpg.add_text("Preconditions:", color=(140, 140, 160))
+                    self._authority_combo = dpg.add_combo(
+                        items=["any (planning)", "confirmed (execution)"],
+                        default_value="any (planning)",
+                        width=175,
+                        callback=None,
                     )
 
                     dpg.add_spacer(width=16)
@@ -239,6 +250,10 @@ class ExecutionTab:
         self._bt_xml = bt_xml
         self._render_tree()
 
+        authority_val = dpg.get_value(self._authority_combo)
+        authority = "confirmed" if "confirmed" in authority_val else "any"
+        bt_xml = self._inject_required_authority(bt_xml, authority)
+
         mode = dpg.get_value(self._mode_combo)
         client.load_bt(bt_xml)
 
@@ -277,6 +292,28 @@ class ExecutionTab:
         # Force tree rebuild on next refresh
         self._tree_built_for_xml = ""
         self.refresh_display()
+
+    # ------------------------------------------------------------------
+    # BT XML transforms
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _inject_required_authority(bt_xml: str, authority: str) -> str:
+        """Return bt_xml with ame_required_authority set on every fact check.
+
+        That means every element carrying an ame_preconditions attribute, which
+        covers the action nodes the plan compiler emits, the SimulatedAction
+        stand-in and the PlannedAction decorator alike, plus the GoalReached
+        node in the goal guard.
+        """
+        try:
+            root = ET.fromstring(bt_xml)
+            for node in root.iter():
+                if "ame_preconditions" in node.attrib or node.tag == "GoalReached":
+                    node.set("ame_required_authority", authority)
+            return ET.tostring(root, encoding="unicode")
+        except ET.ParseError:
+            return bt_xml
 
     # ------------------------------------------------------------------
     # Tree rendering

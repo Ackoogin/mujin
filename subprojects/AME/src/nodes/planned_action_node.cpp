@@ -36,7 +36,26 @@ BT::PortsList PlannedActionNode::providedPorts() {
       BT::InputPort<std::string>("ame_add_effects", "", "Grounded add effects"),
       BT::InputPort<std::string>("ame_del_effects", "", "Grounded delete effects"),
       BT::InputPort<bool>("ame_reactive", false, "Recheck preconditions while running"),
+      BT::InputPort<std::string>("ame_required_authority", "any",
+                                 "Authority preconditions must carry: "
+                                 "'any' (default) or 'confirmed'"),
   };
+}
+
+bool PlannedActionNode::requiresConfirmedPreconditions(const BT::TreeNode& node) {
+  std::string required_authority = "any";
+  node.getInput("ame_required_authority", required_authority);
+  return required_authority == "confirmed";
+}
+
+bool PlannedActionNode::factSatisfies(IWorldStateAccess& world_state,
+                                      const std::string& fact,
+                                      bool require_confirmed) {
+  if (!world_state.getFact(fact)) {
+    return false;
+  }
+  return !require_confirmed ||
+         world_state.factAuthority(fact) == FactAuthority::CONFIRMED;
 }
 
 BT::PortsList PlannedActionNode::withBasePorts(BT::PortsList ports) {
@@ -124,8 +143,9 @@ bool PlannedActionNode::preconditionsMet() {
   if (world_state == nullptr) {
     return false;
   }
+  const bool require_confirmed = requiresConfirmedPreconditions(*this);
   for (const auto& fact : preconditions) {
-    if (!world_state->getFact(fact)) {
+    if (!factSatisfies(*world_state, fact, require_confirmed)) {
       return false;
     }
   }
