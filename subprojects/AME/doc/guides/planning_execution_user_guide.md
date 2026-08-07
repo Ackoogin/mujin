@@ -100,23 +100,49 @@ At compile time, placeholders such as `{param0}`, `{param1}` are replaced with g
 ### Step C: Compile plan into a BT
 
 `PlanCompiler` emits one action element for each plan step. The element is
-named after the grounded action and carries four contract attributes:
+named after the grounded action and carries six contract attributes:
 
-- `ame_preconditions`,
+- `ame_preconditions`, the facts that must be true before the action starts,
+- `ame_confirmed_preconditions`, the facts that must be true *and* observed,
+- `ame_neg_preconditions`, the facts that must be false,
 - `ame_add_effects`,
 - `ame_del_effects`,
 - `ame_reactive`.
 
-A simple registered implementation receives these ports directly. A registered
-subtree is wrapped in the `PlannedAction` decorator. If an action is not
-registered, the compiler emits a `SimulatedAction` with the same contract.
-The goal guard contains one `GoalReached` condition for the whole mission.
+A precondition lands in `ame_confirmed_preconditions` rather than
+`ame_preconditions` when the domain lists its predicate in a
+`(:confirmed-predicates ...)` section, for example:
 
-Planned actions accept a fifth port, `ame_required_authority`, which the
+```lisp
+(:confirmed-predicates authorised route-clear)
+```
+
+That is how a domain says a clearance or a permission has to be established
+outside the plan. An action can mix the two: it may proceed on a predicted
+"airborne" while insisting on an observed "authorised".
+
+A simple registered implementation receives these ports directly. A registered
+subtree is wrapped in the `PlannedAction` decorator. The goal guard contains one
+`GoalReached` condition for the whole mission.
+
+**Every action in the plan must be registered.** If one is not, `compile()`
+throws `Unregistered action in plan: <name>` and produces no tree. This is
+deliberate: a step with no implementation would otherwise report success for
+work nothing ever dispatched. Call
+`PlanCompiler::setStubUnregisteredActions(true)` to compile such a step to a
+`SimulatedAction` instead. That is meant for tools that reason about a model
+without commanding anything — the authoring tool and the Python bindings set it,
+and nothing else does. If you are integrating AME with a real stack and you meet
+this exception, the fix is to register the missing action, not to enable stubs.
+
+Planned actions accept a seventh port, `ame_required_authority`, which the
 compiler does not emit. It defaults to `any`, meaning a precondition counts
 whether it was predicted by a plan effect or observed. Whoever loads the tree
 can set it to `confirmed` to make the action start only on observed facts;
-DevEnv's "Preconditions" control does exactly that before it loads a tree.
+DevEnv's "Preconditions" control does exactly that before it loads a tree. The
+difference from `(:confirmed-predicates ...)` is who decides and how wide the
+demand is: the port raises the bar for one node's whole precondition set at load
+time, while the domain declaration follows one named fact everywhere it is used.
 
 ### Step D: Execute and monitor
 

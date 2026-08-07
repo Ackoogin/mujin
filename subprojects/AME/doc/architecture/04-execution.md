@@ -24,9 +24,19 @@
        ame_reactive="false"/>
    ```
    A registered XML subtree is the single child of a `PlannedAction`
-   decorator carrying the same ports. An action with no registry entry becomes
-   a `SimulatedAction`. The registry's reactive flag supplies the
+   decorator carrying the same ports. The registry's reactive flag supplies the
    `ame_reactive` value.
+
+   **An action with no registry entry aborts the compile.** `compile()` and
+   `compileSequential()` throw `std::runtime_error("Unregistered action in plan:
+   <name>")`. This is the fail-closed default: emitting a node that does nothing
+   but write the action's predicted effects would report success for work that
+   was never dispatched. `setStubUnregisteredActions(true)` turns the step into a
+   `SimulatedAction` instead, which is for tools reasoning about a model rather
+   than commanding anything — the authoring tool and the Python bindings set it,
+   and nothing else does. An integrator who has not registered every action meets
+   this as an exception at compile time rather than as a silent success at run
+   time.
 
 4. **Tree composition**:
    - No parallel-ready phase -> top-level `Sequence`
@@ -50,9 +60,18 @@ entry. For compatibility with existing in-process trees, they fall back to the
 ### PlannedActionNode (StatefulAction base)
 
 Concrete planned actions derive from `PlannedActionNode` and merge
-`withBasePorts(...)` into their own `providedPorts()`. The base ports are
-`ame_preconditions`, `ame_add_effects`, `ame_del_effects`, `ame_reactive`, and
-`ame_required_authority`.
+`withBasePorts(...)` into their own `providedPorts()`. There are seven base
+ports.
+
+| Port | Carries |
+|------|---------|
+| `ame_preconditions` | Grounded facts that must be true before the action starts |
+| `ame_confirmed_preconditions` | Grounded facts that must be true *and* observed, never merely predicted. The compiler puts a precondition here when the domain declares its predicate in `(:confirmed-predicates ...)` |
+| `ame_neg_preconditions` | Grounded facts that must be false before the action starts |
+| `ame_add_effects` | Grounded facts the action records as true when it succeeds |
+| `ame_del_effects` | Grounded facts the action records as false when it succeeds |
+| `ame_reactive` | Whether to recheck the preconditions on every tick, not only at the start |
+| `ame_required_authority` | The evidence *every* precondition must carry: `any`, the default, or `confirmed` |
 
 The base checks all preconditions before calling `onActionStart()`. When the
 reactive port is true, it checks them again before each call to
@@ -74,6 +93,15 @@ set by whoever loads the tree, as DevEnv does from its "Preconditions" control.
 An `IWorldStateAccess` implementation that cannot report authority answers
 `BELIEVED`, so such an action refuses to run rather than proceeding on a fact
 that cannot be judged.
+
+The two ways of demanding observed state answer to different people.
+`ame_required_authority` raises the bar for one node's whole precondition set,
+and it is set at load time by whoever is running the tree.
+`ame_confirmed_preconditions` names individual facts, and the compiler fills it
+in from the domain's `(:confirmed-predicates ...)` declaration, so the demand
+follows the fact wherever it is used as a precondition and does not depend on
+who loaded the tree. One action can therefore mix the two kinds: a strike that
+may proceed on a predicted "airborne" but must have an observed "authorised".
 
 ### PlannedAction (Decorator)
 
@@ -140,14 +168,20 @@ Leader-delegation node for multi-agent execution. Plans and runs a subtree scope
 - Injects agent context into the compiled subtree blackboard
 - Restores availability on completion or halt
 
-### Guard and dispatch nodes
+### Dispatch nodes
 
-`ExecutorComponent::on_configure()` also registers the action/guard leaves that
-compiled plans tick: `AuthorisationGuard`, `GeofenceGuard`, `TawsGuard`,
-`EnsureAltitude`, `FormationHold`, `IdentifyTarget`, and one `AmeDispatchNode`
-per registered verb (the bridge to `IExecutionSink`). The permission gates
-(e.g. `AuthorisationGuard`) are domain preconditions surfaced as guard leaves, so
-they fail closed by construction.
+`ExecutorComponent::on_configure()` registers `CheckWorldPredicate`,
+`GoalReached`, `PlannedAction` and `SimulatedAction`. Once an `ActionRegistry` is
+attached it also registers one `AmeDispatchNode` per registered verb, under the
+verb's own name, which is the bridge to `IExecutionSink`.
+
+`ame_core` ships no domain-specific guard leaves. A permission gate such as
+"authorised" is written as an ordinary domain precondition, so the planned-action
+base refuses to start the action until the fact holds, and declaring its
+predicate in `(:confirmed-predicates ...)` makes that fact one the deployment
+has to observe rather than one a plan may predict. Gating is therefore fail-closed
+by construction and needs no node of its own. A deployment that wants a bespoke
+guard node registers it on the factory itself, alongside its own action nodes.
 
 ## Replanning
 

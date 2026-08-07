@@ -60,20 +60,26 @@ for your own verbs.
 *verb* and carrying its parameters as positional ports `param0..param7`:
 
 ```xml
-<Sequence name="navigate-to-waypoint(uav1,wp_alpha)">
-    <CheckWorldPredicate predicate="at uav1 base" expected="true"/>
-    <navigate-to-waypoint param0="uav1" param1="wp_alpha"/>
-    <SetWorldPredicate predicate="at uav1 wp_alpha" value="true"/>
-</Sequence>
+<navigate-to-waypoint name="navigate-to-waypoint(uav1,wp_alpha)"
+    param0="uav1" param1="wp_alpha"
+    ame_preconditions="(at uav1 base)"
+    ame_confirmed_preconditions=""
+    ame_neg_preconditions=""
+    ame_add_effects="(at uav1 wp_alpha)"
+    ame_del_effects="(at uav1 base)"
+    ame_reactive="false"/>
 ```
 
-`ExecutorComponent::on_configure()` registers the **single** `AmeDispatchNode`
-class against *every* known verb string:
+The step's preconditions and effects travel with the leaf as attributes rather
+than as sibling nodes. `PlannedActionNode`, which `AmeDispatchNode` derives from,
+reads them: it checks the preconditions before your sink is asked to do anything,
+and records the effects only after your sink reports success.
+
+`ExecutorComponent` registers the **single** `AmeDispatchNode` class against
+*every* verb in the attached `ActionRegistry`, one registration per verb:
 
 ```cpp
-for (const char* verb : {"navigate-to-waypoint", "search-area", "track-target",
-                         "classify-target", "orbit", "hover", "takeoff", "land",
-                         "KeepAltitude", /* … */}) {
+for (const auto& verb : action_registry_->registeredNames()) {
     factory_.registerNodeType<AmeDispatchNode>(verb);
 }
 ```
@@ -83,24 +89,35 @@ So the `<navigate-to-waypoint .../>` leaf instantiates an `AmeDispatchNode` whos
 distinguishes one leaf from another at the C++ level — **the meaning of the verb
 lives entirely in your sink.**
 
-> Integration note: AME registers a fixed verb list. To add verbs for a new
-> domain, extend that registration list (in `ExecutorComponent::on_configure`) or
-> register `AmeDispatchNode` against your verbs on the factory before
-> `loadAndExecute`. The dispatch node never needs subclassing — only the verb
-> string set needs to cover your domain's actions.
+> Integration note: the verb set comes from your `ActionRegistry`, so registering
+> a domain's actions there is all that is needed to make their leaves loadable.
+> You can also register `AmeDispatchNode` against your verbs on the factory
+> directly, before `loadAndExecute`. The dispatch node never needs subclassing —
+> only the verb string set needs to cover your domain's actions. Note that an
+> action the registry does not know about makes `PlanCompiler::compile()` throw
+> rather than produce a tree; see §9.
 
 ---
 
-## 3. `AmeDispatchNode` is a `StatefulActionNode` — the long-running contract
+## 3. `AmeDispatchNode` is a `PlannedActionNode` — the long-running contract
 
-Long-running behaviour in BT.CPP is expressed through
-`BT::StatefulActionNode`, which has three callbacks:
+Long-running behaviour in BT.CPP is expressed through `BT::StatefulActionNode`,
+which has three callbacks. `PlannedActionNode` derives from it and takes those
+three over, so that it can check preconditions and record effects around your
+work; it hands the work itself to three callbacks of its own, which
+`AmeDispatchNode` implements:
 
-| Callback      | When BT.CPP calls it                                 | `AmeDispatchNode` behaviour |
-|---------------|------------------------------------------------------|-----------------------------|
-| `onStart()`   | first tick after the node becomes active             | build `ActionCommand`, `sink->submit(...)`, then immediately evaluate `onRunning()` |
-| `onRunning()` | every subsequent tick while the node returns RUNNING | poll `sink->isPending()` / `sink->resultFor()` and map to a `NodeStatus` |
-| `onHalted()`  | when a parent aborts the node (reactive control, replan, shutdown) | `sink->cancel(command_id)` |
+| Callback             | When `PlannedActionNode` calls it                    | `AmeDispatchNode` behaviour |
+|----------------------|------------------------------------------------------|-----------------------------|
+| `onActionStart()`    | first tick after the node becomes active, once the preconditions have been checked | build `ActionCommand`, `sink->submit(...)`, then immediately evaluate `onActionRunning()` |
+| `onActionRunning()`  | every subsequent tick while the node returns RUNNING | poll `sink->isPending()` / `sink->resultFor()` and map to a `NodeStatus` |
+| `onActionHalted()`   | when a parent aborts the node (reactive control, replan, shutdown) | `sink->cancel(command_id)` |
+
+If the preconditions do not hold, the node fails without any of these being
+called, and no command reaches your sink. If they hold and the action reports
+`SUCCESS`, the base records the declared effects afterwards. A deployment that
+wants to record what it actually confirmed rather than what the plan predicted
+overrides `commitEffects()`; see `04-execution.md`.
 
 The crucial design point:
 
@@ -110,10 +127,10 @@ The crucial design point:
 > coverage — is expected to happen **inside your sink**, driven by the repeated
 > `isPending()` calls. (See the comment block in `ame_dispatch_node.h`.)
 
-### 3.1 `onStart()` — build and submit
+### 3.1 `onActionStart()` — build and submit
 
 ```cpp
-BT::NodeStatus AmeDispatchNode::onStart() {
+BT::NodeStatus AmeDispatchNode::onActionStart() {
     sink_ = config().blackboard->get<IExecutionSink*>("action_sink");   // injected by executor
     if (!sink_) return BT::NodeStatus::FAILURE;
 
@@ -127,7 +144,7 @@ BT::NodeStatus AmeDispatchNode::onStart() {
     if (!submission.accepted) return BT::NodeStatus::FAILURE;   // fail-closed
     command_id_ = command.command_id;
 
-    return onRunning();   // commands that complete synchronously resolve this tick
+    return onActionRunning();   // commands that complete synchronously resolve this tick
 }
 ```
 
@@ -145,10 +162,10 @@ Key facts an integrator must respect:
   this to fail closed when the command cannot be honoured (unknown target, gate
   not authorised, unresolvable symbol). Do **not** invent a success.
 
-### 3.2 `onRunning()` — the poll → status mapping
+### 3.2 `onActionRunning()` — the poll → status mapping
 
 ```cpp
-BT::NodeStatus AmeDispatchNode::onRunning() {
+BT::NodeStatus AmeDispatchNode::onActionRunning() {
     if (sink_->isPending(command_id_)) return BT::NodeStatus::RUNNING;
 
     auto result = sink_->resultFor(command_id_);
@@ -178,10 +195,10 @@ This is the entire long-running protocol. Read it as a contract on **your sink**
 `nullopt` while status is non-terminal). `isPending()` is the authoritative
 "still working" signal.
 
-### 3.3 `onHalted()` — cancellation
+### 3.3 `onActionHalted()` — cancellation
 
 ```cpp
-void AmeDispatchNode::onHalted() {
+void AmeDispatchNode::onActionHalted() {
     if (sink_ && !command_id_.empty()) sink_->cancel(command_id_);
     command_id_.clear();
     sink_ = nullptr;
@@ -196,23 +213,28 @@ release the vehicle slot) and record a `CANCELLED` terminal so any late
 ### 3.4 Where the other BT node types fit (and which ones touch your sink)
 
 A compiled AME tree contains more than dispatch leaves. `ExecutorComponent::on_configure()`
-registers four *families* of node. **Only one family reaches your sink** — the rest
-read/write the WorldModel or run nested planning, using other blackboard handles.
-You must understand the split so you provide the right handles and don't expect a
-guard or a `SetWorldPredicate` to show up as a command.
+registers three *families* of node. **Only one family reaches your sink** — the rest
+read the WorldModel or run nested planning, using other blackboard handles. You
+must understand the split so you provide the right handles and don't expect the
+goal guard to show up as a command.
+
+One plan step is **one node**. Preconditions and effects are not nodes: they are
+attributes on that node, and `PlannedActionNode`, the base class every planned
+action derives from, checks the preconditions before your work starts and records
+the effects after it succeeds. There is no longer a check node in front of the
+leaf or a write node behind it.
 
 ```mermaid
 flowchart TB
-    subgraph TREE["A compiled action unit (one plan step)"]
+    subgraph TREE["A compiled tree"]
         direction TB
-        G["Guard / Condition nodes<br/>AuthorisationGuard, GeofenceGuard,<br/>TawsGuard, EnsureAltitude,<br/>CheckWorldPredicate"]
-        A["Action leaf<br/>AmeDispatchNode (generic, per-verb)<br/>FormationHold, IdentifyTarget (bespoke)"]
-        S["SetWorldPredicate<br/>(write add/del effects)"]
-        G --> A --> S
+        GG["GoalReached<br/>(is the mission already done?)"]
+        A["Action leaf, one per plan step<br/>AmeDispatchNode (generic, per-verb)<br/>carries ame_preconditions,<br/>ame_add_effects, ame_del_effects"]
+        GG --> A
     end
 
-    G -.reads facts.-> WM[("WorldModel<br/>blackboard[world_model]")]
-    S -.writes facts.-> WM
+    GG -.reads facts.-> WM[("WorldModel<br/>blackboard[world_state]")]
+    A -.checks preconditions,<br/>records effects.-> WM
     A ==submit / isPending==> SINK[["IExecutionSink<br/>blackboard[action_sink]"]]
 
     subgraph ORCH["Orchestration stateful nodes (hierarchical / distributed)"]
@@ -228,31 +250,32 @@ flowchart TB
 
 | Family | Nodes | Base class | Talks to | What the integrator must supply |
 |--------|-------|------------|----------|---------------------------------|
-| **Sink-routed action leaves** | `AmeDispatchNode` (every verb), plus the bespoke `FormationHold` (`formation-follow`) and `IdentifyTarget` (`classify-target`) | `StatefulActionNode` | **your `IExecutionSink`** | implement the sink; handle these verbs |
-| **Symbolic effect glue** | `SetWorldPredicate` | `SyncActionNode` | `WorldModel` | nothing — internal plan bookkeeping (writes add/del effects) |
-| **Guard / precondition** | `CheckWorldPredicate`, `AuthorisationGuard`, `GeofenceGuard`, `TawsGuard`, `EnsureAltitude` | `ConditionNode` | `WorldModel` | keep the gating facts current in the WorldModel |
+| **Sink-routed action leaves** | `AmeDispatchNode`, registered once per verb | `PlannedActionNode` | **your `IExecutionSink`** | implement the sink; handle these verbs |
+| **Guards** | `GoalReached` at the top of a compiled tree; `CheckWorldPredicate` in hand-written trees only | `ConditionNode` | `WorldModel` | keep the gating facts current in the WorldModel |
 | **Orchestration** | `ExecutePhaseAction`, `InvokeService`, `DelegateToAgent` | `StatefulActionNode` | planner/compiler handles (or a PYRAMID service) | only if you use hierarchical/distributed plans |
 
 Three things to internalise:
 
-1. **`FormationHold` and `IdentifyTarget` are *also* sink-routed.** They are not a
-   different mechanism — they are hand-written variants of the dispatch leaf that
-   pull `IExecutionSink*` from the same `action_sink` blackboard key and emit a
-   fixed verb (`formation-follow` / `classify-target`) via the shared
-   `action_command_builder`. At your sink they look exactly like any other
-   command, just with a constant verb. The only reason they exist as separate
-   classes is bespoke per-tick re-submit logic; you handle them identically.
+1. **Every verb goes through the same class.** `ame_core` ships no bespoke
+   per-verb action node and no domain-specific guard node. If your deployment
+   needs one — a node that does something the sink interface cannot express — you
+   derive it from `PlannedActionNode` and register it on the factory yourself,
+   under the verb's name, before the tree is loaded. Deriving from
+   `PlannedActionNode` (or merging `withBasePorts(...)` into a plain BT node's
+   `providedPorts()`) is not optional: a node registered under a verb without the
+   base ports makes BehaviorTree.CPP refuse to load the compiled tree, because the
+   compiler puts those attributes on every action element.
 
-2. **Guards and predicate nodes never reach your sink.** `AuthorisationGuard`,
-   `GeofenceGuard`, `TawsGuard` and `EnsureAltitude` are all `ConditionNode`s that
-   evaluate a single boolean fact in the WorldModel (`evaluateTrueWorldFact`). They
-   sit *in front of* the action leaf inside the action-unit `Sequence`, so a gate
-   that is not satisfied makes the **guard** return FAILURE and the action leaf is
-   **never reached** — `submit()` is never called. This is the fail-closed boundary:
-   permission/geofence/terrain safety is enforced before any command leaves AME.
-   Your job is to keep those facts truthful in the WorldModel (e.g. set
-   `(authorised strike-gate)` only when the operator has authorised it); you do
-   **not** re-implement gating in the sink.
+2. **Gating happens inside the action node, not in front of it.** A permission
+   gate such as `(authorised strike-gate)` is an ordinary domain precondition. The
+   planned-action base checks it before calling `onActionStart()`, so an
+   unsatisfied gate makes the node fail and `submit()` is **never called**. This is
+   the fail-closed boundary: permission and safety gating is enforced before any
+   command leaves AME. Your job is to keep those facts truthful in the WorldModel,
+   not to re-implement gating in the sink. Where a gate must be *observed* rather
+   than assumed, the domain declares its predicate in `(:confirmed-predicates ...)`
+   and the compiler routes it into `ame_confirmed_preconditions`, which only an
+   observed fact satisfies (see `04-execution.md`).
 
 3. **Orchestration nodes need planning handles, not a sink.**
    `ExecutePhaseAction` runs a whole nested *plan → compile → execute* cycle for a
@@ -292,7 +315,7 @@ sequenceDiagram
     loop every dt (e.g. 50 Hz)
         Host->>Exec: tickOnce()
         Exec->>Tree: tickOnce()
-        Tree->>Node: onStart() (first activation)
+        Tree->>Node: onActionStart() (preconditions checked, then first activation)
         Node->>Sink: submit(command{verb, params, id})
         Sink->>Back: start work (e.g. set position target)
         Sink-->>Node: ExecutionSubmission{accepted=true}
@@ -301,7 +324,7 @@ sequenceDiagram
         Node-->>Tree: RUNNING
 
         Note over Tree,Node: subsequent ticks
-        Tree->>Node: onRunning()
+        Tree->>Node: onActionRunning()
         Node->>Sink: isPending(id)?
         Sink->>Back: advance + check progress<br/>(re-issue target, arrival test)
         Sink-->>Node: pending=true → RUNNING
@@ -311,7 +334,7 @@ sequenceDiagram
     Note over Sink: work completes (e.g. arrived)
     Host->>Exec: tickOnce()
     Exec->>Tree: tickOnce()
-    Tree->>Node: onRunning()
+    Tree->>Node: onActionRunning()
     Node->>Sink: isPending(id)?
     Sink-->>Node: pending=false, resultFor=SUCCEEDED
     Node-->>Tree: SUCCESS
@@ -394,7 +417,7 @@ stateDiagram-v2
     Running --> Succeeded: arrival / done
     Running --> FailedTransient: recoverable error
     Running --> FailedPermanent: unrecoverable error
-    Running --> Cancelled: onHalted() → cancel()
+    Running --> Cancelled: onActionHalted() → cancel()
     Pending --> Cancelled: cancel() before start
 
     Succeeded --> [*]: leaf → SUCCESS
@@ -443,10 +466,10 @@ classDiagram
 | Method | Called by | You must… |
 |--------|-----------|-----------|
 | `reset(session_id)`     | host, on new session            | clear all per-session state |
-| `submit(command)`       | `onStart()`                     | start/queue work; return `accepted` + (optional) placement; key state by `command_id` |
-| `isPending(command_id)` | `onRunning()` every tick        | return true while in progress; (in-process sinks: advance the work here) |
-| `resultFor(command_id)` | `onRunning()`                   | return the **terminal** result, else `nullopt` |
-| `cancel(command_id)`    | `onHalted()`                    | stop the work; record `CANCELLED` |
+| `submit(command)`       | `onActionStart()`               | start/queue work; return `accepted` + (optional) placement; key state by `command_id` |
+| `isPending(command_id)` | `onActionRunning()` every tick  | return true while in progress; (in-process sinks: advance the work here) |
+| `resultFor(command_id)` | `onActionRunning()`             | return the **terminal** result, else `nullopt` |
+| `cancel(command_id)`    | `onActionHalted()`              | stop the work; record `CANCELLED` |
 | `pushResult(result)`    | your egress consumer (async)    | record terminal/progress result; throw/ignore unknown ids per policy |
 | `pullCommands()`        | your egress consumer (async)    | hand out queued commands for external dispatch (return `[]` for in-process sinks) |
 | `readPlacements()`      | observability / PYRAMID wrapper | return requirement placements (return `[]` if not using typed placement) |
@@ -529,7 +552,7 @@ What `loadAndExecute` does for you (`executor_component.cpp`):
 
 - `factory_.createTreeFromText(bt_xml)` builds the `BT::Tree`.
 - Publishes `world_model` and `action_sink` onto the **root blackboard** — this is
-  how `AmeDispatchNode::onStart()` finds your sink (`blackboard->get<IExecutionSink*>("action_sink")`).
+  how `AmeDispatchNode::onActionStart()` finds your sink (`blackboard->get<IExecutionSink*>("action_sink")`).
 - Attaches `AmeBTLogger` for the 6-layer observability stack.
 
 `on_tick(dt)` (when you run the component via PCL at `tick_rate_hz`, default 50 Hz)
@@ -568,9 +591,17 @@ observe the outcome (it does *not* reset to IDLE).
   stops. Either give the monitor its own actuation channel or don't run it in
   parallel with movement on a single-slot back end. (This exact failure mode was
   hit in AutoMTK Phase 6.)
+- **An unregistered action stops the compile, it does not degrade.**
+  `PlanCompiler::compile()` throws `Unregistered action in plan: <name>` if any
+  plan step has no `ActionRegistry` entry, and returns no tree at all. That is
+  deliberate — the alternative would be a step that records its predicted effects
+  without ever dispatching anything, which reads as success. Register the action.
+  The `setStubUnregisteredActions(true)` escape hatch compiles such a step to a
+  `SimulatedAction`, and is meant for tools that reason about a model rather than
+  command a vehicle; do not enable it in an integration.
 - **`pushResult` for unknown ids throws** in the reference sink — guard your async
   feedback path so cancelled/expired commands don't crash the consumer.
-- **`onRunning()` is called from inside `onStart()`** the first tick, so a
+- **`onActionRunning()` is called from inside `onActionStart()`** the first tick, so a
   command that completes synchronously resolves in a single tick. Your `submit()`
   must therefore leave the sink in a coherent pollable state *before* it returns.
 - The dispatch node only reads ports `param0..param7`. If a domain action needs
@@ -598,12 +629,11 @@ flowchart TB
 - To also feed observed state back for replanning, push `observed_updates` from
   `CommandResult` into the `WorldModel` (or wrap the lot in `IAutonomyBackend` —
   see `autonomy_backend_shell.md`).
-- Guard nodes (`AuthorisationGuard`, `GeofenceGuard`, `TawsGuard`,
-  `EnsureAltitude`, `CheckWorldPredicate`) are already compiled into the tree
-  around your action leaves — permission/geofence/TAWS gating happens **before**
+- Gating is already compiled into the tree, as the preconditions carried on each
+  action leaf — permission, geofence and terrain gating happens **before**
   `submit()` is ever called, so a gated action never reaches your back end (see
-  §3.4 for the full node taxonomy). Surface gate state by reading the compiled
-  tree's guard nodes, not by re-implementing gates in the sink.
+  §3.4 for the full node taxonomy). Surface gate state by reading those facts in
+  the WorldModel, not by re-implementing gates in the sink.
 
 ### Reference source
 

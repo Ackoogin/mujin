@@ -25,7 +25,7 @@ ROS2 bindings directly.
 
 ---
 
-## Planned-action contract: follow-ups (open)
+## Planned-action contract: follow-ups (one open, blocked)
 
 The planned-action contract has landed. `PlanCompiler` emits one element per plan step
 carrying its grounded state contract as ports; `PlannedActionNode` checks the
@@ -42,66 +42,67 @@ at load time, which is what DevEnv's "Preconditions" control sets, and
 Architecture file [`04-execution.md`](../../../subprojects/AME/doc/architecture/04-execution.md)
 describes the result.
 
-What follows is what a review of that work, together with the restore in commit
-`69d17c0`, found still outstanding.
+A review of that work, together with the restore in commit `69d17c0`, found four things
+still outstanding. Three are now done; the fourth is blocked on a decision.
 
-### 1. The authoring tool silently drops `(:confirmed-predicates ...)`
+### 1. The authoring tool silently drops `(:confirmed-predicates ...)` — done
 
-`pddl_importer.cpp` reads `:types`, `:predicates`, `:constants`, `:domain`, `:objects`,
-`:init` and `:goal`. It does not read `:confirmed-predicates`, the project model has no
-field to hold it, and `pddl_generator.cpp` never writes it. So importing a domain that
-declares confirmed predicates and generating from the project again drops the
-declaration. The compiler then stops routing those facts into
-`ame_confirmed_preconditions`, and an action that should have waited for observed state
-accepts predicted state instead. Nothing reports this.
+`pddl_importer.cpp` now reads the section, `PredicateDef` carries a `confirmed` flag that
+the project file stores, and `pddl_generator.cpp` writes the section back out when any
+predicate is flagged. The predicate editor has a checkbox for it, so a declaration can be
+made in the tool as well as preserved through an import. An entry naming a predicate the
+domain does not declare fails the import rather than being ignored. Covered by tests for
+import, an import-and-generate round trip, the undeclared-name case, the flag surviving
+save and load, and the generated section reaching `WorldModel` through `PddlParser`.
 
-The fix is the ordinary one: read the section on import, hold it in the project, write it
-on generate, and add a round-trip test alongside the existing importer and generator
-tests. It is listed first because it is a silent downgrade of a safety-relevant
-declaration rather than a missing feature.
+### 2. The written contract is out of date — done
 
-### 2. Six BT node types are documented here but absent from the code
-
-[`04-execution.md`](../../../subprojects/AME/doc/architecture/04-execution.md), under
-"Guard and dispatch nodes", says `ExecutorComponent::on_configure()` registers
-`AuthorisationGuard`, `GeofenceGuard`, `TawsGuard`, `EnsureAltitude`, `FormationHold` and
-`IdentifyTarget`. None of those names exist anywhere in `subprojects/AME`. They exist in
-the standalone AME repository, whose `executor_component.cpp` does register all six.
-Missing here: the six sources and headers, the `world_fact_guard_utils.h` they share, and
-`tests/test_native_bt_nodes.cpp`, which is around 584 lines in total. The prose arrived in
-the restore; the code did not.
-
-Four of them are condition nodes and are used the way `CheckWorldPredicate` is, from
-hand-written and subtree bindings. `FormationHold` and `IdentifyTarget` are
-`BT::StatefulActionNode` rather than `PlannedActionNode`. Their own test drives them from
-hand-written XML, where being plain BT nodes is fine, but if a deployment binds either of
-them as a simple-node action implementation it must merge the planned-action base ports
-first, or BehaviorTree.CPP will refuse to load the tree.
-
-**Blocked on the repository organisation decision.** Whether these are copied in, taken
-from the standalone repository as the upstream, or left to the deployment that needs them
-depends on which repository is going to own AME's node library. Settle that first;
-copying now would only have to be undone.
-
-### 3. The written contract is out of date
-
-The port list in `04-execution.md` and in
+`04-execution.md` now lists all seven planned-action ports in a table, and
 [`planning_execution_user_guide.md`](../../../subprojects/AME/doc/guides/planning_execution_user_guide.md)
-names five ports. There are seven: `ame_confirmed_preconditions` and
-`ame_neg_preconditions` are undocumented.
+lists the six the compiler emits plus `ame_required_authority`. Both explain how
+`(:confirmed-predicates ...)` and `ame_required_authority` differ, which is who decides
+and how far the demand reaches.
 
-Neither document mentions that an action with no registered implementation now aborts the
-compile with "Unregistered action in plan" unless `PlanCompiler::setStubUnregisteredActions(true)`
-is set, which the authoring shell and the Python bindings do and nothing else does.
-Failing closed is the right default for production, but it is a change in behaviour that
-an integrator meets as an exception, so it belongs in the guide.
+Both documents, and the pitfalls section of
+[`long_running_action_integration.md`](../../../subprojects/AME/doc/guides/long_running_action_integration.md),
+now say that an action with no registered implementation aborts the compile with
+"Unregistered action in plan", and that `PlanCompiler::setStubUnregisteredActions(true)`
+is for tools reasoning about a model rather than for integrations.
 
-### 4. No assurance requirement covers domain-declared confirmed predicates
+### 3. No assurance requirement covers domain-declared confirmed predicates — done
 
-`autonomy_assurance_plan.md` gained SR-05a, which covers a deployment overriding
-`commitEffects()`. The second route to confirmed state, declaring predicates in the
-domain, has no requirement of its own, and finding 1 above is exactly the sort of failure
-such a requirement would catch.
+`autonomy_assurance_plan.md` gained SR-05b, which requires a declared predicate to reach
+the compiled tree as an `ame_confirmed_preconditions` entry, and requires any tool that
+reads a domain and writes one back to preserve the declaration. Both of its verification
+methods now exist: the compiler test in `test_plan_compiler.cpp` and the authoring tool's
+round-trip test. The operating-conditions table in the same document no longer describes
+precondition gating as `CheckWorldPredicate` nodes.
+
+### 4. Six BT node types were documented here but absent from the code — references removed, code still open
+
+[`04-execution.md`](../../../subprojects/AME/doc/architecture/04-execution.md) claimed
+that `ExecutorComponent::on_configure()` registers `AuthorisationGuard`, `GeofenceGuard`,
+`TawsGuard`, `EnsureAltitude`, `FormationHold` and `IdentifyTarget`. None of those names
+exist anywhere in `subprojects/AME`; they exist in the standalone AME repository, along
+with the `world_fact_guard_utils.h` they share and `tests/test_native_bt_nodes.cpp`,
+around 584 lines in total. The prose arrived in the restore; the code did not.
+
+Since the code is not here, the documents no longer name it. `04-execution.md` and
+`long_running_action_integration.md` now describe what the executor actually registers,
+and say that a deployment wanting a bespoke guard node registers its own, deriving it
+from `PlannedActionNode` or merging `withBasePorts(...)` so that BehaviorTree.CPP will
+load a compiled tree that uses it. Nothing in this repository is left describing nodes
+that are not in it.
+
+**Whether the nodes themselves should be here is still blocked on the repository
+organisation decision.** Copying them in, taking the standalone repository as the
+upstream, or leaving them to the deployment that needs them all depend on which
+repository is going to own AME's node library. Settle that first; copying now would only
+have to be undone. Note that four of the six are condition nodes used the way
+`CheckWorldPredicate` is, from hand-written and subtree bindings, while `FormationHold`
+and `IdentifyTarget` are plain `BT::StatefulActionNode`s — fine in the hand-written XML
+their own test drives them from, but a deployment binding either as a simple-node action
+implementation must merge the planned-action base ports first.
 
 ---
 
