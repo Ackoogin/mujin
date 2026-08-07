@@ -118,6 +118,38 @@ static void renderReadOnlyTextBox(const char* id,
                                 ImGuiInputTextFlags_AllowTabInput);
 }
 
+// True for the lines that open a PDDL section, which are drawn in the accent
+// colour so a reader can find the shape of the generated text at a glance.
+static bool isPddlKeywordLine(const std::string& line) {
+  const size_t start = line.find_first_not_of(" \t");
+  if (start == std::string::npos) {
+    return false;
+  }
+
+  const std::string text = line.substr(start);
+  return text.rfind("(define", 0) == 0 ||
+         text.rfind("(:", 0) == 0 ||
+         text.rfind(":requirements", 0) == 0 ||
+         text.rfind(":parameters", 0) == 0 ||
+         text.rfind(":precondition", 0) == 0 ||
+         text.rfind(":effect", 0) == 0;
+}
+
+// Draws generated PDDL as read-only text. Used by the guided editor's "Reads
+// as" preview, where the user is shown the PDDL their sentence produced.
+static void renderPddlText(const std::string& pddl) {
+  const ImVec4 keywordColor(0.0F, 1.0F, 1.0F, 1.0F);
+  std::istringstream input(pddl);
+  std::string line;
+  while (std::getline(input, line)) {
+    if (isPddlKeywordLine(line)) {
+      ImGui::TextColored(keywordColor, "%s", line.c_str());
+    } else {
+      ImGui::TextUnformatted(line.c_str());
+    }
+  }
+}
+
 static ImVec2 remainingPanelSize() {
   ImVec2 size = ImGui::GetContentRegionAvail();
   size.x = std::max(size.x, 1.0F);
