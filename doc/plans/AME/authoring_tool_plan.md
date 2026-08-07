@@ -112,6 +112,13 @@ lists every unfinished item from the previous plan and says where each one went.
 show you the tree it compiled. It cannot show you that tree running. That is
 workstream B, and it is the main new work in this plan.
 
+**One thing the tool inherits from the core needs fixing before that work starts.** The
+tree the tool shows is the tree the plan compiler produces, and that tree currently
+carries a pair of helper nodes around every action, one reading a fact and one writing
+one. They were written to get the pipeline working end to end. They are the wrong shape
+both for the screens in workstream B and for a deployed system, for reasons set out in
+B0 below, and B0 is where they are dealt with.
+
 ---
 
 ## 4. Scope
@@ -278,15 +285,102 @@ feel like:
 The authoring tool should give the same experience against a simulated world rather
 than a real one, at design time, before anything is deployed.
 
+### B0. Each planned action carries its own state checks
+
+This is core work rather than authoring-tool work. The work itself is tracked in
+[`doc/todo/AME/TODO.md`](../../todo/AME/TODO.md), under "Planned actions own their
+preconditions and effects", so that downstream users of `ame_core` can take it and check
+it against their own action nodes without depending on anything in this plan. It is
+listed here as well because the screens in workstream B are what make it urgent, and
+because they cannot meet section 2 until it is done.
+
+**The problem.** The plan compiler surrounds every action with helper nodes: one
+`CheckWorldPredicate` for each of the action's preconditions before it, and one
+`SetWorldPredicate` for each add effect and each delete effect after it
+([`plan_compiler.cpp`](../../../subprojects/AME/src/lib/plan_compiler.cpp), function
+`emitActionUnit`). Those nodes were written to get planning and execution working from
+end to end, and they have two problems.
+
+The first is a presentation problem, and it is the smaller of the two. A three-step
+mission arrives on screen as roughly twenty boxes, of which three are the mission and
+the rest are bookkeeping. Their labels are the planning vocabulary that section 2 rule 1
+keeps off the screen, and a reviewer watching a run has to be told which boxes to
+ignore before the picture means anything, which is what section 2 rule 4 exists to
+prevent.
+
+The second matters more. Writing an effect as a node in the tree asserts that the world
+changed because the action returned success. For a simulated run that is reasonable:
+predicted state is the only state there is. For a deployed system it is not. Whether the
+vehicle actually arrived is something that deployment establishes for itself, and the
+compiled tree should not be asserting it on the action's behalf. The world model already
+draws the distinction the two cases need — every fact is recorded as either believed,
+meaning predicted from a plan effect, or confirmed, meaning observed (`FactAuthority` in
+[`world_model.h`](../../../subprojects/AME/include/ame/world_model.h)) — and it already
+has a check for the two disagreeing. What is missing is a place for an action node to
+make that choice, because at present the tree makes it first.
+
+**Build.**
+
+- The compiler emits one node per plan step. The step's grounded preconditions and
+  effects travel with that node instead of being spread around it, so the tree has one
+  box per thing the mission does and nothing else.
+- A planned-action base class in `ame_core` reads that information, checks the
+  preconditions before the action's own work runs, and applies the effects after it
+  succeeds. Concrete action nodes derive from the base class and implement only the
+  work. Neither the check nor the write is a node on the tree any more.
+- Simulation and validation use a stand-in node derived from that base class. It takes
+  the number of ticks the action is configured to take, succeeds or fails as configured,
+  and applies the declared effects as believed facts. This is what the tree does today,
+  moved inside the node.
+- The goal guard at the top of a compiled tree is the other place `CheckWorldPredicate`
+  appears. It becomes a single condition node asking whether the mission's goal has been
+  met, so no fact-level plumbing is left anywhere in generated output.
+- `CheckWorldPredicate` and `SetWorldPredicate` then appear in no generated tree. No
+  hand-written tree in the repository uses them either; they occur only in compiler
+  output and in the tests that assert on that output, so they can be withdrawn from
+  mission execution once the compiler and the executor are updated.
+
+**What this deliberately does not do.** It does not decide how a deployed system
+establishes the state after an action. That is the deployment's business: a real
+deployment supplies its own action nodes and already confirms, in whatever way suits the
+system it is commanding, that the thing it asked for happened. Nothing in this plan or in
+`ame_core` changes that. What the work above gives those nodes is the declared
+preconditions and effects to work from, and a compiled tree that has stopped writing the
+world model over their heads.
+
+**How the information reaches the node.** Put it on the emitted element, as attributes
+listing the fact names for preconditions, add effects and delete effects. The compiled
+XML then still describes itself, which matters because the authoring tool's tree view,
+DevEnv and every recorded run read that XML, and a saved tree should stay meaningful
+without the project that produced it. The alternative, giving each node a step
+identifier that keys into a table stored alongside the tree, keeps the XML shorter but
+makes a tree file useless on its own; take it only if the attribute lists turn out to be
+unworkable in practice.
+
+**What it touches.** The compiler, the behaviour-tree node headers, the executor
+component and the ROS2 executor node, together with seven test binaries and four
+architecture files that describe the current tree shape. The core TODO entry lists them
+individually. Most of the effort is in those tests and documents rather than in the
+compiler itself.
+
+**Non-specialist acceptance.** A user opens the compiled tree for a three-step mission,
+sees three boxes named after the three things the mission does, and can say what every
+box on the screen is for.
+
+**Effort.** Medium.
+
 ### B1. Simulation engine
 
 **Build.** An in-process runner that takes the compiled behaviour-tree XML the tool
 already produces, builds it with a BehaviorTree.CPP factory, and ticks it against a
-world model populated from the scenario's starting facts. `CheckWorldPredicate` and
-`SetWorldPredicate` already work purely against the world model and are used unchanged.
-Real action nodes talk to external systems, so simulation substitutes a stand-in node
-for each action, following the pattern the demo application already uses
-([`subprojects/AME/src/apps/main.cpp`](../../../subprojects/AME/src/apps/main.cpp)).
+world model populated from the scenario's starting facts. Every action in the tree is
+built as the stand-in node from B0, which checks the action's preconditions against the
+world model, takes the configured number of ticks, and applies the action's effects as
+believed facts. Real action nodes talk to external systems and are never built here. The
+substitution follows the pattern the demo application already uses
+([`subprojects/AME/src/apps/main.cpp`](../../../subprojects/AME/src/apps/main.cpp)),
+with the difference that after B0 one stand-in covers every action instead of one being
+written per action.
 
 Each action gets simulation settings stored in the project beside its behaviour-tree
 binding: how many ticks it takes, whether it succeeds, and optionally a probability of
@@ -308,9 +402,10 @@ mission complete, without configuring anything first.
 
 **Build.** Extend the existing behaviour-tree view so that during a run each node is
 coloured by its current status, the node being ticked is marked, and completed branches
-are visibly finished. A user can click any node to see which action it came from and
-which facts it checks or sets. Nodes keep the plain-language names the guided editor
-gave them rather than the generated identifiers.
+are visibly finished. Because of B0 there is one node per action, so a user can click it
+to see the action it came from, the facts that had to be true before it could run, and
+the facts it changed. Nodes keep the plain-language names the guided editor gave them
+rather than the generated identifiers.
 
 **Non-specialist acceptance.** Someone watching over the author's shoulder can say
 which part of the mission is happening now, and which parts already finished, without
@@ -467,7 +562,7 @@ tool and can tell which parts of the mission have been checked and which have no
 | Milestone | Items | What it delivers |
 |-----------|-------|------------------|
 | **M1 — Concepts reviewed** | C1 (simulation pack) | The simulation screens are agreed on paper before code is written |
-| **M2 — It runs** | B1, B2 | A scenario can be run inside the tool and watched |
+| **M2 — It runs** | B0, B1, B2 | The compiled tree shows one box per mission step, and a scenario can be run inside the tool and watched |
 | **M3 — It is legible** | B3, A3, A4 | Facts and timing are visible; problems and scenarios are workable without planning knowledge |
 | **M4 — It survives contact** | B4, B5 | Faults, replanning and batch expectations |
 | **M5 — It is shareable** | B6, B7, C2 | Recorded runs, comparison, and a one-action review pack |
@@ -475,7 +570,9 @@ tool and can tell which parts of the mission have been checked and which have no
 | **M7 — Evidence** | C3 | Generated assurance material |
 
 The ordering is deliberate. C1 comes first because the wording and layout decisions in
-it are cheap now and expensive after the screens exist. The rest of workstream A sits
+it are cheap now and expensive after the screens exist. B0 comes before any of the run
+screens because it changes the shape of the tree those screens draw, and doing it
+afterwards would mean building the live tree view twice. The rest of workstream A sits
 late because those items are irritations rather than obstacles, and because a user who
 can simulate a mission but has to type a file path is better off than one with polished
 file handling and no way to see their mission run. A3 and A4 are pulled forward into M3
@@ -485,12 +582,12 @@ build a starting situation cannot run a simulation.
 **Dependencies.**
 
 ```
-B1 ──> B2 ──> B3 ──> B4 ──> B5
- │       │      │            │
- │       │      └──> B6 ──> B7
- │       │             │
- │       └─────────────┴──> C2 ──> C3
- └──> A4 (scenario facts feed the run)
+B0 ──> B1 ──> B2 ──> B3 ──> B4 ──> B5
+        │       │      │            │
+        │       │      └──> B6 ──> B7
+        │       │             │
+        │       └─────────────┴──> C2 ──> C3
+        └──> A4 (scenario facts feed the run)
 
 C1 precedes B2, B3 and B4
 A1, A2, A3, A5, A6, A7, A8 are independent
@@ -526,12 +623,13 @@ a screen makes sense to someone who has never seen a planning model.
 | 5 | Rename the new action, decide against it, and undo with one keystroke | A2 |
 | 6 | Fix the three problems the tool reports, by clicking each one | A3 |
 | 7 | Build a starting situation of six facts for a scenario | A4 |
-| 8 | Run the scenario and watch it complete | B1, B2 |
-| 9 | Say when a particular fact stopped being true | B3 |
-| 10 | Make one action fail, run again, and explain why the mission took a different route | B4 |
-| 11 | Run the whole scenario set and say which one failed and why | B5 |
-| 12 | Change one action, re-run, and say from the comparison what the change did | B7 |
-| 13 | Export a review pack and name what each file in it is | C2 |
+| 8 | Open the compiled tree for the scenario and say what every box on it is for | B0 |
+| 9 | Run the scenario and watch it complete | B1, B2 |
+| 10 | Say when a particular fact stopped being true | B3 |
+| 11 | Make one action fail, run again, and explain why the mission took a different route | B4 |
+| 12 | Run the whole scenario set and say which one failed and why | B5 |
+| 13 | Change one action, re-run, and say from the comparison what the change did | B7 |
+| 14 | Export a review pack and name what each file in it is | C2 |
 
 **Separate checks.** These do not fit one sitting, either because they need a second
 person, a second machine, or a document read away from the tool. Each is still run by
@@ -539,12 +637,12 @@ someone who does not write software.
 
 | Check | Task | Item |
 |-------|------|------|
-| 14 | Import a second domain into the project and see, before committing, which existing actions it would overwrite | A5 |
-| 15 | Open a saved view by name and get the picture the author saved | A6 |
-| 16 | Mark a fact as a contingency and another as a safe state, run the analysis, and read whether the safe state is reachable | A8 |
-| 17 | Save a run, send the folder to a colleague, and have the colleague step through the same mission | B6 |
-| 18 | Read a concept mockup pack in a browser and answer its questions without asking what anything means | C1 |
-| 19 | Read the generated assurance report without opening the tool and say which parts of the mission have been checked | C3 |
+| 15 | Import a second domain into the project and see, before committing, which existing actions it would overwrite | A5 |
+| 16 | Open a saved view by name and get the picture the author saved | A6 |
+| 17 | Mark a fact as a contingency and another as a safe state, run the analysis, and read whether the safe state is reachable | A8 |
+| 18 | Save a run, send the folder to a colleague, and have the colleague step through the same mission | B6 |
+| 19 | Read a concept mockup pack in a browser and answer its questions without asking what anything means | C1 |
+| 20 | Read the generated assurance report without opening the tool and say which parts of the mission have been checked | C3 |
 
 ---
 
@@ -552,7 +650,8 @@ someone who does not write software.
 
 | Risk | Likelihood | Impact | What we do about it |
 |------|-----------|--------|--------------------|
-| Simulated behaviour diverges from real execution, so a mission that works in the tool fails in the field | Medium | High | The simulation uses the real compiled tree, the real world model and the real planner. Only the action nodes are substituted, and each substitution is visible in the user interface with its settings shown. The tool never claims a run proves field behaviour |
+| Simulated behaviour diverges from real execution, so a mission that works in the tool fails in the field | Medium | High | The simulation uses the real compiled tree, the real world model and the real planner. After B0 the substitution is one node per action and nothing else, and the simulated node is given the same preconditions and effects a deployed one would be; the difference is that the simulated node predicts the state that follows an action, where a deployed system establishes it. Each substitution is visible in the user interface with its settings shown, and the tool never claims a run proves field behaviour |
+| B0 changes the compiled tree for everything that reads it, not just the authoring tool | Medium | Medium | The two node types being withdrawn appear only in generated output and in the tests that assert on it; no hand-written tree in the repository uses them, so the change is confined to the compiler, the executor and those tests. The architecture files and the user guide listed in B0 are updated in the same change, so no document is left describing the old tree shape |
 | Simulation settings per action become a modelling burden of their own | Medium | Medium | Defaults that need no configuration: one tick, always succeeds. Settings are only opened by users who want a specific fault |
 | Fault injection grows into a scripting language | Medium | Medium | Two mechanisms only, fixed at the start: force an action to fail on a given attempt, and set a fact at a given tick. Anything more expressive is a separate decision, not a slow accumulation |
 | The timeline and tree views drift apart from DevEnv's, so the two tools disagree | Low | Medium | Both read the same three JSONL schemas. B6 makes the files interchangeable in both directions, which is testable |
