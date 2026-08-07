@@ -25,46 +25,83 @@ ROS2 bindings directly.
 
 ---
 
-## Planned actions own their preconditions and effects (open)
+## Planned-action contract: follow-ups (open)
 
-`PlanCompiler::emitActionUnit` wraps each plan step in a `Sequence` holding one
-`CheckWorldPredicate` per precondition, then the registered action node, then one
-`SetWorldPredicate` per add effect and delete effect. Those two node types were written
-to get planning and execution working from end to end. They are the wrong shape to keep,
-for two reasons.
+The planned-action contract has landed. `PlanCompiler` emits one element per plan step
+carrying its grounded state contract as ports; `PlannedActionNode` checks the
+preconditions and commits the effects around the concrete action's own work;
+`SimulatedAction`, the `PlannedAction` decorator and the `GoalReached` condition make up
+the rest of the generated vocabulary; `SetWorldPredicate` is gone and
+`CheckWorldPredicate` survives only for hand-written trees. `IWorldStateAccess` is the
+seam through which all of this reads and writes facts, so the ROS2 executor can work
+through its `GetFact` and `SetFact` services. Two mechanisms then decide how much
+evidence a precondition needs: `ame_required_authority` raises the bar for a whole node
+at load time, which is what DevEnv's "Preconditions" control sets, and
+`(:confirmed-predicates ...)` in the domain routes named facts into
+`ame_confirmed_preconditions`, which are only ever satisfied from observed state.
+Architecture file [`04-execution.md`](../../../subprojects/AME/doc/architecture/04-execution.md)
+describes the result.
 
-A compiled tree for a three-step mission is about twenty nodes, of which three are the
-mission. Everything that draws, reviews or replays that tree has to account for the rest.
+What follows is what a review of that work, together with the restore in commit
+`69d17c0`, found still outstanding.
 
-More importantly, writing an effect as a node on the tree asserts that the world changed
-because the action returned success. That is a fair account of predicted state and no
-account at all of real state. How the state after an action is established is a decision
-that belongs to the action, and the tree should not be making it on the action's behalf.
+### 1. The authoring tool silently drops `(:confirmed-predicates ...)`
 
-| # | Item | Notes |
-|---|------|-------|
-| 1 | Emit one node per plan step | The step's grounded preconditions, add effects and delete effects travel with the node, as attributes on the emitted element, so a compiled tree still describes itself to anything that reads it later |
-| 2 | Planned-action base class in `ame_core` | Checks the preconditions before the concrete node's own work runs, applies the effects once it succeeds, and leaves to the derived class how the resulting state is established |
-| 3 | Stand-in node for simulation and validation | Takes a configured number of ticks, succeeds or fails as configured, applies the declared effects as `BELIEVED` facts. This is what the tree does today, moved inside a node |
-| 4 | Goal guard becomes a single condition node | The other place `CheckWorldPredicate` is emitted. Replacing it leaves no fact-level plumbing anywhere in generated output |
-| 5 | Withdraw `CheckWorldPredicate` and `SetWorldPredicate` from mission execution | They occur only in generated output and in the tests that assert on it. No hand-written tree in the repository uses them |
-| 6 | Update the tests and documents that describe the current tree shape | `test_plan_compiler`, `test_e2e_pipeline`, `test_integration`, `test_multi_agent`, `test_extensions`, `test_observability`, `test_e2e_spatial_routing`; architecture files `02-world-model.md`, `04-execution.md`, `05-observability.md`, `06-ros2.md`; the planning and execution user guide |
+`pddl_importer.cpp` reads `:types`, `:predicates`, `:constants`, `:domain`, `:objects`,
+`:init` and `:goal`. It does not read `:confirmed-predicates`, the project model has no
+field to hold it, and `pddl_generator.cpp` never writes it. So importing a domain that
+declares confirmed predicates and generating from the project again drops the
+declaration. The compiler then stops routing those facts into
+`ame_confirmed_preconditions`, and an action that should have waited for observed state
+accepts predicted state instead. Nothing reports this.
 
-**Out of scope.** Establishing the state after an action from confirmed observation is a
-deployment concern and stays outside core AME. A deployment supplies its own action nodes
-and already decides how it confirms that a commanded action happened. What core AME owes
-those nodes is the declared preconditions and effects, and a compiled tree that no longer
-asserts effects on their behalf. The seam that supports this is already in place:
-`FactAuthority` distinguishes `BELIEVED` from `CONFIRMED` facts and
-`WorldModel::hasAuthorityConflict()` reports the two disagreeing. Related: the
-State-Authority Semantics prerequisite under Extension 8.
+The fix is the ordinary one: read the section on import, hold it in the project, write it
+on generate, and add a round-trip test alongside the existing importer and generator
+tests. It is listed first because it is a silent downgrade of a safety-relevant
+declaration rather than a missing feature.
 
-**Why it is tracked here.** The change is in `ame_core` and the executor, so downstream
-users can take it and check it against their own action nodes without waiting on, or
-depending on, any authoring-tool work. The graphical authoring tool needs it as well, for
-the simulation-run screens; item B0 of
-[`authoring_tool_plan.md`](../../plans/AME/authoring_tool_plan.md) states the case from
-that side and points here for the work itself.
+### 2. Six BT node types are documented here but absent from the code
+
+[`04-execution.md`](../../../subprojects/AME/doc/architecture/04-execution.md), under
+"Guard and dispatch nodes", says `ExecutorComponent::on_configure()` registers
+`AuthorisationGuard`, `GeofenceGuard`, `TawsGuard`, `EnsureAltitude`, `FormationHold` and
+`IdentifyTarget`. None of those names exist anywhere in `subprojects/AME`. They exist in
+the standalone AME repository, whose `executor_component.cpp` does register all six.
+Missing here: the six sources and headers, the `world_fact_guard_utils.h` they share, and
+`tests/test_native_bt_nodes.cpp`, which is around 584 lines in total. The prose arrived in
+the restore; the code did not.
+
+Four of them are condition nodes and are used the way `CheckWorldPredicate` is, from
+hand-written and subtree bindings. `FormationHold` and `IdentifyTarget` are
+`BT::StatefulActionNode` rather than `PlannedActionNode`. Their own test drives them from
+hand-written XML, where being plain BT nodes is fine, but if a deployment binds either of
+them as a simple-node action implementation it must merge the planned-action base ports
+first, or BehaviorTree.CPP will refuse to load the tree.
+
+**Blocked on the repository organisation decision.** Whether these are copied in, taken
+from the standalone repository as the upstream, or left to the deployment that needs them
+depends on which repository is going to own AME's node library. Settle that first;
+copying now would only have to be undone.
+
+### 3. The written contract is out of date
+
+The port list in `04-execution.md` and in
+[`planning_execution_user_guide.md`](../../../subprojects/AME/doc/guides/planning_execution_user_guide.md)
+names five ports. There are seven: `ame_confirmed_preconditions` and
+`ame_neg_preconditions` are undocumented.
+
+Neither document mentions that an action with no registered implementation now aborts the
+compile with "Unregistered action in plan" unless `PlanCompiler::setStubUnregisteredActions(true)`
+is set, which the authoring shell and the Python bindings do and nothing else does.
+Failing closed is the right default for production, but it is a change in behaviour that
+an integrator meets as an exception, so it belongs in the guide.
+
+### 4. No assurance requirement covers domain-declared confirmed predicates
+
+`autonomy_assurance_plan.md` gained SR-05a, which covers a deployment overriding
+`commitEffects()`. The second route to confirmed state, declaring predicates in the
+domain, has no requirement of its own, and finding 1 above is exactly the sort of failure
+such a requirement would catch.
 
 ---
 
@@ -100,7 +137,7 @@ PDDL 2.1 durative actions with STN conversion. See [`temporal_extension_research
 Neural components assist, but the symbolic system remains authoritative. See [`neuro_symbolic_reasoning.md`](../../research/AME/neuro_symbolic_reasoning.md) and [`neuro_symbolic_reasoning_review.md`](../../reviews/AME/neuro_symbolic_reasoning_review.md).
 
 ### Pre-requisites
-- **State-Authority Semantics:** Clarify `BELIEVED` (plan effects) vs `CONFIRMED` (perception) facts in WorldModel
+- ~~**State-Authority Semantics:** Clarify `BELIEVED` (plan effects) vs `CONFIRMED` (perception) facts in WorldModel~~ — done. The distinction is now visible in execution as well as in the world model: see the planned-action contract above for `ame_required_authority` and `(:confirmed-predicates ...)`
 - **Neural Acceptance Criteria:** Latency budget (500ms), fallback to LAPKT on timeout/error, audit logging
 
 ### Phase 1 (Low-Risk)
@@ -144,9 +181,13 @@ From SACE Stage 8 analysis. See [`autonomy_assurance_plan.md`](../../plans/AME/a
 - Configurable time/node budget with timeout handling
 
 ### ActionRegistry
-- Dynamic registration from config file (YAML/JSON)
+- Dynamic registration from config file (YAML/JSON). `registerActionFile()` covers one
+  action at a time from a pre-authored BT XML file; what is still missing is loading the
+  whole mapping table from configuration
 - Type-checked parameter binding against PDDL schema
-- Startup validation: all PDDL actions have registered implementations
+- ~~Startup validation: all PDDL actions have registered implementations~~ — served at
+  compile time instead: `PlanCompiler` aborts with "Unregistered action in plan" unless
+  stub mode is enabled
 
 ### BT Nodes
 - Failure taxonomy: TRANSIENT (retry), PERMANENT (replan + blacklist), FATAL (abort)
@@ -155,7 +196,9 @@ From SACE Stage 8 analysis. See [`autonomy_assurance_plan.md`](../../plans/AME/a
 ### PlanCompiler
 - Serialise compiled BT to file for inspection
 - Emit DOT graph of causal structure
-- Complex DAG join-point synchronisation
+- ~~Complex DAG join-point synchronisation~~ — served conservatively by the phased
+  compiler, which puts a barrier between execution phases. Joining at the individual
+  step rather than at a phase boundary would still let more run in parallel
 
 ### MissionExecutor
 - Progressive replan: retry -> local replan -> full replan -> relax goal -> abort

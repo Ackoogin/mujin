@@ -287,12 +287,13 @@ than a real one, at design time, before anything is deployed.
 
 ### B0. Each planned action carries its own state checks
 
-This is core work rather than authoring-tool work. The work itself is tracked in
-[`doc/todo/AME/TODO.md`](../../todo/AME/TODO.md), under "Planned actions own their
-preconditions and effects", so that downstream users of `ame_core` can take it and check
-it against their own action nodes without depending on anything in this plan. It is
-listed here as well because the screens in workstream B are what make it urgent, and
-because they cannot meet section 2 until it is done.
+**This item is done.** It was core work rather than authoring-tool work, and it is
+recorded, along with the follow-ups a review of it raised, in
+[`doc/todo/AME/TODO.md`](../../todo/AME/TODO.md) under "Planned-action contract:
+follow-ups". The rest of this item is kept as written because it states why the
+simulation-run screens needed the change, and because the walkthrough in section 9 still
+checks it. One caveat for workstream B: an action with no registered implementation now
+aborts the compile unless stub mode is switched on, which the authoring tool does.
 
 **The problem.** The plan compiler surrounds every action with helper nodes: one
 `CheckWorldPredicate` for each of the action's preconditions before it, and one
