@@ -34,14 +34,12 @@ public:
                                   const ActionRegistry& registry) const;
 
 private:
-    // Generate XML for a single action unit (precondition checks + action + effects)
+    // Generate one planned-action XML element with its state contract as ports.
     std::string emitActionUnit(const GroundAction& ga,
                                const WorldModel& wm,
                                const ActionRegistry& registry) const;
 
-    // Emit ReactiveFallback goal guard around the plan body.
-    // If all goals are already satisfied, the tree returns SUCCESS
-    // without re-executing the plan -- safe for continuous ticking.
+    // Emit a ReactiveFallback with one GoalReached condition around the plan.
     void emitGoalGuardOpen(std::ostringstream& xml,
                            const WorldModel& wm,
                            const std::string& indent) const;

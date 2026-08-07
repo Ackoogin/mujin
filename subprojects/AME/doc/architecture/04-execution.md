@@ -10,22 +10,26 @@
 
 2. **Flow extraction** -- topological sort, group into independent causal chains. Steps with no cross-flow dependencies form separate flows.
 
-3. **Action unit generation** -- each plan step becomes:
+3. **Planned action generation** -- each plan step becomes one action element.
+   A simple registered node receives the grounded state contract as ports:
    ```xml
-   <Sequence|ReactiveSequence name="action_params">
-       <CheckWorldPredicate predicate="pre1" expected="true"/>
-       ...
-       <resolved BT fragment from ActionRegistry>
-       <SetWorldPredicate predicate="add1" value="true"/>
-       <SetWorldPredicate predicate="del1" value="false"/>
-   </Sequence|ReactiveSequence>
+   <MoveAction name="move(uav1,base,sector_a)"
+       param0="uav1" param1="base" param2="sector_a"
+       ame_preconditions="(at uav1 base)"
+       ame_add_effects="(at uav1 sector_a)"
+       ame_del_effects="(at uav1 base)"
+       ame_reactive="false"/>
    ```
-   Sequence vs. ReactiveSequence comes from the ActionRegistry's per-action reactive flag.
+   A registered XML subtree is the single child of a `PlannedAction`
+   decorator carrying the same ports. An action with no registry entry becomes
+   a `SimulatedAction`. The registry's reactive flag supplies the
+   `ame_reactive` value.
 
 4. **Tree composition**:
    - Single flow -> top-level `Sequence`
    - Multiple flows -> `Parallel` node with `success_count = flow_count`
-   - Shared actions (join points) -> blackboard-flag guard pattern (first execution sets done-flag; duplicates check and skip)
+   - A `ReactiveFallback` uses one `GoalReached` condition before the plan body,
+     so a completed mission is not run again on a later tick.
 
 5. **Output** -- XML string loadable by `BT::BehaviorTreeFactory::createTreeFromText()`
 
@@ -33,15 +37,50 @@
 
 ## BT Node Types
 
-All world-model nodes receive `WorldModel*` via a shared pointer in the root blackboard.
+Planned actions obtain `IWorldStateAccess*` from the `world_state` blackboard
+entry. For compatibility with existing in-process trees, they fall back to the
+`WorldModel*` stored as `world_model`.
+
+### PlannedActionNode (StatefulAction base)
+
+Concrete planned actions derive from `PlannedActionNode` and merge
+`withBasePorts(...)` into their own `providedPorts()`. The base ports are
+`ame_preconditions`, `ame_add_effects`, `ame_del_effects`, and `ame_reactive`.
+
+The base checks all preconditions before calling `onActionStart()`. When the
+reactive port is true, it checks them again before each call to
+`onActionRunning()`. It calls `commitEffects()` only after the concrete action
+reports `SUCCESS`. The default implementation records add effects as true and
+delete effects as false with `BELIEVED` authority.
+
+A deployed action can override `commitEffects()` to record what it actually
+confirmed. The core does not enforce confirmed state. A synchronous action
+only needs to implement `onActionStart()` and return a final status.
+
+### PlannedAction (Decorator)
+
+Applies the same contract to a registered multi-node XML template. It checks
+preconditions, ticks its one child, and commits effects only when that child
+succeeds.
+
+### SimulatedAction (StatefulAction)
+
+Provides deterministic stand-in behavior for unregistered actions and future
+authoring-tool simulations. Its `ticks` input defaults to one and its `success`
+input defaults to true. It inherits the normal planned-action checks and
+effect commit behavior.
+
+### GoalReached (Condition)
+
+Reads the semicolon-separated grounded facts in its `goals` port and succeeds
+only when every fact is true through the world-state access interface.
 
 ### CheckWorldPredicate (Condition)
 
 Reads `predicate` port (string key), queries `WorldModel::getFact()`, returns SUCCESS/FAILURE.
 
-### SetWorldPredicate (SyncAction)
-
-Reads `predicate` + `value` ports, calls `WorldModel::setFact()`, returns SUCCESS.
+This node remains available for hand-written condition and contingency trees.
+The compiler does not emit it.
 
 ### ReplanOnFailure (Decorator)
 
@@ -56,7 +95,8 @@ Orchestrates a full **plan -> compile -> execute** cycle for a sub-goal set, ena
   1. Direct (`planner`, `plan_compiler`, `action_registry` on blackboard)
   2. Component path (`planner_component`) for distributed ROS2 deployments
 - Causal audit integration: writes `episode_id`, `parent_episode_id`, and `phase_name` when `plan_audit_log` is available
-- Lifecycle: `onStart()` plan/compile/create subtree; `onRunning()` tick subtree; `onHalted()` halt subtree
+- Lifecycle hooks: `onActionStart()` plans and creates the subtree,
+  `onActionRunning()` ticks it, and `onActionHalted()` halts it.
 
 ### InvokeService (StatefulAction)
 
@@ -64,9 +104,9 @@ Asynchronous PYRAMID service invocation BT node. Keeps the core SDK-agnostic via
 
 - Request construction: explicit request JSON + optional PDDL parameter auto-mapping (`param_names`/`param_values`)
 - Async lifecycle:
-  - `onStart()` -> `callAsync()`
-  - `onRunning()` -> `pollResult()` until terminal status
-  - `onHalted()` -> `cancelCall()`
+  - `onActionStart()` -> `callAsync()`
+  - `onActionRunning()` -> `pollResult()` until terminal status
+  - `onActionHalted()` -> `cancelCall()`
 - Timeout control: `timeout_ms` (default 5000, `0` disables timeout)
 - Blackboard dependency: `pyramid_service` must contain `IPyramidService*`
 
@@ -134,7 +174,7 @@ BT tick → FAILURE
                   PlannerComponent triggers full symbolic replan)
 ```
 
-`failed_step` is computed by counting how many top-level action-unit children of
+`failed_step` is computed by counting how many top-level planned-action children of
 the root sequence have `SUCCESS` status in the live BT tree at failure time.
 
 The hook closure is responsible for compiling PlanStep proposals to BT XML (it
@@ -142,4 +182,3 @@ captures `PlanCompiler` and `ActionRegistry` from its own scope).
 
 No hook → baseline FAILURE path identical to `AME_NEURO=OFF`.
 See [08-neuro-symbolic.md § 9](08-neuro-symbolic.md) for the full seam specification.
-

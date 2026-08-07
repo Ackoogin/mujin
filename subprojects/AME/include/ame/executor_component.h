@@ -2,6 +2,7 @@
 
 #include <ame/bt_logger.h>
 #include <ame/world_model.h>
+#include <ame/world_state_access.h>
 #include <pcl/component.hpp>
 
 #include <behaviortree_cpp/bt_factory.h>
@@ -111,6 +112,7 @@ private:
   std::unique_ptr<BT::Tree> tree_;
   std::unique_ptr<AmeBTLogger> bt_logger_;
   WorldModel* inprocess_wm_ = nullptr;
+  std::unique_ptr<LocalWorldStateAccess> local_world_state_access_;
   IExecutionSink* action_sink_ = nullptr;
   const ActionRegistry* action_registry_ = nullptr;
 #if defined(AME_NEURO)

@@ -6,17 +6,17 @@ namespace ame {
 
 FollowRoute::FollowRoute(const std::string& name,
                          const BT::NodeConfiguration& config)
-    : BT::StatefulActionNode(name, config) {}
+    : PlannedActionNode(name, config) {}
 
 BT::PortsList FollowRoute::providedPorts() {
-  return {
+  return withBasePorts({
       BT::InputPort<std::string>("agent"),
       BT::InputPort<std::string>("route", "", "Serialised waypoints"),
       BT::OutputPort<std::string>("progress"),
-  };
+  });
 }
 
-BT::NodeStatus FollowRoute::onStart() {
+BT::NodeStatus FollowRoute::onActionStart() {
   auto agent = getInput<std::string>("agent");
   if (!agent) {
     return BT::NodeStatus::FAILURE;
@@ -72,10 +72,10 @@ BT::NodeStatus FollowRoute::onStart() {
   }
 
   setOutput("progress", "0/" + std::to_string(waypoints_.size()));
-  return onRunning();
+  return onActionRunning();
 }
 
-BT::NodeStatus FollowRoute::onRunning() {
+BT::NodeStatus FollowRoute::onActionRunning() {
   if (current_wp_ >= waypoints_.size()) {
     return BT::NodeStatus::SUCCESS;
   }
@@ -90,7 +90,7 @@ BT::NodeStatus FollowRoute::onRunning() {
   return BT::NodeStatus::SUCCESS;
 }
 
-void FollowRoute::onHalted() {
+void FollowRoute::onActionHalted() {
   waypoints_.clear();
   current_wp_ = 0;
 }

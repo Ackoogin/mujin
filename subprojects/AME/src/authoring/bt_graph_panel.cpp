@@ -229,10 +229,11 @@ ImVec4 nodeColor(const std::string& kind) {
       kind == "ReactiveFallback" || kind == "Fallback") {
     return ImVec4(0.10f, 0.20f, 0.40f, 1.0f);
   }
-  if (kind == "CheckWorldPredicate" || kind.find("Check") != std::string::npos) {
+  if (kind == "GoalReached" || kind == "CheckWorldPredicate" ||
+      kind.find("Check") != std::string::npos) {
     return ImVec4(0.05f, 0.28f, 0.10f, 1.0f);
   }
-  if (kind == "SetWorldPredicate" || kind.find("Set") != std::string::npos) {
+  if (kind.find("Set") != std::string::npos) {
     return ImVec4(0.20f, 0.10f, 0.40f, 1.0f);
   }
   return ImVec4(0.45f, 0.25f, 0.05f, 1.0f);

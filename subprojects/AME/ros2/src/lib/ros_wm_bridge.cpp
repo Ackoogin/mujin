@@ -1,6 +1,7 @@
 #include "ame_ros2/ros_wm_bridge.hpp"
 
 #include <chrono>
+#include <utility>
 
 namespace ame_ros2 {
 
@@ -44,45 +45,41 @@ BT::NodeStatus RosCheckWorldPredicate::tick() {
     ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
-// ---------------------------------------------------------------------------
-// RosSetWorldPredicate
-// ---------------------------------------------------------------------------
+RosWorldStateAccess::RosWorldStateAccess(
+    rclcpp::Client<ame_ros2::srv::GetFact>::SharedPtr get_fact_client,
+    rclcpp::Client<ame_ros2::srv::SetFact>::SharedPtr set_fact_client)
+    : get_fact_client_(std::move(get_fact_client)),
+      set_fact_client_(std::move(set_fact_client)) {}
 
-RosSetWorldPredicate::RosSetWorldPredicate(const std::string& name,
-                                           const BT::NodeConfiguration& config)
-  : BT::SyncActionNode(name, config)
-{}
-
-BT::PortsList RosSetWorldPredicate::providedPorts() {
-  return {
-    BT::InputPort<std::string>("predicate"),
-    BT::InputPort<bool>("value", true, "value to set"),
-  };
+bool RosWorldStateAccess::getFact(const std::string& key) {
+  if (!get_fact_client_) {
+    return false;
+  }
+  auto request = std::make_shared<ame_ros2::srv::GetFact::Request>();
+  request->key = key;
+  auto future = get_fact_client_->async_send_request(request);
+  if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
+    return false;
+  }
+  const auto response = future.get();
+  return response->found && response->value;
 }
 
-BT::NodeStatus RosSetWorldPredicate::tick() {
-  auto pred = getInput<std::string>("predicate");
-  if (!pred) return BT::NodeStatus::FAILURE;
-
-  bool value = true;
-  getInput("value", value);
-
-  auto* client = config().blackboard->get<
-    rclcpp::Client<ame_ros2::srv::SetFact>*>("set_fact_client");
-  if (!client) return BT::NodeStatus::FAILURE;
-
-  auto req     = std::make_shared<ame_ros2::srv::SetFact::Request>();
-  req->key     = pred.value();
-  req->value   = value;
-  req->source  = std::string("SetWorldPredicate:") + name();
-
-  auto future = client->async_send_request(req);
-  if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
-    return BT::NodeStatus::FAILURE;
+bool RosWorldStateAccess::setFact(const std::string& key,
+                                  bool value,
+                                  const std::string& source) {
+  if (!set_fact_client_) {
+    return false;
   }
-
-  auto res = future.get();
-  return res->success ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  auto request = std::make_shared<ame_ros2::srv::SetFact::Request>();
+  request->key = key;
+  request->value = value;
+  request->source = source;
+  auto future = set_fact_client_->async_send_request(request);
+  if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
+    return false;
+  }
+  return future.get()->success;
 }
 
 } // namespace ame_ros2

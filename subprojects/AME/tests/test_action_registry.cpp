@@ -15,6 +15,8 @@ TEST(ActionRegistry, ResolveSimpleAction) {
 
     auto impl = reg.resolve("move", {"uav1", "base", "sector_a"});
     EXPECT_EQ(impl.xml, R"(<MoveAction param0="uav1" param1="base" param2="sector_a"/>)");
+    EXPECT_EQ(impl.node_type, "MoveAction");
+    EXPECT_FALSE(impl.is_subtree);
     EXPECT_FALSE(impl.reactive);
     EXPECT_EQ(impl.param_bindings.size(), 3u);
     EXPECT_EQ(impl.param_bindings[0], "uav1");
@@ -36,6 +38,8 @@ TEST(ActionRegistry, RegisterSubTreeTemplate) {
     auto impl = reg.resolve("search", {"uav1", "sector_a"});
     EXPECT_EQ(impl.xml,
         R"(<Sequence><FlyTo target="sector_a"/><RunSensor area="sector_a"/></Sequence>)");
+    EXPECT_TRUE(impl.is_subtree);
+    EXPECT_TRUE(impl.node_type.empty());
 }
 
 TEST(ActionRegistry, ReactiveFlag) {

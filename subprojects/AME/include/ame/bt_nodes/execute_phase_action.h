@@ -1,6 +1,6 @@
 #pragma once
 
-#include <behaviortree_cpp/action_node.h>
+#include "ame/bt_nodes/planned_action_node.h"
 #include <behaviortree_cpp/bt_factory.h>
 #include <string>
 #include <vector>
@@ -42,21 +42,22 @@ class PlannerComponent;
 ///   phase_name   (input) -- human-readable label for audit / logging
 ///
 /// Lifecycle:
-///   onStart()   -- solve sub-plan, compile to BT XML, instantiate subtree
-///   onRunning() -- tick the compiled subtree once per BT cycle
-///   onHalted()  -- halt and destroy the subtree
+///   onActionStart()   -- solve sub-plan, compile to BT XML, instantiate subtree
+///   onActionRunning() -- tick the compiled subtree once per BT cycle
+///   onActionHalted()  -- halt and destroy the subtree
 ///
 /// Returns SUCCESS when all sub-goals are achieved, FAILURE if planning fails,
 /// RUNNING while the subtree is executing.
-class ExecutePhaseAction : public BT::StatefulActionNode {
+class ExecutePhaseAction : public PlannedActionNode {
 public:
   ExecutePhaseAction(const std::string& name, const BT::NodeConfiguration& config);
 
   static BT::PortsList providedPorts();
 
-  BT::NodeStatus onStart() override;
-  BT::NodeStatus onRunning() override;
-  void onHalted() override;
+protected:
+  BT::NodeStatus onActionStart() override;
+  BT::NodeStatus onActionRunning() override;
+  void onActionHalted() override;
 
 private:
   /// Parse semicolon-delimited goal string into individual fluent strings.

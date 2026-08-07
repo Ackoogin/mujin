@@ -12,8 +12,10 @@
 #include "ame/pyramid_service.h"
 #include "ame/bt_nodes/invoke_service.h"
 #include "ame/bt_nodes/execute_phase_action.h"
-#include "ame/bt_nodes/check_world_predicate.h"
-#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_nodes/goal_reached.h"
+#include "ame/bt_nodes/planned_action.h"
+#include "ame/bt_nodes/planned_action_node.h"
+#include "ame/bt_nodes/simulated_action.h"
 #include "ame/action_registry.h"
 #include "ame/plan_audit_log.h"
 #include "ame/plan_compiler.h"
@@ -603,11 +605,20 @@ TEST(SnapshotManager, ConcurrentPublishAndRead) {
 
 // Stub BT action node (always succeeds) for use in compiled subtrees.
 // Declares param0..param2 to match ports emitted by ActionRegistry::resolve().
-class StubAction : public BT::SyncActionNode {
+class StubAction : public ame::PlannedActionNode {
 public:
     StubAction(const std::string& name, const BT::NodeConfiguration& config)
-        : BT::SyncActionNode(name, config) {}
-    BT::NodeStatus tick() override {
+        : PlannedActionNode(name, config) {}
+    static BT::PortsList providedPorts() {
+        return withBasePorts({
+            BT::InputPort<std::string>("predicate", "", "fact to set on success"),
+            BT::InputPort<std::string>("param0", "", ""),
+            BT::InputPort<std::string>("param1", "", ""),
+            BT::InputPort<std::string>("param2", "", ""),
+        });
+    }
+protected:
+    BT::NodeStatus onActionStart() override {
         auto pred = getInput<std::string>("predicate");
         if (pred && !pred.value().empty()) {
             auto* wm = config().blackboard->get<ame::WorldModel*>("world_model");
@@ -615,20 +626,13 @@ public:
         }
         return BT::NodeStatus::SUCCESS;
     }
-    static BT::PortsList providedPorts() {
-        return {
-            BT::InputPort<std::string>("predicate", "", "fact to set on success"),
-            BT::InputPort<std::string>("param0", "", ""),
-            BT::InputPort<std::string>("param1", "", ""),
-            BT::InputPort<std::string>("param2", "", ""),
-        };
-    }
 };
 
 static BT::BehaviorTreeFactory makeFullFactory() {
     BT::BehaviorTreeFactory f;
-    f.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    f.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
+    f.registerNodeType<ame::GoalReached>("GoalReached");
+    f.registerNodeType<ame::PlannedAction>("PlannedAction");
+    f.registerNodeType<ame::SimulatedAction>("SimulatedAction");
     f.registerNodeType<ame::ExecutePhaseAction>("ExecutePhaseAction");
     f.registerNodeType<StubAction>("StubAction");
     return f;

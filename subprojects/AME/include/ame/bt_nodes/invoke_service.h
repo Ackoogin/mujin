@@ -1,8 +1,8 @@
 #pragma once
 
 #include "ame/pyramid_service.h"
+#include "ame/bt_nodes/planned_action_node.h"
 
-#include <behaviortree_cpp/action_node.h>
 #include <chrono>
 #include <cstdint>
 #include <string>
@@ -11,9 +11,9 @@ namespace ame {
 
 /// \brief BT node that maps a PDDL action to an async PYRAMID SDK service call.
 ///
-/// Inherits from BT::StatefulActionNode to support non-blocking async
-/// execution: onStart() initiates the call, onRunning() polls for completion,
-/// and onHalted() cancels the pending request.
+/// Uses the planned-action lifecycle for non-blocking execution:
+/// onActionStart() initiates the call, onActionRunning() polls for completion,
+/// and onActionHalted() cancels the pending request.
 ///
 /// Blackboard key: "pyramid_service" (IPyramidService*)
 ///
@@ -30,18 +30,19 @@ namespace ame {
 ///   response_json (output) -- Serialised response fields in k=v format
 ///
 /// Lifecycle:
-///   onStart()   -- initiate async service call via IPyramidService::callAsync()
-///   onRunning() -- poll result; return RUNNING while pending, SUCCESS/FAILURE on completion
-///   onHalted()  -- cancel the pending async call
-class InvokeService : public BT::StatefulActionNode {
+///   onActionStart()   -- initiate async service call via IPyramidService::callAsync()
+///   onActionRunning() -- poll result while the request is pending
+///   onActionHalted()  -- cancel the pending async call
+class InvokeService : public PlannedActionNode {
 public:
   InvokeService(const std::string& name, const BT::NodeConfiguration& config);
 
   static BT::PortsList providedPorts();
 
-  BT::NodeStatus onStart() override;
-  BT::NodeStatus onRunning() override;
-  void onHalted() override;
+protected:
+  BT::NodeStatus onActionStart() override;
+  BT::NodeStatus onActionRunning() override;
+  void onActionHalted() override;
 
 private:
   /// \brief Parse "k1=v1;k2=v2" into a ServiceMessage.

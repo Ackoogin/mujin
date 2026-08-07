@@ -224,11 +224,11 @@ public:
     pcl_status_t test_tick() { return on_tick(0.0); }
 };
 
-// Minimal BT that always fails via CheckWorldPredicate on an absent fact.
+// Minimal planned action that always fails.
 const char* k_fail_bt = R"xml(
 <root BTCPP_format="4">
   <BehaviorTree ID="FailPlan">
-    <CheckWorldPredicate predicate="(absent_fact x)" />
+    <SimulatedAction name="fail(x)" success="false" />
   </BehaviorTree>
 </root>)xml";
 
@@ -239,7 +239,7 @@ TEST(ExecutorSeam, RepairLoadFailurePreservesFailureStatus) {
     wm.typeSystem().addType("object");
     wm.addObject("x", "object");
     wm.registerPredicate("absent_fact", {"object"});
-    // (absent_fact x) is not set → CheckWorldPredicate returns FAILURE.
+    // The failed simulated action drives the executor repair path.
 
     TestableExecutorComponent exec;
     exec.setParam("bt_log.enabled", false);

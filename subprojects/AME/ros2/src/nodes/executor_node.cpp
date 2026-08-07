@@ -7,7 +7,7 @@
 #include <ame/bt_nodes/delegate_to_agent.h>
 #include <ame/bt_nodes/execute_phase_action.h>
 #include <ame/bt_nodes/invoke_service.h>
-#include <ame/bt_nodes/set_world_predicate.h>
+#include <ame/world_state_access.h>
 
 #include <behaviortree_cpp/basic_types.h>
 
@@ -54,6 +54,15 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
 
   registerCoreNodes();
 
+  if (!inprocess_wm_) {
+    get_fact_client_ = create_client<ame_ros2::srv::GetFact>(
+        "/world_model_node/get_fact");
+    set_fact_client_ = create_client<ame_ros2::srv::SetFact>(
+        "/world_model_node/set_fact");
+    ros_world_state_access_ = std::make_unique<RosWorldStateAccess>(
+        get_fact_client_, set_fact_client_);
+  }
+
   // Wire blackboard initializer with in-process dependencies
   component_->setBlackboardInitializer([this](const BT::Blackboard::Ptr& bb) {
     if (!agent_id_.empty()) {
@@ -65,6 +74,11 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
     bb->set<BT::BehaviorTreeFactory*>("bt_factory", &component_->factory());
     if (inprocess_wm_) {
       bb->set<ame::WorldModel*>("world_model", inprocess_wm_);
+    } else if (ros_world_state_access_) {
+      bb->set<ame::IWorldStateAccess*>("world_state",
+                                      ros_world_state_access_.get());
+      bb->set<rclcpp::Client<ame_ros2::srv::GetFact>*>(
+          "get_fact_client", get_fact_client_.get());
     }
     if (planner_) {
       bb->set<ame::Planner*>("planner", planner_);
@@ -181,6 +195,9 @@ ExecutorNode::on_cleanup(const rclcpp_lifecycle::State&) {
   svc_stop_execution_.reset();
   pub_bt_events_.reset();
   pub_execution_status_.reset();
+  ros_world_state_access_.reset();
+  get_fact_client_.reset();
+  set_fact_client_.reset();
   component_->cleanup();
   return CallbackReturn::SUCCESS;
 }
@@ -196,7 +213,6 @@ void ExecutorNode::registerCoreNodes() {
 
   if (!inprocess_wm_) {
     component_->factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
-    component_->factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
   }
   component_->factory().registerNodeType<ame::InvokeService>("InvokeService");
   component_->factory().registerNodeType<ame::ExecutePhaseAction>("ExecutePhaseAction");

@@ -15,18 +15,18 @@ namespace ame {
 
 ExecutePhaseAction::ExecutePhaseAction(const std::string& name,
                                        const BT::NodeConfiguration& config)
-    : BT::StatefulActionNode(name, config) {}
+    : PlannedActionNode(name, config) {}
 
 BT::PortsList ExecutePhaseAction::providedPorts() {
-  return {
+  return withBasePorts({
       BT::InputPort<std::string>(
           "phase_goals",
           "Semicolon-separated goal fluents, e.g. \"(searched sector_a);(classified sector_a)\""),
       BT::InputPort<std::string>("phase_name", "", "Human-readable phase label for audit"),
-  };
+  });
 }
 
-BT::NodeStatus ExecutePhaseAction::onStart() {
+BT::NodeStatus ExecutePhaseAction::onActionStart() {
   auto encoded_goals = getInput<std::string>("phase_goals");
   if (!encoded_goals) {
     return BT::NodeStatus::FAILURE;
@@ -132,7 +132,7 @@ BT::NodeStatus ExecutePhaseAction::planDirect(const std::vector<std::string>& go
     return BT::NodeStatus::FAILURE;
   }
 
-  return onRunning();
+  return onActionRunning();
 }
 
 BT::NodeStatus ExecutePhaseAction::planViaComponent(
@@ -177,7 +177,7 @@ BT::NodeStatus ExecutePhaseAction::planViaComponent(
     return BT::NodeStatus::FAILURE;
   }
 
-  return onRunning();
+  return onActionRunning();
 }
 
 void ExecutePhaseAction::recordAuditEpisode(
@@ -235,7 +235,7 @@ void ExecutePhaseAction::recordAuditEpisode(
   episode_id_ = audit->recordEpisode(std::move(ep));
 }
 
-BT::NodeStatus ExecutePhaseAction::onRunning() {
+BT::NodeStatus ExecutePhaseAction::onActionRunning() {
   if (!sub_tree_) {
     return BT::NodeStatus::FAILURE;
   }
@@ -249,7 +249,7 @@ BT::NodeStatus ExecutePhaseAction::onRunning() {
   return status;
 }
 
-void ExecutePhaseAction::onHalted() {
+void ExecutePhaseAction::onActionHalted() {
   if (sub_tree_) {
     sub_tree_->haltTree();
     sub_tree_.reset();

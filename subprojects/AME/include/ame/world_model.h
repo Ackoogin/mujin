@@ -125,7 +125,7 @@ public:
                         const std::vector<std::string>& del_templates);
 
     // Fact access by string key (e.g. "(at robot base)")
-    // The optional source tag identifies the originator (e.g. "SetWorldPredicate:node_name").
+    // The optional source tag identifies the originator (e.g. "PlannedAction:node_name").
     // authority: BELIEVED for plan effects, CONFIRMED for perception-sourced facts.
     void setFact(const std::string& key, bool value,
                  const std::string& source = "",

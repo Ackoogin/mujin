@@ -1,6 +1,6 @@
 #pragma once
 
-#include <behaviortree_cpp/action_node.h>
+#include "ame/bt_nodes/planned_action_node.h"
 #include <string>
 #include <vector>
 
@@ -15,15 +15,16 @@ namespace ame {
 ///   route    (input)  -- serialised waypoint data (semicolon-separated
 ///                        "lat,lon,alt" triples from InvokeService response)
 ///   progress (output) -- "current/total" progress string (e.g. "3/12")
-class FollowRoute : public BT::StatefulActionNode {
+class FollowRoute : public PlannedActionNode {
 public:
   FollowRoute(const std::string& name, const BT::NodeConfiguration& config);
 
   static BT::PortsList providedPorts();
 
-  BT::NodeStatus onStart() override;
-  BT::NodeStatus onRunning() override;
-  void onHalted() override;
+protected:
+  BT::NodeStatus onActionStart() override;
+  BT::NodeStatus onActionRunning() override;
+  void onActionHalted() override;
 
 private:
   struct Waypoint {

@@ -6,8 +6,9 @@
 #include "ame/plan_compiler.h"
 #include "ame/action_registry.h"
 #include "ame/bt_nodes/delegate_to_agent.h"
-#include "ame/bt_nodes/check_world_predicate.h"
-#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_nodes/goal_reached.h"
+#include "ame/bt_nodes/planned_action.h"
+#include "ame/bt_nodes/simulated_action.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <algorithm>
@@ -637,8 +638,9 @@ protected:
         wm.setFact("(at uav1 base)", true);
         
         // Register BT nodes
-        factory.registerNodeType<CheckWorldPredicate>("CheckWorldPredicate");
-        factory.registerNodeType<SetWorldPredicate>("SetWorldPredicate");
+        factory.registerNodeType<GoalReached>("GoalReached");
+        factory.registerNodeType<PlannedAction>("PlannedAction");
+        factory.registerNodeType<SimulatedAction>("SimulatedAction");
         factory.registerNodeType<DelegateToAgent>("DelegateToAgent");
     }
     

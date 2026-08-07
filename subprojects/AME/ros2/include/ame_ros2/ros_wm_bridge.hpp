@@ -1,9 +1,9 @@
 #pragma once
 
 #include <behaviortree_cpp/condition_node.h>
-#include <behaviortree_cpp/action_node.h>
 #include <rclcpp/rclcpp.hpp>
 
+#include "ame/world_state_access.h"
 #include "ame_ros2/srv/get_fact.hpp"
 #include "ame_ros2/srv/set_fact.hpp"
 
@@ -22,17 +22,22 @@ public:
   BT::NodeStatus tick() override;
 };
 
-/// \brief BT SyncActionNode that calls WorldModelNode/set_fact.
-/// Used in distributed mode instead of ame::SetWorldPredicate.
-/// Ports: "predicate" (string), "value" (bool, default true)
-/// Blackboard key: "set_fact_client" (rclcpp::Client<SetFact>*)
-class RosSetWorldPredicate : public BT::SyncActionNode {
+/// \brief World-state access backed by WorldModelNode GetFact and SetFact
+/// service clients.
+class RosWorldStateAccess : public ame::IWorldStateAccess {
 public:
-  RosSetWorldPredicate(const std::string& name,
-                       const BT::NodeConfiguration& config);
+  RosWorldStateAccess(
+      rclcpp::Client<ame_ros2::srv::GetFact>::SharedPtr get_fact_client,
+      rclcpp::Client<ame_ros2::srv::SetFact>::SharedPtr set_fact_client);
 
-  static BT::PortsList providedPorts();
-  BT::NodeStatus tick() override;
+  bool getFact(const std::string& key) override;
+  bool setFact(const std::string& key,
+               bool value,
+               const std::string& source) override;
+
+private:
+  rclcpp::Client<ame_ros2::srv::GetFact>::SharedPtr get_fact_client_;
+  rclcpp::Client<ame_ros2::srv::SetFact>::SharedPtr set_fact_client_;
 };
 
 } // namespace ame_ros2

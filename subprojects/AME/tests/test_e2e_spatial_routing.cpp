@@ -5,8 +5,10 @@
 #include "ame/plan_compiler.h"
 #include "ame/spatial_oracle.h"
 #include "ame/pyramid_service.h"
-#include "ame/bt_nodes/check_world_predicate.h"
-#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_nodes/goal_reached.h"
+#include "ame/bt_nodes/planned_action.h"
+#include "ame/bt_nodes/planned_action_node.h"
+#include "ame/bt_nodes/simulated_action.h"
 #include "ame/bt_nodes/invoke_service.h"
 #include "ame/bt_nodes/follow_route.h"
 
@@ -48,17 +50,18 @@ private:
 };
 
 // Stub search action
-class StubSearchAction : public BT::SyncActionNode {
+class StubSearchAction : public ame::PlannedActionNode {
 public:
   StubSearchAction(const std::string& name, const BT::NodeConfiguration& config)
-      : BT::SyncActionNode(name, config) {}
-  BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
+      : PlannedActionNode(name, config) {}
   static BT::PortsList providedPorts() {
-    return {
+    return withBasePorts({
         BT::InputPort<std::string>("param0"),
         BT::InputPort<std::string>("param1"),
-    };
+    });
   }
+protected:
+  BT::NodeStatus onActionStart() override { return BT::NodeStatus::SUCCESS; }
 };
 
 // =============================================================================
@@ -107,7 +110,7 @@ static ame::WorldModel buildSpatialDomain() {
 static ame::ActionRegistry buildSpatialRegistry() {
   ame::ActionRegistry reg;
 
-  // move action uses a subtree: InvokeService -> FollowRoute -> SetWorldPredicate
+  // The move implementation is a subtree; its wrapper owns the state contract.
   reg.registerActionSubTree("move", R"xml(
     <Sequence>
       <InvokeService service_name="path_planner" operation="compute_route"
@@ -125,8 +128,9 @@ static ame::ActionRegistry buildSpatialRegistry() {
 
 static BT::BehaviorTreeFactory buildSpatialFactory() {
   BT::BehaviorTreeFactory factory;
-  factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-  factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
+  factory.registerNodeType<ame::GoalReached>("GoalReached");
+  factory.registerNodeType<ame::PlannedAction>("PlannedAction");
+  factory.registerNodeType<ame::SimulatedAction>("SimulatedAction");
   factory.registerNodeType<ame::InvokeService>("InvokeService");
   factory.registerNodeType<ame::FollowRoute>("FollowRoute");
   factory.registerNodeType<StubSearchAction>("StubSearchAction");
@@ -408,7 +412,7 @@ TEST(E2ESpatialRouting, FactAuthorityOnSpatialFacts) {
   auto tree = createSpatialTree(factory, xml, wm, path_planner);
   tree.tickWhileRunning();
 
-  // BT-applied location facts should be BELIEVED (SetWorldPredicate default)
+  // The default planned-action commit records location facts as BELIEVED.
   auto at_meta = wm.getFactMetadata("(at uav1 sector_a)");
   EXPECT_EQ(at_meta.authority, ame::FactAuthority::BELIEVED);
 
@@ -454,7 +458,7 @@ TEST(E2ESpatialRouting, RouteAuditTrail) {
     if (entry.find("stub_spatial_oracle") != std::string::npos) {
       has_oracle_fact = true;
     }
-    if (entry.find("SetWorldPredicate") != std::string::npos) {
+    if (entry.find("PlannedAction:") != std::string::npos) {
       has_bt_effect = true;
     }
   }

@@ -8,13 +8,13 @@ namespace ame {
 
 AmeDispatchNode::AmeDispatchNode(const std::string& name,
                                  const BT::NodeConfiguration& config)
-    : BT::StatefulActionNode(name, config) {}
+    : PlannedActionNode(name, config) {}
 
 BT::PortsList AmeDispatchNode::providedPorts() {
-  return nodes::actionParamPorts();
+  return withBasePorts(nodes::actionParamPorts());
 }
 
-BT::NodeStatus AmeDispatchNode::onStart() {
+BT::NodeStatus AmeDispatchNode::onActionStart() {
   try {
     sink_ = config().blackboard->get<IExecutionSink*>("action_sink");
   } catch (const std::exception&) {
@@ -35,10 +35,10 @@ BT::NodeStatus AmeDispatchNode::onStart() {
   }
 
   // The command may complete synchronously (non-movement verbs); check now.
-  return onRunning();
+  return onActionRunning();
 }
 
-BT::NodeStatus AmeDispatchNode::onRunning() {
+BT::NodeStatus AmeDispatchNode::onActionRunning() {
   if (!sink_) {
     return BT::NodeStatus::FAILURE;
   }
@@ -62,7 +62,7 @@ BT::NodeStatus AmeDispatchNode::onRunning() {
   }
 }
 
-void AmeDispatchNode::onHalted() {
+void AmeDispatchNode::onActionHalted() {
   if (sink_ && !command_id_.empty()) {
     sink_->cancel(command_id_);
   }

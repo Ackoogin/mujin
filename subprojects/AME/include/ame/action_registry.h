@@ -9,7 +9,9 @@ namespace ame {
 // Resolved BT implementation for a grounded action
 struct ActionImpl {
     std::string xml;           // Resolved BT XML fragment (subtree or single node)
-    bool reactive = false;     // Use ReactiveSequence vs. Sequence
+    std::string node_type;     // Registered node type for a simple implementation
+    bool is_subtree = false;   // True when xml came from a subtree template
+    bool reactive = false;     // Recheck preconditions while the action is running
     std::vector<std::string> param_bindings; // Actual parameter values
 };
 

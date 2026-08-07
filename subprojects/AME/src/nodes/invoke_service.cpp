@@ -6,10 +6,10 @@ namespace ame {
 
 InvokeService::InvokeService(const std::string& name,
                              const BT::NodeConfiguration& config)
-    : BT::StatefulActionNode(name, config) {}
+    : PlannedActionNode(name, config) {}
 
 BT::PortsList InvokeService::providedPorts() {
-  return {
+  return withBasePorts({
       BT::InputPort<std::string>("service_name"),
       BT::InputPort<std::string>("operation"),
       BT::InputPort<unsigned>("timeout_ms", 5000u, "Timeout in ms (0 = no timeout)"),
@@ -17,10 +17,10 @@ BT::PortsList InvokeService::providedPorts() {
       BT::InputPort<std::string>("param_names", "", "Semicolon-separated PDDL param names"),
       BT::InputPort<std::string>("param_values", "", "Semicolon-separated PDDL param values"),
       BT::OutputPort<std::string>("response_json"),
-  };
+  });
 }
 
-BT::NodeStatus InvokeService::onStart() {
+BT::NodeStatus InvokeService::onActionStart() {
   auto service_name = getInput<std::string>("service_name");
   auto operation = getInput<std::string>("operation");
 
@@ -63,10 +63,10 @@ BT::NodeStatus InvokeService::onStart() {
   request_id_ = service_->callAsync(service_name.value(), operation.value(), request);
 
   // Check immediately in case the call completed synchronously
-  return onRunning();
+  return onActionRunning();
 }
 
-BT::NodeStatus InvokeService::onRunning() {
+BT::NodeStatus InvokeService::onActionRunning() {
   if (!service_) {
     return BT::NodeStatus::FAILURE;
   }
@@ -95,7 +95,7 @@ BT::NodeStatus InvokeService::onRunning() {
   return BT::NodeStatus::FAILURE;
 }
 
-void InvokeService::onHalted() {
+void InvokeService::onActionHalted() {
   if (service_ && request_id_ != 0) {
     service_->cancelCall(request_id_);
   }

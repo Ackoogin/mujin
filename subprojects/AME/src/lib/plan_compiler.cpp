@@ -10,6 +10,51 @@
 
 namespace ame {
 
+namespace {
+
+std::string escapeXmlAttribute(const std::string& value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (const char c : value) {
+        switch (c) {
+        case '&': escaped += "&amp;"; break;
+        case '<': escaped += "&lt;"; break;
+        case '>': escaped += "&gt;"; break;
+        case '\"': escaped += "&quot;"; break;
+        case '\'': escaped += "&apos;"; break;
+        default: escaped += c; break;
+        }
+    }
+    return escaped;
+}
+
+std::string joinFacts(const std::vector<unsigned>& fact_ids,
+                      const WorldModel& wm) {
+    std::ostringstream encoded;
+    for (size_t i = 0; i < fact_ids.size(); ++i) {
+        if (i != 0) {
+            encoded << ';';
+        }
+        encoded << wm.fluentName(fact_ids[i]);
+    }
+    return encoded.str();
+}
+
+void emitContractAttributes(std::ostringstream& xml,
+                            const GroundAction& action,
+                            const WorldModel& wm,
+                            bool reactive) {
+    xml << " ame_preconditions=\""
+        << escapeXmlAttribute(joinFacts(action.preconditions, wm)) << "\""
+        << " ame_add_effects=\""
+        << escapeXmlAttribute(joinFacts(action.add_effects, wm)) << "\""
+        << " ame_del_effects=\""
+        << escapeXmlAttribute(joinFacts(action.del_effects, wm)) << "\""
+        << " ame_reactive=\"" << (reactive ? "true" : "false") << "\"";
+}
+
+}  // namespace
+
 // =========================================================================
 // Helpers
 // =========================================================================
@@ -45,42 +90,33 @@ std::string PlanCompiler::emitActionUnit(const GroundAction& ga,
                                          const ActionRegistry& registry) const {
     std::string name = actionName(ga.signature);
     auto params = actionParams(ga.signature);
-
-    bool reactive = false;
-    if (registry.hasAction(name)) {
-        reactive = registry.isReactive(name);
-    }
-
-    std::string seq_type = reactive ? "ReactiveSequence" : "Sequence";
     std::ostringstream xml;
 
-    xml << "<" << seq_type << " name=\"" << ga.signature << "\">\n";
-
-    // Precondition checks
-    for (auto pre_id : ga.preconditions) {
-        xml << "    <CheckWorldPredicate predicate=\""
-            << wm.fluentName(pre_id) << "\"/>\n";
+    if (!registry.hasAction(name)) {
+        xml << "<SimulatedAction name=\""
+            << escapeXmlAttribute(ga.signature) << "\"";
+        emitContractAttributes(xml, ga, wm, false);
+        xml << "/>";
+        return xml.str();
     }
 
-    // The actual action implementation (from ActionRegistry)
-    if (registry.hasAction(name)) {
-        auto impl = registry.resolve(name, params);
-        xml << "    " << impl.xml << "\n";
+    auto impl = registry.resolve(name, params);
+    if (impl.is_subtree) {
+        xml << "<PlannedAction name=\""
+            << escapeXmlAttribute(ga.signature) << "\"";
+        emitContractAttributes(xml, ga, wm, impl.reactive);
+        xml << ">\n  " << impl.xml << "\n</PlannedAction>";
+        return xml.str();
     }
 
-    // Add effects
-    for (auto add_id : ga.add_effects) {
-        xml << "    <SetWorldPredicate predicate=\""
-            << wm.fluentName(add_id) << "\" value=\"true\"/>\n";
+    xml << '<' << impl.node_type << " name=\""
+        << escapeXmlAttribute(ga.signature) << "\"";
+    for (size_t i = 0; i < impl.param_bindings.size(); ++i) {
+        xml << " param" << i << "=\""
+            << escapeXmlAttribute(impl.param_bindings[i]) << "\"";
     }
-
-    // Delete effects
-    for (auto del_id : ga.del_effects) {
-        xml << "    <SetWorldPredicate predicate=\""
-            << wm.fluentName(del_id) << "\" value=\"false\"/>\n";
-    }
-
-    xml << "</" << seq_type << ">";
+    emitContractAttributes(xml, ga, wm, impl.reactive);
+    xml << "/>";
 
     return xml.str();
 }
@@ -228,22 +264,9 @@ void PlanCompiler::emitGoalGuardOpen(std::ostringstream& xml,
     const auto& goal_ids = wm.goalFluentIds();
     if (goal_ids.empty()) return;
 
-    // ReactiveFallback: if the goal-check child succeeds (all goals met),
-    // the fallback returns SUCCESS without re-running the plan.
     xml << indent << "<ReactiveFallback>\n";
-
-    // Goal check: a Sequence of CheckWorldPredicate for each goal fluent
-    if (goal_ids.size() == 1) {
-        xml << indent << "  <CheckWorldPredicate predicate=\""
-            << wm.fluentName(goal_ids[0]) << "\"/>\n";
-    } else {
-        xml << indent << "  <Sequence name=\"GoalCheck\">\n";
-        for (auto gid : goal_ids) {
-            xml << indent << "    <CheckWorldPredicate predicate=\""
-                << wm.fluentName(gid) << "\"/>\n";
-        }
-        xml << indent << "  </Sequence>\n";
-    }
+    xml << indent << "  <GoalReached name=\"GoalReached\" goals=\""
+        << escapeXmlAttribute(joinFacts(goal_ids, wm)) << "\"/>\n";
 }
 
 void PlanCompiler::emitGoalGuardClose(std::ostringstream& xml,

@@ -76,7 +76,7 @@ cat ame_plan_audit.jsonl | python3 -m json.tool
 
 # Query specific fields with jq
 cat ame_bt_events.jsonl | jq 'select(.status == "SUCCESS")'
-cat ame_wm_audit.jsonl | jq 'select(.source | startswith("SetWorldPredicate"))'
+cat ame_wm_audit.jsonl | jq 'select(.source | startswith("PlannedAction"))'
 cat ame_plan_audit.jsonl | jq '.plan_actions'
 ```
 
@@ -181,4 +181,3 @@ The `#if defined(AME_FOXGLOVE)` guards in `main.cpp` ensure the code compiles cl
 ## Architecture
 
 See `subprojects/AME/doc/architecture/` for the full architecture reference (7 numbered files covering system overview, WorldModel, planning, execution, observability, ROS2, and extensions).
-

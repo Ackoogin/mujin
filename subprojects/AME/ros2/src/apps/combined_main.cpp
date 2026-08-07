@@ -25,6 +25,7 @@
 #include "ame_ros2/lifecycle_manager.hpp"
 
 #include <ame/action_registry.h>
+#include <ame/bt_nodes/planned_action_node.h>
 #include <ame/executor_component.h>
 #include <ame/planner_component.h>
 #include <ame/pyramid_service.h>
@@ -44,38 +45,41 @@
 // Stub action nodes for the UAV search demo domain
 // ---------------------------------------------------------------------------
 
-class StubMoveAction : public BT::SyncActionNode {
+class StubMoveAction : public ame::PlannedActionNode {
 public:
   StubMoveAction(const std::string& name, const BT::NodeConfiguration& config)
-    : BT::SyncActionNode(name, config) {}
-  BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
+    : PlannedActionNode(name, config) {}
   static BT::PortsList providedPorts() {
-    return { BT::InputPort<std::string>("param0"),
-             BT::InputPort<std::string>("param1"),
-             BT::InputPort<std::string>("param2") };
+    return withBasePorts({BT::InputPort<std::string>("param0"),
+                          BT::InputPort<std::string>("param1"),
+                          BT::InputPort<std::string>("param2")});
   }
+protected:
+  BT::NodeStatus onActionStart() override { return BT::NodeStatus::SUCCESS; }
 };
 
-class StubSearchAction : public BT::SyncActionNode {
+class StubSearchAction : public ame::PlannedActionNode {
 public:
   StubSearchAction(const std::string& name, const BT::NodeConfiguration& config)
-    : BT::SyncActionNode(name, config) {}
-  BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
+    : PlannedActionNode(name, config) {}
   static BT::PortsList providedPorts() {
-    return { BT::InputPort<std::string>("param0"),
-             BT::InputPort<std::string>("param1") };
+    return withBasePorts({BT::InputPort<std::string>("param0"),
+                          BT::InputPort<std::string>("param1")});
   }
+protected:
+  BT::NodeStatus onActionStart() override { return BT::NodeStatus::SUCCESS; }
 };
 
-class StubClassifyAction : public BT::SyncActionNode {
+class StubClassifyAction : public ame::PlannedActionNode {
 public:
   StubClassifyAction(const std::string& name, const BT::NodeConfiguration& config)
-    : BT::SyncActionNode(name, config) {}
-  BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
+    : PlannedActionNode(name, config) {}
   static BT::PortsList providedPorts() {
-    return { BT::InputPort<std::string>("param0"),
-             BT::InputPort<std::string>("param1") };
+    return withBasePorts({BT::InputPort<std::string>("param0"),
+                          BT::InputPort<std::string>("param1")});
   }
+protected:
+  BT::NodeStatus onActionStart() override { return BT::NodeStatus::SUCCESS; }
 };
 
 // ---------------------------------------------------------------------------

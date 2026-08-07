@@ -2,25 +2,34 @@
 #include "ame/plan_compiler.h"
 #include "ame/action_registry.h"
 #include "ame/world_model.h"
-#include "ame/bt_nodes/check_world_predicate.h"
-#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_nodes/goal_reached.h"
+#include "ame/bt_nodes/planned_action.h"
+#include "ame/bt_nodes/planned_action_node.h"
+#include "ame/bt_nodes/simulated_action.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 
 // Stub action that succeeds and accepts any ports
-class StubAction : public BT::SyncActionNode {
+class StubAction : public ame::PlannedActionNode {
 public:
     StubAction(const std::string& name, const BT::NodeConfiguration& config)
-        : BT::SyncActionNode(name, config) {}
-    BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
+        : PlannedActionNode(name, config) {}
     static BT::PortsList providedPorts() {
-        return {
+        return withBasePorts({
             BT::InputPort<std::string>("param0"),
             BT::InputPort<std::string>("param1"),
             BT::InputPort<std::string>("param2"),
-        };
+        });
     }
+protected:
+    BT::NodeStatus onActionStart() override { return BT::NodeStatus::SUCCESS; }
 };
+
+static void registerCoreNodes(BT::BehaviorTreeFactory& factory) {
+    factory.registerNodeType<ame::GoalReached>("GoalReached");
+    factory.registerNodeType<ame::PlannedAction>("PlannedAction");
+    factory.registerNodeType<ame::SimulatedAction>("SimulatedAction");
+}
 
 static ame::WorldModel buildUAVDomain() {
     ame::WorldModel wm;
@@ -90,10 +99,14 @@ TEST(PlanCompiler, CompileSequentialTwoActions) {
     auto xml = compiler.compileSequential(plan, wm, reg);
 
     EXPECT_NE(xml.find("<Sequence>"), std::string::npos);
-    EXPECT_NE(xml.find("CheckWorldPredicate"), std::string::npos);
-    EXPECT_NE(xml.find("SetWorldPredicate"), std::string::npos);
+    EXPECT_EQ(xml.find("CheckWorldPredicate"), std::string::npos);
+    EXPECT_EQ(xml.find("<Set"), std::string::npos);
     EXPECT_NE(xml.find("StubMoveAction"), std::string::npos);
     EXPECT_NE(xml.find("StubSearchAction"), std::string::npos);
+    EXPECT_NE(xml.find("name=\"move(uav1,base,sector_a)\""), std::string::npos);
+    EXPECT_NE(xml.find("ame_preconditions=\"(at uav1 base)\""), std::string::npos);
+    EXPECT_NE(xml.find("ame_add_effects=\"(at uav1 sector_a)\""), std::string::npos);
+    EXPECT_NE(xml.find("ame_del_effects=\"(at uav1 base)\""), std::string::npos);
 }
 
 TEST(PlanCompiler, CausallyLinkedIsSequential) {
@@ -138,7 +151,7 @@ TEST(PlanCompiler, IndependentActionsAreParallel) {
     EXPECT_NE(xml.find("<Parallel"), std::string::npos);
 }
 
-TEST(PlanCompiler, ReactiveSequenceUsed) {
+TEST(PlanCompiler, ReactiveFlagBecomesActionPort) {
     auto wm = buildUAVDomain();
     ame::ActionRegistry reg;
     reg.registerAction("move", "StubMoveAction", true);
@@ -151,7 +164,8 @@ TEST(PlanCompiler, ReactiveSequenceUsed) {
     };
 
     auto xml = compiler.compileSequential(plan, wm, reg);
-    EXPECT_NE(xml.find("ReactiveSequence"), std::string::npos);
+    EXPECT_EQ(xml.find("ReactiveSequence"), std::string::npos);
+    EXPECT_NE(xml.find("ame_reactive=\"true\""), std::string::npos);
 }
 
 TEST(PlanCompiler, CompiledXMLIsLoadable) {
@@ -168,8 +182,7 @@ TEST(PlanCompiler, CompiledXMLIsLoadable) {
     auto xml = compiler.compileSequential(plan, wm, reg);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
+    registerCoreNodes(factory);
     factory.registerNodeType<StubAction>("StubMoveAction");
     factory.registerNodeType<StubAction>("StubSearchAction");
     factory.registerNodeType<StubAction>("StubClassifyAction");
@@ -195,8 +208,7 @@ TEST(PlanCompiler, FullPlanExecution) {
     auto xml = compiler.compileSequential(plan, wm, reg);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
+    registerCoreNodes(factory);
     factory.registerNodeType<StubAction>("StubMoveAction");
     factory.registerNodeType<StubAction>("StubSearchAction");
     factory.registerNodeType<StubAction>("StubClassifyAction");
@@ -211,4 +223,63 @@ TEST(PlanCompiler, FullPlanExecution) {
     EXPECT_TRUE(wm.getFact("(at uav1 sector_a)"));
     EXPECT_TRUE(wm.getFact("(searched sector_a)"));
     EXPECT_TRUE(wm.getFact("(classified sector_a)"));
+}
+
+TEST(PlanCompiler, UnregisteredActionUsesSimulatedAction) {
+    auto wm = buildUAVDomain();
+    ame::ActionRegistry registry;
+    ame::PlanCompiler compiler;
+    std::vector<ame::PlanStep> plan = {
+        {findAction(wm, "move(uav1,base,sector_a)")},
+    };
+
+    const auto xml = compiler.compileSequential(plan, wm, registry);
+    EXPECT_NE(xml.find("<SimulatedAction"), std::string::npos);
+    EXPECT_NE(xml.find("name=\"move(uav1,base,sector_a)\""), std::string::npos);
+}
+
+TEST(PlanCompiler, SubtreeIsWrappedInPlannedAction) {
+    auto wm = buildUAVDomain();
+    ame::ActionRegistry registry;
+    registry.registerActionSubTree(
+        "move", "<Sequence><AlwaysSuccess/><AlwaysSuccess/></Sequence>", true);
+    ame::PlanCompiler compiler;
+    std::vector<ame::PlanStep> plan = {
+        {findAction(wm, "move(uav1,base,sector_a)")},
+    };
+
+    const auto xml = compiler.compileSequential(plan, wm, registry);
+    EXPECT_NE(xml.find("<PlannedAction name=\"move(uav1,base,sector_a)\""),
+              std::string::npos);
+    EXPECT_NE(xml.find("ame_reactive=\"true\""), std::string::npos);
+    EXPECT_NE(xml.find("<Sequence><AlwaysSuccess/><AlwaysSuccess/></Sequence>"),
+              std::string::npos);
+}
+
+TEST(PlanCompiler, ThreeStepTreeHasThreeActionElementsAndOneGoalCondition) {
+    auto wm = buildUAVDomain();
+    wm.setGoal({"(classified sector_a)"});
+    auto registry = buildRegistry();
+    ame::PlanCompiler compiler;
+    std::vector<ame::PlanStep> plan = {
+        {findAction(wm, "move(uav1,base,sector_a)")},
+        {findAction(wm, "search(uav1,sector_a)")},
+        {findAction(wm, "classify(uav1,sector_a)")},
+    };
+
+    const auto xml = compiler.compileSequential(plan, wm, registry);
+    auto count = [&xml](const std::string& token) {
+        size_t result = 0;
+        for (size_t pos = 0; (pos = xml.find(token, pos)) != std::string::npos;
+             pos += token.size()) {
+            ++result;
+        }
+        return result;
+    };
+    EXPECT_EQ(count("<StubMoveAction"), 1u);
+    EXPECT_EQ(count("<StubSearchAction"), 1u);
+    EXPECT_EQ(count("<StubClassifyAction"), 1u);
+    EXPECT_EQ(count("<GoalReached"), 1u);
+    EXPECT_EQ(xml.find("CheckWorldPredicate"), std::string::npos);
+    EXPECT_EQ(xml.find("<Set"), std::string::npos);
 }

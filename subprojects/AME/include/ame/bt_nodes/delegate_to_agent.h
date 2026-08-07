@@ -1,6 +1,6 @@
 #pragma once
 
-#include <behaviortree_cpp/action_node.h>
+#include "ame/bt_nodes/planned_action_node.h"
 #include <behaviortree_cpp/bt_factory.h>
 #include <string>
 #include <vector>
@@ -40,15 +40,16 @@ class PlanAuditLog;
 ///
 /// Returns SUCCESS when all delegated goals are achieved, FAILURE if
 /// planning fails or agent is not found, RUNNING while executing.
-class DelegateToAgent : public BT::StatefulActionNode {
+class DelegateToAgent : public PlannedActionNode {
 public:
   DelegateToAgent(const std::string& name, const BT::NodeConfiguration& config);
 
   static BT::PortsList providedPorts();
 
-  BT::NodeStatus onStart() override;
-  BT::NodeStatus onRunning() override;
-  void onHalted() override;
+protected:
+  BT::NodeStatus onActionStart() override;
+  BT::NodeStatus onActionRunning() override;
+  void onActionHalted() override;
 
 private:
   static std::vector<std::string> parseGoals(const std::string& encoded);

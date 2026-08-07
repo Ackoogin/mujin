@@ -36,6 +36,8 @@ ActionImpl ActionRegistry::resolve(const std::string& action_name,
     impl.param_bindings = params;
 
     if (it->second.kind == Registration::SimpleNode) {
+        impl.node_type = it->second.bt_node_type;
+        impl.is_subtree = false;
         // Emit a simple node XML: <NodeType param0="val0" param1="val1" .../>
         std::string xml = "<" + it->second.bt_node_type;
         for (size_t i = 0; i < params.size(); ++i) {
@@ -44,6 +46,7 @@ ActionImpl ActionRegistry::resolve(const std::string& action_name,
         xml += "/>";
         impl.xml = xml;
     } else {
+        impl.is_subtree = true;
         // Substitute {param0}, {param1}, ... in the template
         std::string xml = it->second.xml_template;
         for (size_t i = 0; i < params.size(); ++i) {

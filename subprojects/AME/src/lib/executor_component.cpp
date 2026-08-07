@@ -4,7 +4,9 @@
 #include <ame/action_registry.h>
 #include <ame/bt_nodes/ame_dispatch_node.h>
 #include <ame/bt_nodes/check_world_predicate.h>
-#include <ame/bt_nodes/set_world_predicate.h>
+#include <ame/bt_nodes/goal_reached.h>
+#include <ame/bt_nodes/planned_action.h>
+#include <ame/bt_nodes/simulated_action.h>
 
 #include <behaviortree_cpp/control_node.h>
 
@@ -17,6 +19,11 @@ ExecutorComponent::ExecutorComponent()
 
 void ExecutorComponent::setInProcessWorldModel(WorldModel* wm) {
   inprocess_wm_ = wm;
+  if (wm != nullptr) {
+    local_world_state_access_ = std::make_unique<LocalWorldStateAccess>(wm);
+  } else {
+    local_world_state_access_.reset();
+  }
 }
 
 void ExecutorComponent::setActionSink(IExecutionSink* sink) {
@@ -61,6 +68,10 @@ void ExecutorComponent::loadAndExecute(const std::string& bt_xml) {
   if (inprocess_wm_ != nullptr) {
     blackboard->set("world_model", inprocess_wm_);
   }
+  if (local_world_state_access_ != nullptr) {
+    blackboard->set<IWorldStateAccess*>("world_state",
+                                        local_world_state_access_.get());
+  }
   if (action_sink_ != nullptr) {
     blackboard->set("action_sink", action_sink_);
   }
@@ -104,8 +115,13 @@ void ExecutorComponent::haltExecution() {
 // ---------------------------------------------------------------------------
 
 pcl_status_t ExecutorComponent::on_configure() {
-  factory_.registerNodeType<CheckWorldPredicate>("CheckWorldPredicate");
-  factory_.registerNodeType<SetWorldPredicate>("SetWorldPredicate");
+  const auto& builders = factory_.builders();
+  if (builders.find("CheckWorldPredicate") == builders.end()) {
+    factory_.registerNodeType<CheckWorldPredicate>("CheckWorldPredicate");
+  }
+  factory_.registerNodeType<GoalReached>("GoalReached");
+  factory_.registerNodeType<PlannedAction>("PlannedAction");
+  factory_.registerNodeType<SimulatedAction>("SimulatedAction");
 
   // Build topic prefix from agent_id parameter
   const auto agent_id = paramStr("agent_id", "");
@@ -173,33 +189,24 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
       if (tree_) {
         // compileSequential() wraps the plan body in a ReactiveFallback goal guard
         // when the WorldModel has goal fluents:
-        //   ReactiveFallback -> [GoalCheck, Sequence(action units)]
+        //   ReactiveFallback -> [GoalReached, Sequence(planned actions)]
         // Navigate past the guard to reach the plan Sequence whose children
         // are the action units we want to count.
         BT::ControlNode* plan_seq = nullptr;
         auto* root = dynamic_cast<BT::ControlNode*>(tree_->rootNode());
         if (root && !root->children().empty()) {
           auto* first = root->children().front();
-          // GoalCheck is either a ConditionNode (single goal) or a Sequence
-          // named "GoalCheck" (multiple goals); action-unit sequences are never
-          // bare ConditionNodes and are not named "GoalCheck".
-          bool goal_guard = dynamic_cast<BT::ConditionNode*>(first) != nullptr
-                            || first->name() == "GoalCheck";
+          const bool goal_guard = first->registrationName() == "GoalReached";
           if (goal_guard && root->children().size() >= 2)
             plan_seq = dynamic_cast<BT::ControlNode*>(root->children().back());
         }
         if (!plan_seq) plan_seq = root;
         if (plan_seq) {
-          // Distinguish action units from flow sequences:
-          // - Action units (sequential plans): first child is a ConditionNode
-          //   (CheckWorldPredicate precondition), never a ControlNode.
-          // - Flow sequences (parallel plans): first child is itself a
-          //   ControlNode (an action unit), so compile() emits a Parallel of flows.
-          // For parallel plans, count completed action units across all flows so
-          // failed_step approximates the total number of completed plan steps.
+          // A parallel plan may contain Sequence nodes for flows with several
+          // planned actions. Count their children; every other child represents
+          // one plan step.
           auto is_flow = [](BT::ControlNode* node) -> bool {
-              return !node->children().empty() &&
-                     dynamic_cast<BT::ControlNode*>(node->children().front()) != nullptr;
+              return node != nullptr && node->registrationName() == "Sequence";
           };
           for (auto* child : plan_seq->children()) {
             auto* ctrl = dynamic_cast<BT::ControlNode*>(child);

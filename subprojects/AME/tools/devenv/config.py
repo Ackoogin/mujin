@@ -59,7 +59,7 @@ STATUS_COLOURS = {
 # Source tag colours for WM audit
 SOURCE_COLOURS = {
     "perception":        (90,  180, 210, 255),
-    "SetWorldPredicate": (52,  199, 105, 255),
+    "PlannedAction":     (52,  199, 105, 255),
     "planner_init":      (160, 130, 220, 255),
     "devenv":            (210, 160,  40, 255),
 }

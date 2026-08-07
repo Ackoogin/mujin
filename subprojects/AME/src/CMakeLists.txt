@@ -4,6 +4,7 @@
 add_library(ame_core STATIC
     lib/type_system.cpp
     lib/world_model.cpp
+    lib/world_state_access.cpp
     lib/action_registry.cpp
     lib/autonomy_backend.cpp
     lib/plan_compiler.cpp
@@ -17,7 +18,10 @@ add_library(ame_core STATIC
     lib/agent_dispatcher.cpp
     lib/execution_sink.cpp
     nodes/check_world_predicate.cpp
-    nodes/set_world_predicate.cpp
+    nodes/planned_action_node.cpp
+    nodes/planned_action.cpp
+    nodes/simulated_action.cpp
+    nodes/goal_reached.cpp
     nodes/ame_dispatch_node.cpp
     nodes/invoke_service.cpp
     nodes/execute_phase_action.cpp

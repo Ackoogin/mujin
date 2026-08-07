@@ -1,6 +1,9 @@
 # WorldModel & TypeSystem
 
-The WorldModel is the central shared state of the system. All components access it by reference.
+The WorldModel is the central shared state of the system. Components in the
+same process can access it by reference. Behavior tree actions use the
+`IWorldStateAccess` interface so the same nodes also work when the world model
+is in another process.
 
 ## TypeSystem
 
@@ -55,9 +58,6 @@ public:
     void projectToSTRIPS(aptk::STRIPS_Problem& prob) const;
     aptk::State* currentStateAsSTRIPS() const;
 
-    // Blackboard projection (one-way push, blackboard is read-only)
-    void syncToBlackboard(BT::Blackboard::Ptr bb) const;
-
     // Change tracking
     uint64_t version() const;  // monotonic, increments on any state change
 };
@@ -73,14 +73,36 @@ Facts are stored as a dynamic bitset (`vector<uint64_t>`) -- compact and efficie
 
 The WorldModel owns all truth:
 
-- The BT blackboard is a **read-only view** pushed via `syncToBlackboard()`
-- All mutations go through `SetWorldPredicate` BT nodes that call `setFact()` directly
+- Planned actions read and write facts through the `world_state` blackboard
+  entry, which contains an `IWorldStateAccess*`.
+- `LocalWorldStateAccess` forwards those calls to an in-process `WorldModel*`.
+- If `world_state` is absent, planned actions use the existing `world_model`
+  blackboard entry as a compatibility fallback.
+- A distributed executor supplies a service-backed implementation instead.
 - LAPKT gets a **snapshot projection** via `projectToSTRIPS()`
 - External systems update state via WorldModel APIs and ROS2 adapters (see [06-ros2.md](06-ros2.md))
 
+The interface is intentionally small:
+
+```cpp
+class IWorldStateAccess {
+public:
+    virtual bool getFact(const std::string& key) = 0;
+    virtual bool setFact(const std::string& key, bool value,
+                         const std::string& source) = 0;
+};
+```
+
+The local and ROS2 implementations record writes made by the default planned
+action behavior as `BELIEVED` facts.
+
 ## Error Model
 
-On action failure, the BT does not apply PDDL effects. Ground truth comes from external perception systems calling `setFact()`. The WorldModel never trusts the plan's model of what happened.
+On action failure, the action does not apply its PDDL effects. When an action
+succeeds, the core planned-action base records its declared effects as
+`BELIEVED`. A deployed action can override `commitEffects()` and record only
+the state that its external system or sensors actually established. The core
+does not require confirmed state after an action.
 
 ## State Authority Semantics
 
@@ -88,7 +110,7 @@ Facts are tagged with authority to distinguish their provenance:
 
 | Authority | Meaning | Source |
 |-----------|---------|--------|
-| `BELIEVED` | Predicted by plan effects | BT `SetWorldPredicate` nodes |
+| `BELIEVED` | Predicted by plan effects | Default `PlannedActionNode::commitEffects()` |
 | `CONFIRMED` | Observed by perception | Perception callbacks, `/detections` topic |
 
 ```cpp
@@ -164,4 +186,3 @@ wm.enqueueMutation(fluent_id, true, "perception:camera", FactAuthority::CONFIRME
 wm.applyQueuedMutations();
 auto snap = wm.captureSnapshot();
 ```
-

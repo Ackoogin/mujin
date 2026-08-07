@@ -1,7 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <ame/bt_nodes/check_world_predicate.h>
-#include <ame/bt_nodes/set_world_predicate.h>
 #include <ame/executor_component.h>
 #include <ame/planner_component.h>
 

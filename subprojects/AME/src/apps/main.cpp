@@ -7,8 +7,10 @@
 #include "ame/action_registry.h"
 #include "ame/planner.h"
 #include "ame/plan_compiler.h"
-#include "ame/bt_nodes/check_world_predicate.h"
-#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_nodes/goal_reached.h"
+#include "ame/bt_nodes/planned_action.h"
+#include "ame/bt_nodes/planned_action_node.h"
+#include "ame/bt_nodes/simulated_action.h"
 #include "ame/bt_logger.h"
 #include "ame/wm_audit_log.h"
 #include "ame/plan_audit_log.h"
@@ -27,52 +29,55 @@
 #include <string>
 
 // Stub action nodes that just log and succeed
-class StubMoveAction : public BT::SyncActionNode {
+class StubMoveAction : public ame::PlannedActionNode {
 public:
     StubMoveAction(const std::string& name, const BT::NodeConfiguration& config)
-        : BT::SyncActionNode(name, config) {}
-    BT::NodeStatus tick() override {
-        std::cout << "  [BT] " << name() << " executed\n";
-        return BT::NodeStatus::SUCCESS;
-    }
+        : PlannedActionNode(name, config) {}
     static BT::PortsList providedPorts() {
-        return {
+        return withBasePorts({
             BT::InputPort<std::string>("param0"),
             BT::InputPort<std::string>("param1"),
             BT::InputPort<std::string>("param2"),
-        };
+        });
+    }
+protected:
+    BT::NodeStatus onActionStart() override {
+        std::cout << "  [BT] " << name() << " executed\n";
+        return BT::NodeStatus::SUCCESS;
     }
 };
 
-class StubSearchAction : public BT::SyncActionNode {
+class StubSearchAction : public ame::PlannedActionNode {
 public:
     StubSearchAction(const std::string& name, const BT::NodeConfiguration& config)
-        : BT::SyncActionNode(name, config) {}
-    BT::NodeStatus tick() override {
-        std::cout << "  [BT] " << name() << " executed\n";
-        return BT::NodeStatus::SUCCESS;
-    }
+        : PlannedActionNode(name, config) {}
     static BT::PortsList providedPorts() {
-        return {
+        return withBasePorts({
             BT::InputPort<std::string>("param0"),
             BT::InputPort<std::string>("param1"),
-        };
+        });
+    }
+protected:
+    BT::NodeStatus onActionStart() override {
+        std::cout << "  [BT] " << name() << " executed\n";
+        return BT::NodeStatus::SUCCESS;
     }
 };
 
-class StubClassifyAction : public BT::SyncActionNode {
+class StubClassifyAction : public ame::PlannedActionNode {
 public:
     StubClassifyAction(const std::string& name, const BT::NodeConfiguration& config)
-        : BT::SyncActionNode(name, config) {}
-    BT::NodeStatus tick() override {
-        std::cout << "  [BT] " << name() << " executed\n";
-        return BT::NodeStatus::SUCCESS;
-    }
+        : PlannedActionNode(name, config) {}
     static BT::PortsList providedPorts() {
-        return {
+        return withBasePorts({
             BT::InputPort<std::string>("param0"),
             BT::InputPort<std::string>("param1"),
-        };
+        });
+    }
+protected:
+    BT::NodeStatus onActionStart() override {
+        std::cout << "  [BT] " << name() << " executed\n";
+        return BT::NodeStatus::SUCCESS;
     }
 };
 
@@ -216,8 +221,9 @@ int main() {
     // ---- Step 5: Execute BT ----
     std::cout << "\n--- Step 5: Execute BT ---\n";
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::GoalReached>("GoalReached");
+    factory.registerNodeType<ame::PlannedAction>("PlannedAction");
+    factory.registerNodeType<ame::SimulatedAction>("SimulatedAction");
     factory.registerNodeType<StubMoveAction>("StubMoveAction");
     factory.registerNodeType<StubSearchAction>("StubSearchAction");
     factory.registerNodeType<StubClassifyAction>("StubClassifyAction");

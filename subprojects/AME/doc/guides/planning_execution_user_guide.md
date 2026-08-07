@@ -84,23 +84,34 @@ Create domain and problem files with:
 - valid initial facts,
 - mission goals.
 
-### Step B: Register action execution templates
+### Step B: Register action implementations
 
-The planner is intentionally execution-agnostic. Use `ActionRegistry` to map each PDDL action name to a BT subtree snippet.
+The planner is intentionally execution-agnostic. Use `ActionRegistry` to map
+each PDDL action name to either one BT node type or a BT subtree snippet.
 
 At compile time, placeholders such as `{param0}`, `{param1}` are replaced with grounded values.
 
 ### Step C: Compile plan into a BT
 
-`PlanCompiler` wraps each action with:
+`PlanCompiler` emits one action element for each plan step. The element is
+named after the grounded action and carries four contract attributes:
 
-- precondition checks (`CheckWorldPredicate`),
-- execution node/subtree (your mapping),
-- world-state effect updates (`SetWorldPredicate`).
+- `ame_preconditions`,
+- `ame_add_effects`,
+- `ame_del_effects`,
+- `ame_reactive`.
+
+A simple registered implementation receives these ports directly. A registered
+subtree is wrapped in the `PlannedAction` decorator. If an action is not
+registered, the compiler emits a `SimulatedAction` with the same contract.
+The goal guard contains one `GoalReached` condition for the whole mission.
 
 ### Step D: Execute and monitor
 
-The BT executes action units. If an execution node fails (timeout/service error/etc.), mission execution can trigger replanning and continue from updated state.
+Each planned action checks its own preconditions and applies effects only after
+its work succeeds. If an execution node fails because of a timeout, service
+error, or another runtime problem, mission execution can trigger replanning
+and continue from updated state.
 
 ---
 
@@ -139,16 +150,24 @@ If keys overlap, mapped parameters override conflicting request defaults.
 
 Your BT factory must register:
 
-- `CheckWorldPredicate`
-- `SetWorldPredicate`
+- `GoalReached`
+- `PlannedAction`
+- `SimulatedAction`
 - `InvokeService`
+
+Register `CheckWorldPredicate` as well when hand-written trees use that
+condition node.
 
 ### 4.4 Put dependencies on the blackboard
 
 Before ticking a compiled tree, set:
 
 - `pyramid_service` (`IPyramidService*`)
-- `world_model`
+- `world_state` (`IWorldStateAccess*`)
+
+Existing in-process setups can continue to provide `world_model`
+(`WorldModel*`). Planned actions use it as a fallback when `world_state` is not
+present.
 
 If `pyramid_service` is missing/null, `InvokeService` fails immediately.
 
@@ -161,7 +180,11 @@ If `pyramid_service` is missing/null, `InvokeService` fails immediately.
 
 ### 4.6 Simulation/testing path
 
-Use `MockPyramidService` for deterministic tests.
+Use `SimulatedAction` for a deterministic stand-in when no action
+implementation is registered. It defaults to one tick and success, and it
+records declared effects as believed facts. Use its `ticks` and `success`
+ports to configure duration and outcome. Use `MockPyramidService` when the
+test needs to exercise an `InvokeService` mapping.
 
 For richer failure/latency tests, provide a custom test adapter that delays completion or forces failures.
 
@@ -171,15 +194,20 @@ For richer failure/latency tests, provide a custom test adapter that delays comp
 
 ### Built-in execution nodes (common)
 
-- **`CheckWorldPredicate`**: condition check against world state.
-- **`SetWorldPredicate`**: write add/delete effects.
+- **`PlannedActionNode`**: base class that checks a simple action's contract and commits effects after success.
+- **`PlannedAction`**: decorator that gives the same contract to a multi-node action subtree.
+- **`SimulatedAction`**: configurable stand-in for an action without a registered implementation.
+- **`GoalReached`**: checks all mission goal facts in one condition node.
+- **`CheckWorldPredicate`**: condition for hand-written trees that need one explicit fact check.
 - **`InvokeService`**: async backend/PYRAMID call.
 - **`ExecutePhaseAction`**: hierarchical node that performs sub-plan -> compile -> execute for phase goals.
 - **`DelegateToAgent`**: multi-agent delegation node.
 
-### `Sequence` vs `ReactiveSequence`
+### Reactive planned actions
 
-When action mapping is marked *reactive*, the compiler emits a `ReactiveSequence` so preconditions are re-checked while the action is still running.
+When an action mapping is marked *reactive*, the compiler sets
+`ame_reactive="true"` on that action. Its planned-action base or decorator
+then checks the preconditions again on every tick while the work is running.
 
 Use reactive mode for long-running actions that may become invalid due to live world updates.
 
@@ -198,9 +226,19 @@ Create a custom BT node when you need runtime logic not covered by existing node
 - mission-specific control logic,
 - specialized service/result interpretation.
 
+An action implementation used directly by `ActionRegistry::registerAction()`
+derives from `PlannedActionNode`. Its `providedPorts()` calls
+`withBasePorts(...)`, and its action work is implemented through
+`onActionStart()`, `onActionRunning()`, and `onActionHalted()`.
+
+The base `commitEffects()` records declared add and delete effects as believed
+facts after success. A deployed action overrides this method when it needs to
+record only the state that its external system or sensors actually confirmed.
+AME does not require confirmed state after an action.
+
 Typical steps:
 
-1. Implement node class with BT.CPP API.
+1. Implement the node as a `PlannedActionNode` when it is a planned action.
 2. Register the node type in `BehaviorTreeFactory`.
 3. Reference it from action subtrees or top-level trees.
 
@@ -208,7 +246,9 @@ Typical steps:
 
 `ActionRegistry::registerActionSubTree(action_name, xml, reactive)` lets you define custom per-action execution fragments.
 
-This is the preferred mechanism to customize action runtime behavior while preserving PDDL planning compatibility.
+The compiler wraps the template in `PlannedAction`, so the template must have
+one root node. That root can be a control node containing as many child nodes
+as the implementation needs.
 
 Good subtree patterns:
 
@@ -291,8 +331,9 @@ For new teams:
 
 ## 10) Troubleshooting quick reference
 
-- **Action exists in PDDL but does nothing useful**  
-  Usually missing/misconfigured `ActionRegistry` subtree mapping.
+- **Action exists in PDDL but runs only as a simulation**
+  The action has no `ActionRegistry` mapping. Register its deployed node type
+  or subtree when it should command an external system.
 
 - **`InvokeService` fails immediately**  
   Check `pyramid_service` blackboard pointer and adapter lifetime.
@@ -315,4 +356,3 @@ For new teams:
 - Execution internals and node details: `subprojects/AME/doc/architecture/04-execution.md`
 - Deployment details (ROS2 modes): `subprojects/AME/doc/architecture/06-ros2.md`
 - Full architecture map: `subprojects/AME/doc/architecture/01-overview.md`
-

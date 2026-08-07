@@ -14,18 +14,18 @@ namespace ame {
 
 DelegateToAgent::DelegateToAgent(const std::string& name,
                                  const BT::NodeConfiguration& config)
-    : BT::StatefulActionNode(name, config) {}
+    : PlannedActionNode(name, config) {}
 
 BT::PortsList DelegateToAgent::providedPorts() {
-  return {
+  return withBasePorts({
       BT::InputPort<std::string>("agent_id", "ID of agent to delegate to"),
       BT::InputPort<std::string>(
           "agent_goals",
           "Semicolon-separated goal fluents for this agent"),
-  };
+  });
 }
 
-BT::NodeStatus DelegateToAgent::onStart() {
+BT::NodeStatus DelegateToAgent::onActionStart() {
   auto agent_id_input = getInput<std::string>("agent_id");
   if (!agent_id_input) {
     return BT::NodeStatus::FAILURE;
@@ -147,10 +147,10 @@ BT::NodeStatus DelegateToAgent::onStart() {
     return BT::NodeStatus::FAILURE;
   }
 
-  return onRunning();
+  return onActionRunning();
 }
 
-BT::NodeStatus DelegateToAgent::onRunning() {
+BT::NodeStatus DelegateToAgent::onActionRunning() {
   if (!sub_tree_) {
     return BT::NodeStatus::FAILURE;
   }
@@ -177,7 +177,7 @@ BT::NodeStatus DelegateToAgent::onRunning() {
   return status;
 }
 
-void DelegateToAgent::onHalted() {
+void DelegateToAgent::onActionHalted() {
   if (sub_tree_) {
     sub_tree_->haltTree();
     sub_tree_.reset();

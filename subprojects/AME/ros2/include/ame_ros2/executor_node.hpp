@@ -5,6 +5,7 @@
 #include <string>
 
 #include <rclcpp/node_options.hpp>
+#include <rclcpp/client.hpp>
 #include <rclcpp/publisher.hpp>
 #include <rclcpp/service.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -12,6 +13,8 @@
 
 #include <ame_ros2/srv/load_bt.hpp>
 #include <ame_ros2/srv/stop_execution.hpp>
+#include <ame_ros2/srv/get_fact.hpp>
+#include <ame_ros2/srv/set_fact.hpp>
 
 // Forward-declare AME and BT types — full headers are not needed by ROS2 consumers
 namespace ame {
@@ -27,6 +30,8 @@ namespace ame {
 namespace BT { class BehaviorTreeFactory; }
 
 namespace ame_ros2 {
+
+class RosWorldStateAccess;
 
 /// \brief Thin ROS2 lifecycle wrapper for ame::ExecutorComponent.
 ///
@@ -101,6 +106,9 @@ private:
   ame::ActionRegistry*   action_registry_   = nullptr;
   ame::PlanAuditLog*     plan_audit_log_    = nullptr;
   ame::PlannerComponent* planner_component_ = nullptr;
+  rclcpp::Client<ame_ros2::srv::GetFact>::SharedPtr get_fact_client_;
+  rclcpp::Client<ame_ros2::srv::SetFact>::SharedPtr set_fact_client_;
+  std::unique_ptr<RosWorldStateAccess> ros_world_state_access_;
   std::string            agent_id_;
 
   bool core_nodes_registered_ = false;

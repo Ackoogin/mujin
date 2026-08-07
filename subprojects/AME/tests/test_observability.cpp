@@ -12,8 +12,10 @@
 #include "ame/action_registry.h"
 #include "ame/plan_compiler.h"
 #include "ame/planner.h"
-#include "ame/bt_nodes/check_world_predicate.h"
-#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_nodes/goal_reached.h"
+#include "ame/bt_nodes/planned_action.h"
+#include "ame/bt_nodes/planned_action_node.h"
+#include "ame/bt_nodes/simulated_action.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/bt_observer.h>
@@ -57,19 +59,27 @@ static ame::WorldModel makeSimpleWorldModel() {
 }
 
 // Stub BT action that always succeeds
-class StubAction : public BT::SyncActionNode {
+class StubAction : public ame::PlannedActionNode {
 public:
     StubAction(const std::string& name, const BT::NodeConfiguration& config)
-        : BT::SyncActionNode(name, config) {}
-    BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
+        : PlannedActionNode(name, config) {}
     static BT::PortsList providedPorts() {
-        return {
+        return withBasePorts({
             BT::InputPort<std::string>("param0"),
             BT::InputPort<std::string>("param1"),
             BT::InputPort<std::string>("param2"),
-        };
+        });
     }
+protected:
+    BT::NodeStatus onActionStart() override { return BT::NodeStatus::SUCCESS; }
 };
+
+static void registerExecutionNodes(BT::BehaviorTreeFactory& factory) {
+    factory.registerNodeType<ame::GoalReached>("GoalReached");
+    factory.registerNodeType<ame::PlannedAction>("PlannedAction");
+    factory.registerNodeType<ame::SimulatedAction>("SimulatedAction");
+    factory.registerNodeType<StubAction>("StubAction");
+}
 
 // =========================================================================
 // Layer 3: WorldModel Audit Log
@@ -131,7 +141,7 @@ TEST(WmAuditLog, NoEntryWhenValueUnchanged) {
     EXPECT_EQ(audit.size(), 1u);
 }
 
-TEST(WmAuditLog, SourceTagFromSetWorldPredicate) {
+TEST(WmAuditLog, SourceTagFromPlannedAction) {
     auto wm = makeSimpleWorldModel();
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
@@ -160,9 +170,7 @@ TEST(WmAuditLog, SourceTagFromSetWorldPredicate) {
 
     // Execute
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
-    factory.registerNodeType<StubAction>("StubAction");
+    registerExecutionNodes(factory);
 
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
@@ -170,18 +178,18 @@ TEST(WmAuditLog, SourceTagFromSetWorldPredicate) {
     auto status = tree.tickWhileRunning();
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
 
-    // Audit entries should exist and have SetWorldPredicate source tags
+    // Audit entries should identify the planned action that recorded them.
     EXPECT_GT(audit.size(), 0u);
 
     bool found_set_wp_source = false;
     for (auto& entry : audit.entries()) {
-        if (entry.source.find("SetWorldPredicate:") == 0) {
+        if (entry.source.find("PlannedAction:") == 0) {
             found_set_wp_source = true;
             break;
         }
     }
     EXPECT_TRUE(found_set_wp_source)
-        << "Expected at least one audit entry with SetWorldPredicate source tag";
+        << "Expected at least one audit entry with a planned-action source tag";
 }
 
 TEST(WmAuditLog, WritesToFile) {
@@ -242,9 +250,7 @@ TEST(AmeBTLogger, EmitsEventsOnBTExecution) {
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
-    factory.registerNodeType<StubAction>("StubAction");
+    registerExecutionNodes(factory);
 
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
@@ -288,9 +294,7 @@ TEST(AmeBTLogger, CallbackSinkReceivesEvents) {
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
-    factory.registerNodeType<StubAction>("StubAction");
+    registerExecutionNodes(factory);
 
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
@@ -329,9 +333,7 @@ TEST(AmeBTLogger, WritesToFile) {
 
     {
         BT::BehaviorTreeFactory factory;
-        factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-        factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
-        factory.registerNodeType<StubAction>("StubAction");
+        registerExecutionNodes(factory);
 
         auto tree = factory.createTreeFromText(xml);
         tree.rootBlackboard()->set("world_model", &wm);
@@ -375,9 +377,7 @@ TEST(TreeObserver, CollectsStatisticsOnExecution) {
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
-    factory.registerNodeType<StubAction>("StubAction");
+    registerExecutionNodes(factory);
 
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
@@ -426,9 +426,7 @@ TEST(ObservabilityIntegration, AllLayersWorkTogether) {
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
-    factory.registerNodeType<StubAction>("StubAction");
+    registerExecutionNodes(factory);
 
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
@@ -451,10 +449,10 @@ TEST(ObservabilityIntegration, AllLayersWorkTogether) {
     bool has_bt = false;
     for (auto& e : audit.entries()) {
         if (e.source == "planner_init") has_init = true;
-        if (e.source.find("SetWorldPredicate:") == 0) has_bt = true;
+        if (e.source.find("PlannedAction:") == 0) has_bt = true;
     }
     EXPECT_TRUE(has_init) << "Should have planner_init source";
-    EXPECT_TRUE(has_bt) << "Should have SetWorldPredicate source";
+    EXPECT_TRUE(has_bt) << "Should have planned-action source";
 }
 
 // =========================================================================

@@ -30,8 +30,8 @@ Custom `StatusChangeLogger` subclass that emits structured JSON events:
 ```json
 {
   "ts_us": 1702345678000,
-  "node": "search_sector_uav1_sectorA",
-  "type": "ReactiveSequence",
+  "node": "search(uav1,sectorA)",
+  "type": "SearchAction",
   "prev": "IDLE",
   "status": "RUNNING",
   "tree_id": "MissionPlan",
@@ -57,12 +57,12 @@ Hooked into `WorldModel::setAuditCallback()`. Emits a structured entry on every 
   "ts_us": 1702345679000,
   "fact": "at(uav1,sectorA)",
   "value": true,
-  "source": "SetWorldPredicate:search_sector_uav1_sectorA"
+  "source": "PlannedAction:search(uav1,sectorA)"
 }
 ```
 
 Sources are one of:
-- A BT node name (from `SetWorldPredicate`)
+- A planned action name (from the default effect commit)
 - `"perception"` or `"perception:<subtag>"` (external update)
 - `"planner_init"` (initial state sync)
 
@@ -122,6 +122,11 @@ For each planning episode, logs a self-contained JSON object:
 - LAPKT solver used and solve time (`PlanResult::solve_time_ms`)
 - Ordered action list
 - Compiled BT XML
+
+The compiled XML contains one planned-action element for each plan step. Its
+`ame_preconditions`, `ame_add_effects`, and `ame_del_effects` attributes keep
+the recorded tree self-contained without adding separate fact-level nodes to
+the event stream.
 
 Hierarchical missions produce a tree of episodes linked by `parent_episode_id`, enabling full traceability from top-level mission phases down to individual sub-plans:
 
@@ -206,4 +211,3 @@ and neural advisor calls — enabling full causal traceability of any mission ev
 | Node statistics | TreeObserver queryable in-memory | 1 |
 | Plan provenance | PlanAuditLog JSONL | 5 |
 | Tree editor | Not needed -- trees are compiler-generated | -- |
-

@@ -20,7 +20,7 @@ namespace ame {
 /// }
 ///
 /// Sources follow a convention:
-///   - "SetWorldPredicate:<node_name>"  -- BT effect node
+///   - "PlannedAction:<node_name>"      -- planned action effect
 ///   - "perception"                     -- external update
 ///   - "planner_init"                   -- initial state sync
 ///   - ""                               -- untagged (legacy callers)

@@ -3,25 +3,28 @@
 #include "ame/action_registry.h"
 #include "ame/planner.h"
 #include "ame/plan_compiler.h"
-#include "ame/bt_nodes/check_world_predicate.h"
-#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_nodes/goal_reached.h"
+#include "ame/bt_nodes/planned_action.h"
+#include "ame/bt_nodes/planned_action_node.h"
+#include "ame/bt_nodes/simulated_action.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/action_node.h>
 
 // Stub action that succeeds and accepts any ports
-class StubAction : public BT::SyncActionNode {
+class StubAction : public ame::PlannedActionNode {
 public:
     StubAction(const std::string& name, const BT::NodeConfiguration& config)
-        : BT::SyncActionNode(name, config) {}
-    BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
+        : PlannedActionNode(name, config) {}
     static BT::PortsList providedPorts() {
-        return {
+        return withBasePorts({
             BT::InputPort<std::string>("param0"),
             BT::InputPort<std::string>("param1"),
             BT::InputPort<std::string>("param2"),
-        };
+        });
     }
+protected:
+    BT::NodeStatus onActionStart() override { return BT::NodeStatus::SUCCESS; }
 };
 
 static ame::WorldModel buildUAVDomain() {
@@ -64,8 +67,9 @@ static ame::ActionRegistry buildRegistry() {
 
 static BT::BehaviorTreeFactory buildFactory() {
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::GoalReached>("GoalReached");
+    factory.registerNodeType<ame::PlannedAction>("PlannedAction");
+    factory.registerNodeType<ame::SimulatedAction>("SimulatedAction");
     factory.registerNodeType<StubAction>("StubMoveAction");
     factory.registerNodeType<StubAction>("StubSearchAction");
     factory.registerNodeType<StubAction>("StubClassifyAction");
