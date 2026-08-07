@@ -327,6 +327,34 @@ PredicateDef parsePredicate(const Sexpr& expr) {
   return predicate;
 }
 
+// Reads (:confirmed-predicates authorised route-clear) and marks the named
+// predicates, so that generating the domain again writes the section back out.
+// The core parser tolerates a parenthesised entry such as (authorised), so this
+// reader does too.
+void applyConfirmedPredicates(const Sexpr& section, ProjectModel& model) {
+  for (size_t i = 1; i < section.children.size(); ++i) {
+    const Sexpr& entry = section.children[i];
+    std::string name;
+    if (!entry.isList) {
+      name = entry.atom;
+    } else if (!entry.children.empty() && !entry.children.front().isList) {
+      name = entry.children.front().atom;
+    } else {
+      throw std::runtime_error("malformed :confirmed-predicates entry");
+    }
+
+    const auto it = std::find_if(model.predicates.begin(), model.predicates.end(),
+                                 [&name](const PredicateDef& predicate) {
+                                   return predicate.name == name;
+                                 });
+    if (it == model.predicates.end()) {
+      throw std::runtime_error(
+          "':confirmed-predicates' names an undeclared predicate: " + name);
+    }
+    it->confirmed = true;
+  }
+}
+
 ActionDef parseAction(const Sexpr& expr) {
   if (!expr.isList || expr.children.size() < 2U ||
       !isKeyword(expr.children.front(), ":action") || expr.children[1].isList) {
@@ -407,6 +435,10 @@ PddlImportResult PddlImporter::importDomain(const std::string& domainPddl) {
       for (size_t i = 1; i < predicates->children.size(); ++i) {
         model.predicates.push_back(parsePredicate(predicates->children[i]));
       }
+    }
+
+    if (const Sexpr* confirmed = findListSection(root, ":confirmed-predicates")) {
+      applyConfirmedPredicates(*confirmed, model);
     }
 
     if (const Sexpr* constants = findListSection(root, ":constants")) {

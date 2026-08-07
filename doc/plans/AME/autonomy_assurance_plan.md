@@ -176,7 +176,7 @@ The SOC specifies the conditions under which the autonomy module is permitted to
 | **Human-on-the-loop (HOTL)** | Operator can observe and override mission execution | Observability stack (Layers 1-5) + override interface |
 | **Bounded planning time** | Prevents unbounded compute; ensures timely replanning | `max_iterations` parameter in LAPKT solver |
 | **Replan limit** | Prevents livelock | `MissionExecutor` replan counter + safe-state fallback |
-| **Precondition gating** | Actions only execute when preconditions verified | `CheckWorldPredicate` BT nodes |
+| **Precondition gating** | Actions only execute when preconditions verified | `PlannedActionNode` checks each action's `ame_preconditions` before its work starts; facts on a predicate declared in `(:confirmed-predicates ...)` must additionally have been observed |
 | **Perception freshness** | WorldModel state must be recent enough for planning | Perception timestamp + staleness threshold |
 | **Safe-state fallback** | If no valid plan exists, system enters defined safe state | `ReplanOnFailure` -> safe-state BT sub-tree |
 | **Audit completeness** | All state changes and decisions are logged | WM audit log, BT event stream, Plan audit trail |
@@ -214,6 +214,7 @@ Mapped to UK MOD Joint Doctrine Note (JDN) autonomy levels:
 | SR-04 | Causal graph extraction SHALL preserve all add-effect -> precondition dependencies | H4 | Property-based test: compiled BT re-checked against original plan |
 | SR-05 | A planned action SHALL only modify the facts specified in the PDDL action's effect list, which reach it as the `ame_add_effects` and `ame_del_effects` ports the plan compiler emits | H5 | Static analysis of action-node binding; integration test |
 | SR-05a | A deployed action that overrides `commitEffects()` SHALL record only state its own system or sensors confirmed, and SHALL record it with `FactAuthority::CONFIRMED` | H3, H5 | Integration test per deployment; authority conflicts surfaced by `WorldModel::hasAuthorityConflict()` |
+| SR-05b | A predicate the domain declares in `(:confirmed-predicates ...)` SHALL reach the compiled tree as an `ame_confirmed_preconditions` entry on every action that has it as a precondition, so that the action starts only on observed state. Any tool that reads a domain and writes one back SHALL preserve the declaration | H3, H5 | Unit test on `PlanCompiler` output; import-and-generate round-trip test in the authoring tool |
 | SR-06 | `MissionExecutor` SHALL cease replanning after K consecutive failures and enter safe state | H6 | Unit test |
 | SR-07 | BT tick period SHALL not exceed T ms (e.g. 20 ms for 50 Hz) | H7 | Performance test + runtime monitoring |
 | SR-08 | `ActionRegistry.resolve()` SHALL fail loudly if no mapping exists for a PDDL action name | H8 | Unit test; compile-time assertion where possible |

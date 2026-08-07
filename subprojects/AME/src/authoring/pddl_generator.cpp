@@ -220,6 +220,25 @@ std::string PddlGenerator::generateDomain(const ProjectModel& model) {
   }
   out << "  )\n";
 
+  // Facts the model says must be observed rather than predicted. The plan
+  // compiler reads this section and routes preconditions on these predicates
+  // into a planned action's confirmed-precondition port, so leaving it out
+  // would quietly let an action proceed on predicted state.
+  const bool anyConfirmed =
+      std::any_of(model.predicates.begin(), model.predicates.end(),
+                  [](const PredicateDef& predicate) {
+                    return predicate.confirmed;
+                  });
+  if (anyConfirmed) {
+    out << "\n  (:confirmed-predicates";
+    for (const auto& predicate : model.predicates) {
+      if (predicate.confirmed) {
+        out << " " << predicate.name;
+      }
+    }
+    out << ")\n";
+  }
+
   for (const auto& action : model.actions) {
     out << "\n";
     out << "  (:action " << action.name << "\n";

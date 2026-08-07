@@ -192,6 +192,41 @@ TEST(ProjectModel, LegacyCausalLinksAreIgnoredAndNotWritten) {
     EXPECT_FALSE(written.contains("causalLinks"));
 }
 
+TEST(ProjectModel, ConfirmedPredicateFlagSurvivesSaveAndLoad) {
+    ProjectModel m;
+    m.predicates.push_back({"airborne", {{"?u", "uav"}}, 0, 0});
+    m.predicates.push_back({"authorised", {{"?t", "target"}}, 0, 0, true});
+
+    const char* path = "test_confirmed_predicate_tmp.json";
+    ASSERT_TRUE(m.save(path));
+
+    ProjectModel loaded;
+    ASSERT_TRUE(loaded.load(path));
+    ASSERT_EQ(loaded.predicates.size(), 2u);
+    EXPECT_FALSE(loaded.predicates[0].confirmed);
+    EXPECT_TRUE(loaded.predicates[1].confirmed);
+    std::remove(path);
+}
+
+TEST(ProjectModel, LoadOldPredicateWithoutConfirmedFlagDefaults) {
+    nlohmann::json j = {
+        {"version", 1},
+        {"projectName", "OldProject"},
+        {"types", nlohmann::json::array()},
+        {"predicates", {{{"name", "at"},
+                         {"params", nlohmann::json::array()},
+                         {"posX", 0.0},
+                         {"posY", 0.0}}}},
+        {"actions", nlohmann::json::array()},
+        {"objects", nlohmann::json::array()},
+        {"scenarios", nlohmann::json::array()},
+    };
+
+    const ProjectModel m = j.get<ProjectModel>();
+    ASSERT_EQ(m.predicates.size(), 1u);
+    EXPECT_FALSE(m.predicates[0].confirmed);
+}
+
 TEST(ProjectModel, LoadMissingFile) {
     ProjectModel m;
     EXPECT_FALSE(m.load("__nonexistent_file_xyz__.json"));

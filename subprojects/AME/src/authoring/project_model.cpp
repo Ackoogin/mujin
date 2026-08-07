@@ -26,14 +26,20 @@ void to_json(nlohmann::json& j, const PredicateDef& value) {
         {"params", value.params},
         {"posX", value.posX},
         {"posY", value.posY},
+        {"confirmed", value.confirmed},
     };
 }
 
 void from_json(const nlohmann::json& j, PredicateDef& value) {
+    value = PredicateDef{};
     j.at("name").get_to(value.name);
     j.at("params").get_to(value.params);
     j.at("posX").get_to(value.posX);
     j.at("posY").get_to(value.posY);
+    // Projects saved before confirmed predicates existed have no such key.
+    if (j.contains("confirmed")) {
+        j.at("confirmed").get_to(value.confirmed);
+    }
 }
 
 void to_json(nlohmann::json& j, const EffectRef& value) {

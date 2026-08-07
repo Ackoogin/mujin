@@ -2204,6 +2204,26 @@ void AppShell::renderSelectedElementEditor() {
       }
       ImGui::EndTable();
     }
+    // Wording avoids "confirmed predicate": the user is being asked about
+    // evidence, not about the domain section this becomes.
+    bool mustBeObserved = pred.confirmed;
+    if (ImGui::Checkbox("Only counts once it has been observed##predconfirmed",
+                        &mustBeObserved)) {
+      m_commandStack.execute(m_model,
+                             mustBeObserved
+                                 ? "Require this fact to be observed"
+                                 : "Accept this fact as expected",
+                             [selPred, mustBeObserved](ProjectModel& model) {
+        model.predicates[static_cast<size_t>(selPred)].confirmed = mustBeObserved;
+      });
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "An action waiting on this fact will not start until something has\n"
+          "reported it. Leave this off to let an action rely on the fact an\n"
+          "earlier step was expected to bring about.");
+    }
+
     static char s_pname[32] = {};
     static char s_ptype[32] = {};
     ImGui::InputText("Param##ppn", s_pname, sizeof(s_pname));

@@ -5,7 +5,17 @@
 
 struct TypeDef { std::string name, parent; };
 struct Parameter { std::string name, type; };
-struct PredicateDef { std::string name; std::vector<Parameter> params; float posX=0,posY=0; };
+// `confirmed` marks a fact that an action may only act on once it has been
+// observed. It becomes an entry in the domain's (:confirmed-predicates ...)
+// section, which the plan compiler turns into a confirmed precondition. It is
+// declared last so that existing brace initialisers, which supply name, params
+// and the two canvas coordinates, keep compiling.
+struct PredicateDef {
+    std::string name;
+    std::vector<Parameter> params;
+    float posX=0,posY=0;
+    bool confirmed=false;
+};
 struct EffectRef { std::string predicateName; std::vector<std::string> argNames; };
 struct BtBinding {
     std::string nodeType;

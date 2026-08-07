@@ -145,3 +145,24 @@ TEST(PddlGenerator, RoundTripsThroughPddlParser) {
   EXPECT_EQ(wm.numGroundActions(), 13U);
   EXPECT_TRUE(wm.getFact("(at uav1 base)"));
 }
+
+// The declaration is only worth writing if the core parser picks it up again,
+// because that is what makes the plan compiler treat the fact as one an action
+// has to observe rather than one it may assume.
+TEST(PddlGenerator, ConfirmedPredicatesReachTheWorldModel) {
+  ProjectModel model = makeUavSearchModel();
+  for (auto& predicate : model.predicates) {
+    if (predicate.name == "searched") {
+      predicate.confirmed = true;
+    }
+  }
+
+  const std::string domain = PddlGenerator::generateDomain(model);
+  expectContains(domain, "(:confirmed-predicates searched)");
+
+  ame::WorldModel wm;
+  ASSERT_NO_THROW(ame::PddlParser::parseFromString(
+      domain, PddlGenerator::generateProblem(model, "uav-search-1"), wm));
+  EXPECT_TRUE(wm.isConfirmedPredicate("searched"));
+  EXPECT_FALSE(wm.isConfirmedPredicate("at"));
+}
