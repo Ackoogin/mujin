@@ -113,6 +113,7 @@ int main(int argc, char** argv) {
   // -- Wire in-process pointers -------------------------------------------
   pl_comp.setInProcessWorldModel(&wm_comp.worldModel());
   ex_comp.setInProcessWorldModel(&wm_comp.worldModel());
+  ex_comp.setActionRegistry(&pl_comp.actionRegistry());
 
   ad_comp.setWorldModel(&wm_comp.worldModel());
   ad_comp.setPlanner(&pl_comp.planner());

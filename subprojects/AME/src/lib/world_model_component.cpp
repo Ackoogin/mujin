@@ -23,7 +23,12 @@ GetFactResult WorldModelComponent::getFact(const std::string& key) const {
     result.value = wm_.getFact(key);
     result.authority = wm_.getFactMetadata(key).authority;
     result.found = true;
+  } catch (const std::exception& e) {
+    logWarn("Failed to get fact '%s': %s", key.c_str(), e.what());
+    result.found = false;
+    result.value = false;
   } catch (...) {
+    logWarn("Failed to get fact '%s': unknown error", key.c_str());
     result.found = false;
     result.value = false;
     result.authority = FactAuthority::BELIEVED;
@@ -199,13 +204,20 @@ WorldModelComponent::LoadDomainResult WorldModelComponent::loadDomainFromStrings
     const std::string& domain_pddl,
     const std::string& problem_pddl) {
   // Capture current facts under lock, then parse without holding it.
-  std::vector<std::pair<std::string, std::string>> preserved_facts;
+  struct PreservedFact {
+    std::string key;
+    std::string source;
+    FactAuthority authority;
+    uint64_t timestamp_us;
+  };
+  std::vector<PreservedFact> preserved_facts;
   {
     std::lock_guard<std::mutex> lock(wm_mutex_);
     for (unsigned i = 0; i < wm_.numFluents(); ++i) {
       if (wm_.getFact(i)) {
         const auto& meta = wm_.getFactMetadata(i);
-        preserved_facts.emplace_back(wm_.fluentName(i), meta.source);
+        preserved_facts.push_back(
+            {wm_.fluentName(i), meta.source, meta.authority, meta.timestamp_us});
       }
     }
   }
@@ -215,10 +227,27 @@ WorldModelComponent::LoadDomainResult WorldModelComponent::loadDomainFromStrings
     WorldModel new_wm;
     PddlParser::parseFromString(domain_pddl, problem_pddl, new_wm);
 
-    for (const auto& [key, source] : preserved_facts) {
+    for (const auto& fact : preserved_facts) {
       try {
-        new_wm.setFact(key, true, source.empty() ? "domain_reload" : source);
+        (void)new_wm.fluentIndex(fact.key);
+      } catch (const std::exception& e) {
+        result.dropped_facts.push_back(fact.key);
+        logWarn("Dropped preserved fact '%s' during domain reload: %s",
+                fact.key.c_str(), e.what());
+        continue;
+      }
+
+      try {
+        new_wm.setFact(fact.key, true,
+                       fact.source.empty() ? "domain_reload" : fact.source,
+                       fact.authority,
+                       fact.timestamp_us);
+      } catch (const std::exception& e) {
+        logError("Failed to preserve fact '%s' during domain reload: %s",
+                 fact.key.c_str(), e.what());
       } catch (...) {
+        logError("Failed to preserve fact '%s' during domain reload: unknown error",
+                 fact.key.c_str());
       }
     }
 

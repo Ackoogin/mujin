@@ -8,7 +8,10 @@
 
 1. **Causal graph** -- for each pair (i, j) where i < j: if any add-effect of step i is a precondition of step j, add edge i->j. Also track delete-effect conflicts for mutex detection.
 
-2. **Flow extraction** -- topological sort, group into independent causal chains. Steps with no cross-flow dependencies form separate flows.
+2. **Execution phase extraction** -- repeatedly collect every step whose causal
+   predecessors have already been scheduled. Each phase is sorted by original
+   plan index. A phase with multiple steps can run in parallel; phase boundaries
+   are conservative synchronization barriers.
 
 3. **Planned action generation** -- each plan step becomes one action element.
    A simple registered node receives the grounded state contract as ports:
@@ -26,10 +29,13 @@
    `ame_reactive` value.
 
 4. **Tree composition**:
-   - Single flow -> top-level `Sequence`
-   - Multiple flows -> `Parallel` node with `success_count = flow_count`
-   - A `ReactiveFallback` uses one `GoalReached` condition before the plan body,
-     so a completed mission is not run again on a later tick.
+   - No parallel-ready phase -> top-level `Sequence`
+   - Parallel-ready phases -> top-level `Sequence` containing one child per phase
+   - Single-step phase -> action unit emitted directly
+   - Multi-step phase -> `Parallel` node with `success_count = phase_size`
+   - A `ReactiveFallback` uses `GoalReached` conditions before the plan body, so
+     a completed mission is not run again on a later tick. Disjunctive goals emit
+     one `GoalReached` per alternative inside a `Fallback`.
 
 5. **Output** -- XML string loadable by `BT::BehaviorTreeFactory::createTreeFromText()`
 
@@ -94,9 +100,13 @@ Reads `predicate` port (string key), queries `WorldModel::getFact()`, returns SU
 This node remains available for hand-written condition and contingency trees.
 The compiler does not emit it.
 
-### ReplanOnFailure (Decorator)
+### Replan signalling (no dedicated node)
 
-Wraps a sub-tree. On child FAILURE, signals replan via blackboard flag. MissionExecutor picks up the signal.
+There is no `ReplanOnFailure` decorator node. Replanning is not signalled from
+inside the tree: when the root tree returns `FAILURE`, `ExecutorComponent`
+publishes `FAILURE` on its status port and the autonomy backend
+(`CurrentAmeBackendAdapter`) observes that status and drives the replan (see
+[Replanning](#replanning) below).
 
 ### ExecutePhaseAction (StatefulAction)
 
@@ -130,42 +140,37 @@ Leader-delegation node for multi-agent execution. Plans and runs a subtree scope
 - Injects agent context into the compiled subtree blackboard
 - Restores availability on completion or halt
 
-## MissionExecutor / Replanning
+### Guard and dispatch nodes
 
-```cpp
-class MissionExecutor {
-public:
-    MissionExecutor(WorldModel& wm, ActionRegistry& registry);
-    void setGoal(const std::vector<unsigned>& goal_fluents);
+`ExecutorComponent::on_configure()` also registers the action/guard leaves that
+compiled plans tick: `AuthorisationGuard`, `GeofenceGuard`, `TawsGuard`,
+`EnsureAltitude`, `FormationHold`, `IdentifyTarget`, and one `AmeDispatchNode`
+per registered verb (the bridge to `IExecutionSink`). The permission gates
+(e.g. `AuthorisationGuard`) are domain preconditions surfaced as guard leaves, so
+they fail closed by construction.
 
-    TickResult tick() {
-        if (!current_tree_) replan();
+## Replanning
 
-        auto status = current_tree_->tickOnce();
+There is no monolithic `MissionExecutor` class. The plan → execute → replan loop
+is split across PCL components and driven by an autonomy backend:
 
-        if (status == BT::NodeStatus::FAILURE) {
-            replan();
-            return TickResult::REPLANNING;
-        }
-        if (status == BT::NodeStatus::SUCCESS) {
-            return TickResult::COMPLETE;
-        }
-        return TickResult::RUNNING;
-    }
+| Piece | Header | Role |
+|-------|--------|------|
+| `ExecutorComponent` | `executor_component.h` | Owns the BT. `loadAndExecute(bt_xml)` loads a compiled tree; `on_tick()` (default 50 Hz) calls `tickOnce()` and publishes `IDLE`/`RUNNING`/`SUCCESS`/`FAILURE` on its `executor/status` port. |
+| `PlannerComponent` | `planner_component.h` | Plans and compiles, publishing compiled BT XML on its `bt_xml` port for the executor to load. |
+| `CurrentAmeBackendAdapter` | `current_ame_backend_adapter.h` | Implements `IAutonomyBackend`; orchestrates the loop. |
 
-private:
-    void replan() {
-        aptk::STRIPS_Problem prob;
-        world_model_.projectToSTRIPS(prob);
-        auto plan = solver.solve(prob, world_model_.currentStateAsSTRIPS(), goal_);
-        auto bb = BT::Blackboard::create();
-        world_model_.syncToBlackboard(bb);
-        current_tree_ = compiler_.compileAndCreate(plan, bb);
-    }
-};
-```
+`CurrentAmeBackendAdapter::step()` ticks the executor and, when
+`ExecutorComponent::lastStatus()` is `FAILURE`, snapshots the current world model,
+replans from that state, and reloads the executor — bounded by
+`policy_.max_replans` (default 3), after which it stops.
 
-On failure: halt tree, snapshot world model (which may have been updated by perception since the failure), replan from current state, recompile, swap tree, resume ticking.
+The demo executable (`src/apps/main.cpp`) uses the simpler single-shot form: it
+compiles one tree and drives it with `BT::Tree::tickWhileRunning()`.
+
+On failure the sequence is: halt tree, snapshot world model (which may have been
+updated by perception since the failure), replan from current state, recompile,
+swap tree, resume ticking — up to `max_replans` times.
 
 ### Repair Hook Seam (`AME_NEURO`)
 

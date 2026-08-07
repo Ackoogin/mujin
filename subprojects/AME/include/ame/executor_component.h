@@ -1,15 +1,19 @@
 #pragma once
 
 #include <ame/bt_logger.h>
+#include <ame/plan_compiler.h>
 #include <ame/world_model.h>
 #include <ame/world_state_access.h>
 #include <pcl/component.hpp>
 
 #include <behaviortree_cpp/bt_factory.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace ame {
 
@@ -57,7 +61,8 @@ public:
   /// \brief Inject direct world model access for in-process execution.
   void setInProcessWorldModel(WorldModel* wm);
 
-  /// \brief Inject the execution sink used by native action leaves.
+  /// \brief Inject the execution sink that AmeDispatchNode leaves dispatch to.
+  /// Published on the BT blackboard ("action_sink") in loadAndExecute().
   void setActionSink(IExecutionSink* sink);
 
   /// \brief Inject the registry that defines allowed dispatch action verbs.
@@ -83,6 +88,7 @@ public:
 
   /// \brief Load a BT and prepare it for ticking.
   void loadAndExecute(const std::string& bt_xml);
+  void loadAndExecute(const CompiledPlan& compiled_plan);
 
   /// \brief Tick the current tree once if execution is active.
   void tickOnce();
@@ -104,6 +110,9 @@ protected:
 private:
   void resetExecutionState();
   void registerDispatchNodesFromRegistry();
+#if defined(AME_NEURO)
+  unsigned computeFailedStepFromMetadata() const;
+#endif
 
   /// \brief Emit one BT event line via both EventSink and PCL port.
   void emitEvent(const std::string& json_line);
@@ -117,6 +126,9 @@ private:
   const ActionRegistry* action_registry_ = nullptr;
 #if defined(AME_NEURO)
   RepairHook repair_hook_;
+  std::vector<PlanStepMeta> plan_step_meta_;
+  std::unordered_set<std::uint16_t> completed_step_uids_;
+  std::vector<BT::TreeNode::StatusChangeSubscriber> step_status_subscribers_;
 #endif
   BlackboardInitializer blackboard_initializer_;
   EventSink event_sink_;

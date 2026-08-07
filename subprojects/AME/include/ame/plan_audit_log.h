@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -11,12 +12,14 @@ namespace ame {
 ///
 /// Each episode records a complete snapshot of why the planner produced a
 /// given plan: initial state, goals, solver, timing, plan steps, and the
-/// compiled BT XML.  Written as JSONL for post-hoc analysis.
+/// compiled BT XML.  Written as JSONL for post-hoc analysis.  In-memory
+/// retention is bounded to the most recent 10000 episodes by default.
 class PlanAuditLog {
 public:
     struct Episode {
         uint64_t    episode_id = 0;               // Unique ID (auto-assigned by recordEpisode)
         uint64_t    parent_episode_id = 0;        // 0 = top-level; non-zero = sub-plan of parent
+        std::string session_id;                   // Cross-stream correlation identifier
         std::string phase_name;                   // Human-readable phase label (hierarchical only)
         uint64_t    ts_us = 0;                    // When planning started
         std::vector<std::string> init_facts;      // Fluent keys that were true
@@ -58,6 +61,9 @@ public:
     /// Allocate the next unique episode ID without recording an episode.
     uint64_t nextEpisodeId();
 
+    /// Set the maximum number of episodes retained in memory.
+    void setMaxRetainedEpisodes(std::size_t max_episodes);
+
     /// All episodes recorded so far.
     const std::vector<Episode>& episodes() const { return episodes_; }
 
@@ -67,6 +73,7 @@ public:
 private:
     std::ofstream file_;
     std::vector<Episode> episodes_;
+    std::size_t max_retained_episodes_ = 10000;
     uint64_t next_episode_id_ = 1;
 };
 

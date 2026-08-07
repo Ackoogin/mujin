@@ -48,6 +48,81 @@ void emitFact(std::ostringstream& out, const FactRef& ref) {
   out << ")";
 }
 
+bool isParameterRef(const std::string& arg) {
+  return !arg.empty() && arg.front() == '?';
+}
+
+bool hasObjectNamed(const std::vector<ObjectDef>& objects,
+                    const std::string& name) {
+  return std::any_of(objects.begin(), objects.end(),
+                     [&name](const ObjectDef& object) {
+                       return object.name == name;
+                     });
+}
+
+const PredicateDef* findPredicate(const ProjectModel& model,
+                                  const std::string& name) {
+  const auto it = std::find_if(model.predicates.begin(), model.predicates.end(),
+                               [&name](const PredicateDef& predicate) {
+                                 return predicate.name == name;
+                               });
+  if (it == model.predicates.end()) {
+    return nullptr;
+  }
+  return &(*it);
+}
+
+void appendImplicitLiteralObjects(const ProjectModel& model,
+                                  const std::string& predicateName,
+                                  const std::vector<std::string>& args,
+                                  std::vector<ObjectDef>& objects) {
+  const PredicateDef* predicate = findPredicate(model, predicateName);
+  if (predicate == nullptr) {
+    return;
+  }
+
+  const size_t count = std::min(args.size(), predicate->params.size());
+  for (size_t i = 0; i < count; ++i) {
+    if (isParameterRef(args[i]) || hasObjectNamed(objects, args[i])) {
+      continue;
+    }
+    objects.push_back({args[i], predicate->params[i].type});
+  }
+}
+
+std::vector<ObjectDef> problemObjectsWithImplicitLiterals(
+    const ProjectModel& model,
+    const ScenarioDef& scenario) {
+  std::vector<ObjectDef> objects = model.objects;
+
+  for (const auto& action : model.actions) {
+    for (const auto& ref : action.preconditions) {
+      appendImplicitLiteralObjects(model, ref.predicateName, ref.argNames, objects);
+    }
+    for (const auto& ref : action.addEffects) {
+      appendImplicitLiteralObjects(model, ref.predicateName, ref.argNames, objects);
+    }
+    for (const auto& ref : action.delEffects) {
+      appendImplicitLiteralObjects(model, ref.predicateName, ref.argNames, objects);
+    }
+  }
+
+  for (const auto& fact : scenario.initialState) {
+    appendImplicitLiteralObjects(model,
+                                 fact.predicateName,
+                                 fact.objectNames,
+                                 objects);
+  }
+  for (const auto& fact : scenario.goals) {
+    appendImplicitLiteralObjects(model,
+                                 fact.predicateName,
+                                 fact.objectNames,
+                                 objects);
+  }
+
+  return objects;
+}
+
 void emitFactList(std::ostringstream& out,
                   const std::vector<EffectRef>& facts,
                   const std::string& indent) {
@@ -181,7 +256,9 @@ std::string PddlGenerator::generateProblem(const ProjectModel& model,
   out << "\n\n";
 
   out << "  (:objects\n";
-  for (const auto& object : model.objects) {
+  const std::vector<ObjectDef> objects =
+      problemObjectsWithImplicitLiterals(model, *scenario);
+  for (const auto& object : objects) {
     out << "    " << object.name;
     if (!object.type.empty()) {
       out << " - " << object.type;

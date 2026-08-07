@@ -71,6 +71,30 @@ const char* kUavSearchProblemPddl = R"pddl(
 )
 )pddl";
 
+const char* kDomainWithConstantsPddl = R"pddl(
+(define (domain constants-demo)
+  (:requirements :strips :typing)
+
+  (:types
+    mission priority - object
+  )
+
+  (:constants
+    routine critical - priority
+  )
+
+  (:predicates
+    (has-priority ?m - mission ?p - priority)
+  )
+
+  (:action mark-critical
+    :parameters (?m - mission)
+    :precondition (has-priority ?m critical)
+    :effect (has-priority ?m routine)
+  )
+)
+)pddl";
+
 } // namespace
 
 TEST(PddlImporter, ImportsUavSearchDomain) {
@@ -101,6 +125,18 @@ TEST(PddlImporter, ImportsUavSearchProblem) {
   EXPECT_EQ(problem.model.scenarios.back().name, "uav-search-1");
   EXPECT_EQ(problem.model.scenarios.back().initialState.size(), 1U);
   EXPECT_GE(problem.model.scenarios.back().goals.size(), 1U);
+}
+
+TEST(PddlImporter, ImportsDomainConstantsAsObjects) {
+  const PddlImportResult result =
+      PddlImporter::importDomain(kDomainWithConstantsPddl);
+
+  ASSERT_TRUE(result.ok) << result.error;
+  ASSERT_EQ(result.model.objects.size(), 2U);
+  EXPECT_EQ(result.model.objects[0].name, "routine");
+  EXPECT_EQ(result.model.objects[0].type, "priority");
+  EXPECT_EQ(result.model.objects[1].name, "critical");
+  EXPECT_EQ(result.model.objects[1].type, "priority");
 }
 
 TEST(PddlImporter, RejectsMalformedPddl) {

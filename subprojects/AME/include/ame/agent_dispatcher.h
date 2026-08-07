@@ -53,6 +53,11 @@ public:
     /// \brief Set the action registry for BT compilation.
     void setActionRegistry(ActionRegistry* registry) { registry_ = registry; }
 
+    /// \brief Set the goal allocator, preserving the default on null input.
+    void setGoalAllocator(std::shared_ptr<IGoalAllocator> allocator) {
+        if (allocator) allocator_ = allocator;
+    }
+
     /// \brief Allocate and dispatch goals to available agents.
     std::vector<AgentDispatchResult> dispatchGoals(
         const std::vector<std::string>& goals);
@@ -90,7 +95,7 @@ private:
     PlanCompiler*  compiler_ = nullptr;
     ActionRegistry* registry_ = nullptr;
 
-    GoalAllocator allocator_;
+    std::shared_ptr<IGoalAllocator> allocator_ = std::make_shared<GoalAllocator>();
 
     std::vector<std::string> dispatched_agents_;
 

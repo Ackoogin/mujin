@@ -28,7 +28,10 @@ void ExecutorNode::setInProcessWorldModel(ame::WorldModel* wm) {
 void ExecutorNode::setPyramidService(ame::IPyramidService* svc) { pyramid_service_ = svc; }
 void ExecutorNode::setPlanner(ame::Planner* p)                   { planner_ = p; }
 void ExecutorNode::setPlanCompiler(ame::PlanCompiler* c)         { plan_compiler_ = c; }
-void ExecutorNode::setActionRegistry(ame::ActionRegistry* r)     { action_registry_ = r; }
+void ExecutorNode::setActionRegistry(ame::ActionRegistry* r) {
+  action_registry_ = r;
+  component_->setActionRegistry(r);
+}
 void ExecutorNode::setPlanAuditLog(ame::PlanAuditLog* l)         { plan_audit_log_ = l; }
 void ExecutorNode::setPlannerComponent(ame::PlannerComponent* pc){ planner_component_ = pc; }
 

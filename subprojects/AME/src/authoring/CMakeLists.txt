@@ -80,8 +80,14 @@ if(WIN32)
   target_link_libraries(tinyfiledialogs PUBLIC comdlg32 ole32)
 endif()
 
-# nlohmann_json is already provided by subprojects/PYRAMID as an interface target
-# (nlohmann_json::nlohmann_json alias) — no FetchContent needed here.
+if(NOT TARGET nlohmann_json::nlohmann_json)
+  add_library(nlohmann_json INTERFACE)
+  add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+  target_include_directories(nlohmann_json
+    INTERFACE
+      "${PYRAMID_ROOT_DIR}/core/external"
+  )
+endif()
 
 add_library(ame_authoring_project_model STATIC
     contingency_analyser.cpp

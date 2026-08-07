@@ -7,6 +7,8 @@
 #include <action.hxx>
 #include <strips_state.hxx>
 
+#include <set>
+
 // =============================================================================
 // TypeSystem tests
 // =============================================================================
@@ -77,6 +79,25 @@ TEST(TypeSystem, GetObjectsOfType) {
 TEST(TypeSystem, UnknownTypeThrows) {
     ame::TypeSystem ts;
     EXPECT_THROW(ts.addObject("x", "unknown_type"), std::runtime_error);
+}
+
+TEST(TypeSystem, CyclicTypesThrowInsteadOfRecursingForever) {
+    ame::TypeSystem ts;
+    ts.addType("alpha", "beta");
+    ts.addType("beta", "alpha");
+
+    EXPECT_THROW(ts.isSubtype("alpha", "object"), std::runtime_error);
+}
+
+TEST(TypeSystem, DuplicateAddObjectKeepsObjectOrderUnique) {
+    ame::TypeSystem ts;
+    ts.addType("robot");
+
+    ts.addObject("uav1", "robot");
+    ts.addObject("uav1", "robot");
+
+    ASSERT_EQ(ts.getAllObjects().size(), 1u);
+    EXPECT_EQ(ts.getAllObjects().front(), "uav1");
 }
 
 // =============================================================================
@@ -327,6 +348,51 @@ static ame::WorldModel buildUAVDomain() {
     return wm;
 }
 
+static std::set<std::string> groundActionSignatureSet(const ame::WorldModel& wm) {
+    std::set<std::string> signatures;
+    for (const auto& action : wm.groundActions()) {
+        signatures.insert(action.signature);
+    }
+    return signatures;
+}
+
+static void addUAVTypes(ame::WorldModel& wm) {
+    auto& ts = wm.typeSystem();
+    ts.addType("object");
+    ts.addType("location", "object");
+    ts.addType("sector", "location");
+    ts.addType("robot", "object");
+}
+
+static void registerUAVPredicates(ame::WorldModel& wm) {
+    wm.registerPredicate("at", {"robot", "location"});
+    wm.registerPredicate("searched", {"sector"});
+    wm.registerPredicate("classified", {"sector"});
+}
+
+static void registerUAVActions(ame::WorldModel& wm) {
+    wm.registerAction("move",
+        {"?r", "?from", "?to"},
+        {"robot", "location", "location"},
+        {"(at ?r ?from)"},
+        {"(at ?r ?to)"},
+        {"(at ?r ?from)"});
+
+    wm.registerAction("search",
+        {"?r", "?s"},
+        {"robot", "sector"},
+        {"(at ?r ?s)"},
+        {"(searched ?s)"},
+        {});
+
+    wm.registerAction("classify",
+        {"?r", "?s"},
+        {"robot", "sector"},
+        {"(at ?r ?s)", "(searched ?s)"},
+        {"(classified ?s)"},
+        {});
+}
+
 TEST(WorldModel, ActionGrounding) {
     auto wm = buildUAVDomain();
 
@@ -354,6 +420,99 @@ TEST(WorldModel, ActionGrounding) {
         }
     }
     EXPECT_TRUE(found_move);
+}
+
+TEST(WorldModel, IncrementalGroundingMatchesAllAtOnceGrounding) {
+    auto all_at_once = buildUAVDomain();
+
+    ame::WorldModel incremental;
+    addUAVTypes(incremental);
+    registerUAVPredicates(incremental);
+    registerUAVActions(incremental);
+    incremental.addObject("uav1", "robot");
+    incremental.addObject("base", "location");
+    incremental.addObject("sector_a", "sector");
+    incremental.addObject("sector_b", "sector");
+
+    EXPECT_EQ(groundActionSignatureSet(incremental),
+              groundActionSignatureSet(all_at_once));
+    EXPECT_EQ(incremental.numGroundActions(),
+              groundActionSignatureSet(incremental).size());
+}
+
+TEST(WorldModel, RepeatedAddObjectDoesNotDuplicateGroundActions) {
+    ame::WorldModel wm;
+    addUAVTypes(wm);
+    registerUAVPredicates(wm);
+    registerUAVActions(wm);
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.addObject("sector_a", "sector");
+    wm.addObject("sector_b", "sector");
+
+    const auto signatures_before = groundActionSignatureSet(wm);
+    const auto count_before = wm.numGroundActions();
+
+    wm.addObject("sector_b", "sector");
+
+    EXPECT_EQ(wm.numGroundActions(), count_before);
+    EXPECT_EQ(groundActionSignatureSet(wm), signatures_before);
+    EXPECT_EQ(wm.numGroundActions(), groundActionSignatureSet(wm).size());
+}
+
+TEST(WorldModel, ActionGroundingFailsForUnresolvableTemplate) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("robot");
+    ts.addType("location");
+
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+
+    try {
+        wm.registerAction("bad-action",
+            {"?r", "?loc"},
+            {"robot", "location"},
+            {"(missing ?r ?loc)"},
+            {},
+            {});
+        FAIL() << "Expected unresolved action template to throw";
+    } catch (const std::runtime_error& ex) {
+        const std::string message = ex.what();
+        EXPECT_NE(message.find("bad-action"), std::string::npos);
+        EXPECT_NE(message.find("(missing ?r ?loc)"), std::string::npos);
+        EXPECT_NE(message.find("(missing uav1 base)"), std::string::npos);
+    }
+}
+
+TEST(WorldModel, ActionGroundingSubstitutesSharedPrefixParametersSafely) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("robot");
+    ts.addType("sector");
+
+    wm.addObject("uav1", "robot");
+    wm.addObject("sector_a", "sector");
+    wm.registerPredicate("at", {"robot", "sector"});
+    wm.registerPredicate("searched", {"sector"});
+
+    ASSERT_NO_THROW({
+        wm.registerAction("navigate",
+            {"?s", "?sector"},
+            {"robot", "sector"},
+            {"(at ?s ?sector)"},
+            {"(searched ?sector)"},
+            {});
+    });
+
+    ASSERT_EQ(wm.numGroundActions(), 1u);
+    const auto& action = wm.groundActions().front();
+    EXPECT_EQ(action.signature, "navigate(uav1,sector_a)");
+    ASSERT_EQ(action.preconditions.size(), 1u);
+    ASSERT_EQ(action.add_effects.size(), 1u);
+    EXPECT_EQ(wm.fluentName(action.preconditions[0]), "(at uav1 sector_a)");
+    EXPECT_EQ(wm.fluentName(action.add_effects[0]), "(searched sector_a)");
 }
 
 // =============================================================================

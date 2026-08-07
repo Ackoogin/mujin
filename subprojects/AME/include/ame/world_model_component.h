@@ -95,6 +95,7 @@ public:
     std::string error_msg;
     unsigned num_fluents = 0;
     unsigned num_ground_actions = 0;
+    std::vector<std::string> dropped_facts;
   };
   LoadDomainResult loadDomainFromStrings(const std::string& domain_pddl,
                                          const std::string& problem_pddl);

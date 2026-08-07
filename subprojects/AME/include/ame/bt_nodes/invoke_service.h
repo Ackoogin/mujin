@@ -21,13 +21,15 @@ namespace ame {
 ///   service_name  (input)  -- PYRAMID service endpoint name
 ///   operation     (input)  -- Operation / method within the service
 ///   timeout_ms    (input)  -- Timeout in milliseconds (0 = no timeout, default 5000)
-///   request_json  (input)  -- Optional request fields (k=v pairs separated by ';',
-///                            e.g. "target=sector_a;priority=1")
+///   request_json  (input)  -- Optional request fields as key=value pairs
+///                            separated by ';', not JSON
+///                            (e.g. "target=sector_a;priority=1")
 ///   param_names   (input)  -- Optional semicolon-separated PDDL param names for
 ///                            auto-mapping (e.g. "?robot;?from;?to")
 ///   param_values  (input)  -- Optional semicolon-separated PDDL param values for
 ///                            auto-mapping (e.g. "uav1;base;sector_a")
-///   response_json (output) -- Serialised response fields in k=v format
+///   response_json (output) -- Serialised response fields as key=value pairs
+///                            separated by ';', not JSON
 ///
 /// Lifecycle:
 ///   onActionStart()   -- initiate async service call via IPyramidService::callAsync()

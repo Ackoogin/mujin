@@ -43,6 +43,7 @@ public:
     // Solve: project WorldModel to STRIPS, run BRFS, return plan steps.
     // The returned PlanStep::action_index values correspond to WorldModel::groundActions().
     PlanResult solve(const WorldModel& wm) const;
+    PlanResult solve(const WorldModel& wm, const std::vector<unsigned>& goal_ids) const;
 
 #if defined(AME_NEURO)
     // Attach a neural heuristic hook. Null-object default (no hook) preserves

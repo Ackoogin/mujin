@@ -1,6 +1,7 @@
 #include <ame/agent_dispatcher.h>
 #include <ame/pcl_msg_json.h>
 
+#include <exception>
 #include <sstream>
 
 namespace ame {
@@ -73,7 +74,7 @@ std::vector<AgentDispatchResult> AgentDispatcher::dispatchGoals(
     std::vector<AgentDispatchResult> results;
     if (!wm_ || !planner_ || !compiler_ || !registry_) return results;
 
-    auto assignments = allocator_.allocate(goals, *wm_);
+    auto assignments = allocator_->allocate(goals, *wm_);
     for (const auto& assignment : assignments) {
         results.push_back(dispatchToAgent(assignment.agent_id, assignment.goals));
     }
@@ -103,8 +104,22 @@ AgentDispatchResult AgentDispatcher::dispatchToAgent(
 
     agent->available = false;
 
-    wm_->setGoal(goals);
-    auto plan_result = planner_->solve(*wm_);
+    WorldModel local_wm(*wm_);
+    local_wm.setAuditCallback({});
+
+    std::vector<unsigned> goal_ids;
+    goal_ids.reserve(goals.size());
+    try {
+        for (const auto& goal : goals) {
+            goal_ids.push_back(local_wm.fluentIndex(goal));
+        }
+    } catch (const std::exception& e) {
+        agent->available = true;
+        result.error_message = e.what();
+        return result;
+    }
+
+    auto plan_result = planner_->solve(local_wm, goal_ids);
     if (!plan_result.success) {
         agent->available = true;
         result.error_message = "Planning failed for agent: " + agent_id;
@@ -114,9 +129,10 @@ AgentDispatchResult AgentDispatcher::dispatchToAgent(
     result.solve_time_ms = plan_result.solve_time_ms;
     for (const auto& step : plan_result.steps) {
         result.plan_actions.push_back(
-            wm_->groundActions()[step.action_index].signature);
+            local_wm.groundActions()[step.action_index].signature);
     }
-    result.bt_xml = compiler_->compile(plan_result.steps, *wm_, *registry_, agent_id);
+    result.bt_xml =
+        compiler_->compile(plan_result.steps, local_wm, *registry_, agent_id, goal_ids);
 
     // Dispatch via PCL port
     auto it = agent_bt_pubs_.find(agent_id);
@@ -134,9 +150,9 @@ AgentDispatchResult AgentDispatcher::dispatchToAgent(
             result.error_message = "Failed to publish BT to agent: " + agent_id;
         }
     } else {
-        // Port not in roster (in-process / test mode without a real port)
-        result.success = true;
-        dispatched_agents_.push_back(agent_id);
+        agent->available = true;
+        result.success = false;
+        result.error_message = "No BT publisher port registered for agent: " + agent_id;
     }
 
     return result;

@@ -567,7 +567,9 @@ FactAuthority CurrentAmeBackendAdapter::toWorldModelAuthority(
     case FactAuthorityLevel::CONFIRMED:
       return FactAuthority::CONFIRMED;
   }
-  return FactAuthority::CONFIRMED;
+  throw std::runtime_error(
+      "Unknown FactAuthorityLevel: " +
+      std::to_string(static_cast<int>(authority)));
 }
 
 std::vector<AgentState> CurrentAmeBackendAdapter::collectAgentStates() const {
@@ -639,7 +641,7 @@ bool CurrentAmeBackendAdapter::maybeEmitGoalDispatches() {
     return false;
   }
 
-  auto assignments = goal_allocator_.allocate(goals, world_model_);
+  auto assignments = goal_allocator_->allocate(goals, world_model_);
   if (assignments.empty()) {
     return false;
   }

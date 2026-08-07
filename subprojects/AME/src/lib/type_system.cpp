@@ -1,5 +1,6 @@
 #include "ame/type_system.h"
 #include <stdexcept>
+#include <unordered_set>
 
 namespace ame {
 
@@ -12,10 +13,18 @@ bool TypeSystem::hasType(const std::string& name) const {
 }
 
 bool TypeSystem::isSubtype(const std::string& child, const std::string& parent) const {
-    if (child == parent) return true;
-    auto it = types_.find(child);
-    if (it == types_.end() || it->second.empty()) return false;
-    return isSubtype(it->second, parent);
+    std::unordered_set<std::string> visited;
+    std::string current = child;
+    while (true) {
+        if (current == parent) return true;
+        if (!visited.insert(current).second) {
+            throw std::runtime_error("TypeSystem::isSubtype: cyclic type hierarchy at '" +
+                                     current + "'");
+        }
+        auto it = types_.find(current);
+        if (it == types_.end() || it->second.empty()) return false;
+        current = it->second;
+    }
 }
 
 std::vector<std::string> TypeSystem::getObjectsOfType(const std::string& type) const {
@@ -32,8 +41,11 @@ void TypeSystem::addObject(const std::string& name, const std::string& type) {
     if (!hasType(type)) {
         throw std::runtime_error("TypeSystem::addObject: unknown type '" + type + "'");
     }
+    const bool is_new_object = !hasObject(name);
     objects_[name] = type;
-    object_order_.push_back(name);
+    if (is_new_object) {
+        object_order_.push_back(name);
+    }
 }
 
 bool TypeSystem::hasObject(const std::string& name) const {

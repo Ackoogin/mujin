@@ -5,6 +5,8 @@
 #include "ame/current_ame_backend_adapter.h"
 #include "ame/world_model.h"
 
+#include <stdexcept>
+
 namespace {
 
 ame::WorldModel buildDomain() {
@@ -163,6 +165,22 @@ TEST(AutonomyBackend, ConfirmedObservedUpdatesOverridePredictedEffects) {
   auto metadata = wm.getFactMetadata("(at uav1 sector_a)");
   EXPECT_EQ(metadata.authority, ame::FactAuthority::CONFIRMED);
   EXPECT_EQ(metadata.source, "perception:gps");
+}
+
+TEST(AutonomyBackend, UnknownFactAuthorityLevelThrows) {
+  auto wm = buildDomain();
+  auto registry = buildRegistry();
+  ame::CurrentAmeBackendAdapter backend(wm, registry);
+
+  ame::StateUpdate update;
+  update.fact_updates.push_back({
+      "(at uav1 base)",
+      true,
+      "corrupt",
+      static_cast<ame::FactAuthorityLevel>(99),
+  });
+
+  EXPECT_THROW(backend.pushState(update), std::runtime_error);
 }
 
 TEST(AutonomyBackend, FailedCommandTriggersReplanAndNewDecisionRecord) {

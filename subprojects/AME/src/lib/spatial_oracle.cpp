@@ -2,8 +2,24 @@
 
 #include <algorithm>
 #include <set>
+#include <string>
 
 namespace ame {
+
+namespace {
+
+std::string predicateName(const std::string& fluent) {
+  if (fluent.size() < 3 || fluent[0] != '(') {
+    return {};
+  }
+  const auto end = fluent.find_first_of(" )", 1);
+  if (end == std::string::npos || end == 1) {
+    return {};
+  }
+  return fluent.substr(1, end - 1);
+}
+
+}  // namespace
 
 void StubSpatialOracle::updateReachability(WorldModel& wm) {
   // Stub: mark all locations reachable from all robots.
@@ -42,7 +58,7 @@ void StubSpatialOracle::updateNearest(WorldModel& wm) {
 
   for (unsigned i = 0; i < n; ++i) {
     const auto& fname = wm.fluentName(i);
-    if (fname.substr(0, 3) == "(at" && wm.getFact(i)) {
+    if (predicateName(fname) == "at" && wm.getFact(i)) {
       // Parse "(at robot location)"
       auto first_space = fname.find(' ', 1);
       auto second_space = fname.find(' ', first_space + 1);

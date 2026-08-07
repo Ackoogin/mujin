@@ -76,7 +76,7 @@ ament_target_dependencies(ame_ros2_lib
 )
 
 target_link_libraries(ame_ros2_lib
-    ame::ame_core
+    ame::ame_pcl_components
 )
 
 # Link generated message typesupport

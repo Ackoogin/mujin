@@ -97,6 +97,41 @@ TEST(PddlValidator, GroundingReportPopulatedForUavSearch) {
   EXPECT_EQ(report.grounding.actionStats.size(), 3U);
 }
 
+TEST(PddlValidator, LiteralActionArgumentsValidateAsTypedObjects) {
+  ProjectModel model;
+  model.projectName = "literal-args";
+  model.types.push_back({"mission", "object"});
+  model.types.push_back({"priority", "object"});
+  model.predicates.push_back({"mission-active", {{"?m", "mission"}}, 0.0F, 0.0F});
+  model.predicates.push_back({"has-priority",
+                              {{"?m", "mission"}, {"?p", "priority"}},
+                              0.0F,
+                              0.0F});
+  model.predicates.push_back({"mission-complete", {{"?m", "mission"}}, 0.0F, 0.0F});
+
+  ActionDef complete;
+  complete.name = "complete-critical";
+  complete.params = {{"?m", "mission"}};
+  complete.preconditions.push_back({"mission-active", {"?m"}});
+  complete.preconditions.push_back({"has-priority", {"?m", "critical"}});
+  complete.addEffects.push_back({"mission-complete", {"?m"}});
+  model.actions.push_back(complete);
+
+  model.objects.push_back({"mission-1", "mission"});
+  ScenarioDef scenario;
+  scenario.name = "nominal";
+  scenario.initialState.push_back({"mission-active", {"mission-1"}});
+  scenario.initialState.push_back({"has-priority", {"mission-1", "critical"}});
+  scenario.goals.push_back({"mission-complete", {"mission-1"}});
+  model.scenarios.push_back(std::move(scenario));
+
+  const ValidationReport report = PddlValidator::validate(model, "nominal");
+  EXPECT_TRUE(report.ok)
+      << (report.errors.empty() ? "no error message" : report.errors.front().message);
+  EXPECT_EQ(report.grounding.actionStats.size(), 1U);
+  EXPECT_EQ(report.grounding.actionStats.front().count, 1U);
+}
+
 TEST(PddlValidator, GroundingWarnsWhenNoObjects) {
   const ProjectModel model = makeUavSearchModel();
 

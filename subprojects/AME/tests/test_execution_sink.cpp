@@ -104,6 +104,15 @@ ame::ActionRegistry buildRegistry() {
   return registry;
 }
 
+class SentinelGoalAllocator : public ame::IGoalAllocator {
+public:
+  std::vector<ame::AgentGoalAssignment> allocate(
+      const std::vector<std::string>& goals,
+      const ame::WorldModel&) const override {
+    return {{"uav2", goals}};
+  }
+};
+
 const ame::RequirementPlacementRecord* findPlacement(
     const std::vector<ame::RequirementPlacementRecord>& placements,
     const std::string& action_name) {
@@ -170,6 +179,55 @@ TEST(ExecutionSink, RequirementBindingConvertsBoundCommandToPlacement) {
   EXPECT_EQ(sink.resultFor(command.command_id)->status,
             ame::CommandStatus::SUCCEEDED);
   EXPECT_FALSE(sink.isPending(command.command_id));
+}
+
+TEST(ExecutionSink, BackendUsesInjectedGoalAllocatorForGoalDispatch) {
+  auto wm = buildDomain();
+  auto registry = buildRegistry();
+
+  ame::CurrentAmeBackendAdapter backend(wm, registry);
+  backend.setGoalAllocator(std::make_shared<SentinelGoalAllocator>());
+
+  ame::SessionRequest request;
+  request.session_id = "dispatch-injected";
+  request.intent.goal_fluents = {"(searched sector_a)"};
+  request.policy.enable_goal_dispatch = true;
+  request.available_agents = {
+      {"uav1", "uav", true},
+      {"uav2", "uav", true},
+  };
+  backend.start(request);
+  backend.step();
+
+  auto dispatches = backend.pullGoalDispatches();
+  ASSERT_EQ(dispatches.size(), 1u);
+  EXPECT_EQ(dispatches.front().agent_id, "uav2");
+  ASSERT_EQ(dispatches.front().goals.size(), 1u);
+  EXPECT_EQ(dispatches.front().goals.front(), "(searched sector_a)");
+}
+
+TEST(ExecutionSink, BackendDefaultGoalAllocatorUsesRoundRobinPolicy) {
+  auto wm = buildDomain();
+  auto registry = buildRegistry();
+
+  ame::CurrentAmeBackendAdapter backend(wm, registry);
+
+  ame::SessionRequest request;
+  request.session_id = "dispatch-default";
+  request.intent.goal_fluents = {"(searched sector_a)"};
+  request.policy.enable_goal_dispatch = true;
+  request.available_agents = {
+      {"uav1", "uav", true},
+      {"uav2", "uav", true},
+  };
+  backend.start(request);
+  backend.step();
+
+  auto dispatches = backend.pullGoalDispatches();
+  ASSERT_EQ(dispatches.size(), 1u);
+  EXPECT_EQ(dispatches.front().agent_id, "uav1");
+  ASSERT_EQ(dispatches.front().goals.size(), 1u);
+  EXPECT_EQ(dispatches.front().goals.front(), "(searched sector_a)");
 }
 
 TEST(ExecutionSink, PreferTypedPlacementFallsBackToCommandWhenUnbound) {

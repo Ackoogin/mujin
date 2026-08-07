@@ -7,6 +7,7 @@
 
 #include "ame/world_model.h"
 #include "ame/bt_logger.h"
+#include "ame/detail/escape.h"
 #include "ame/wm_audit_log.h"
 #include "ame/plan_audit_log.h"
 #include "ame/action_registry.h"
@@ -22,6 +23,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -79,6 +82,26 @@ static void registerExecutionNodes(BT::BehaviorTreeFactory& factory) {
     factory.registerNodeType<ame::PlannedAction>("PlannedAction");
     factory.registerNodeType<ame::SimulatedAction>("SimulatedAction");
     factory.registerNodeType<StubAction>("StubAction");
+}
+
+static size_t countLines(const std::string& filepath) {
+    std::ifstream in(filepath);
+    size_t count = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        ++count;
+    }
+    return count;
+}
+
+// =========================================================================
+// Shared escaping utilities
+// =========================================================================
+
+TEST(EscapeUtilities, JsonEscapeCoversNamedAndHexControlCharacters) {
+    EXPECT_EQ(ame::detail::jsonEscape("line\n\x01"), "line\\n\\u0001");
+    EXPECT_EQ(ame::detail::jsonEscape(std::string("a\b\f\r\t", 5)),
+              "a\\b\\f\\r\\t");
 }
 
 // =========================================================================
@@ -228,6 +251,26 @@ TEST(WmAuditLog, WritesToFile) {
     std::remove(filepath.c_str());
 }
 
+TEST(WmAuditLog, RetentionCapDropsOldestButFileReceivesAllEntries) {
+    std::string filepath = "test_wm_audit_cap.jsonl";
+
+    {
+        ame::WmAuditLog audit(filepath);
+        audit.setMaxRetainedEntries(2);
+
+        audit.onFactChange(1, 10, "fact1", true, "src1");
+        audit.onFactChange(2, 20, "fact2", true, "src2");
+        audit.onFactChange(3, 30, "fact3", false, "src3");
+
+        ASSERT_EQ(audit.size(), 2u);
+        EXPECT_EQ(audit.entries()[0].fact, "fact2");
+        EXPECT_EQ(audit.entries()[1].fact, "fact3");
+    }
+
+    EXPECT_EQ(countLines(filepath), 3u);
+    std::remove(filepath.c_str());
+}
+
 // =========================================================================
 // Layer 2: AmeBTLogger
 // =========================================================================
@@ -352,6 +395,38 @@ TEST(AmeBTLogger, WritesToFile) {
     EXPECT_NE(line.find("\"tree_id\":\"FilePlan\""), std::string::npos);
     in.close();
 
+    std::remove(filepath.c_str());
+}
+
+TEST(AmeBTLogger, RetentionCapDropsOldestButFileReceivesAllEvents) {
+    std::string filepath = "test_bt_events_cap.jsonl";
+
+    BT::BehaviorTreeFactory factory;
+    auto tree = factory.createTreeFromText(
+        "<root BTCPP_format=\"4\">\n"
+        "  <BehaviorTree ID=\"MainTree\">\n"
+        "    <AlwaysSuccess/>\n"
+        "  </BehaviorTree>\n"
+        "</root>\n");
+
+    {
+        ame::AmeBTLogger logger(tree, "CapPlan");
+        logger.setMaxRetainedEvents(2);
+        logger.addFileSink(filepath);
+
+        logger.callback(BT::Duration{}, *tree.rootNode(),
+                        BT::NodeStatus::IDLE, BT::NodeStatus::RUNNING);
+        logger.callback(BT::Duration{}, *tree.rootNode(),
+                        BT::NodeStatus::RUNNING, BT::NodeStatus::SUCCESS);
+        logger.callback(BT::Duration{}, *tree.rootNode(),
+                        BT::NodeStatus::SUCCESS, BT::NodeStatus::FAILURE);
+
+        ASSERT_EQ(logger.events().size(), 2u);
+        EXPECT_EQ(logger.events()[0].find("\"prev\":\"IDLE\""), std::string::npos);
+        EXPECT_NE(logger.events()[0].find("\"prev\":\"RUNNING\""), std::string::npos);
+    }
+
+    EXPECT_EQ(countLines(filepath), 3u);
     std::remove(filepath.c_str());
 }
 
@@ -540,6 +615,62 @@ TEST(PlanAuditLog, WritesToFile) {
     EXPECT_NE(line.find("\"bt_xml\":"), std::string::npos);
     in.close();
 
+    std::remove(filepath.c_str());
+}
+
+///< F-21/AMC.058: session_id (when set) is serialized for cross-stream
+///< correlation; absent when empty.
+TEST(PlanAuditLog, SessionIdRoundTripsWhenSet) {
+    std::string filepath = "test_plan_audit_session.jsonl";
+
+    {
+        ame::PlanAuditLog audit(filepath);
+
+        ame::PlanAuditLog::Episode with_session;
+        with_session.solver = "BRFS";
+        with_session.session_id = "sess-1234";
+        audit.recordEpisode(with_session);
+
+        ame::PlanAuditLog::Episode without_session;
+        without_session.solver = "BRFS";
+        audit.recordEpisode(without_session);
+    }
+
+    std::ifstream in(filepath);
+    ASSERT_TRUE(in.is_open());
+    std::string line1;
+    std::string line2;
+    ASSERT_TRUE(std::getline(in, line1));
+    ASSERT_TRUE(std::getline(in, line2));
+    in.close();
+
+    EXPECT_NE(line1.find("\"session_id\":\"sess-1234\""), std::string::npos);
+    EXPECT_EQ(line2.find("\"session_id\""), std::string::npos);
+
+    std::remove(filepath.c_str());
+}
+
+TEST(PlanAuditLog, RetentionCapDropsOldestButFileReceivesAllEpisodes) {
+    std::string filepath = "test_plan_audit_cap.jsonl";
+
+    {
+        ame::PlanAuditLog audit(filepath);
+        audit.setMaxRetainedEpisodes(2);
+
+        for (int i = 1; i <= 3; ++i) {
+            ame::PlanAuditLog::Episode ep;
+            ep.ts_us = static_cast<uint64_t>(i);
+            ep.solver = "solver" + std::to_string(i);
+            ep.success = true;
+            audit.recordEpisode(ep);
+        }
+
+        ASSERT_EQ(audit.size(), 2u);
+        EXPECT_EQ(audit.episodes()[0].solver, "solver2");
+        EXPECT_EQ(audit.episodes()[1].solver, "solver3");
+    }
+
+    EXPECT_EQ(countLines(filepath), 3u);
     std::remove(filepath.c_str());
 }
 

@@ -10,9 +10,16 @@ This separation keeps the planning model and execution model independently repla
 
 `PddlParser` (`include/ame/pddl_parser.h`) loads PDDL domain and problem files into a WorldModel.
 
-- Supports STRIPS-level PDDL (`:typing`, `:strips`)
+- Supports STRIPS-level PDDL (`:typing`, `:strips`) plus a finite ADL subset
+  that is compiled away before LAPKT: nested `and`, `(not ATOM)` negative
+  preconditions, `(or ...)` disjunctive preconditions (lowered to DNF, one schema
+  per disjunct), `(= a b)`/`(not (= a b))` equality binding filters, finite
+  `forall`/`exists` quantifiers, `(either ...)` union parameter types, and
+  top-level `(or ...)` disjunctive goals. Effects and goals stay negation-free.
 - Populates types, objects, predicates, initial facts, and goal fluents
 - Example domain: `subprojects/AME/domains/uav_search/domain.pddl` + `problem.pddl`
+- How each construct is lowered (and what is still rejected):
+  [09-pddl-subset-with-lapkt.md](09-pddl-subset-with-lapkt.md)
 - Two entry points:
   - `PddlParser::parse(domain_path, problem_path, wm)` -- from file paths (deployment)
   - `PddlParser::parseFromString(domain_pddl, problem_pddl, wm)` -- from string content (service-driven loading)
@@ -112,4 +119,3 @@ Both use pure STRIPS with positive preconditions only. Contingency actions are m
 `contingency_verifier` (`src/apps/contingency_verifier.cpp`) is a standalone tool that exhaustively verifies safe-state reachability across all system health combinations. It automatically identifies context predicates (0-ary predicates that gate actions but are never in effects), enumerates all 2^N combinations, and solves each with the LAPKT planner.
 
 Monotone dominance pruning reduces solver calls exponentially when minimal solvable states exist. See `doc/guides/contingency_verifier.md` for full usage and formal pruning justification.
-

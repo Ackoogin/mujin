@@ -2,6 +2,7 @@
 
 #include <behaviortree_cpp/loggers/abstract_logger.h>
 
+#include <cstddef>
 #include <fstream>
 #include <functional>
 #include <string>
@@ -25,6 +26,7 @@ class WorldModel;
 /// }
 ///
 /// Sinks are configurable: file (JSONL), or user-supplied callback.
+/// In-memory retention is bounded to the most recent 10000 events by default.
 class AmeBTLogger : public BT::StatusChangeLogger {
 public:
     /// User-defined sink: receives the formatted JSON string for each event.
@@ -48,6 +50,9 @@ public:
     /// Register an arbitrary callback sink.
     void addCallbackSink(SinkCallback cb);
 
+    /// Set the maximum number of events retained in memory.
+    void setMaxRetainedEvents(std::size_t max_events);
+
     // -- StatusChangeLogger interface ----------------------------------------
 
     void callback(BT::Duration timestamp,
@@ -69,6 +74,7 @@ private:
     std::ofstream file_;
     std::vector<SinkCallback> callbacks_;
     std::vector<std::string> events_;
+    std::size_t max_retained_events_ = 10000;
 };
 
 } // namespace ame

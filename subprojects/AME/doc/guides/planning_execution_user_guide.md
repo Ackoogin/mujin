@@ -58,8 +58,14 @@ Practical meaning:
 
 ### Preconditions and effects
 
-- **Preconditions**: facts that must be true before an action executes.
-- **Effects**: facts that become true/false after an action.
+- **Preconditions**: facts that must be true before an action executes. Beyond
+  plain positive atoms, preconditions may use nested `and`, `or`, `(not ATOM)`,
+  `(= a b)` / `(not (= a b))`, and finite `forall` / `exists`; parameters may use
+  `(either t1 t2)` union types. Goals may use a top-level `(or ...)`. See
+  [PDDL subset](../architecture/09-pddl-subset-with-lapkt.md) for the full list
+  and what is rejected.
+- **Effects**: facts that become true/false after an action (positive add
+  effects and `(not atom)` delete effects).
 
 Example for move:
 

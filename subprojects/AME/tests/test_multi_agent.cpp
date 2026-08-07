@@ -582,6 +582,9 @@ TEST_F(MultiAgentPlanningTest, PlanCompilerAgentContext) {
     
     PlanCompiler compiler;
     ActionRegistry registry;
+    registry.registerAction("move", "StubMoveAction");
+    registry.registerAction("search", "StubSearchAction");
+    registry.registerAction("classify", "StubClassifyAction");
     
     // Compile without agent context
     std::string xml_no_agent = compiler.compile(result.steps, wm, registry);
@@ -637,6 +640,12 @@ protected:
         // Set initial state
         wm.setFact("(at uav1 base)", true);
         
+        // Register BT action implementations so plan compilation resolves the
+        // delegated subtree (F-01: unregistered actions now fail compilation
+        // closed instead of emitting a phantom-success no-op).
+        registry.registerAction("move", "StubMoveAction");
+        registry.registerAction("search", "StubSearchAction");
+
         // Register BT nodes
         factory.registerNodeType<GoalReached>("GoalReached");
         factory.registerNodeType<PlannedAction>("PlannedAction");

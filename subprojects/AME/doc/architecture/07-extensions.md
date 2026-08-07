@@ -12,7 +12,7 @@ Completed extension material has been consolidated into the main architecture do
 
 ## Temporal Planning (Extension 7) -- Future
 
-PDDL 2.1 durative actions with STN (Simple Temporal Network) conversion. See [`temporal_extension_research.md`](../../../../doc/research/AME/temporal_extension_research.md) for full planner evaluation.
+PDDL 2.1 durative actions with STN (Simple Temporal Network) conversion.
 
 ### Planner Strategy
 
@@ -59,7 +59,6 @@ PDDL 2.1 Domain --> PddlParser (extended) --> IPlannerBackend
 Neural components remain advisory; the symbolic stack stays authoritative.
 
 Background research: [`neuro_symbolic_reasoning.md`](../../../../doc/research/AME/neuro_symbolic_reasoning.md).
-Work plan (all items complete): [`neuro_symbolic_infrastructure_plan.md`](../../../../doc/plans/AME/neuro_symbolic_infrastructure_plan.md).
 
 ### Design Principle: Propose-Verify-Fallback
 

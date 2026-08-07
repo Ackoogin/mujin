@@ -33,6 +33,13 @@ public:
                                nullptr);
   ~CurrentAmeBackendAdapter();
 
+  /// \brief Set the goal allocator, preserving the default on null input.
+  void setGoalAllocator(std::shared_ptr<IGoalAllocator> allocator) {
+    if (allocator) {
+      goal_allocator_ = allocator;
+    }
+  }
+
   AutonomyBackendCapabilities describeCapabilities() const override;
   void start(const SessionRequest& request) override;
   void pushState(const StateUpdate& update) override;
@@ -79,7 +86,8 @@ private:
   const ActionRegistry& action_registry_;
   Planner planner_;
   PlanCompiler plan_compiler_;
-  GoalAllocator goal_allocator_;
+  std::shared_ptr<IGoalAllocator> goal_allocator_ =
+      std::make_shared<GoalAllocator>();
   ExecutorComponent executor_;
   std::unique_ptr<BackendPyramidServiceProxy> pyramid_proxy_;
   std::shared_ptr<IExecutionSink> execution_sink_;

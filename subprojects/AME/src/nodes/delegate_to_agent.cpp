@@ -80,8 +80,21 @@ BT::NodeStatus DelegateToAgent::onActionStart() {
   config().blackboard->set("current_agent_id", agent_id_);
 
   // Plan for this agent's goals
-  wm->setGoal(goals);
-  auto result = planner->solve(*wm);
+  WorldModel local_wm(*wm);
+  local_wm.setAuditCallback({});
+
+  std::vector<unsigned> goal_ids;
+  goal_ids.reserve(goals.size());
+  try {
+    for (const auto& goal : goals) {
+      goal_ids.push_back(local_wm.fluentIndex(goal));
+    }
+  } catch (const std::exception&) {
+    agent->available = true;
+    return BT::NodeStatus::FAILURE;
+  }
+
+  auto result = planner->solve(local_wm, goal_ids);
 
   if (!result.success || result.steps.empty()) {
     agent->available = true;  // Restore availability on failure
@@ -89,7 +102,8 @@ BT::NodeStatus DelegateToAgent::onActionStart() {
   }
 
   // Compile plan to BT, passing agent context
-  std::string bt_xml = compiler->compile(result.steps, *wm, *registry, agent_id_);
+  std::string bt_xml =
+      compiler->compile(result.steps, local_wm, *registry, agent_id_, goal_ids);
 
   // Record audit if available
   PlanAuditLog* audit = nullptr;
@@ -114,12 +128,12 @@ BT::NodeStatus DelegateToAgent::onActionStart() {
     ep.bt_xml = bt_xml;
 
     for (const auto& step : result.steps) {
-      ep.plan_actions.push_back(wm->groundActions()[step.action_index].signature);
+      ep.plan_actions.push_back(local_wm.groundActions()[step.action_index].signature);
     }
 
-    for (unsigned i = 0; i < wm->numFluents(); ++i) {
-      if (wm->getFact(i)) {
-        ep.init_facts.push_back(wm->fluentName(i));
+    for (unsigned i = 0; i < local_wm.numFluents(); ++i) {
+      if (local_wm.getFact(i)) {
+        ep.init_facts.push_back(local_wm.fluentName(i));
       }
     }
 

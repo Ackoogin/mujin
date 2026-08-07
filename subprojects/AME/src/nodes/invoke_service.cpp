@@ -13,10 +13,10 @@ BT::PortsList InvokeService::providedPorts() {
       BT::InputPort<std::string>("service_name"),
       BT::InputPort<std::string>("operation"),
       BT::InputPort<unsigned>("timeout_ms", 5000u, "Timeout in ms (0 = no timeout)"),
-      BT::InputPort<std::string>("request_json", "", "k=v;k=v encoded request fields"),
+      BT::InputPort<std::string>("request_json", "", "key=value;key=value field string, not JSON"),
       BT::InputPort<std::string>("param_names", "", "Semicolon-separated PDDL param names"),
       BT::InputPort<std::string>("param_values", "", "Semicolon-separated PDDL param values"),
-      BT::OutputPort<std::string>("response_json"),
+      BT::OutputPort<std::string>("response_json", "key=value;key=value field string, not JSON"),
   });
 }
 

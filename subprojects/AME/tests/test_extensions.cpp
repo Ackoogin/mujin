@@ -20,7 +20,6 @@
 #include "ame/plan_audit_log.h"
 #include "ame/plan_compiler.h"
 #include "ame/planner.h"
-#include "ame/planner_component.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 
@@ -100,6 +99,17 @@ TEST(PerceptionBridge, SourceTaggedAsPerception) {
     bridge.flush();
 
     EXPECT_EQ(captured_source, "perception");
+}
+
+TEST(PerceptionBridge, FlushedFactsAreConfirmed) {
+    auto wm = makeUavWorldModel();
+    ame::PerceptionBridge bridge(wm);
+
+    bridge.updateFact("(at uav1 base)", true);
+    bridge.flush();
+
+    const auto metadata = wm.getFactMetadata("(at uav1 base)");
+    EXPECT_EQ(metadata.authority, ame::FactAuthority::CONFIRMED);
 }
 
 TEST(PerceptionBridge, SourceTagIncludesSubtag) {
@@ -960,19 +970,16 @@ TEST(PlanAuditLog, ParentEpisodeIdPreserved) {
     EXPECT_NE(child_id, parent_id);
 }
 
-TEST(ExecutePhaseAction, PlannerComponentPath) {
+TEST(ExecutePhaseAction, DirectPlannerPath) {
     auto wm = makeUavWorldModel();
     wm.setFact("(at uav1 sector_a)", true);
 
-    ame::PlannerComponent component;
-    component.setParam("plan_audit.enabled", false);
-    component.setParam("compiler.parallel", false);
-    component.setInProcessWorldModel(&wm);
-    component.actionRegistry().registerAction("move",    "StubAction");
-    component.actionRegistry().registerAction("search",  "StubAction");
-    component.actionRegistry().registerAction("classify","StubAction");
-    ASSERT_EQ(component.configure(), PCL_OK);
-    ASSERT_EQ(component.activate(), PCL_OK);
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+    ame::ActionRegistry registry;
+    registry.registerAction("move",    "StubAction");
+    registry.registerAction("search",  "StubAction");
+    registry.registerAction("classify","StubAction");
 
     ame::PlanAuditLog audit;
     BT::BehaviorTreeFactory factory = makeFullFactory();
@@ -990,7 +997,9 @@ TEST(ExecutePhaseAction, PlannerComponentPath) {
     auto tree = factory.createTreeFromText(xml);
     auto bb = tree.rootBlackboard();
     bb->set("world_model",        &wm);
-    bb->set("planner_component",  &component);
+    bb->set("planner",            &planner);
+    bb->set("plan_compiler",      &compiler);
+    bb->set("action_registry",    &registry);
     bb->set("bt_factory",         &factory);
     bb->set("plan_audit_log",     &audit);
 
@@ -1005,8 +1014,4 @@ TEST(ExecutePhaseAction, PlannerComponentPath) {
     ASSERT_EQ(audit.size(), 1u);
     EXPECT_EQ(audit.episodes()[0].phase_name, "component_phase");
     EXPECT_TRUE(audit.episodes()[0].success);
-
-    EXPECT_EQ(component.deactivate(), PCL_OK);
-    EXPECT_EQ(component.cleanup(), PCL_OK);
-    EXPECT_EQ(component.shutdown(), PCL_OK);
 }

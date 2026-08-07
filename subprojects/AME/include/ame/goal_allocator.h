@@ -14,11 +14,29 @@ struct AgentGoalAssignment {
     std::vector<std::string> goals;  // PDDL goal fluents
 };
 
+/// \brief Interface for assigning mission goals to available agents.
+///
+/// Production allocators should derive grouping vocabulary from the loaded
+/// domain rather than hard-coded predicate names, argument positions, or sector
+/// string parsing.
+class IGoalAllocator {
+public:
+    virtual ~IGoalAllocator() = default;
+
+    /// \brief Allocate goals to available agents.
+    virtual std::vector<AgentGoalAssignment> allocate(
+        const std::vector<std::string>& goals,
+        const WorldModel& wm) const = 0;
+};
+
 /// Allocates mission goals to available agents.
 ///
 /// The GoalAllocator supports the PYRAMID leader-delegation pattern where
 /// a leader agent plans at the goal level and delegates sub-goals to agents.
-class GoalAllocator {
+///
+/// This concrete stub allocator bakes in a same-token sector grouping policy
+/// and round-robin sector assignment over agents.
+class GoalAllocator : public IGoalAllocator {
 public:
     /// Allocate goals to available agents.
     ///
@@ -31,7 +49,7 @@ public:
     /// \return Vector of per-agent goal assignments
     std::vector<AgentGoalAssignment> allocate(
         const std::vector<std::string>& goals,
-        const WorldModel& wm) const;
+        const WorldModel& wm) const override;
 
     /// Extract sector/location from a goal fluent string.
     /// E.g., "(searched sector_a)" -> "sector_a"

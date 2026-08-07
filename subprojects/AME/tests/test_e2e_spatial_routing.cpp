@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "ame/world_model.h"
 #include "ame/action_registry.h"
+#include "ame/execution_sink.h"
 #include "ame/planner.h"
 #include "ame/plan_compiler.h"
 #include "ame/spatial_oracle.h"
@@ -14,6 +15,11 @@
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/action_node.h>
+
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 // =============================================================================
 // Stub path-planner service: returns a fixed waypoint list for any route request
@@ -47,6 +53,70 @@ public:
 private:
   uint64_t next_id_ = 0;
   unsigned call_count_ = 0;
+};
+
+class ImmediateSuccessSink : public ame::IExecutionSink {
+public:
+  void reset(const std::string& session_id) override {
+    session_id_ = session_id;
+    commands_.clear();
+    results_.clear();
+  }
+
+  ame::ExecutionSubmission submit(const ame::ActionCommand& command) override {
+    commands_.push_back(command);
+
+    ame::CommandResult result;
+    result.command_id = command.command_id;
+    result.status = ame::CommandStatus::SUCCEEDED;
+    result.source = "test_sink";
+    results_[command.command_id] = result;
+
+    ame::ExecutionSubmission submission;
+    submission.accepted = true;
+    submission.command_egress_visible = true;
+    return submission;
+  }
+
+  std::vector<ame::ActionCommand> pullCommands() override {
+    auto commands = commands_;
+    commands_.clear();
+    return commands;
+  }
+
+  void pushResult(const ame::CommandResult& result) override {
+    results_[result.command_id] = result;
+  }
+
+  void cancel(const std::string& command_id) override {
+    ame::CommandResult result;
+    result.command_id = command_id;
+    result.status = ame::CommandStatus::CANCELLED;
+    result.source = "test_sink";
+    results_[command_id] = result;
+  }
+
+  std::optional<ame::CommandResult> resultFor(
+      const std::string& command_id) const override {
+    const auto it = results_.find(command_id);
+    if (it == results_.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
+
+  bool isPending(const std::string&) const override { return false; }
+
+  std::vector<ame::RequirementPlacementRecord> readPlacements() const override {
+    return {};
+  }
+
+  const std::vector<ame::ActionCommand>& commands() const { return commands_; }
+
+private:
+  std::string session_id_;
+  std::vector<ame::ActionCommand> commands_;
+  std::unordered_map<std::string, ame::CommandResult> results_;
 };
 
 // Stub search action
@@ -140,10 +210,12 @@ static BT::BehaviorTreeFactory buildSpatialFactory() {
 static BT::Tree createSpatialTree(BT::BehaviorTreeFactory& factory,
                                   const std::string& xml,
                                   ame::WorldModel& wm,
-                                  ame::IPyramidService& service) {
+                                  ame::IPyramidService& service,
+                                  ame::IExecutionSink& action_sink) {
   auto blackboard = BT::Blackboard::create();
   blackboard->set("world_model", &wm);
   blackboard->set<ame::IPyramidService*>("pyramid_service", &service);
+  blackboard->set<ame::IExecutionSink*>("action_sink", &action_sink);
   return factory.createTreeFromText(xml, blackboard);
 }
 
@@ -199,11 +271,26 @@ TEST(SpatialOracle, NearestUpdatesAfterMove) {
   EXPECT_FALSE(wm.getFact("(nearest uav1 sector_a)"));
 }
 
+TEST(SpatialOracle, AttackPredicateIsNotTreatedAsAt) {
+  auto wm = buildSpatialDomain();
+  wm.registerPredicate("attack", {"robot", "location"});
+  wm.setFact("(attack uav1 sector_a)", true);
+
+  ame::StubSpatialOracle oracle;
+  oracle.updateReachability(wm);
+  oracle.updateNearest(wm);
+
+  EXPECT_FALSE(wm.getFact("(nearest uav1 base)"));
+  EXPECT_FALSE(wm.getFact("(nearest uav1 sector_a)"));
+  EXPECT_FALSE(wm.getFact("(nearest uav1 sector_b)"));
+  EXPECT_FALSE(wm.getFact("(nearest uav1 sector_c)"));
+}
+
 // =============================================================================
 // FollowRoute BT node tests
 // =============================================================================
 
-TEST(FollowRoute, SucceedsWithEmptyRoute) {
+TEST(FollowRoute, FailsWithEmptyRoute) {
   BT::BehaviorTreeFactory factory;
   factory.registerNodeType<ame::FollowRoute>("FollowRoute");
 
@@ -215,9 +302,12 @@ TEST(FollowRoute, SucceedsWithEmptyRoute) {
     </root>
   )";
 
-  auto tree = factory.createTreeFromText(xml);
+  ImmediateSuccessSink action_sink;
+  auto blackboard = BT::Blackboard::create();
+  blackboard->set<ame::IExecutionSink*>("action_sink", &action_sink);
+  auto tree = factory.createTreeFromText(xml, blackboard);
   auto status = tree.tickWhileRunning();
-  EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(status, BT::NodeStatus::FAILURE);
 }
 
 TEST(FollowRoute, SucceedsWithWaypoints) {
@@ -232,9 +322,38 @@ TEST(FollowRoute, SucceedsWithWaypoints) {
     </root>
   )";
 
-  auto tree = factory.createTreeFromText(xml);
+  ImmediateSuccessSink action_sink;
+  auto blackboard = BT::Blackboard::create();
+  blackboard->set<ame::IExecutionSink*>("action_sink", &action_sink);
+  auto tree = factory.createTreeFromText(xml, blackboard);
   auto status = tree.tickWhileRunning();
   EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(action_sink.commands().size(), 1u);
+  EXPECT_EQ(action_sink.commands()[0].action_name, "follow-route");
+  EXPECT_EQ(action_sink.commands()[0].request_fields.at("agent"), "uav1");
+  EXPECT_EQ(action_sink.commands()[0].request_fields.at("waypoints"),
+            "51.0,1.0,100|51.1,1.1,100|51.2,1.2,100");
+}
+
+TEST(FollowRoute, FailsWithMalformedWaypoint) {
+  BT::BehaviorTreeFactory factory;
+  factory.registerNodeType<ame::FollowRoute>("FollowRoute");
+
+  std::string xml = R"(
+    <root BTCPP_format="4">
+      <BehaviorTree ID="main">
+        <FollowRoute agent="uav1" route="51.0,abc,100"/>
+      </BehaviorTree>
+    </root>
+  )";
+
+  ImmediateSuccessSink action_sink;
+  auto blackboard = BT::Blackboard::create();
+  blackboard->set<ame::IExecutionSink*>("action_sink", &action_sink);
+  auto tree = factory.createTreeFromText(xml, blackboard);
+  auto status = tree.tickWhileRunning();
+  EXPECT_EQ(status, BT::NodeStatus::FAILURE);
+  EXPECT_TRUE(action_sink.commands().empty());
 }
 
 // =============================================================================
@@ -273,8 +392,9 @@ TEST(E2ESpatialRouting, OracleThenPlanThenExecute) {
 
   // Phase 4: Execute BT with stub path planner service
   StubPathPlannerService path_planner;
+  ImmediateSuccessSink action_sink;
   auto factory = buildSpatialFactory();
-  auto tree = createSpatialTree(factory, xml, wm, path_planner);
+  auto tree = createSpatialTree(factory, xml, wm, path_planner, action_sink);
 
   auto status = tree.tickWhileRunning();
   EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -309,8 +429,9 @@ TEST(E2ESpatialRouting, MultiSectorSearchWithOracle) {
   auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
 
   StubPathPlannerService path_planner;
+  ImmediateSuccessSink action_sink;
   auto factory = buildSpatialFactory();
-  auto tree = createSpatialTree(factory, xml, wm, path_planner);
+  auto tree = createSpatialTree(factory, xml, wm, path_planner, action_sink);
 
   auto status = tree.tickWhileRunning();
   EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -357,8 +478,9 @@ TEST(E2ESpatialRouting, ReplanAfterOracleRefresh) {
 
   auto xml1 = compiler.compileSequential(result1.steps, wm, reg);
   StubPathPlannerService pp1;
+  ImmediateSuccessSink action_sink1;
   auto factory1 = buildSpatialFactory();
-  auto tree1 = createSpatialTree(factory1, xml1, wm, pp1);
+  auto tree1 = createSpatialTree(factory1, xml1, wm, pp1, action_sink1);
   tree1.tickWhileRunning();
 
   EXPECT_TRUE(wm.getFact("(searched sector_a)"));
@@ -378,8 +500,9 @@ TEST(E2ESpatialRouting, ReplanAfterOracleRefresh) {
 
   auto xml2 = compiler.compileSequential(result2.steps, wm, reg);
   StubPathPlannerService pp2;
+  ImmediateSuccessSink action_sink2;
   auto factory2 = buildSpatialFactory();
-  auto tree2 = createSpatialTree(factory2, xml2, wm, pp2);
+  auto tree2 = createSpatialTree(factory2, xml2, wm, pp2, action_sink2);
   tree2.tickWhileRunning();
 
   EXPECT_TRUE(wm.getFact("(searched sector_b)"));
@@ -408,8 +531,9 @@ TEST(E2ESpatialRouting, FactAuthorityOnSpatialFacts) {
   auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
 
   StubPathPlannerService path_planner;
+  ImmediateSuccessSink action_sink;
   auto factory = buildSpatialFactory();
-  auto tree = createSpatialTree(factory, xml, wm, path_planner);
+  auto tree = createSpatialTree(factory, xml, wm, path_planner, action_sink);
   tree.tickWhileRunning();
 
   // The default planned-action commit records location facts as BELIEVED.
@@ -447,8 +571,9 @@ TEST(E2ESpatialRouting, RouteAuditTrail) {
   auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
 
   StubPathPlannerService path_planner;
+  ImmediateSuccessSink action_sink;
   auto factory = buildSpatialFactory();
-  auto tree = createSpatialTree(factory, xml, wm, path_planner);
+  auto tree = createSpatialTree(factory, xml, wm, path_planner, action_sink);
   tree.tickWhileRunning();
 
   // Audit log should contain oracle-sourced facts and BT-applied effects

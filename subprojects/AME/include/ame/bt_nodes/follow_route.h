@@ -6,9 +6,10 @@
 
 namespace ame {
 
+class IExecutionSink;
+
 /// \brief BT node that executes a waypoint sequence received from a path
-/// planner service. In production this would interface with a flight controller;
-/// in test/simulation it completes immediately on the first tick.
+/// planner service by dispatching a route-follow command through IExecutionSink.
 ///
 /// Ports:
 ///   agent    (input)  -- agent identifier (e.g. "uav1")
@@ -35,6 +36,8 @@ private:
 
   std::vector<Waypoint> waypoints_;
   size_t current_wp_ = 0;
+  IExecutionSink* sink_ = nullptr;
+  std::string command_id_;
 };
 
 } // namespace ame

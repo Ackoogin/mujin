@@ -3,7 +3,6 @@
 #include <ame/plan_audit_log.h>
 #include <ame/plan_compiler.h>
 #include <ame/planner.h>
-#include <ame/planner_component.h>
 #include <ame/world_model.h>
 
 #include <behaviortree_cpp/bt_factory.h>
@@ -43,17 +42,6 @@ BT::NodeStatus ExecutePhaseAction::onActionStart() {
     phase_name = phase_name_input.value();
   }
 
-  // Try PlannerComponent path first, fall back to direct Planner path.
-  PlannerComponent* component = nullptr;
-  try {
-    component = config().blackboard->get<PlannerComponent*>("planner_component");
-  } catch (const std::exception&) {}
-
-  if (component) {
-    return planViaComponent(goals, component, phase_name);
-  }
-
-  // Direct path: requires WorldModel, Planner, PlanCompiler, ActionRegistry.
   WorldModel* wm = nullptr;
   try {
     wm = config().blackboard->get<WorldModel*>("world_model");
@@ -85,26 +73,39 @@ BT::NodeStatus ExecutePhaseAction::planDirect(const std::vector<std::string>& go
     return BT::NodeStatus::FAILURE;
   }
 
-  wm->setGoal(goals);
+  WorldModel local_wm(*wm);
+  local_wm.setAuditCallback({});
 
-  auto result = planner->solve(*wm);
+  std::vector<unsigned> goal_ids;
+  goal_ids.reserve(goals.size());
+  try {
+    for (const auto& goal : goals) {
+      goal_ids.push_back(local_wm.fluentIndex(goal));
+    }
+  } catch (const std::exception&) {
+    recordAuditEpisode(phase_name, goals, local_wm, "BRFS",
+                       0.0, false, 0, 0, 0.0f, {}, "");
+    return BT::NodeStatus::FAILURE;
+  }
+
+  auto result = planner->solve(local_wm, goal_ids);
   if (!result.success || result.steps.empty()) {
-    recordAuditEpisode(phase_name, goals, *wm, "BRFS",
+    recordAuditEpisode(phase_name, goals, local_wm, "BRFS",
                        result.solve_time_ms, false,
                        result.expanded, result.generated,
                        result.cost, {}, "");
     return BT::NodeStatus::FAILURE;
   }
 
-  std::string bt_xml = compiler->compile(result.steps, *wm, *registry);
+  std::string bt_xml = compiler->compile(result.steps, local_wm, *registry, goal_ids);
 
   // Collect plan action signatures for audit.
   std::vector<std::string> plan_actions;
   for (const auto& step : result.steps) {
-    plan_actions.push_back(wm->groundActions()[step.action_index].signature);
+    plan_actions.push_back(local_wm.groundActions()[step.action_index].signature);
   }
 
-  recordAuditEpisode(phase_name, goals, *wm, "BRFS",
+  recordAuditEpisode(phase_name, goals, local_wm, "BRFS",
                      result.solve_time_ms, true,
                      result.expanded, result.generated,
                      result.cost, plan_actions, bt_xml);
@@ -128,51 +129,6 @@ BT::NodeStatus ExecutePhaseAction::planDirect(const std::vector<std::string>& go
     }
     sub_tree_ =
         std::make_unique<BT::Tree>(factory_ptr->createTreeFromText(bt_xml, bb));
-  } catch (const std::exception&) {
-    return BT::NodeStatus::FAILURE;
-  }
-
-  return onActionRunning();
-}
-
-BT::NodeStatus ExecutePhaseAction::planViaComponent(
-    const std::vector<std::string>& goals,
-    PlannerComponent* component,
-    const std::string& phase_name) {
-  auto exec_result = component->solveGoal(goals);
-
-  if (!exec_result.success || exec_result.bt_xml.empty()) {
-    recordAuditEpisode(phase_name, goals, WorldModel{}, "BRFS",
-                       exec_result.solve_time_ms, false,
-                       exec_result.expanded, exec_result.generated,
-                       exec_result.cost, {}, "");
-    return BT::NodeStatus::FAILURE;
-  }
-
-  recordAuditEpisode(phase_name, goals, WorldModel{}, "BRFS",
-                     exec_result.solve_time_ms, true,
-                     exec_result.expanded, exec_result.generated,
-                     exec_result.cost, exec_result.plan_actions,
-                     exec_result.bt_xml);
-
-  // Build the sub-tree.
-  BT::BehaviorTreeFactory* factory_ptr = nullptr;
-  try {
-    factory_ptr = config().blackboard->get<BT::BehaviorTreeFactory*>("bt_factory");
-  } catch (const std::exception&) {
-    return BT::NodeStatus::FAILURE;
-  }
-  if (!factory_ptr) {
-    return BT::NodeStatus::FAILURE;
-  }
-
-  try {
-    auto bb = config().blackboard;
-    if (episode_id_ != 0) {
-      bb->set("parent_episode_id", episode_id_);
-    }
-    sub_tree_ = std::make_unique<BT::Tree>(
-        factory_ptr->createTreeFromText(exec_result.bt_xml, bb));
   } catch (const std::exception&) {
     return BT::NodeStatus::FAILURE;
   }
@@ -230,6 +186,12 @@ void ExecutePhaseAction::recordAuditEpisode(
         config().blackboard->get<uint64_t>("parent_episode_id");
   } catch (const std::exception&) {
     ep.parent_episode_id = 0;
+  }
+
+  try {
+    ep.session_id = config().blackboard->get<std::string>("session_id");
+  } catch (const std::exception&) {
+    ep.session_id.clear();
   }
 
   episode_id_ = audit->recordEpisode(std::move(ep));

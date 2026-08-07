@@ -8,9 +8,8 @@
 #include <ame/bt_nodes/planned_action.h>
 #include <ame/bt_nodes/simulated_action.h>
 
-#include <behaviortree_cpp/control_node.h>
-
 #include <stdexcept>
+#include <unordered_set>
 
 namespace ame {
 
@@ -60,6 +59,12 @@ void ExecutorComponent::loadAndExecute(const std::string& bt_xml) {
     throw std::runtime_error("Executor component must be active before loading a BT");
   }
 
+#if defined(AME_NEURO)
+  plan_step_meta_.clear();
+  completed_step_uids_.clear();
+  step_status_subscribers_.clear();
+#endif
+
   resetExecutionState();
   registerDispatchNodesFromRegistry();
   tree_ = std::make_unique<BT::Tree>(factory_.createTreeFromText(bt_xml));
@@ -93,6 +98,37 @@ void ExecutorComponent::loadAndExecute(const std::string& bt_xml) {
 
   executing_   = true;
   last_status_ = BT::NodeStatus::RUNNING;
+}
+
+void ExecutorComponent::loadAndExecute(const CompiledPlan& compiled_plan) {
+  loadAndExecute(compiled_plan.xml);
+#if defined(AME_NEURO)
+  plan_step_meta_ = compiled_plan.steps;
+
+  std::unordered_set<std::string> action_unit_names;
+  action_unit_names.reserve(plan_step_meta_.size());
+  for (const auto& meta : plan_step_meta_) {
+    action_unit_names.insert(meta.action_unit_name);
+  }
+
+  const std::function<void(BT::TreeNode*)> visitor =
+      [this, &action_unit_names](BT::TreeNode* node) {
+    if (action_unit_names.count(node->name()) == 0) {
+      return;
+    }
+    auto subscriber = node->subscribeToStatusChange(
+        [this](BT::TimePoint,
+               const BT::TreeNode& node,
+               BT::NodeStatus,
+               BT::NodeStatus status) {
+      if (status == BT::NodeStatus::SUCCESS) {
+        completed_step_uids_.insert(node.UID());
+      }
+    });
+    step_status_subscribers_.push_back(std::move(subscriber));
+  };
+  tree_->applyVisitor(visitor);
+#endif
 }
 
 void ExecutorComponent::tickOnce() {
@@ -183,52 +219,7 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
     // If the hook returns non-empty BT XML, restart execution with the repair plan.
     // Returning empty falls through to the baseline FAILURE path.
     if (!success && repair_hook_ && inprocess_wm_) {
-      // Compute failed step: count how many top-level action units succeeded
-      // before the failure by inspecting the live tree (not yet halted here).
-      unsigned failed_step = 0;
-      if (tree_) {
-        // compileSequential() wraps the plan body in a ReactiveFallback goal guard
-        // when the WorldModel has goal fluents:
-        //   ReactiveFallback -> [GoalReached, Sequence(planned actions)]
-        // Navigate past the guard to reach the plan Sequence whose children
-        // are the action units we want to count.
-        BT::ControlNode* plan_seq = nullptr;
-        auto* root = dynamic_cast<BT::ControlNode*>(tree_->rootNode());
-        if (root && !root->children().empty()) {
-          auto* first = root->children().front();
-          const bool goal_guard = first->registrationName() == "GoalReached";
-          if (goal_guard && root->children().size() >= 2)
-            plan_seq = dynamic_cast<BT::ControlNode*>(root->children().back());
-        }
-        if (!plan_seq) plan_seq = root;
-        if (plan_seq) {
-          // A parallel plan may contain Sequence nodes for flows with several
-          // planned actions. Count their children; every other child represents
-          // one plan step.
-          auto is_flow = [](BT::ControlNode* node) -> bool {
-              return node != nullptr && node->registrationName() == "Sequence";
-          };
-          for (auto* child : plan_seq->children()) {
-            auto* ctrl = dynamic_cast<BT::ControlNode*>(child);
-            if (child->status() == BT::NodeStatus::SUCCESS) {
-              // Fully successful: count the child itself (+1) or all its steps.
-              if (ctrl && is_flow(ctrl))
-                failed_step += static_cast<unsigned>(ctrl->children().size());
-              else
-                ++failed_step;
-            } else {
-              // First failing child: if it's a flow, count steps inside it.
-              if (ctrl && is_flow(ctrl)) {
-                for (auto* step : ctrl->children()) {
-                  if (step->status() == BT::NodeStatus::SUCCESS) ++failed_step;
-                  else break;
-                }
-              }
-              break;
-            }
-          }
-        }
-      }
+      const unsigned failed_step = computeFailedStepFromMetadata();
       try {
         std::string repair_xml = repair_hook_(failed_step, *inprocess_wm_);
         if (!repair_xml.empty()) {
@@ -278,6 +269,10 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
 void ExecutorComponent::resetExecutionState() {
   executing_   = false;
   last_status_ = BT::NodeStatus::IDLE;
+#if defined(AME_NEURO)
+  completed_step_uids_.clear();
+  step_status_subscribers_.clear();
+#endif
   tree_.reset();
   bt_logger_.reset();
 }
@@ -289,11 +284,21 @@ void ExecutorComponent::registerDispatchNodesFromRegistry() {
 
   const auto& builders = factory_.builders();
   for (const auto& verb : action_registry_->registeredNames()) {
-    if (builders.find(verb) == builders.end()) {
-      factory_.registerNodeType<AmeDispatchNode>(verb);
+    if (builders.find(verb) != builders.end()) {
+      continue;
     }
+    factory_.registerNodeType<AmeDispatchNode>(verb);
   }
 }
+
+#if defined(AME_NEURO)
+unsigned ExecutorComponent::computeFailedStepFromMetadata() const {
+  if (!tree_ || plan_step_meta_.empty()) {
+    return 0;
+  }
+  return static_cast<unsigned>(completed_step_uids_.size());
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // Static PCL callbacks

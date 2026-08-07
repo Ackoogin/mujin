@@ -13,7 +13,6 @@ class Planner;
 class PlanCompiler;
 class ActionRegistry;
 class PlanAuditLog;
-class PlannerComponent;
 
 /// \brief Hierarchical planning BT node.
 ///
@@ -24,13 +23,10 @@ class PlannerComponent;
 ///   "world_model"    -- WorldModel*
 ///   "bt_factory"     -- BT::BehaviorTreeFactory*
 ///
-/// Blackboard keys (planning -- one of two paths):
-///   Path A (direct):
-///     "planner"        -- Planner*
-///     "plan_compiler"  -- PlanCompiler*
-///     "action_registry"-- ActionRegistry*
-///   Path B (component):
-///     "planner_component" -- PlannerComponent*
+/// Blackboard keys (planning):
+///   "planner"        -- Planner*
+///   "plan_compiler"  -- PlanCompiler*
+///   "action_registry"-- ActionRegistry*
 ///
 /// Blackboard keys (optional):
 ///   "plan_audit_log"     -- PlanAuditLog*   (for recording sub-planning episodes)
@@ -67,11 +63,6 @@ private:
   BT::NodeStatus planDirect(const std::vector<std::string>& goals,
                             WorldModel* wm,
                             const std::string& phase_name);
-
-  /// Plan via PlannerComponent.
-  BT::NodeStatus planViaComponent(const std::vector<std::string>& goals,
-                                  PlannerComponent* component,
-                                  const std::string& phase_name);
 
   /// Record a sub-planning episode to the audit log.
   void recordAuditEpisode(const std::string& phase_name,

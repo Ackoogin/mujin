@@ -103,7 +103,7 @@ ForwardSimVerifier::verify(const PlanProposal& proposal,
         }
         const auto& ga = ground_actions[step.action_index];
 
-        // Check preconditions.
+        // Check positive preconditions.
         for (unsigned pre_id : ga.preconditions) {
             std::vector<std::string> ev;
             if (!sim_trusted(pre_id, ev)) {
@@ -115,6 +115,19 @@ ForwardSimVerifier::verify(const PlanProposal& proposal,
                 return v;
             }
             v.evidence.insert(v.evidence.end(), ev.begin(), ev.end());
+        }
+
+        // Check negative preconditions: the fluent must be false. This is a
+        // value check (sim_get), not an authority check -- confirmed-false
+        // semantics are intentionally not required here.
+        for (unsigned neg_id : ga.neg_preconditions) {
+            if (sim_get(neg_id)) {
+                v.accepted = false;
+                v.reason = "neg_precondition_failed_at_step_" + std::to_string(step_idx);
+                v.evidence.push_back("step:" + std::to_string(step_idx));
+                v.evidence.push_back("neg_precondition:" + wm.fluentName(neg_id));
+                return v;
+            }
         }
 
         // Apply effects.

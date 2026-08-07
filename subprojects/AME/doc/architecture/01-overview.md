@@ -46,8 +46,8 @@ Both default to no-op; the symbolic baseline is byte-for-byte identical without 
 | **ActionRegistry** | Maps PDDL action names to BT node types, sub-tree templates, or pre-authored sub-trees | `action_registry.h` |
 | **PlanCompiler** | Builds a causal dependency graph from the plan, extracts parallel flows, emits BT XML | `plan_compiler.h` |
 | **BT.CPP Executor** | Ticks the compiled behaviour tree; BT nodes read/write world state directly | `bt_nodes/` |
-| **MissionExecutor** | Top-level tick loop with replan-on-failure | `main.cpp` |
-| **Observability** | 5-layer audit stack: TreeObserver, AmeBTLogger, WmAuditLog, FoxgloveBridge, PlanAuditLog | see [05-observability.md](05-observability.md) |
+| **ExecutorComponent** | BT tick loop (default 50 Hz); replan-on-failure orchestrated by `CurrentAmeBackendAdapter` | `executor_component.h` |
+| **Observability** | 6-layer audit stack (Layer 6 optional): TreeObserver, AmeBTLogger, WmAuditLog, FoxgloveBridge, PlanAuditLog, NeuroAuditLog | see [05-observability.md](05-observability.md) |
 | **NeuroSymbolic** (opt.) | Propose-verify-fallback envelope, backend pool, verifiers, audit (Layer 6), config | see [08-neuro-symbolic.md](08-neuro-symbolic.md) |
 
 ## Design Principles
@@ -65,7 +65,7 @@ Both default to no-op; the symbolic baseline is byte-for-byte identical without 
 | `ame_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
 | `ame_foxglove` | FoxgloveBridge WebSocket server | ame_core, websocketpp, asio |
 | `ame_neuro` | Neuro-symbolic PVF envelope, backends, verifiers, audit, config (`AME_NEURO=ON`) | ame_core |
-| `ame_test_app` | Demo executable (`src/ame/apps/main.cpp`) | ame_core, optionally ame_foxglove, ame_neuro |
+| `ame_test_app` | Demo executable (`src/apps/main.cpp`) | ame_core, optionally ame_foxglove, ame_neuro |
 | `ame_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | ame_core, rclcpp, rclcpp_action, rclcpp_lifecycle |
 
 `ame_foxglove` and `ame_neuro` are separate static libraries so `ame_core` stays dependency-free.
@@ -77,7 +77,7 @@ Guard Foxglove code with `#if defined(AME_FOXGLOVE)` and neuro code with `#if de
 |------------|--------|---------|
 | BehaviorTree.CPP 4.6.2 | FetchContent | BT execution + SQLite logging |
 | LAPKT Devel2.0 (core) | FetchContent | STRIPS model, BRFS search |
-| Google Test 1.14 | FetchContent | Unit/integration testing (73 tests) |
+| Google Test 1.14 | FetchContent | Unit/integration testing |
 | SQLite3 | System | BT.CPP SQLite logging backend |
 | websocketpp 0.8.2 | FetchContent | Foxglove WebSocket server (optional) |
 | Standalone Asio 1.28 | FetchContent | Async I/O for websocketpp (optional) |

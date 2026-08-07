@@ -1,21 +1,15 @@
 # ---------------------------------------------------------------------------
 # ame_core -- ROS-agnostic planning + execution library
 # ---------------------------------------------------------------------------
-add_library(ame_core STATIC
+set(_AME_CORE_SOURCES
     lib/type_system.cpp
     lib/world_model.cpp
     lib/world_state_access.cpp
     lib/action_registry.cpp
-    lib/autonomy_backend.cpp
     lib/plan_compiler.cpp
     lib/pddl_parser.cpp
     lib/planner.cpp
-    lib/pcl_msg_json.cpp
-    lib/world_model_component.cpp
-    lib/planner_component.cpp
-    lib/executor_component.cpp
     lib/goal_allocator.cpp
-    lib/agent_dispatcher.cpp
     lib/execution_sink.cpp
     nodes/check_world_predicate.cpp
     nodes/planned_action_node.cpp
@@ -32,37 +26,108 @@ add_library(ame_core STATIC
     lib/wm_audit_log.cpp
     lib/plan_audit_log.cpp
     lib/perception_bridge.cpp
-    lib/pyramid_autonomy_bridge.cpp
     lib/world_model_snapshot.cpp
 )
 
+set(_AME_PCL_COMPONENT_SOURCES
+    lib/pcl_msg_json.cpp
+    lib/world_model_component.cpp
+    lib/planner_component.cpp
+    lib/executor_component.cpp
+    lib/agent_dispatcher.cpp
+    # autonomy_backend implements CurrentAmeBackendAdapter, which embeds an
+    # ExecutorComponent; it is a component-layer adapter, not pure core.
+    lib/autonomy_backend.cpp
+)
+
+# pyramid_autonomy_bridge.cpp includes a generated PYRAMID header; only
+# compile it when the PYRAMID subproject is included in the build.
+if(UNMANNED_BUILD_PYRAMID)
+    list(APPEND _AME_PCL_COMPONENT_SOURCES lib/pyramid_autonomy_bridge.cpp)
+    if(AME_BUILD_AGRA_MA_BRIDGE)
+        list(APPEND _AME_PCL_COMPONENT_SOURCES
+            lib/agra_ma_bridge.cpp)
+    endif()
+endif()
+
+add_library(ame_core STATIC ${_AME_CORE_SOURCES})
+
 target_include_directories(ame_core PUBLIC
     ${AME_ROOT_DIR}/include
-    ${PYRAMID_CPP_BINDINGS_DIR}
 )
+target_include_directories(ame_core PRIVATE
+    $<TARGET_PROPERTY:pcl_core,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+# PYRAMID owns the C++ convenience layer over PCL's C ABI. AME needs those
+# headers even when the rest of the PYRAMID subproject is disabled.
+if(NOT TARGET pyramid_pcl_cpp)
+    add_library(pyramid_pcl_cpp INTERFACE)
+    target_include_directories(pyramid_pcl_cpp INTERFACE
+        ${PYRAMID_ROOT_DIR}/include
+    )
+    target_link_libraries(pyramid_pcl_cpp INTERFACE pcl_core)
+endif()
 
 target_link_libraries(ame_core
     PUBLIC
         behaviortree_cpp
         lapkt_core
+)
+
+add_library(ame_pcl_components STATIC ${_AME_PCL_COMPONENT_SOURCES})
+
+target_include_directories(ame_pcl_components PUBLIC
+    ${AME_ROOT_DIR}/include
+    ${PYRAMID_CPP_BINDINGS_DIR}
+)
+
+target_link_libraries(ame_pcl_components
+    PUBLIC
+        ame_core
         pcl_core
         pyramid_pcl_cpp
-        pyramid_generated_codecs
 )
-add_dependencies(ame_core pyramid_cpp_bindings_codegen)
 
-if(AME_BUILD_AGRA_MA_BRIDGE)
-    target_sources(ame_core PRIVATE lib/agra_ma_bridge.cpp)
-    if(NOT TARGET pyramid_agra_profile_data_model)
-        message(FATAL_ERROR
-            "AME_BUILD_AGRA_MA_BRIDGE requires "
-            "PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR to point at checked-in "
-            "A-GRA data-model bindings")
+if(UNMANNED_BUILD_PYRAMID)
+    add_dependencies(ame_pcl_components pyramid_cpp_bindings_codegen)
+    target_link_libraries(ame_pcl_components PUBLIC pyramid_generated_codecs)
+    if(AME_BUILD_AGRA_MA_BRIDGE)
+        if(NOT TARGET pyramid_agra_profile_data_model)
+            message(FATAL_ERROR
+                "AME_BUILD_AGRA_MA_BRIDGE requires "
+                "PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR to point at checked-in "
+                "A-GRA data-model bindings")
+        endif()
+        # Only the C2 services/components layer is taken from the P3 bindings;
+        # the data-model *codec* comes from the consumer's contract via
+        # pyramid_agra_profile_data_model.
+        #
+        # Both directories contain a pyramid_data_model_agra_types.hpp, and
+        # only the P3 one may be reachable by that name. Putting the contract
+        # directory first does not work and must not be attempted: `#pragma
+        # once` keys on the file, so with both reachable a single translation
+        # unit includes each of them once and every enum is defined twice.
+        # Tried 2026-07-27; ame_py.cpp fails with ~100 "multiple definition of
+        # enum class" errors.
+        #
+        # So the bridge compiles against P3's declarations while linking a
+        # codec built from the contract's. That is safe only while the two
+        # agree, and they do -- of 1113 structs common to both, zero differ,
+        # which is what a strict text slice of one proto should give. It is
+        # guarded rather than assumed: see the header-agreement check in
+        # AutoMTK's tests/automtk_agra. Without that guard a divergence would
+        # be silent, because the type names are identical and it would build
+        # and link either way.
+        add_dependencies(ame_pcl_components
+            pyramid_agra_p3_bindings_codegen)
+        target_link_libraries(ame_pcl_components PUBLIC
+            pyramid_agra_profile_data_model)
+        target_include_directories(ame_pcl_components PUBLIC
+            ${PYRAMID_AGRA_P3_BINDINGS_DIR})
+        target_compile_definitions(ame_pcl_components PUBLIC
+            AME_BUILD_AGRA_MA_BRIDGE=1)
     endif()
-    add_dependencies(ame_core pyramid_agra_p3_bindings_codegen)
-    target_link_libraries(ame_core PUBLIC pyramid_agra_profile_data_model)
-    target_include_directories(ame_core PUBLIC ${PYRAMID_AGRA_P3_BINDINGS_DIR})
-    target_compile_definitions(ame_core PUBLIC AME_BUILD_AGRA_MA_BRIDGE=1)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -149,7 +214,7 @@ add_executable(ame_test_app apps/main.cpp)
 # Pure-PCL entry point (no ROS2 dependency)
 # ---------------------------------------------------------------------------
 add_executable(ame_pcl_main apps/ame_pcl_main.cpp)
-target_link_libraries(ame_pcl_main PRIVATE ame_core)
+target_link_libraries(ame_pcl_main PRIVATE ame_pcl_components)
 if(AME_FOXGLOVE)
     target_link_libraries(ame_pcl_main PRIVATE ame_foxglove)
     target_compile_definitions(ame_pcl_main PRIVATE AME_FOXGLOVE=1)
@@ -174,6 +239,9 @@ endif()
 # ---------------------------------------------------------------------------
 add_executable(contingency_verifier apps/contingency_verifier.cpp)
 target_link_libraries(contingency_verifier PRIVATE ame_core)
+target_include_directories(contingency_verifier PRIVATE
+    "${PYRAMID_ROOT_DIR}/core/external"
+)
 
 # ---------------------------------------------------------------------------
 # Install rules -- allows ros2/ ament_cmake package to find_package(ame_core)
@@ -202,7 +270,7 @@ if(NOT EXISTS "${behaviortree_cpp_BINARY_DIR}/cmake_install.cmake")
 endif()
 
 # Static archives
-install(TARGETS ame_core lapkt_core
+install(TARGETS ame_core ame_pcl_components lapkt_core
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -250,7 +318,7 @@ endif()
 # ---------------------------------------------------------------------------
 if(AME_BUILD_PYTHON)
     pybind11_add_module(_ame_py bindings/ame_py.cpp)
-    target_link_libraries(_ame_py PRIVATE ame_core)
+    target_link_libraries(_ame_py PRIVATE ame_pcl_components)
     if(AME_BUILD_AGRA_MA_BRIDGE)
         set(_AME_PY_AGRA_PORT_SOURCES
             ${PYRAMID_AGRA_OMS_JSON_BINDINGS_DIR}/pyramid_services_agra_c2_provided.cpp

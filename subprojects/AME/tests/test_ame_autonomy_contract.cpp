@@ -34,17 +34,21 @@ class CodecLoaderEnvironment : public ::testing::Environment {
  public:
   void SetUp() override {
     pcl_plugin_handle_t* handle = nullptr;
-    const auto status = pcl_plugin_load_codec(AUTONOMY_BACKEND_JSON_CODEC_PLUGIN_PATH,
-                                              nullptr,
-                                              pcl_codec_registry_default(),
-                                              &handle);
+    const auto status = pcl_plugin_load_codec(
+        AME_AUTONOMY_JSON_CODEC_PLUGIN_PATH,
+        nullptr,
+        pcl_codec_registry_default(),
+        &handle);
     if (status != PCL_OK) {
       std::fprintf(stderr,
-                   "Failed to load autonomy_backend JSON codec plugin '%s': %d\n",
-                   AUTONOMY_BACKEND_JSON_CODEC_PLUGIN_PATH,
+                   "Failed to load AME autonomy JSON codec plugin '%s': %d\n",
+                   AME_AUTONOMY_JSON_CODEC_PLUGIN_PATH,
                    static_cast<int>(status));
       std::abort();
     }
+
+    // The default registry borrows the plugin vtable for the process lifetime.
+    // Keep the plugin loaded until the test process exits.
   }
 };
 

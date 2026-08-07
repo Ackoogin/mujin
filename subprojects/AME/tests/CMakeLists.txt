@@ -24,69 +24,100 @@ target_link_libraries(test_action_registry PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_action_registry DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_autonomy_backend test_autonomy_backend.cpp)
-target_link_libraries(test_autonomy_backend PRIVATE ame_core GTest::gtest_main)
+target_link_libraries(test_autonomy_backend
+  PRIVATE
+    ame_pcl_components
+    GTest::gtest_main
+)
 gtest_discover_tests(test_autonomy_backend DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_execution_sink test_execution_sink.cpp)
-target_link_libraries(test_execution_sink PRIVATE ame_core GTest::gtest_main)
+target_link_libraries(test_execution_sink
+  PRIVATE
+    ame_pcl_components
+    GTest::gtest_main
+)
 gtest_discover_tests(test_execution_sink DISCOVERY_MODE PRE_TEST)
 
-add_executable(test_ame_autonomy_contract
-    test_ame_autonomy_contract.cpp
-    ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_autonomy_backend_provided.cpp
-)
-add_dependencies(test_ame_autonomy_contract pyramid_cpp_bindings_codegen)
-target_link_libraries(test_ame_autonomy_contract
-    PRIVATE
-        ame_core
-        pyramid_generated_codecs
-        GTest::gtest_main
-)
-# The generated dispatch() resolves codecs through the process-wide PCL codec
-# registry, and nothing populates that registry on its own. The test loads the
-# JSON codec plugin at start-up, so it needs the plugin built first and needs to
-# be told where it ended up.
-add_dependencies(test_ame_autonomy_contract pyramid_codec_json_autonomy_backend)
-target_compile_definitions(test_ame_autonomy_contract PRIVATE
-    AUTONOMY_BACKEND_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_autonomy_backend>")
-gtest_discover_tests(test_ame_autonomy_contract DISCOVERY_MODE PRE_TEST)
 
-if(AME_BUILD_AGRA_MA_BRIDGE)
-    add_executable(test_agra_ma_bridge test_agra_ma_bridge.cpp)
-    add_dependencies(test_agra_ma_bridge pyramid_agra_p3_bindings_codegen)
-    target_link_libraries(test_agra_ma_bridge PRIVATE ame_core GTest::gtest_main)
-    gtest_discover_tests(test_agra_ma_bridge DISCOVERY_MODE PRE_TEST)
+if(UNMANNED_BUILD_PYRAMID)
+    add_executable(test_ame_autonomy_contract
+        test_ame_autonomy_contract.cpp
+        ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_autonomy_backend_provided.cpp
+    )
+    add_dependencies(test_ame_autonomy_contract
+        pyramid_cpp_bindings_codegen
+        pyramid_codec_json_autonomy_backend
+    )
+    target_link_libraries(test_ame_autonomy_contract
+        PRIVATE
+            ame_pcl_components
+            GTest::gtest_main
+    )
+    target_compile_definitions(test_ame_autonomy_contract PRIVATE
+        AME_AUTONOMY_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_autonomy_backend>"
+    )
+    gtest_discover_tests(test_ame_autonomy_contract DISCOVERY_MODE PRE_TEST)
 
-    add_executable(test_agra_ma_grounding_component
-        test_agra_ma_grounding_component.cpp)
-    add_dependencies(test_agra_ma_grounding_component
-        pyramid_agra_p3_bindings_codegen
-        pyramid_cpp_bindings_codegen)
-    target_link_libraries(test_agra_ma_grounding_component
-        PRIVATE ame_core GTest::gtest_main)
-    gtest_discover_tests(test_agra_ma_grounding_component DISCOVERY_MODE PRE_TEST)
+    if(AME_BUILD_AGRA_MA_BRIDGE)
+        add_executable(test_agra_ma_bridge test_agra_ma_bridge.cpp)
+        add_dependencies(test_agra_ma_bridge
+            pyramid_agra_p3_bindings_codegen)
+        target_link_libraries(test_agra_ma_bridge
+            PRIVATE
+                ame_pcl_components
+                GTest::gtest_main
+        )
+        gtest_discover_tests(test_agra_ma_bridge DISCOVERY_MODE PRE_TEST)
 
-    add_executable(test_agra_ma_grounding_port_round_trip
-        test_agra_ma_grounding_port_round_trip.cpp
-        ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp)
-    add_dependencies(test_agra_ma_grounding_port_round_trip
-        pyramid_agra_p3_bindings_codegen
-        pyramid_cpp_bindings_codegen)
-    set_source_files_properties(
-        ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp
-        PROPERTIES COMPILE_OPTIONS
-        "-include;${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_agra_ma_grounding_services_provided_types.hpp")
-    target_link_libraries(test_agra_ma_grounding_port_round_trip
-        PRIVATE ame_core GTest::gtest_main)
-    target_compile_definitions(test_agra_ma_grounding_port_round_trip PRIVATE
-        AGRA_MA_GROUNDING_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_ma_grounding>")
-    gtest_discover_tests(test_agra_ma_grounding_port_round_trip DISCOVERY_MODE PRE_TEST)
+        add_executable(test_agra_ma_grounding_component
+            test_agra_ma_grounding_component.cpp)
+        add_dependencies(test_agra_ma_grounding_component
+            pyramid_agra_p3_bindings_codegen
+            pyramid_cpp_bindings_codegen)
+        target_link_libraries(test_agra_ma_grounding_component
+            PRIVATE
+                ame_pcl_components
+                GTest::gtest_main
+        )
+        gtest_discover_tests(test_agra_ma_grounding_component DISCOVERY_MODE PRE_TEST)
+
+        add_executable(test_agra_ma_grounding_port_round_trip
+            test_agra_ma_grounding_port_round_trip.cpp
+            ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp)
+        add_dependencies(test_agra_ma_grounding_port_round_trip
+            pyramid_agra_p3_bindings_codegen
+            pyramid_cpp_bindings_codegen)
+        # pyramid_services_agra_ma_grounding_provided.cpp references
+        # TaskGrounding/PlanGrounding/etc without including the header that
+        # declares them (see agra_ma_grounding_component.hpp's comment on
+        # the same gap) -- force it in here too, since this generated .cpp
+        # is compiled standalone, not through that header.
+        set_source_files_properties(
+            ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_agra_ma_grounding_provided.cpp
+            PROPERTIES COMPILE_OPTIONS
+            "-include;${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_agra_ma_grounding_services_provided_types.hpp")
+        target_link_libraries(test_agra_ma_grounding_port_round_trip
+            PRIVATE
+                ame_pcl_components
+                GTest::gtest_main
+        )
+        target_compile_definitions(test_agra_ma_grounding_port_round_trip PRIVATE
+            AGRA_MA_GROUNDING_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_agra_ma_grounding>"
+        )
+        gtest_discover_tests(test_agra_ma_grounding_port_round_trip DISCOVERY_MODE PRE_TEST)
+    endif()
 endif()
 
+# Header-only seam between AME's native identifiers and the OMS-JSON wire
+# form; needs no A-GRA bindings, so it is not gated on the MA bridge.
 add_executable(test_agra_oms_uuid test_agra_oms_uuid.cpp)
 target_link_libraries(test_agra_oms_uuid PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_agra_oms_uuid DISCOVERY_MODE PRE_TEST)
 
+# Header-only seam between AME's native identifiers and the "native JSON"
+# pivot dialect ame_py.cpp's protobuf<->native conversion produces; needs no
+# A-GRA bindings or Python, so it is not gated on the MA bridge either.
 add_executable(test_agra_native_json_uuid test_agra_native_json_uuid.cpp)
 target_link_libraries(test_agra_native_json_uuid PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_agra_native_json_uuid DISCOVERY_MODE PRE_TEST)
@@ -121,7 +152,7 @@ target_link_libraries(test_e2e_spatial_routing PRIVATE ame_core GTest::gtest_mai
 gtest_discover_tests(test_e2e_spatial_routing DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_extensions test_extensions.cpp)
-target_link_libraries(test_extensions PRIVATE ame_core GTest::gtest_main)
+target_link_libraries(test_extensions PRIVATE ame_pcl_components GTest::gtest_main)
 gtest_discover_tests(test_extensions DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_multi_agent test_multi_agent.cpp)
@@ -129,21 +160,21 @@ target_link_libraries(test_multi_agent PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_multi_agent DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_world_model_component test_world_model_component.cpp)
-target_link_libraries(test_world_model_component PRIVATE ame_core GTest::gtest_main)
+target_link_libraries(test_world_model_component PRIVATE ame_pcl_components GTest::gtest_main)
 gtest_discover_tests(test_world_model_component DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_planner_component test_planner_component.cpp)
-target_link_libraries(test_planner_component PRIVATE ame_core GTest::gtest_main)
+target_link_libraries(test_planner_component PRIVATE ame_pcl_components GTest::gtest_main)
 target_include_directories(test_planner_component PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 gtest_discover_tests(test_planner_component DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_executor_component test_executor_component.cpp)
-target_link_libraries(test_executor_component PRIVATE ame_core GTest::gtest_main)
+target_link_libraries(test_executor_component PRIVATE ame_pcl_components GTest::gtest_main)
 target_include_directories(test_executor_component PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 gtest_discover_tests(test_executor_component DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_pcl_integration test_pcl_integration.cpp)
-target_link_libraries(test_pcl_integration PRIVATE ame_core GTest::gtest_main)
+target_link_libraries(test_pcl_integration PRIVATE ame_pcl_components GTest::gtest_main)
 target_include_directories(test_pcl_integration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 gtest_discover_tests(test_pcl_integration DISCOVERY_MODE PRE_TEST)
 
@@ -179,7 +210,7 @@ if(AME_NEURO)
     gtest_discover_tests(test_neuro_audit DISCOVERY_MODE PRE_TEST)
 
     add_executable(test_neuro_config test_neuro_config.cpp)
-    target_link_libraries(test_neuro_config PRIVATE ame_neuro GTest::gtest_main)
+    target_link_libraries(test_neuro_config PRIVATE ame_neuro ame_pcl_components GTest::gtest_main)
     target_compile_definitions(test_neuro_config PRIVATE AME_NEURO=1)
     gtest_discover_tests(test_neuro_config DISCOVERY_MODE PRE_TEST)
 

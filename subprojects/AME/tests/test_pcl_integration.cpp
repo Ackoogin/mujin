@@ -352,6 +352,32 @@ TEST(PclIntegration, PlannerPlanService) {
     EXPECT_EQ(pl_comp.cleanup(), PCL_OK);
 }
 
+TEST(AgentDispatcher, MissingPublisherPortFailsDispatch) {
+    auto wm = buildUavWorldModel();
+    wm.registerAgent("uav1", "uav");
+
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+    ame::ActionRegistry registry;
+    registerUavActions(registry);
+
+    ame::AgentDispatcher dispatcher;
+    dispatcher.setWorldModel(&wm);
+    dispatcher.setPlanner(&planner);
+    dispatcher.setPlanCompiler(&compiler);
+    dispatcher.setActionRegistry(&registry);
+
+    auto result = dispatcher.dispatchToAgent("uav1", {"(searched sector_a)"});
+
+    EXPECT_FALSE(result.success);
+    EXPECT_NE(result.error_message.find("uav1"), std::string::npos);
+    EXPECT_TRUE(dispatcher.dispatchedAgents().empty());
+
+    const auto* agent = wm.getAgent("uav1");
+    ASSERT_NE(agent, nullptr);
+    EXPECT_TRUE(agent->available);
+}
+
 ///< REQ_PCL_008: PlannerComponent shall load a domain via PCL load_domain service.
 TEST(PclIntegration, PlannerLoadDomainService) {
     ame::PlannerComponent pl_comp;

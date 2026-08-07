@@ -16,8 +16,47 @@ namespace ame {
 using BRFS_Engine = aptk::search::brfs::BRFS<aptk::agnostic::Fwd_Search_Problem>;
 
 PlanResult Planner::solve(const WorldModel& wm) const {
+    // Disjunctive goals: try each alternative in order and return the first that
+    // is solvable. With a single alternative this is exactly solve(goalFluentIds).
+    const auto& alternatives = wm.goalAlternatives();
+    if (alternatives.size() <= 1) {
+        return solve(wm, wm.goalFluentIds());
+    }
+
+    PlanResult last;
+    for (const auto& alt : alternatives) {
+        PlanResult r = solve(wm, alt);
+        if (r.success) {
+            return r;
+        }
+        last = std::move(r);
+    }
+    // None solvable: report the last attempt's diagnostics.
+    if (last.error_msg.empty()) {
+        last.error_msg = "No plan found for any goal alternative";
+    }
+    return last;
+}
+
+PlanResult Planner::solve(const WorldModel& wm,
+                          const std::vector<unsigned>& goal_ids) const {
     PlanResult result;
     auto t0 = std::chrono::steady_clock::now();
+
+    if (goal_ids.empty()) {
+        result.error_msg = "Planner::solve: empty goal set";
+        auto t1 = std::chrono::steady_clock::now();
+        result.solve_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        return result;
+    }
+    for (auto goal_id : goal_ids) {
+        if (goal_id >= wm.numFluents()) {
+            result.error_msg = "Planner::solve: goal fluent id out of range";
+            auto t1 = std::chrono::steady_clock::now();
+            result.solve_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+            return result;
+        }
+    }
 
     // Build action traversal order for LAPKT; default is identity [0, 1, ..., N-1].
     const unsigned n_actions = wm.numGroundActions();
@@ -32,9 +71,9 @@ PlanResult Planner::solve(const WorldModel& wm) const {
     // Exceptions are swallowed so a neural outage never blocks the symbolic plan.
     if (heuristic_hook_) {
         try {
-            auto heuristic_scores = heuristic_hook_(wm, wm.goalFluentIds());
-            result.heuristic_source = "neural_hook"; // hook fired; may or may not reorder
+            auto heuristic_scores = heuristic_hook_(wm, goal_ids);
             if (!heuristic_scores.empty()) {
+                result.heuristic_source = "neural_hook";
                 std::unordered_map<unsigned, float> score_map;
                 score_map.reserve(heuristic_scores.size());
                 for (const auto& s : heuristic_scores)
@@ -61,7 +100,7 @@ PlanResult Planner::solve(const WorldModel& wm) const {
     // action list.  projectToSTRIPS calls make_action_tables() internally —
     // do NOT call it again afterwards.
     aptk::STRIPS_Problem strips;
-    wm.projectToSTRIPS(strips, action_order);
+    wm.projectToSTRIPS(strips, action_order, goal_ids);
 
     // Build mapping from LAPKT action index -> WorldModel ground action index.
     // LAPKT assigns index i to the i-th action added, which is action_order[i].

@@ -89,7 +89,9 @@ IWorldStateAccess* PlannedAction::worldStateAccess() {
 
 bool PlannedAction::preconditionsMet() {
   const auto facts = factList("ame_preconditions");
-  if (facts.empty()) {
+  const auto confirmed_facts = factList("ame_confirmed_preconditions");
+  const auto neg_facts = factList("ame_neg_preconditions");
+  if (facts.empty() && confirmed_facts.empty() && neg_facts.empty()) {
     return true;
   }
   auto* world_state = worldStateAccess();
@@ -100,6 +102,16 @@ bool PlannedAction::preconditionsMet() {
       PlannedActionNode::requiresConfirmedPreconditions(*this);
   for (const auto& fact : facts) {
     if (!PlannedActionNode::factSatisfies(*world_state, fact, require_confirmed)) {
+      return false;
+    }
+  }
+  for (const auto& fact : confirmed_facts) {
+    if (!PlannedActionNode::factSatisfies(*world_state, fact, true)) {
+      return false;
+    }
+  }
+  for (const auto& fact : neg_facts) {
+    if (world_state->getFact(fact)) {
       return false;
     }
   }

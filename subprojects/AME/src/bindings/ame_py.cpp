@@ -20,6 +20,7 @@
 #include <ame/executor_component.h>
 #include <ame/autonomy_backend.h>
 #include <ame/current_ame_backend_adapter.h>
+#include <ame/execution_sink.h>
 
 #if defined(AME_BUILD_AGRA_MA_BRIDGE)
 #include <cctype>
@@ -1715,6 +1716,16 @@ PYBIND11_MODULE(_ame_py, m) {
         .value("IMMEDIATE", ame::StopMode::IMMEDIATE)
         .export_values();
 
+    py::enum_<ame::RequirementPlacementState>(m, "RequirementPlacementState")
+        .value("Unspecified", ame::RequirementPlacementState::Unspecified)
+        .value("Pending", ame::RequirementPlacementState::Pending)
+        .value("Running", ame::RequirementPlacementState::Running)
+        .value("Completed", ame::RequirementPlacementState::Completed)
+        .value("Failed", ame::RequirementPlacementState::Failed)
+        .value("Cancelled", ame::RequirementPlacementState::Cancelled)
+        .value("Unsupported", ame::RequirementPlacementState::Unsupported)
+        .export_values();
+
     py::class_<ame::FactUpdate>(m, "FactUpdate")
         .def(py::init<>())
         .def_readwrite("key", &ame::FactUpdate::key)
@@ -1791,6 +1802,36 @@ PYBIND11_MODULE(_ame_py, m) {
         .def_readwrite("status", &ame::CommandResult::status)
         .def_readwrite("observed_updates", &ame::CommandResult::observed_updates)
         .def_readwrite("source", &ame::CommandResult::source);
+
+    py::class_<ame::RequirementPlacementRecord>(m, "RequirementPlacementRecord")
+        .def(py::init<>())
+        .def_readwrite("placement_id", &ame::RequirementPlacementRecord::placement_id)
+        .def_readwrite("command_id", &ame::RequirementPlacementRecord::command_id)
+        .def_readwrite("action_name", &ame::RequirementPlacementRecord::action_name)
+        .def_readwrite("signature", &ame::RequirementPlacementRecord::signature)
+        .def_readwrite("target_component", &ame::RequirementPlacementRecord::target_component)
+        .def_readwrite("target_service", &ame::RequirementPlacementRecord::target_service)
+        .def_readwrite("target_type", &ame::RequirementPlacementRecord::target_type)
+        .def_readwrite("target_requirement_id", &ame::RequirementPlacementRecord::target_requirement_id)
+        .def_readwrite("state", &ame::RequirementPlacementRecord::state);
+
+    py::class_<ame::ExecutionSubmission>(m, "ExecutionSubmission")
+        .def(py::init<>())
+        .def_readwrite("accepted", &ame::ExecutionSubmission::accepted)
+        .def_readwrite("command_egress_visible", &ame::ExecutionSubmission::command_egress_visible)
+        .def_readwrite("placement", &ame::ExecutionSubmission::placement)
+        .def_readwrite("rejection_reason", &ame::ExecutionSubmission::rejection_reason);
+
+    py::class_<ame::IExecutionSink, PyIExecutionSink>(m, "IExecutionSink")
+        .def(py::init<>())
+        .def("reset", &ame::IExecutionSink::reset, py::arg("session_id"))
+        .def("submit", &ame::IExecutionSink::submit, py::arg("command"))
+        .def("pullCommands", &ame::IExecutionSink::pullCommands)
+        .def("pushResult", &ame::IExecutionSink::pushResult, py::arg("result"))
+        .def("cancel", &ame::IExecutionSink::cancel, py::arg("command_id"))
+        .def("resultFor", &ame::IExecutionSink::resultFor, py::arg("command_id"))
+        .def("isPending", &ame::IExecutionSink::isPending, py::arg("command_id"))
+        .def("readPlacements", &ame::IExecutionSink::readPlacements);
 
     py::class_<ame::DispatchResult>(m, "DispatchResult")
         .def(py::init<>())
@@ -1872,14 +1913,44 @@ PYBIND11_MODULE(_ame_py, m) {
         .def("register_predicate", &ame::WorldModel::registerPredicate,
             py::arg("name"), py::arg("param_types"),
             "Register a predicate with parameter types")
+        .def("register_confirmed_predicate",
+            &ame::WorldModel::registerConfirmedPredicate, py::arg("name"),
+            "Declare a predicate whose facts satisfy a precondition only when "
+            "observed. Normally comes from the domain's (:confirmed-predicates "
+            "...) block rather than this call.")
+        .def("is_confirmed_predicate", &ame::WorldModel::isConfirmedPredicate,
+            py::arg("name"),
+            "Whether a predicate was declared confirmed-only")
+        .def("is_confirmed_fact", &ame::WorldModel::isConfirmedFact,
+            py::arg("fact_key"),
+            "Whether a grounded fact key names a confirmed-only predicate")
+        .def("confirmed_predicates",
+            [](const ame::WorldModel& wm) {
+                const auto& names = wm.confirmedPredicates();
+                return std::vector<std::string>(names.begin(), names.end());
+            },
+            "Names of predicates declared confirmed-only")
         .def("add_object", &ame::WorldModel::addObject,
             py::arg("name"), py::arg("type"),
             "Add an object with a type")
         // Actions
-        .def("register_action", &ame::WorldModel::registerAction,
+        .def("register_action",
+            [](ame::WorldModel& wm,
+               const std::string& name,
+               const std::vector<std::string>& params,
+               const std::vector<std::string>& param_types,
+               const std::vector<std::string>& preconditions,
+               const std::vector<std::string>& add_effects,
+               const std::vector<std::string>& del_effects,
+               const std::vector<std::string>& neg_preconditions) {
+                wm.registerAction(name, params, param_types, preconditions,
+                                  neg_preconditions, add_effects, del_effects);
+            },
             py::arg("name"), py::arg("params"), py::arg("param_types"),
             py::arg("preconditions"), py::arg("add_effects"), py::arg("del_effects"),
-            "Register an action schema")
+            py::arg("neg_preconditions") = std::vector<std::string>{},
+            "Register an action schema. neg_preconditions are fluent templates "
+            "that must be false for the grounded action to apply.")
         .def("num_ground_actions", &ame::WorldModel::numGroundActions,
             "Get number of grounded actions")
         // Agent management
@@ -1952,7 +2023,9 @@ PYBIND11_MODULE(_ame_py, m) {
     // -------------------------------------------------------------------------
     py::class_<ame::Planner>(m, "Planner")
         .def(py::init<>())
-        .def("solve", &ame::Planner::solve,
+        .def("solve",
+            static_cast<ame::PlanResult (ame::Planner::*)(
+                const ame::WorldModel&) const>(&ame::Planner::solve),
             py::arg("wm"),
             "Solve the planning problem defined in WorldModel");
 
@@ -1965,13 +2038,24 @@ PYBIND11_MODULE(_ame_py, m) {
             py::arg("pddl_name"), py::arg("bt_node_type"), py::arg("reactive") = false)
         .def("register_action_subtree", &ame::ActionRegistry::registerActionSubTree,
             py::arg("pddl_name"), py::arg("subtree_xml_template"), py::arg("reactive") = false)
-        .def("has_action", &ame::ActionRegistry::hasAction, py::arg("pddl_name"));
+        .def("register_action_file", &ame::ActionRegistry::registerActionFile,
+            py::arg("pddl_name"), py::arg("path"), py::arg("reactive") = false)
+        .def("has_action", &ame::ActionRegistry::hasAction, py::arg("pddl_name"))
+        .def("registered_names", &ame::ActionRegistry::registeredNames);
 
     // -------------------------------------------------------------------------
     // PlanCompiler
     // -------------------------------------------------------------------------
     py::class_<ame::PlanCompiler>(m, "PlanCompiler")
         .def(py::init<>())
+        .def("set_stub_unregistered_actions",
+             &ame::PlanCompiler::setStubUnregisteredActions, py::arg("enabled"),
+             "Compile planned actions with no registered BT binding to stub "
+             "units (effect predicates only) instead of failing closed. For "
+             "authoring/devenv preview; production leaves this off.")
+        .def("stub_unregistered_actions",
+             &ame::PlanCompiler::stubUnregisteredActions,
+             "Whether unregistered actions compile to stub units.")
         .def("compile", [](const ame::PlanCompiler& compiler,
                            const std::vector<ame::PlanStep>& plan,
                            const ame::WorldModel& wm,
@@ -2412,6 +2496,12 @@ PYBIND11_MODULE(_ame_py, m) {
         .def("set_inprocess_world_model", &ame::ExecutorComponent::setInProcessWorldModel,
             py::arg("wm"),
             "Inject world model for in-process execution")
+        .def("set_action_sink", &ame::ExecutorComponent::setActionSink,
+            py::arg("sink"), py::keep_alive<1, 2>(),
+            "Inject the IExecutionSink that AmeDispatchNode leaves dispatch to")
+        .def("set_action_registry", &ame::ExecutorComponent::setActionRegistry,
+            py::arg("registry"), py::keep_alive<1, 2>(),
+            "Inject the ActionRegistry used to register dispatch action verbs")
         .def("set_event_sink", [](ame::ExecutorComponent& exec, py::function callback) {
             exec.setEventSink([callback](const std::string& event) {
                 py::gil_scoped_acquire gil;
@@ -2430,7 +2520,9 @@ PYBIND11_MODULE(_ame_py, m) {
         .def("deactivate", [](ame::ExecutorComponent& exec) {
             return exec.deactivate() == PCL_OK;
         }, "Deactivate the executor")
-        .def("load_and_execute", &ame::ExecutorComponent::loadAndExecute,
+        .def("load_and_execute",
+            static_cast<void (ame::ExecutorComponent::*)(const std::string&)>(
+                &ame::ExecutorComponent::loadAndExecute),
             py::arg("bt_xml"),
             "Load BT XML and start execution")
         .def("tick_once", &ame::ExecutorComponent::tickOnce,

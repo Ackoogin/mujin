@@ -10,7 +10,7 @@ The contingency verifier accepts a PDDL domain and a template problem file, then
 
 The tool:
 
-1. Parses the domain and **automatically identifies context predicates** -- 0-ary predicates that gate actions but are never produced or consumed by any action.
+1. Parses the domain and **automatically identifies context fluents** -- grounded precondition fluents that gate actions but are never produced or consumed by any action.
 2. Enumerates all 2^N combinations of these predicates.
 3. For each combination, invokes the LAPKT BRFS planner.
 4. Reports solvability, plan length, and recovery actions for every combination.
@@ -53,10 +53,12 @@ contingency_verifier <domain.pddl> <template_problem.pddl> [options]
 |------|-------------|
 | `--no-prune` | Disable monotonicity pruning (solve every combination) |
 | `--json <file>` | Write machine-readable report to JSON file |
-| `--verbose` | Show full plan step signatures |
+| `--safety-goal <expr>` | Add an acceptable safety goal. Repeat for OR alternatives. Expressions may be `(fact)`, `(fact1) (fact2)`, or `(and ...)` |
+| `--safety-invariant <expr>` | Alias for `--safety-goal` |
+| `--verbose` | Show full plan step signatures in the summary table |
 | `-h`, `--help` | Show help |
 
-**Template problem file:** provides the structural initial state (position, flight phase, ODD predicates) and the safety goal. The tool toggles context predicates across all combinations while keeping the structural state fixed.
+**Template problem file:** provides the structural initial state (position, flight phase, ODD predicates) and the default safety goal. The tool toggles context predicates across all combinations while keeping the structural state fixed. Use repeated `--safety-goal` flags when more than one terminal state is acceptable.
 
 Run once per mission phase with different templates:
 
@@ -98,7 +100,7 @@ Context predicates are:
 
 1. **Not in any action's add effects** -- the planner cannot set them.
 2. **Not in any action's delete effects** -- the planner cannot clear them.
-3. **Appear only as positive preconditions** -- the STRIPS parser does not support negated preconditions.
+3. **Appear only as positive preconditions** -- a negative precondition would let an added fact *disable* an action, breaking monotonicity. The parser does support negative preconditions; the verifier detects them and disables pruning automatically (see below) rather than relying on a parser limitation.
 
 Given these three conditions:
 
@@ -119,7 +121,7 @@ Pruning would be invalid if any of the three conditions were violated:
 - If an action could **clear** a context predicate (condition 2 violated), same issue.
 - If a context predicate appeared as a **negated precondition** (condition 3 violated), additional capabilities could *disable* actions, breaking monotonicity.
 
-The tool verifies all three conditions at startup and prints the verification result per predicate. Use `--no-prune` to disable pruning and solve every combination independently if the domain structure is uncertain.
+The tool verifies all three conditions at startup and prints the verification result per predicate. Conditions 1 and 2 are structural to a context predicate. For condition 3, if the domain uses any negative preconditions the tool **disables monotone pruning automatically** and prints a notice, then solves every combination directly (it never prunes unsoundly). Use `--no-prune` to disable pruning explicitly if the domain structure is otherwise uncertain.
 
 ### Performance impact
 
@@ -142,13 +144,14 @@ The text report includes:
 1. **Header** -- domain file, template problem, identified context predicates with initial values.
 2. **Pruning justification** -- formal theorem, proof, and per-predicate condition verification.
 3. **Combination table** -- every combination with result (SAFE / GAP / SAFE(implied) / GAP(implied)), plan length, solve time, and recovery actions used.
-4. **Summary** -- total combinations, solver calls, pruning statistics, and any design gaps.
+4. **Review details** -- per-combination start state, selected safety goal, full plan, and simulated end state.
+5. **Summary** -- total combinations, solver calls, pruning statistics, and any design gaps.
 
 Implied results show which verified combination they were derived from, maintaining an audit trail.
 
 ### JSON report (`--json`)
 
-Machine-readable output containing all fields from the text report plus per-combination flags, full plan signatures, and timing data. Suitable for downstream tooling, dashboards, or automated regression detection.
+Machine-readable output containing all fields from the text report plus per-combination flags, safety goals, full plan signatures, start states, end states, and timing data. Suitable for downstream tooling, dashboards, or automated regression detection.
 
 Structure:
 
@@ -170,6 +173,9 @@ Structure:
       "result": "SAFE",
       "plan_length": 1,
       "solve_time_ms": 0.1,
+      "selected_goal": "(safe-state uav1)",
+      "initial_state": "(at uav1 wp1); ...",
+      "end_state": "(safe-state uav1); ...",
       "actions": "emergency-land",
       "plan": "emergency-land(uav1,wp1)"
     },
@@ -252,7 +258,6 @@ The tool consumes the same PDDL domain files used by the runtime execution plann
 
 ## Limitations
 
-- **0-ary predicates only.** Parameterised context predicates (e.g. `(weather-ok ?l)`) are not enumerated. These can be handled by providing multiple template problems with different structural states.
-- **STRIPS only.** The tool inherits the PDDL parser's STRIPS limitation. Negated preconditions are not supported; use explicit positive predicates (e.g. `(sensor-degraded ?a)` instead of `(not (sensor-operational ?a))`).
+- **Pruning needs positive context predicates.** The parser supports negative preconditions, but monotone pruning is only sound when context predicates appear as positive preconditions. The tool disables pruning automatically for domains that use negative preconditions. For prunable contingency domains, prefer explicit positive predicates (e.g. `(sensor-degraded ?a)` instead of `(not (sensor-operational ?a))`).
 - **No timeout.** The LAPKT BRFS solver has no per-combination timeout. For large domains, individual combinations may take significant time. Use `--no-prune` with caution on large state spaces.
 - **Sequential execution.** Combinations are solved sequentially. For large enumerations, consider running the tool overnight in CI/CD.

@@ -33,6 +33,11 @@ PlannedActionNode::PlannedActionNode(const std::string& name,
 BT::PortsList PlannedActionNode::providedPorts() {
   return {
       BT::InputPort<std::string>("ame_preconditions", "", "Grounded preconditions"),
+      BT::InputPort<std::string>("ame_confirmed_preconditions", "",
+                                 "Grounded preconditions that must be observed, "
+                                 "never merely predicted"),
+      BT::InputPort<std::string>("ame_neg_preconditions", "",
+                                 "Grounded preconditions that must be false"),
       BT::InputPort<std::string>("ame_add_effects", "", "Grounded add effects"),
       BT::InputPort<std::string>("ame_del_effects", "", "Grounded delete effects"),
       BT::InputPort<bool>("ame_reactive", false, "Recheck preconditions while running"),
@@ -136,16 +141,32 @@ IWorldStateAccess* PlannedActionNode::worldStateAccess() {
 
 bool PlannedActionNode::preconditionsMet() {
   const auto preconditions = factList("ame_preconditions");
-  if (preconditions.empty()) {
+  const auto confirmed_preconditions = factList("ame_confirmed_preconditions");
+  const auto neg_preconditions = factList("ame_neg_preconditions");
+  if (preconditions.empty() && confirmed_preconditions.empty() &&
+      neg_preconditions.empty()) {
     return true;
   }
   auto* world_state = worldStateAccess();
   if (world_state == nullptr) {
     return false;
   }
+
+  // ame_required_authority raises the bar for the whole node; the confirmed
+  // list is always held to observed state whatever that port says.
   const bool require_confirmed = requiresConfirmedPreconditions(*this);
   for (const auto& fact : preconditions) {
     if (!factSatisfies(*world_state, fact, require_confirmed)) {
+      return false;
+    }
+  }
+  for (const auto& fact : confirmed_preconditions) {
+    if (!factSatisfies(*world_state, fact, true)) {
+      return false;
+    }
+  }
+  for (const auto& fact : neg_preconditions) {
+    if (world_state->getFact(fact)) {
       return false;
     }
   }

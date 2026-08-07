@@ -1,4 +1,5 @@
 #include "ame/bt_logger.h"
+#include "ame/detail/escape.h"
 #include "ame/world_model.h"
 
 #include <chrono>
@@ -18,23 +19,6 @@ static const char* statusStr(BT::NodeStatus s) {
         case BT::NodeStatus::FAILURE: return "FAILURE";
         default:                      return "UNKNOWN";
     }
-}
-
-/// Minimal JSON-string escaping (backslash + double-quote).
-static std::string jsonEscape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size() + 4);
-    for (char c : s) {
-        switch (c) {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n";  break;
-            case '\r': out += "\\r";  break;
-            case '\t': out += "\\t";  break;
-            default:   out += c;      break;
-        }
-    }
-    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +49,13 @@ void AmeBTLogger::addCallbackSink(SinkCallback cb) {
     callbacks_.push_back(std::move(cb));
 }
 
+void AmeBTLogger::setMaxRetainedEvents(std::size_t max_events) {
+    max_retained_events_ = max_events;
+    while (events_.size() > max_retained_events_) {
+        events_.erase(events_.begin());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // StatusChangeLogger interface
 // ---------------------------------------------------------------------------
@@ -83,18 +74,15 @@ void AmeBTLogger::callback(BT::Duration timestamp,
     std::ostringstream os;
     os << "{"
        << "\"ts_us\":" << wall_us << ","
-       << "\"node\":\"" << jsonEscape(node.name()) << "\","
-       << "\"type\":\"" << jsonEscape(node.registrationName()) << "\","
+       << "\"node\":\"" << detail::jsonEscape(node.name()) << "\","
+       << "\"type\":\"" << detail::jsonEscape(node.registrationName()) << "\","
        << "\"prev\":\"" << statusStr(prev_status) << "\","
        << "\"status\":\"" << statusStr(status) << "\","
-       << "\"tree_id\":\"" << jsonEscape(tree_id_) << "\","
+       << "\"tree_id\":\"" << detail::jsonEscape(tree_id_) << "\","
        << "\"wm_version\":" << wm_ver
        << "}";
 
     std::string line = os.str();
-
-    // Store in memory
-    events_.push_back(line);
 
     // Dispatch to sinks
     if (file_.is_open()) {
@@ -102,6 +90,12 @@ void AmeBTLogger::callback(BT::Duration timestamp,
     }
     for (auto& cb : callbacks_) {
         cb(line);
+    }
+
+    // Store in memory
+    events_.push_back(std::move(line));
+    while (events_.size() > max_retained_events_) {
+        events_.erase(events_.begin());
     }
 }
 

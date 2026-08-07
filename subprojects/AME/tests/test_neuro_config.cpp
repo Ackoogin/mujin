@@ -134,7 +134,10 @@ TEST(PlannerSeam, BaselineIdenticalWithoutHook) {
     EXPECT_TRUE(r2.success);
     EXPECT_EQ(r1.steps.size(), r2.steps.size());
     EXPECT_TRUE(hook_called);
-    EXPECT_EQ(r2.heuristic_source, "neural_hook");
+    // An empty hook return does not influence the plan, so provenance must
+    // remain "symbolic" (AMC.062 accuracy / F-21) — reporting "neural_hook"
+    // here would be a false neural-provenance claim.
+    EXPECT_EQ(r2.heuristic_source, "symbolic");
 #endif
 }
 
@@ -259,6 +262,62 @@ TEST(ExecutorSeam, RepairLoadFailurePreservesFailureStatus) {
 
     // Even though loadAndExecute reset last_status_ to IDLE before throwing,
     // the fix must restore it to FAILURE so callers observe the correct status.
+    EXPECT_EQ(exec.lastStatus(), BT::NodeStatus::FAILURE);
+
+    exec.deactivate();
+    exec.cleanup();
+    exec.shutdown();
+}
+
+TEST(ExecutorSeam, RepairHookUsesCompiledPlanMetadataForFailedStep) {
+    ame::WorldModel wm;
+    wm.typeSystem().addType("object");
+    wm.addObject("x", "object");
+    wm.registerPredicate("done", {"object"});
+    wm.registerPredicate("goal", {"object"});
+    // (goal x) is unset, so the goal guard falls through to the plan body.
+    // (done x) starts false, so the first action unit can set it to true.
+
+    const std::string bt_xml = R"xml(
+<root BTCPP_format="4">
+  <BehaviorTree ID="FailPlan">
+    <ReactiveFallback>
+      <CheckWorldPredicate predicate="(goal x)" />
+      <Sequence>
+        <Sequence name="step0">
+          <SimulatedAction name="set-done" ame_add_effects="(done x)" />
+        </Sequence>
+        <Sequence name="step1">
+          <CheckWorldPredicate predicate="(goal x)" />
+        </Sequence>
+      </Sequence>
+    </ReactiveFallback>
+  </BehaviorTree>
+</root>)xml";
+
+    ame::CompiledPlan compiled;
+    compiled.xml = bt_xml;
+    compiled.steps.push_back({0, "step0"});
+    compiled.steps.push_back({1, "step1"});
+    compiled.has_goal_guard = true;
+
+    TestableExecutorComponent exec;
+    exec.setParam("bt_log.enabled", false);
+    exec.setInProcessWorldModel(&wm);
+    ASSERT_EQ(exec.configure(), PCL_OK);
+    ASSERT_EQ(exec.activate(), PCL_OK);
+
+    exec.loadAndExecute(compiled);
+
+    unsigned captured_failed_step = 99;
+    exec.setRepairHook([&](unsigned failed_step, const ame::WorldModel&)
+                           -> std::string {
+        captured_failed_step = failed_step;
+        return {};
+    });
+
+    EXPECT_EQ(exec.test_tick(), PCL_OK);
+    EXPECT_EQ(captured_failed_step, 1u);
     EXPECT_EQ(exec.lastStatus(), BT::NodeStatus::FAILURE);
 
     exec.deactivate();

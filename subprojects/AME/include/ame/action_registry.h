@@ -27,6 +27,11 @@ public:
                                const std::string& subtree_xml_template,
                                bool reactive = false);
 
+    // Register a pre-authored BT XML file with {param0}, {param1}, ... placeholders
+    void registerActionFile(const std::string& pddl_name,
+                            const std::string& path,
+                            bool reactive = false);
+
     // Resolve: given an action name and parameter values, produce the ActionImpl
     ActionImpl resolve(const std::string& action_name,
                        const std::vector<std::string>& params) const;
@@ -34,7 +39,7 @@ public:
     // Check if an action is registered
     bool hasAction(const std::string& pddl_name) const;
 
-    // Return all registered PDDL action names.
+    /// \brief Return all registered PDDL action names.
     std::vector<std::string> registeredNames() const;
 
     // Get the reactive flag for an action
@@ -42,10 +47,10 @@ public:
 
 private:
     struct Registration {
-        enum Kind { SimpleNode, SubTreeTemplate };
+        enum Kind { SimpleNode, SubTreeTemplate, PreAuthoredFile };
         Kind kind = SimpleNode;
         std::string bt_node_type;         // for SimpleNode
-        std::string xml_template;         // for SubTreeTemplate
+        std::string xml_template;         // for SubTreeTemplate and PreAuthoredFile
         bool reactive = false;
     };
 

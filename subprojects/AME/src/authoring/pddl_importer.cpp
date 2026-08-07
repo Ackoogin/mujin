@@ -237,6 +237,19 @@ std::vector<ObjectDef> parseObjects(const Sexpr& list) {
   return objects;
 }
 
+void appendUniqueObjects(std::vector<ObjectDef>& target,
+                         const std::vector<ObjectDef>& source) {
+  for (const auto& object : source) {
+    const auto it = std::find_if(target.begin(), target.end(),
+                                 [&object](const ObjectDef& existing) {
+                                   return existing.name == object.name;
+                                 });
+    if (it == target.end()) {
+      target.push_back(object);
+    }
+  }
+}
+
 EffectRef parseEffectRef(const Sexpr& expr) {
   if (!expr.isList || expr.children.empty() || expr.children.front().isList) {
     throw std::runtime_error("expected fact expression");
@@ -396,6 +409,10 @@ PddlImportResult PddlImporter::importDomain(const std::string& domainPddl) {
       }
     }
 
+    if (const Sexpr* constants = findListSection(root, ":constants")) {
+      appendUniqueObjects(model.objects, parseObjects(*constants));
+    }
+
     for (const auto& child : root.children) {
       if (child.isList && !child.children.empty() &&
           isKeyword(child.children.front(), ":action")) {
@@ -432,9 +449,7 @@ PddlImportResult PddlImporter::importProblem(const ProjectModel& model,
     ProjectModel imported = model;
     if (const Sexpr* objects = findListSection(root, ":objects")) {
       const std::vector<ObjectDef> parsedObjects = parseObjects(*objects);
-      imported.objects.insert(imported.objects.end(),
-                              parsedObjects.begin(),
-                              parsedObjects.end());
+      appendUniqueObjects(imported.objects, parsedObjects);
     }
 
     ScenarioDef scenario;

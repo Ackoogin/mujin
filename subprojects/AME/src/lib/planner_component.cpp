@@ -150,7 +150,15 @@ std::unique_ptr<WorldModel> PlannerComponent::snapshotWorldModel(
     throw std::runtime_error("World state query failed");
   }
   for (const auto& fact : snapshot.facts) {
-    try { wm->setFact(fact.key, fact.value, "snapshot"); } catch (...) {}
+    try {
+      wm->setFact(fact.key, fact.value, "snapshot");
+    } catch (const std::exception& e) {
+      logWarn("Failed to apply snapshot fact '%s': %s",
+              fact.key.c_str(), e.what());
+    } catch (...) {
+      logWarn("Failed to apply snapshot fact '%s': unknown error",
+              fact.key.c_str());
+    }
   }
   wm->setGoal(goal_fluents);
   return wm;

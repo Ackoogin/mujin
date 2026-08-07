@@ -214,3 +214,70 @@ TEST_F(VerifierFixture, AuthorityView_ThreeVerdictsFromSameSnapshot) {
         EXPECT_FALSE(verdict.accepted) << "ConfirmedOnly should reject BELIEVED facts";
     }
 }
+
+// ---------------------------------------------------------------------------
+// ForwardSimVerifier: negative preconditions (must be false)
+// ---------------------------------------------------------------------------
+
+class NegPreVerifierFixture : public ::testing::Test {
+protected:
+    void SetUp() override {
+        auto& ts = wm_.typeSystem();
+        ts.addType("object");
+        ts.addType("robot", "object");
+        wm_.addObject("uav1", "robot");
+        wm_.registerPredicate("armed", {"robot"});
+        wm_.registerPredicate("ready", {"robot"});
+        // prepare: requires (not armed) -> sets ready
+        wm_.registerAction("prepare",
+            {"?r"}, {"robot"},
+            /*pre*/{}, /*neg_pre*/{"(armed ?r)"},
+            /*add*/{"(ready ?r)"}, /*del*/{});
+        // arm: -> sets armed
+        wm_.registerAction("arm",
+            {"?r"}, {"robot"},
+            /*pre*/{}, /*neg_pre*/{},
+            /*add*/{"(armed ?r)"}, /*del*/{});
+    }
+    ame::WorldModel wm_;
+};
+
+TEST_F(NegPreVerifierFixture, NegPreSatisfiedWhenFalse) {
+    ForwardSimVerifier v;
+    PlanProposal p;
+    unsigned prep = find_action(wm_, "prepare(uav1)");
+    ASSERT_NE(prep, UINT_MAX);
+    p.steps = {{prep}};
+    p.goal_fluent_keys = {"(ready uav1)"};
+    auto verdict = v.verify(p, wm_);
+    EXPECT_TRUE(verdict.accepted) << verdict.reason;
+}
+
+TEST_F(NegPreVerifierFixture, NegPreViolatedWhenTrueRejected) {
+    wm_.setFact("(armed uav1)", true, "test", ame::FactAuthority::CONFIRMED);
+    ForwardSimVerifier v;
+    PlanProposal p;
+    unsigned prep = find_action(wm_, "prepare(uav1)");
+    ASSERT_NE(prep, UINT_MAX);
+    p.steps = {{prep}};
+    p.goal_fluent_keys = {"(ready uav1)"};
+    auto verdict = v.verify(p, wm_);
+    EXPECT_FALSE(verdict.accepted);
+    EXPECT_NE(verdict.reason.find("neg_precondition_failed"), std::string::npos);
+}
+
+TEST_F(NegPreVerifierFixture, NegPreViolatedByEarlierEffectRejected) {
+    // arm sets armed true, so prepare's (not armed) precondition then fails.
+    ForwardSimVerifier v;
+    PlanProposal p;
+    unsigned arm  = find_action(wm_, "arm(uav1)");
+    unsigned prep = find_action(wm_, "prepare(uav1)");
+    ASSERT_NE(arm, UINT_MAX);
+    ASSERT_NE(prep, UINT_MAX);
+    p.steps = {{arm}, {prep}};
+    p.goal_fluent_keys = {"(ready uav1)"};
+    auto verdict = v.verify(p, wm_);
+    EXPECT_FALSE(verdict.accepted);
+    EXPECT_NE(verdict.reason.find("neg_precondition_failed_at_step_1"),
+              std::string::npos);
+}

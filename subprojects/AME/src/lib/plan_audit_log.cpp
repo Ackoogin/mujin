@@ -1,35 +1,16 @@
 #include "ame/plan_audit_log.h"
+#include "ame/detail/escape.h"
 
 #include <sstream>
 
 namespace ame {
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-static std::string jsonEscape(const std::string& s) {
-    std::string out;
-    out.reserve(s.size() + 4);
-    for (char c : s) {
-        switch (c) {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n";  break;
-            case '\r': out += "\\r";  break;
-            case '\t': out += "\\t";  break;
-            default:   out += c;      break;
-        }
-    }
-    return out;
-}
 
 static std::string jsonStringArray(const std::vector<std::string>& arr) {
     std::ostringstream os;
     os << "[";
     for (size_t i = 0; i < arr.size(); ++i) {
         if (i > 0) os << ",";
-        os << "\"" << jsonEscape(arr[i]) << "\"";
+        os << "\"" << detail::jsonEscape(arr[i]) << "\"";
     }
     os << "]";
     return os.str();
@@ -61,41 +42,47 @@ uint64_t PlanAuditLog::recordEpisode(Episode ep) {
     }
 
     uint64_t id = ep.episode_id;
-    episodes_.push_back(std::move(ep));
-    const auto& stored = episodes_.back();
 
     if (file_.is_open()) {
         std::ostringstream os;
         os << "{"
-           << "\"episode_id\":" << stored.episode_id << ","
-           << "\"parent_episode_id\":" << stored.parent_episode_id << ",";
-        if (!stored.phase_name.empty()) {
-            os << "\"phase_name\":\"" << jsonEscape(stored.phase_name) << "\",";
+           << "\"episode_id\":" << ep.episode_id << ","
+           << "\"parent_episode_id\":" << ep.parent_episode_id << ",";
+        if (!ep.phase_name.empty()) {
+            os << "\"phase_name\":\"" << detail::jsonEscape(ep.phase_name) << "\",";
         }
-        os << "\"ts_us\":" << stored.ts_us << ","
-           << "\"solver\":\"" << jsonEscape(stored.solver) << "\","
-           << "\"solve_time_ms\":" << stored.solve_time_ms << ","
-           << "\"success\":" << (stored.success ? "true" : "false") << ","
-           << "\"expanded\":" << stored.expanded << ","
-           << "\"generated\":" << stored.generated << ","
-           << "\"cost\":" << stored.cost << ","
-           << "\"init_facts\":" << jsonStringArray(stored.init_facts) << ","
-           << "\"goal_fluents\":" << jsonStringArray(stored.goal_fluents) << ","
-           << "\"plan_actions\":" << jsonStringArray(stored.plan_actions) << ","
-           << "\"bt_xml\":\"" << jsonEscape(stored.bt_xml) << "\","
-           << "\"heuristic_source\":\"" << jsonEscape(stored.heuristic_source) << "\","
-           << "\"goal_source\":\"" << jsonEscape(stored.goal_source) << "\","
-           << "\"repair_source\":\"" << jsonEscape(stored.repair_source) << "\"";
-        if (!stored.neuro_record_ids.empty()) {
+        if (!ep.session_id.empty()) {
+            os << "\"session_id\":\"" << detail::jsonEscape(ep.session_id) << "\",";
+        }
+        os << "\"ts_us\":" << ep.ts_us << ","
+           << "\"solver\":\"" << detail::jsonEscape(ep.solver) << "\","
+           << "\"solve_time_ms\":" << ep.solve_time_ms << ","
+           << "\"success\":" << (ep.success ? "true" : "false") << ","
+           << "\"expanded\":" << ep.expanded << ","
+           << "\"generated\":" << ep.generated << ","
+           << "\"cost\":" << ep.cost << ","
+           << "\"init_facts\":" << jsonStringArray(ep.init_facts) << ","
+           << "\"goal_fluents\":" << jsonStringArray(ep.goal_fluents) << ","
+           << "\"plan_actions\":" << jsonStringArray(ep.plan_actions) << ","
+           << "\"bt_xml\":\"" << detail::jsonEscape(ep.bt_xml) << "\","
+           << "\"heuristic_source\":\"" << detail::jsonEscape(ep.heuristic_source) << "\","
+           << "\"goal_source\":\"" << detail::jsonEscape(ep.goal_source) << "\","
+           << "\"repair_source\":\"" << detail::jsonEscape(ep.repair_source) << "\"";
+        if (!ep.neuro_record_ids.empty()) {
             os << ",\"neuro_record_ids\":[";
-            for (size_t i = 0; i < stored.neuro_record_ids.size(); ++i) {
+            for (size_t i = 0; i < ep.neuro_record_ids.size(); ++i) {
                 if (i) os << ",";
-                os << stored.neuro_record_ids[i];
+                os << ep.neuro_record_ids[i];
             }
             os << "]";
         }
         os << "}";
         file_ << os.str() << '\n';
+    }
+
+    episodes_.push_back(std::move(ep));
+    while (episodes_.size() > max_retained_episodes_) {
+        episodes_.erase(episodes_.begin());
     }
 
     return id;
@@ -104,6 +91,13 @@ uint64_t PlanAuditLog::recordEpisode(Episode ep) {
 void PlanAuditLog::flush() {
     if (file_.is_open()) {
         file_.flush();
+    }
+}
+
+void PlanAuditLog::setMaxRetainedEpisodes(std::size_t max_episodes) {
+    max_retained_episodes_ = max_episodes;
+    while (episodes_.size() > max_retained_episodes_) {
+        episodes_.erase(episodes_.begin());
     }
 }
 

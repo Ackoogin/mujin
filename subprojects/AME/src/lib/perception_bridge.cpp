@@ -22,7 +22,7 @@ unsigned PerceptionBridge::flush() {
     }
 
     for (auto& upd : batch) {
-        wm_.setFact(upd.fact, upd.value, upd.source);
+        wm_.setFact(upd.fact, upd.value, upd.source, FactAuthority::CONFIRMED);
         if (callback_) {
             callback_(upd.fact, upd.value);
         }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <fstream>
 #include <functional>
 #include <string>
@@ -24,6 +25,8 @@ namespace ame {
 ///   - "perception"                     -- external update
 ///   - "planner_init"                   -- initial state sync
 ///   - ""                               -- untagged (legacy callers)
+///
+/// In-memory retention is bounded to the most recent 10000 entries by default.
 class WmAuditLog {
 public:
     struct Entry {
@@ -52,6 +55,9 @@ public:
     /// Flush the file sink.
     void flush();
 
+    /// Set the maximum number of entries retained in memory.
+    void setMaxRetainedEntries(std::size_t max_entries);
+
     /// All entries recorded so far (useful for testing / queries).
     const std::vector<Entry>& entries() const { return entries_; }
 
@@ -61,6 +67,7 @@ public:
 private:
     std::ofstream file_;
     std::vector<Entry> entries_;
+    std::size_t max_retained_entries_ = 10000;
 };
 
 } // namespace ame

@@ -13,7 +13,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cfloat>
 #include <cstdio>
 #include <cstring>
@@ -106,33 +105,140 @@ static bool readTextFile(const std::string& path, std::string& out) {
   return file.good() || file.eof();
 }
 
-static bool isPddlKeywordLine(const std::string& line) {
-  const size_t start = line.find_first_not_of(" \t");
-  if (start == std::string::npos) {
-    return false;
-  }
-
-  const std::string text = line.substr(start);
-  return text.rfind("(define", 0) == 0 ||
-         text.rfind("(:", 0) == 0 ||
-         text.rfind(":requirements", 0) == 0 ||
-         text.rfind(":parameters", 0) == 0 ||
-         text.rfind(":precondition", 0) == 0 ||
-         text.rfind(":effect", 0) == 0 ||
-         text.rfind("(:goal", 0) == 0;
+static void renderReadOnlyTextBox(const char* id,
+                                  const std::string& text,
+                                  const ImVec2& size) {
+  std::vector<char> buffer(text.begin(), text.end());
+  buffer.push_back('\0');
+  ImGui::InputTextMultiline(id,
+                            buffer.data(),
+                            buffer.size(),
+                            size,
+                            ImGuiInputTextFlags_ReadOnly |
+                                ImGuiInputTextFlags_AllowTabInput);
 }
 
-static void renderPddlText(const std::string& pddl) {
-  const ImVec4 keywordColor(0.0F, 1.0F, 1.0F, 1.0F);
-  std::istringstream input(pddl);
-  std::string line;
-  while (std::getline(input, line)) {
-    if (isPddlKeywordLine(line)) {
-      ImGui::TextColored(keywordColor, "%s", line.c_str());
-    } else {
-      ImGui::TextUnformatted(line.c_str());
+static ImVec2 remainingPanelSize() {
+  ImVec2 size = ImGui::GetContentRegionAvail();
+  size.x = std::max(size.x, 1.0F);
+  size.y = std::max(size.y, 1.0F);
+  return size;
+}
+
+static std::string buildValidationOutputText(
+    const ValidationReport& validation,
+    const StructuralReport& structural,
+    const ScenarioBatchReport& batch,
+    const ContingencyReport& contingency,
+    const std::string& validationState,
+    const std::string& lastOperation) {
+  std::ostringstream output;
+  output << "Validation state: " << validationState << '\n';
+  output << "Last operation: " << lastOperation << "\n\n";
+
+  if (validation.ok) {
+    output << "Validation passed\n";
+  } else if (validation.errors.empty()) {
+    output << "Click Validate > Validate Now\n";
+  } else {
+    output << "Validation errors:\n";
+    for (const auto& err : validation.errors) {
+      output << "ERR: " << err.message << '\n';
+      for (const auto& pn : err.predicateNames) {
+        output << "  predicate: " << pn << '\n';
+      }
+      for (const auto& an : err.actionNames) {
+        output << "  action: " << an << '\n';
+      }
     }
   }
+
+  if (validation.grounding.valid) {
+    output << "\nGrounding report:\n";
+    output << "Total fluents: " << validation.grounding.totalFluents << '\n';
+    output << "Total ground actions: "
+           << validation.grounding.totalGroundActions << '\n';
+    for (const auto& warning : validation.grounding.warnings) {
+      output << "WARNING: " << warning << '\n';
+    }
+
+    output << "\nPredicate ground instances:\n";
+    for (const auto& stat : validation.grounding.predicateStats) {
+      output << "  " << stat.elementName << ": " << stat.count << '\n';
+    }
+
+    output << "\nAction ground instances:\n";
+    for (const auto& stat : validation.grounding.actionStats) {
+      output << "  " << stat.elementName << ": " << stat.count << '\n';
+    }
+  }
+
+  output << "\nStructural issues:\n";
+  if (structural.issues.empty()) {
+    output << "No structural issues\n";
+  } else {
+    for (const auto& issue : structural.issues) {
+      output << (issue.severity == Severity::Error ? "ERR: " : "WARN: ")
+             << issue.message << '\n';
+    }
+  }
+
+  if (!batch.results.empty()) {
+    output << "\nScenario regression: " << batch.passCount << " pass, "
+           << batch.failCount << " fail, " << batch.errorCount << " error\n";
+    for (const auto& result : batch.results) {
+      output << result.scenarioName << ": ";
+      switch (result.outcome) {
+      case ScenarioOutcome::Pass:
+        output << "PASS";
+        break;
+      case ScenarioOutcome::Fail:
+        output << "FAIL";
+        break;
+      case ScenarioOutcome::Error:
+        output << "ERROR";
+        break;
+      }
+      output << ", steps=" << result.planStepCount
+             << ", time_ms=" << result.solveTimeMs;
+      if (!result.reason.empty()) {
+        output << ", notes=" << result.reason;
+      }
+      output << '\n';
+    }
+  }
+
+  if (!contingency.contextFluents.empty()) {
+    output << "\nContingency analysis: " << contingency.feasibleCount
+           << " feasible / " << contingency.infeasibleCount
+           << " infeasible / " << contingency.errorCount
+           << " error (" << contingency.contextFluents.size()
+           << " context fluents)\n";
+    if (!contingency.error.empty()) {
+      output << "ERROR: " << contingency.error << '\n';
+    }
+    for (const auto& ctx : contingency.results) {
+      output << "Context:";
+      if (ctx.trueFluents.empty()) {
+        output << " (none)";
+      } else {
+        for (const auto& fluent : ctx.trueFluents) {
+          output << ' ' << fluent;
+        }
+      }
+      output << " -> ";
+      if (!ctx.errorMessage.empty()) {
+        output << "ERROR: " << ctx.errorMessage;
+      } else if (ctx.planFound) {
+        output << "OK";
+      } else {
+        output << "NO PLAN";
+      }
+      output << ", steps=" << ctx.planSteps << '\n';
+    }
+  }
+
+  return output.str();
 }
 
 static void renderActionRefSection(const char* title,
@@ -1780,6 +1886,11 @@ void AppShell::renderPddlTab() {
   ImGui::BeginChild("##PddlPreview", ImVec2(0.0F, halfH),
                     ImGuiChildFlags_Border);
   const std::string pddl = PddlGenerator::generateDomain(m_model);
+  if (ImGui::Button("Copy domain PDDL")) {
+    ImGui::SetClipboardText(pddl.c_str());
+    lastOperation = "Copied domain PDDL";
+  }
+  ImGui::SameLine();
   const auto load_generated = [&]() {
     const size_t length = std::min(pddl.size(), m_pddlEditorBuffer.size() - 1U);
     std::copy_n(pddl.data(), length, m_pddlEditorBuffer.data());
@@ -1822,166 +1933,21 @@ void AppShell::renderPddlTab() {
   ImGui::EndChild();
   ImGui::BeginChild("##ValidationOutput", ImVec2(0.0F, 0.0F),
                     ImGuiChildFlags_Border);
-  if (m_lastValidation.ok) {
-    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.3f, 1.0f), "Validation passed");
-  } else if (m_lastValidation.errors.empty()) {
-    ImGui::TextDisabled("Click Validate > Validate Now");
-  } else {
-    for (const auto& err : m_lastValidation.errors) {
-      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", err.message.c_str());
-      for (const auto& pn : err.predicateNames) {
-        ImGui::BulletText("predicate: %s", pn.c_str());
-      }
-      for (const auto& an : err.actionNames) {
-        ImGui::BulletText("action: %s", an.c_str());
-      }
-    }
-  }
-  if (m_lastValidation.grounding.valid) {
-    ImGui::Separator();
-    ImGui::TextDisabled("Grounding Report");
-    ImGui::Text("Total fluents:        %u",
-                m_lastValidation.grounding.totalFluents);
-    ImGui::Text("Total ground actions: %u",
-                m_lastValidation.grounding.totalGroundActions);
-    for (const auto& warning : m_lastValidation.grounding.warnings) {
-      ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
-                         "WARNING: %s", warning.c_str());
-    }
-
-    if (ImGui::BeginTable("##predcounts", 2,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-      ImGui::TableSetupColumn("Predicate");
-      ImGui::TableSetupColumn("Ground instances");
-      ImGui::TableHeadersRow();
-      for (const auto& stat : m_lastValidation.grounding.predicateStats) {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted(stat.elementName.c_str());
-        ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%u", stat.count);
-      }
-      ImGui::EndTable();
-    }
-
-    if (ImGui::BeginTable("##actioncounts", 2,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-      ImGui::TableSetupColumn("Action schema");
-      ImGui::TableSetupColumn("Ground actions");
-      ImGui::TableHeadersRow();
-      for (const auto& stat : m_lastValidation.grounding.actionStats) {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted(stat.elementName.c_str());
-        ImGui::TableSetColumnIndex(1);
-        ImGui::Text("%u", stat.count);
-      }
-      ImGui::EndTable();
-    }
+  const std::string validationOutput =
+      buildValidationOutputText(m_lastValidation,
+                                m_structuralReport,
+                                m_lastBatchReport,
+                                m_lastContingencyReport,
+                                validationState,
+                                lastOperation);
+  if (ImGui::Button("Copy diagnostics")) {
+    ImGui::SetClipboardText(validationOutput.c_str());
+    lastOperation = "Copied diagnostics";
   }
   ImGui::Separator();
-  ImGui::TextDisabled("Structural Issues");
-  if (m_structuralReport.issues.empty()) {
-    ImGui::TextColored(ImVec4(0.2F, 0.9F, 0.3F, 1.0F), "No structural issues");
-  } else {
-    for (const auto& issue : m_structuralReport.issues) {
-      if (issue.severity == Severity::Error) {
-        ImGui::TextColored(ImVec4(1.0F, 0.4F, 0.4F, 1.0F),
-                           "ERR: %s",
-                           issue.message.c_str());
-      } else {
-        ImGui::TextColored(ImVec4(1.0F, 0.8F, 0.2F, 1.0F),
-                           "WARN: %s",
-                           issue.message.c_str());
-      }
-    }
-  }
-  if (!m_lastBatchReport.results.empty()) {
-    ImGui::Separator();
-    ImGui::TextDisabled("Scenario regression: %zu pass, %zu fail, %zu error",
-                        m_lastBatchReport.passCount,
-                        m_lastBatchReport.failCount,
-                        m_lastBatchReport.errorCount);
-    if (ImGui::BeginTable("##regressionResults", 5,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-      ImGui::TableSetupColumn("Scenario");
-      ImGui::TableSetupColumn("Outcome");
-      ImGui::TableSetupColumn("Steps");
-      ImGui::TableSetupColumn("Time (ms)");
-      ImGui::TableSetupColumn("Notes");
-      ImGui::TableHeadersRow();
-      for (const auto& r : m_lastBatchReport.results) {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted(r.scenarioName.c_str());
-        ImGui::TableSetColumnIndex(1);
-        ImVec4 c = (r.outcome == ScenarioOutcome::Pass)
-                       ? ImVec4(0.3F, 0.9F, 0.3F, 1.0F)
-                       : (r.outcome == ScenarioOutcome::Fail)
-                             ? ImVec4(1.0F, 0.5F, 0.3F, 1.0F)
-                             : ImVec4(1.0F, 0.3F, 0.3F, 1.0F);
-        const char* label = (r.outcome == ScenarioOutcome::Pass)
-                                ? "PASS"
-                                : (r.outcome == ScenarioOutcome::Fail)
-                                      ? "FAIL"
-                                      : "ERROR";
-        ImGui::TextColored(c, "%s", label);
-        ImGui::TableSetColumnIndex(2);
-        ImGui::Text("%zu", r.planStepCount);
-        ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%.2f", r.solveTimeMs);
-        ImGui::TableSetColumnIndex(4);
-        ImGui::TextWrapped("%s", r.reason.c_str());
-      }
-      ImGui::EndTable();
-    }
-  }
-  if (!m_lastContingencyReport.contextFluents.empty()) {
-    const ImVec4 red(1.0F, 0.3F, 0.3F, 1.0F);
-    const ImVec4 green(0.3F, 0.9F, 0.3F, 1.0F);
-    const ImVec4 orange(1.0F, 0.6F, 0.2F, 1.0F);
-    ImGui::Separator();
-    ImGui::TextDisabled(
-        "Contingency analysis: %zu feasible / %zu infeasible / %zu error  (%zu context fluents)",
-        m_lastContingencyReport.feasibleCount,
-        m_lastContingencyReport.infeasibleCount,
-        m_lastContingencyReport.errorCount,
-        m_lastContingencyReport.contextFluents.size());
-    if (!m_lastContingencyReport.error.empty()) {
-      ImGui::TextColored(red, "Error: %s", m_lastContingencyReport.error.c_str());
-    }
-    if (ImGui::BeginTable("##contingency", 3,
-                          ImGuiTableFlags_Borders |
-                              ImGuiTableFlags_RowBg |
-                              ImGuiTableFlags_ScrollY,
-                          ImVec2(0.0F, 200.0F))) {
-      ImGui::TableSetupColumn("Context (true fluents)");
-      ImGui::TableSetupColumn("Outcome");
-      ImGui::TableSetupColumn("Plan steps");
-      ImGui::TableHeadersRow();
-      for (const auto& ctx : m_lastContingencyReport.results) {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        std::string contextStr;
-        for (const auto& fluent : ctx.trueFluents) {
-          contextStr += fluent + " ";
-        }
-        ImGui::TextWrapped("%s",
-                           contextStr.empty() ? "(none)" : contextStr.c_str());
-        ImGui::TableSetColumnIndex(1);
-        if (!ctx.errorMessage.empty()) {
-          ImGui::TextColored(red, "ERROR");
-        } else if (ctx.planFound) {
-          ImGui::TextColored(green, "OK");
-        } else {
-          ImGui::TextColored(orange, "NO PLAN");
-        }
-        ImGui::TableSetColumnIndex(2);
-        ImGui::Text("%zu", ctx.planSteps);
-      }
-      ImGui::EndTable();
-    }
-  }
+  renderReadOnlyTextBox("##ValidationDiagnosticsOutput",
+                        validationOutput,
+                        remainingPanelSize());
   ImGui::EndChild();
 }
 
@@ -3013,6 +2979,10 @@ void AppShell::compileAndShowBt() {
       }
     }
     ame::PlanCompiler compiler;
+    // Authoring previews plans while bindings are still being authored: actions
+    // without a BT binding compile to stub units (effect predicates only)
+    // instead of failing the whole compile. Production stays fail-closed.
+    compiler.setStubUnregisteredActions(true);
     const std::string xml = compiler.compile(m_lastPlan.steps, wm, registry);
     m_btGraph.setXml(xml);
     if (!m_btGraph.lastError().empty()) {

@@ -96,6 +96,44 @@ TEST(PddlGenerator, GenerateUavSearchProblem) {
   expectContains(problem, "(classified sector_a)");
 }
 
+TEST(PddlGenerator, GenerateProblemDeclaresLiteralActionArguments) {
+  ProjectModel model;
+  model.projectName = "literal-args";
+  model.types.push_back({"mission", "object"});
+  model.types.push_back({"priority", "object"});
+  model.predicates.push_back({"mission-active", {{"?m", "mission"}}, 0.0F, 0.0F});
+  model.predicates.push_back({"has-priority",
+                              {{"?m", "mission"}, {"?p", "priority"}},
+                              0.0F,
+                              0.0F});
+  model.predicates.push_back({"mission-complete", {{"?m", "mission"}}, 0.0F, 0.0F});
+
+  ActionDef complete;
+  complete.name = "complete-critical";
+  complete.params = {{"?m", "mission"}};
+  complete.preconditions.push_back({"mission-active", {"?m"}});
+  complete.preconditions.push_back({"has-priority", {"?m", "critical"}});
+  complete.addEffects.push_back({"mission-complete", {"?m"}});
+  model.actions.push_back(complete);
+
+  model.objects.push_back({"mission-1", "mission"});
+  ScenarioDef scenario;
+  scenario.name = "nominal";
+  scenario.initialState.push_back({"mission-active", {"mission-1"}});
+  scenario.initialState.push_back({"has-priority", {"mission-1", "critical"}});
+  scenario.goals.push_back({"mission-complete", {"mission-1"}});
+  model.scenarios.push_back(scenario);
+
+  const std::string problem = PddlGenerator::generateProblem(model, "nominal");
+  expectContains(problem, "mission-1 - mission");
+  expectContains(problem, "critical - priority");
+
+  ame::WorldModel wm;
+  EXPECT_NO_THROW(ame::PddlParser::parseFromString(
+      PddlGenerator::generateDomain(model), problem, wm));
+  EXPECT_GT(wm.numGroundActions(), 0U);
+}
+
 TEST(PddlGenerator, RoundTripsThroughPddlParser) {
   const ProjectModel model = makeUavSearchModel();
   const std::string domain = PddlGenerator::generateDomain(model);
