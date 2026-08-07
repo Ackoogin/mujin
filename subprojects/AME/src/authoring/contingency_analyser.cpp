@@ -253,6 +253,23 @@ ContingencyReport ContingencyAnalyser::analyse(const ProjectModel& model,
       }
       factCount = declared;
     }
+    if (!options.only_predicates.empty() && factCount == 0) {
+      // The declaration named something that is not a fact the plan cannot
+      // change, so there was nothing to vary. Reporting "checked all 1 ways"
+      // here would put a claim of complete coverage into the assurance report
+      // for a contingency that was never varied at all.
+      std::string named;
+      for (size_t i = 0; i < options.only_predicates.size(); ++i) {
+        named += (i == 0 ? "" : ", ") + options.only_predicates[i];
+      }
+      report.error =
+          "this scenario says the contingency is " + named +
+          ", but nothing by that name is a fact the plan cannot change. Either "
+          "some action makes it true or false, or it is not a fact in this "
+          "model. Nothing was checked.";
+      return report;
+    }
+
     if (factCount > maxFluents) {
       report.error = "there are " + std::to_string(factCount) +
                      " facts the plan cannot change, and this checks at most " +

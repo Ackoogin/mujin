@@ -358,6 +358,12 @@ large tree could always be read a branch at a time. The other six are now built:
 Together these finish the keyboard-only path, which the previous plan claimed and did not
 deliver.
 
+A review of this work found that the rename button had never been added: the cascading rename
+existed and was tested, the plan and the user guide both described the button, and nothing
+drew it. It is there now. The lesson is the obvious one — a library function with tests around
+it is not a feature until something calls it — and it is why the review pass was worth
+running.
+
 **Build.** Seven small things a user reasonably expects and cannot currently do:
 rename a type; reorder an action's parameters; add a type from the canvas menu, where
 the entry exists today but does nothing; copy and paste facts and actions, rather than

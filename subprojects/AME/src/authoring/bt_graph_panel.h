@@ -84,7 +84,7 @@ private:
 
   std::vector<BtNode> m_nodes;
   std::string m_lastError;
-  std::unordered_map<std::string, RunNodeStatus> m_runStatusByName;
+  std::unordered_map<std::string, std::vector<RunNodeStatus>> m_runStatusByName;
   bool m_hasRunProgress = false;
   ed::EditorContext* m_context = nullptr;
   int m_selectedNode = -1;

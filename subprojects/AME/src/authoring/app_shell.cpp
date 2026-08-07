@@ -1092,6 +1092,9 @@ bool AppShell::openProjectFrom(const std::string& path) {
 void AppShell::noteProjectOpened(const std::string& path) {
   m_projectPath = path;
   m_unsavedChanges = false;
+  // Without this the next frame sees a count it has not seen before and marks
+  // an untouched project as changed.
+  m_lastSeenEditCount = m_commandStack.editCount();
   RecentProjects::remember(m_settingsPath, path);
   m_recentProjects = RecentProjects::load(m_settingsPath);
 }
@@ -1611,10 +1614,12 @@ void AppShell::renderPanels() {
 
   // A recovery copy every half minute of changed work. Often enough that
   // little is lost, rarely enough that it is never in the way.
-  // Any command on the stack means the project has moved on since it was last
-  // written, which is what the quit prompt and the recovery copy both key off.
-  if (m_commandStack.undoDepth() != m_lastSeenUndoDepth) {
-    m_lastSeenUndoDepth = m_commandStack.undoDepth();
+  // Any edit means the project has moved on since it was last written, which
+  // is what the quit prompt and the recovery copy both key off. The count is
+  // used rather than the undo depth, which stops rising once the stack is full
+  // and does not move at all when keystrokes fold into the step before them.
+  if (m_commandStack.editCount() != m_lastSeenEditCount) {
+    m_lastSeenEditCount = m_commandStack.editCount();
     m_unsavedChanges = true;
   }
 
@@ -1686,14 +1691,20 @@ void AppShell::renderPanels() {
     if (ImGui::IsKeyPressed(ImGuiKey_F6, false)) {
       runValidation();
     }
+    // F and A are unmodified keys, so they must not fire while a modifier is
+    // held: Ctrl+A is "select all" everywhere else, and would otherwise open
+    // the quick-add box.
     // F: bring the whole picture back into view, for a canvas that has been
     // panned somewhere the user cannot find their way back from.
-    if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+    if (!io.KeyCtrl && !io.KeyAlt && !io.KeySuper &&
+        ImGui::IsKeyPressed(ImGuiKey_F, false)) {
       m_domainGraph.requestFitToContents();
       lastOperation = "Fitted the canvas to what is on it";
     }
     // A: add something without reaching for the palette.
-    if (ImGui::IsKeyPressed(ImGuiKey_A, false)) {
+    if (!io.KeyCtrl && !io.KeyAlt && !io.KeySuper &&
+        !ImGui::IsAnyItemActive() &&
+        ImGui::IsKeyPressed(ImGuiKey_A, false)) {
       m_paletteQuickAddOpen = true;
       m_paletteQuickAddName[0] = '\0';
     }

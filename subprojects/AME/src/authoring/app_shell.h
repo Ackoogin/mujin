@@ -260,7 +260,7 @@ private:
   bool m_recoveryWritten = false;
   bool m_askBeforeQuitting = false;
   double m_secondsSinceRecoveryCopy = 0.0;
-  size_t m_lastSeenUndoDepth = 0;
+  size_t m_lastSeenEditCount = 0;
   bool m_problemListRendered = false;
   bool m_hasLastPlan = false;
   bool showAboutModal = false;

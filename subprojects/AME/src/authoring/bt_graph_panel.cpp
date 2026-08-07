@@ -402,9 +402,13 @@ void BtGraphPanel::setXml(const std::string& xml) {
 }
 
 void BtGraphPanel::setRunProgress(const std::vector<RunActionStep>& steps) {
+  // A plan may use the same grounded action twice, so a name is not an
+  // identity. The statuses are kept in order per name, and the nth node with
+  // that name takes the nth status, which is the order the walk and the tree
+  // both use.
   m_runStatusByName.clear();
   for (const RunActionStep& step : steps) {
-    m_runStatusByName[step.signature] = step.status;
+    m_runStatusByName[step.signature].push_back(step.status);
   }
   m_hasRunProgress = true;
 }
@@ -421,9 +425,17 @@ bool BtGraphPanel::runStatusOf(int nodeIndex, RunNodeStatus& status) const {
   }
 
   const BtNode& node = m_nodes[static_cast<size_t>(nodeIndex)];
-  const auto found = m_runStatusByName.find(attrValue(node.attributes, "name"));
-  if (found != m_runStatusByName.end()) {
-    status = found->second;
+  const std::string name = attrValue(node.attributes, "name");
+  const auto found = m_runStatusByName.find(name);
+  if (found != m_runStatusByName.end() && !found->second.empty()) {
+    // Which of the nodes sharing this name is this one?
+    size_t occurrence = 0;
+    for (int i = 0; i < nodeIndex; ++i) {
+      if (attrValue(m_nodes[static_cast<size_t>(i)].attributes, "name") == name) {
+        ++occurrence;
+      }
+    }
+    status = found->second[std::min(occurrence, found->second.size() - 1U)];
     return true;
   }
 

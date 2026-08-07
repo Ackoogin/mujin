@@ -48,5 +48,5 @@ public:
   /// project that has never been near this screen still gets an answer.
   static ContingencyReport analyse(const ProjectModel& model,
                                    const std::string& scenarioName,
-                                   size_t maxFluents = 16);
+                                   size_t maxFluents = 12);
 };

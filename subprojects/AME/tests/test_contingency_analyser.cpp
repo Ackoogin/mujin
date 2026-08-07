@@ -134,6 +134,23 @@ TEST(ContingencyAnalyser, ADeclaredContingencyNarrowsWhatIsVaried) {
       << declared.coverageSentence();
 }
 
+TEST(ContingencyAnalyser, ADeclarationThatMatchesNothingIsRefusedNotReportedAsChecked) {
+  ProjectModel model = makeContingencyModel(3U);
+  // "visited" is made true by move, so it is not a fact the plan cannot
+  // change, and declaring it as the contingency varies nothing at all.
+  model.scenarios[0].contingency.contingencyPredicates = {"visited"};
+
+  const ContingencyReport report =
+      ContingencyAnalyser::analyse(model, "baseline");
+
+  // Reporting "checked all 1 ways" here would put a claim of complete coverage
+  // into the assurance report for something that was never varied.
+  EXPECT_FALSE(report.ok);
+  EXPECT_NE(report.error.find("visited"), std::string::npos) << report.error;
+  EXPECT_NE(report.error.find("Nothing was checked"), std::string::npos)
+      << report.error;
+}
+
 TEST(ContingencyAnalyser, ADeclaredSafeStateIsWhatMustBeReachable) {
   ProjectModel model = makeContingencyModel(3U);
   // Getting back to where it started counts as safe, whatever else happened.

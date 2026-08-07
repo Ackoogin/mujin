@@ -39,6 +39,13 @@ public:
   bool undo(ProjectModel& model);
   bool redo(ProjectModel& model);
 
+  /// \brief How many edits this stack has recorded, ever.
+  ///
+  /// Always moves forward, unlike the undo depth, which is capped and does not
+  /// change when a run of keystrokes folds into the step before it. Anything
+  /// asking "has the project changed since I last looked" has to use this.
+  size_t editCount() const { return m_editCount; }
+
   std::string topUndoLabel() const;
   std::string topRedoLabel() const;
   size_t maxDepth() const { return m_maxDepth; }
@@ -53,6 +60,7 @@ private:
   };
 
   std::string m_coalesceKey;
+  size_t m_editCount = 0;
 
   std::deque<Entry> m_undo;
   std::deque<Entry> m_redo;

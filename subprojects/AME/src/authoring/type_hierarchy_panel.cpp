@@ -67,6 +67,19 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
         });
       }
 
+      // Renaming reaches everything that names this type, in one undoable
+      // step: the things of that type, the parameters that ask for it, the
+      // types below it, and the state groups about it.
+      if (typeName != "object") {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("rename")) {
+          m_renameTypeName = typeName;
+          std::snprintf(m_renameTypeInput, sizeof(m_renameTypeInput), "%s",
+                        typeName.c_str());
+          m_openRenamePopup = true;
+        }
+      }
+
       if (open) {
         std::vector<std::string> childTypeNames;
         for (const TypeDef& type : model.types) {

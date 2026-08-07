@@ -19,6 +19,7 @@ bool CommandStack::execute(ProjectModel& model,
   mutation(model);
   entry.after = model;
 
+  ++m_editCount;
   // First cut intentionally records every command, including no-op mutations.
   m_undo.push_back(std::move(entry));
   while (m_undo.size() > m_maxDepth) {
@@ -45,6 +46,7 @@ bool CommandStack::executeCoalescing(
   // adding another, so undo puts back what the field held before the typing
   // started.
   if (!m_undo.empty() && m_coalesceKey == coalesceKey) {
+    ++m_editCount;
     mutation(model);
     m_undo.back().after = model;
     m_undo.back().label = label;
@@ -66,6 +68,7 @@ bool CommandStack::canRedo() const {
 
 bool CommandStack::undo(ProjectModel& model) {
   m_coalesceKey.clear();
+  ++m_editCount;
   if (!canUndo()) {
     return false;
   }
@@ -79,6 +82,7 @@ bool CommandStack::undo(ProjectModel& model) {
 
 bool CommandStack::redo(ProjectModel& model) {
   m_coalesceKey.clear();
+  ++m_editCount;
   if (!canRedo()) {
     return false;
   }

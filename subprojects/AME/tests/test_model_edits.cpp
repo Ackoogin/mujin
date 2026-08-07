@@ -207,6 +207,44 @@ TEST(CommandStackCoalescing, ComingBackToAFieldAfterUndoStartsAgain) {
   EXPECT_EQ(model.actions[0].name, "move") << "back to where it started";
 }
 
+TEST(CommandStackCoalescing, TheEditCountMovesWhereTheUndoDepthDoesNot) {
+  ProjectModel model = makeModel();
+  CommandStack stack;
+
+  const size_t before = stack.editCount();
+  stack.executeCoalescing(model, "Rename the action", "action:0:name",
+                          [](ProjectModel& m) { m.actions[0].name = "f"; });
+  stack.executeCoalescing(model, "Rename the action", "action:0:name",
+                          [](ProjectModel& m) { m.actions[0].name = "fl"; });
+
+  // Two keystrokes fold into one undoable step, but both are edits, and
+  // anything asking "has this changed since I last looked" must see both.
+  EXPECT_EQ(stack.undoDepth(), 1U);
+  EXPECT_EQ(stack.editCount(), before + 2U);
+
+  const size_t beforeUndo = stack.editCount();
+  ASSERT_TRUE(stack.undo(model));
+  EXPECT_GT(stack.editCount(), beforeUndo) << "undoing is a change too";
+}
+
+TEST(CommandStackCoalescing, TheEditCountKeepsRisingPastTheUndoLimit) {
+  ProjectModel model = makeModel();
+  CommandStack stack(4);  // a deliberately tiny limit
+
+  for (int i = 0; i < 10; ++i) {
+    stack.execute(model, "Add a fact", [i](ProjectModel& m) {
+      PredicateDef fact;
+      fact.name = "fact" + std::to_string(i);
+      m.predicates.push_back(fact);
+    });
+  }
+
+  // The stack only remembers four, but ten edits happened, and a project with
+  // ten unsaved edits must not look unchanged.
+  EXPECT_EQ(stack.undoDepth(), 4U);
+  EXPECT_EQ(stack.editCount(), 10U);
+}
+
 TEST(CommandStackCoalescing, TheMenuCanSayWhatWouldBeUndone) {
   ProjectModel model = makeModel();
   CommandStack stack;

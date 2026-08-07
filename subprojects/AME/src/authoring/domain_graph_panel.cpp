@@ -397,12 +397,26 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     ImGui::InputText("Name##newtype", m_newTypeName, sizeof(m_newTypeName));
     ImGui::TextDisabled("It will be a kind of object; change its parent in the "
                         "sidebar.");
-    if (ImGui::Button("Add") && m_newTypeName[0] != '\0') {
-      const std::string name = m_newTypeName;
-      stack.execute(model, "Add type", [name](ProjectModel& m) {
-        m.types.push_back({name, "object"});
+    const std::string wanted = m_newTypeName;
+    const bool taken =
+        std::any_of(model.types.begin(), model.types.end(),
+                    [&wanted](const TypeDef& type) {
+                      return type.name == wanted;
+                    });
+    if (taken) {
+      ImGui::TextDisabled("There is already a type called %s.", wanted.c_str());
+    }
+    if (taken) {
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Add") && !wanted.empty() && !taken) {
+      stack.execute(model, "Add type", [wanted](ProjectModel& m) {
+        m.types.push_back({wanted, "object"});
       });
       ImGui::CloseCurrentPopup();
+    }
+    if (taken) {
+      ImGui::EndDisabled();
     }
     ImGui::SameLine();
     if (ImGui::Button("Cancel")) {
