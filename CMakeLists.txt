@@ -221,13 +221,39 @@ endif()
 set(AME_CONTRACT_PROTO_DIR "${AME_ROOT_DIR}/contracts/proto"
     CACHE PATH "Contract tree owned by AME, used when PYRAMID's proof contracts are not built")
 
-if(UNMANNED_BUILD_AME AND UNMANNED_BUILD_PYRAMID AND NOT PYRAMID_BUILD_PROOFS)
-    if(NOT DEFINED PYRAMID_PROTO_DIR OR PYRAMID_PROTO_DIR STREQUAL "")
-        set(PYRAMID_PROTO_DIR "${AME_CONTRACT_PROTO_DIR}" CACHE PATH
-            "PYRAMID proto IDL source directory" FORCE)
+# The choice below depends on whether the proof layer is being built, and
+# PYRAMID declares that option itself. Its declaration runs during
+# add_subdirectory(subprojects/PYRAMID), which is further down this file, so on
+# a first configure the variable would still be empty here and every build would
+# be treated as a proof-layer-off build. Declaring the option here settles the
+# choice before it is read; PYRAMID's own option() call then finds it already
+# cached and leaves it alone.
+option(PYRAMID_BUILD_PROOFS
+    "Build the non-product contracts, components, examples, and integration proofs"
+    ON)
+
+if(UNMANNED_BUILD_AME AND UNMANNED_BUILD_PYRAMID)
+    if(NOT PYRAMID_BUILD_PROOFS)
+        if(NOT DEFINED PYRAMID_PROTO_DIR OR PYRAMID_PROTO_DIR STREQUAL "")
+            set(PYRAMID_PROTO_DIR "${AME_CONTRACT_PROTO_DIR}" CACHE PATH
+                "PYRAMID proto IDL source directory" FORCE)
+            message(STATUS
+                "AME: PYRAMID proof contracts are not built, so binding generation "
+                "uses AME's own contract tree at ${AME_CONTRACT_PROTO_DIR}")
+        endif()
+    elseif(DEFINED PYRAMID_PROTO_DIR AND
+           PYRAMID_PROTO_DIR STREQUAL AME_CONTRACT_PROTO_DIR)
+        # This build tree was configured earlier without the proof layer, which
+        # pinned AME's contract tree in its cache. PYRAMID cannot correct that
+        # itself, because it sets the default without FORCE and so leaves any
+        # cached value alone. The proof targets would then be built against
+        # bindings that were never generated, and the configure would fail on
+        # targets with no sources. Clearing the entry lets PYRAMID's own default
+        # apply.
+        unset(PYRAMID_PROTO_DIR CACHE)
         message(STATUS
-            "AME: PYRAMID proof contracts are not built, so binding generation "
-            "uses AME's own contract tree at ${AME_CONTRACT_PROTO_DIR}")
+            "AME: the proof layer is being built, so binding generation returns "
+            "to PYRAMID's proof contract tree")
     endif()
 endif()
 

@@ -5,6 +5,8 @@
 #include "imgui_id_audit.h"
 #include "app_theme.h"
 #include "pddl_generator.h"
+#include "run_record.h"
+#include "simulation_engine.h"
 
 #include <SDL.h>
 
@@ -19,11 +21,20 @@
 
 #include <imgui_internal.h>
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <vector>
+
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 // ---------------------------------------------------------------------------
 // Self-test helpers
@@ -122,6 +133,68 @@ struct SelfTestAssertion {
   std::string name;
   bool        pass = false;
   std::string detail;
+};
+
+/// \brief Keep third-party planner progress out of the self-test JSON stream.
+///
+/// The planner writes directly to C stdout, so redirecting iostreams is not
+/// enough. The original descriptor is restored immediately before the one JSON
+/// document is printed.
+class ScopedStdoutSilencer {
+public:
+  explicit ScopedStdoutSilencer(bool enabled) {
+    if (!enabled) {
+      return;
+    }
+    std::fflush(stdout);
+#if defined(_WIN32)
+    saved_fd_ = _dup(_fileno(stdout));
+#else
+    saved_fd_ = dup(fileno(stdout));
+#endif
+    sink_ = std::tmpfile();
+    if (saved_fd_ < 0 || sink_ == nullptr) {
+      restore();
+      return;
+    }
+#if defined(_WIN32)
+    _dup2(_fileno(sink_), _fileno(stdout));
+#else
+    dup2(fileno(sink_), fileno(stdout));
+#endif
+    active_ = true;
+  }
+
+  ~ScopedStdoutSilencer() { restore(); }
+
+  void restore() {
+    if (active_) {
+      std::fflush(stdout);
+#if defined(_WIN32)
+      _dup2(saved_fd_, _fileno(stdout));
+#else
+      dup2(saved_fd_, fileno(stdout));
+#endif
+      active_ = false;
+    }
+    if (saved_fd_ >= 0) {
+#if defined(_WIN32)
+      _close(saved_fd_);
+#else
+      close(saved_fd_);
+#endif
+      saved_fd_ = -1;
+    }
+    if (sink_ != nullptr) {
+      std::fclose(sink_);
+      sink_ = nullptr;
+    }
+  }
+
+private:
+  int saved_fd_ = -1;
+  FILE* sink_ = nullptr;
+  bool active_ = false;
 };
 
 struct SelfTestReport {
@@ -303,7 +376,9 @@ static void printSelfTestResult(const char* status, const char* screenshotPath,
 // ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-  // Parse --self-test [output.png]
+  // --self-test is the only option this executable takes. Running a mission
+  // without a window is ame_mission_cli's job, so that a build agent needs no
+  // display stack for it.
   bool selfTestMode = false;
   std::string selfTestPath = "ame_authoring_self_test.png";
   for (int i = 1; i < argc; ++i) {
@@ -399,6 +474,7 @@ int main(int argc, char* argv[]) {
   // Self-test: drive the real AppShell, inject actions, validate UI, capture
   // ---------------------------------------------------------------------------
   if (selfTestMode) {
+    ScopedStdoutSilencer stdout_silencer(true);
     const ImVec4   clearColor(0.06F, 0.10F, 0.14F, 1.0F);
     AppShell       shell;
     SelfTestReport report;
@@ -485,6 +561,22 @@ int main(int argc, char* argv[]) {
 
     shell.selfTestCorruptPredicateName(0);
     shell.selfTestValidate();
+    // A3: the problem list is a set of rows that reveal what they name, so a
+    // reader works down the list rather than hunting for the element.
+    shell.selfTestShowPddlTab();
+    // A requested tab is applied on the next frame, and the panel only draws
+    // once that tab is the visible one.
+    for (int frame = 0; frame < 3; ++frame) {
+      renderAppShellFrame(window, shell, clearColor);
+    }
+    report.check("problem_list_rendered",
+                 shell.selfTestProblemListRendered(),
+                 "expected the PDDL tab to show the problem list");
+    const bool problem_opened = shell.selfTestClickFirstProblem();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("problem_click_reveals_element",
+                 problem_opened,
+                 "expected clicking a problem to select the element it names");
     report.check("validation_failed_after_corruption",
                  !shell.selfTestValidation().ok,
                  "expected empty predicate name to fail validation");
@@ -592,6 +684,88 @@ int main(int argc, char* argv[]) {
                  shell.selfTestPlanGraph().selectedActionSchemaName() == "move",
                  "expected selected plan step to extract move action schema");
 
+    // A simulated run of the same scenario: it must start and finish with
+    // nothing configured, which is the acceptance line for the run screens.
+    const bool runStarted = shell.selfTestStartRun("preview");
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("run_starts_without_configuration",
+                 runStarted,
+                 "expected the preview scenario to load a run");
+    const SimulationEngine& run = shell.selfTestSimulation();
+    report.check("run_has_one_node_per_action",
+                 run.actionSteps().size() == shell.selfTestLastPlan().steps.size(),
+                 "expected one run step per planned action");
+    report.check("run_draws_the_tree_it_is_running",
+                 shell.selfTestBtNodeCount() > 0U,
+                 "expected the run to load its compiled tree into the tree view");
+    report.check("run_tree_carries_action_detail",
+                 shell.selfTestBtHasActionContract(),
+                 "expected a run action node to carry its preconditions and effects");
+    shell.selfTestStepRun();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("run_steps_one_tick_at_a_time",
+                 run.tick() == 1U,
+                 "expected One step to advance the run by exactly one tick");
+    const bool runCompleted = shell.selfTestRunToCompletion();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("run_reaches_the_goal",
+                 runCompleted && run.phase() == RunPhase::Completed,
+                 "expected the run to reach the scenario's goal");
+    report.check("run_meets_every_goal",
+                 run.goalsMetCount() == run.goals().size(),
+                 "expected every goal to be true at the end of the run");
+    report.check("run_records_what_changed",
+                 !run.factChanges().empty(),
+                 "expected the run to record the facts it changed");
+    // A picture of the run screen, so the new views can be reviewed from a
+    // headless machine the same way the rest of the tool can.
+    shell.selfTestShowRunTab();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("run_timeline_rendered_as_primary_view",
+                 shell.selfTestRunTimelineRendered(),
+                 "expected the Run tab to render its timeline");
+    report.check("run_facts_panel_rendered",
+                 shell.selfTestRunFactsRendered(),
+                 "expected the Run tab to render its facts panel");
+    report.check("run_tab_screenshot_written",
+                 captureScreenshot(window,
+                                   (selfTestPath + ".run-tab.png").c_str()),
+                 "expected the run tab screenshot to be written");
+    shell.selfTestReplayCurrentRun();
+    shell.selfTestCompareCurrentRunWithItself();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("recorded_run_reuses_run_views",
+                 shell.selfTestReplayRendered() &&
+                     shell.selfTestRunTimelineRendered() &&
+                     shell.selfTestRunFactsRendered(),
+                 "expected replay to use the Run tab timeline and facts views");
+    report.check("run_comparison_summary_rendered",
+                 shell.selfTestRunComparisonRendered(),
+                 "expected the Run tab to show a one-line run comparison");
+    shell.selfTestCloseReplay();
+
+    RunFaultSet selfTestFault;
+    selfTestFault.name = "move-fails-once";
+    selfTestFault.actionFailures.push_back({"move", 1U});
+    shell.selfTestSetRunFaults(selfTestFault);
+    report.check("faulted_run_starts",
+                 shell.selfTestStartRun("preview"),
+                 "expected a run-local forced action failure to load");
+    report.check("faulted_run_recovers_after_replan",
+                 shell.selfTestRunToCompletion(),
+                 "expected the forced first attempt to replan and then recover");
+    shell.selfTestShowRunTab();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("run_fault_controls_rendered",
+                 shell.selfTestRunFaultPanelRendered(),
+                 "expected the Run tab to show the two fault controls");
+    report.check("replan_comparison_rendered",
+                 shell.selfTestReplanComparisonRendered(),
+                 "expected the Run tab to compare abandoned and replacement plans");
+    report.check("run_replan_count_visible_in_model",
+                 shell.selfTestSimulation().replanCount() == 1U,
+                 "expected the recovered run to count one replan");
+
     shell.selfTestAddObject("sector_x", "location");
     shell.selfTestAddScenario("infeasible");
     shell.selfTestAddInitialFact(2, "at", {"uav1", "base"});
@@ -632,6 +806,20 @@ int main(int argc, char* argv[]) {
                          batchReport.errorCount ==
                      batchReport.results.size(),
                  "expected batch report counts to sum to result count");
+
+    shell.selfTestStartBatch();
+    shell.selfTestShowPddlTab();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("batch_progress_rendered_between_scenarios",
+                 shell.selfTestBatchProgressRendered(),
+                 "expected the PDDL tab to show incremental batch progress");
+    report.check("batch_can_be_stopped_part_way",
+                 shell.selfTestBatchRunning(),
+                 "expected more scenarios to remain after one frame");
+    shell.selfTestStopBatch();
+    report.check("batch_stop_takes_effect",
+                 !shell.selfTestBatchRunning(),
+                 "expected Stop to leave the remaining scenarios waiting");
 
     AppShell importShell;
     const bool importDomainOk =
@@ -931,12 +1119,25 @@ int main(int argc, char* argv[]) {
     report.check("structural_clears_after_undo",
                  shell.selfTestStructuralReport().errorCount == 0U,
                  "expected structural errors to clear after undo");
+    // A6: a saved view is a picture somebody can come back to, by name.
+    shell.selfTestSelectActionFromPalette(0);
+    shell.selfTestSetDomainView(0);
+    shell.selfTestSaveCurrentView("how the vehicle moves");
+    renderAppShellFrame(window, shell, clearColor);
+    shell.selfTestSelectPredicateFromPalette(1);
+    renderAppShellFrame(window, shell, clearColor);
+    const bool view_opened = shell.selfTestOpenSavedView("how the vehicle moves");
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("saved_view_reopens_the_same_picture",
+                 view_opened && shell.selfTestSelectedActionIndex() == 0,
+                 "expected a saved view to put the focus back where it was");
+
     const auto& labels = AppShell::tabLabels();
     report.check("tabs_in_workflow_order",
                  labels.size() == 4 &&
                      labels[0] == "Domain" && labels[1] == "PDDL" &&
-                     labels[2] == "Plan"   && labels[3] == "BT",
-                 "AppShell::tabLabels() must be {Domain, PDDL, Plan, BT}");
+                     labels[2] == "Plan"   && labels[3] == "Run",
+                 "AppShell::tabLabels() must be {Domain, PDDL, Plan, Run}");
 
     // Phase 6: capture and print
     bool ok = captureScreenshot(window, selfTestPath.c_str());
@@ -947,6 +1148,7 @@ int main(int argc, char* argv[]) {
     } else {
       report.check("screenshot_written", true);
     }
+    stdout_silencer.restore();
     report.print(selfTestPath.c_str(), dw, dh);
 
     ImGui_ImplOpenGL3_Shutdown();

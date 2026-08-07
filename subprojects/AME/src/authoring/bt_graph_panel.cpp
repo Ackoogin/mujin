@@ -224,6 +224,41 @@ std::string makeLabel(const RawNode& node) {
   return label;
 }
 
+std::vector<std::string> splitFacts(const std::string& encoded) {
+  std::vector<std::string> facts;
+  size_t begin = 0;
+  while (begin < encoded.size()) {
+    const size_t end = encoded.find(';', begin);
+    const size_t length =
+        end == std::string::npos ? std::string::npos : end - begin;
+    const std::string fact = encoded.substr(begin, length);
+    if (!fact.empty()) {
+      facts.push_back(fact);
+    }
+    if (end == std::string::npos) {
+      break;
+    }
+    begin = end + 1U;
+  }
+  return facts;
+}
+
+// The run colours are the ones the rest of the tool uses for finished,
+// happening now, waiting and went wrong, darkened to sit behind node text.
+ImVec4 runNodeColor(RunNodeStatus status) {
+  switch (status) {
+  case RunNodeStatus::Finished:
+    return ImVec4(0.07f, 0.26f, 0.18f, 1.0f);
+  case RunNodeStatus::Happening:
+    return ImVec4(0.05f, 0.30f, 0.38f, 1.0f);
+  case RunNodeStatus::WentWrong:
+    return ImVec4(0.36f, 0.12f, 0.10f, 1.0f);
+  case RunNodeStatus::Waiting:
+    break;
+  }
+  return ImVec4(0.14f, 0.16f, 0.20f, 1.0f);
+}
+
 ImVec4 nodeColor(const std::string& kind) {
   if (kind == "Sequence" || kind == "ReactiveSequence" || kind == "Parallel" ||
       kind == "ReactiveFallback" || kind == "Fallback") {
@@ -366,6 +401,62 @@ void BtGraphPanel::setXml(const std::string& xml) {
   updateVisibility();
 }
 
+void BtGraphPanel::setRunProgress(const std::vector<RunActionStep>& steps) {
+  m_runStatusByName.clear();
+  for (const RunActionStep& step : steps) {
+    m_runStatusByName[step.signature] = step.status;
+  }
+  m_hasRunProgress = true;
+}
+
+void BtGraphPanel::clearRunProgress() {
+  m_runStatusByName.clear();
+  m_hasRunProgress = false;
+}
+
+bool BtGraphPanel::runStatusOf(int nodeIndex, RunNodeStatus& status) const {
+  if (!m_hasRunProgress || nodeIndex < 0 ||
+      nodeIndex >= static_cast<int>(m_nodes.size())) {
+    return false;
+  }
+
+  const BtNode& node = m_nodes[static_cast<size_t>(nodeIndex)];
+  const auto found = m_runStatusByName.find(attrValue(node.attributes, "name"));
+  if (found != m_runStatusByName.end()) {
+    status = found->second;
+    return true;
+  }
+
+  // A node that holds others reports what they are doing: anything going wrong
+  // wins, then anything happening, and it is finished only once every part of
+  // it that belongs to the run has finished.
+  bool anyKnown = false;
+  bool allFinished = true;
+  for (const int child : node.children) {
+    RunNodeStatus childStatus = RunNodeStatus::Waiting;
+    if (!runStatusOf(child, childStatus)) {
+      continue;
+    }
+    anyKnown = true;
+    if (childStatus == RunNodeStatus::WentWrong) {
+      status = RunNodeStatus::WentWrong;
+      return true;
+    }
+    if (childStatus == RunNodeStatus::Happening) {
+      status = RunNodeStatus::Happening;
+      return true;
+    }
+    if (childStatus != RunNodeStatus::Finished) {
+      allFinished = false;
+    }
+  }
+  if (!anyKnown) {
+    return false;
+  }
+  status = allFinished ? RunNodeStatus::Finished : RunNodeStatus::Waiting;
+  return true;
+}
+
 void BtGraphPanel::collapseAll() {
   for (BtNode& node : m_nodes) {
     node.collapsed = !node.children.empty();
@@ -460,9 +551,17 @@ void BtGraphPanel::render() {
       continue;
     }
 
-    const ImVec4 bg = nodeColor(node.kind);
+    RunNodeStatus runStatus = RunNodeStatus::Waiting;
+    const bool inRun = runStatusOf(i, runStatus);
+    const ImVec4 bg = inRun ? runNodeColor(runStatus) : nodeColor(node.kind);
+    // The node being ticked is the one a viewer is looking for, so it takes a
+    // bright border while every other node keeps the ordinary one.
+    const ImVec4 border =
+        (inRun && runStatus == RunNodeStatus::Happening)
+            ? ImVec4(0.0f, 0.85f, 1.0f, 1.0f)
+            : ImVec4(0.75f, 0.75f, 0.80f, 0.95f);
     ed::PushStyleColor(ed::StyleColor_NodeBg, bg);
-    ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.75f, 0.75f, 0.80f, 0.95f));
+    ed::PushStyleColor(ed::StyleColor_NodeBorder, border);
 
     ed::BeginNode(kNodeBase + i);
     ed::BeginPin(kInputPinBase + i, ed::PinKind::Input);
@@ -480,7 +579,9 @@ void BtGraphPanel::render() {
     }
     ImGui::BeginGroup();
     ImGui::TextUnformatted(node.label.c_str());
-    if (!node.attributes.empty()) {
+    if (inRun) {
+      ImGui::TextUnformatted(runNodeStatusName(runStatus));
+    } else if (!node.attributes.empty()) {
       const auto& attr = node.attributes.front();
       ImGui::Text("%s=%s", attr.first.c_str(), attr.second.c_str());
     }
@@ -525,4 +626,45 @@ void BtGraphPanel::render() {
 
 size_t BtGraphPanel::nodeCount() const {
   return m_nodes.size();
+}
+
+bool BtGraphPanel::nodeDetail(int nodeIndex, BtNodeDetail& detail) const {
+  if (nodeIndex < 0 || nodeIndex >= static_cast<int>(m_nodes.size())) {
+    return false;
+  }
+  const BtNode& node = m_nodes[static_cast<size_t>(nodeIndex)];
+  detail = BtNodeDetail{};
+  detail.kind = node.kind;
+  detail.label = node.label;
+  detail.action = attrValue(node.attributes, "name");
+  detail.preconditions =
+      splitFacts(attrValue(node.attributes, "ame_preconditions"));
+  detail.confirmedPreconditions =
+      splitFacts(attrValue(node.attributes, "ame_confirmed_preconditions"));
+  detail.negativePreconditions =
+      splitFacts(attrValue(node.attributes, "ame_neg_preconditions"));
+  detail.addEffects =
+      splitFacts(attrValue(node.attributes, "ame_add_effects"));
+  detail.deleteEffects =
+      splitFacts(attrValue(node.attributes, "ame_del_effects"));
+  detail.isAction =
+      std::any_of(node.attributes.begin(), node.attributes.end(),
+                  [](const auto& attribute) {
+                    return attribute.first == "ame_preconditions" ||
+                           attribute.first == "ame_confirmed_preconditions" ||
+                           attribute.first == "ame_neg_preconditions" ||
+                           attribute.first == "ame_add_effects" ||
+                           attribute.first == "ame_del_effects";
+                  });
+  return true;
+}
+
+bool BtGraphPanel::hasActionContract() const {
+  for (int i = 0; i < static_cast<int>(m_nodes.size()); ++i) {
+    BtNodeDetail detail;
+    if (nodeDetail(i, detail) && detail.isAction) {
+      return true;
+    }
+  }
+  return false;
 }

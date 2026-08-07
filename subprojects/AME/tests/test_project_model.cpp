@@ -34,6 +34,14 @@ TEST(ProjectModel, RoundTrip) {
     s.expectation.maxPlanSteps = 10;
     s.expectation.expectedActions = {"move"};
     s.expectation.forbiddenActions = {"explode"};
+    s.expectation.shouldReachGoal = true;
+    s.expectation.minRunActions = 1;
+    s.expectation.maxRunActions = 12;
+    s.expectation.requiredRunActions = {"move"};
+    s.expectation.forbiddenRunActions = {"explode"};
+    s.expectation.maxReplans = 2;
+    s.expectation.runFault.name = "move-fails-once";
+    s.expectation.runFault.actionFailures.push_back({"move", 1U});
     m.scenarios.push_back(s);
 
     const char* path = "test_project_model_tmp.json";
@@ -90,6 +98,16 @@ TEST(ProjectModel, RoundTrip) {
               std::vector<std::string>{"move"});
     EXPECT_EQ(m2.scenarios[0].expectation.forbiddenActions,
               std::vector<std::string>{"explode"});
+    EXPECT_TRUE(m2.scenarios[0].expectation.shouldReachGoal);
+    EXPECT_EQ(m2.scenarios[0].expectation.minRunActions, 1);
+    EXPECT_EQ(m2.scenarios[0].expectation.maxRunActions, 12);
+    EXPECT_EQ(m2.scenarios[0].expectation.requiredRunActions,
+              std::vector<std::string>{"move"});
+    EXPECT_EQ(m2.scenarios[0].expectation.forbiddenRunActions,
+              std::vector<std::string>{"explode"});
+    EXPECT_EQ(m2.scenarios[0].expectation.maxReplans, 2);
+    EXPECT_EQ(m2.scenarios[0].expectation.runFault.name, "move-fails-once");
+    ASSERT_EQ(m2.scenarios[0].expectation.runFault.actionFailures.size(), 1U);
     std::remove(path);
 }
 
@@ -156,6 +174,13 @@ TEST(ProjectModel, LoadOldScenarioWithoutExpectationDefaults) {
     EXPECT_EQ(m.scenarios[0].expectation.maxPlanSteps, 0);
     EXPECT_TRUE(m.scenarios[0].expectation.expectedActions.empty());
     EXPECT_TRUE(m.scenarios[0].expectation.forbiddenActions.empty());
+    EXPECT_TRUE(m.scenarios[0].expectation.shouldReachGoal);
+    EXPECT_EQ(m.scenarios[0].expectation.minRunActions, 0);
+    EXPECT_EQ(m.scenarios[0].expectation.maxRunActions, 0);
+    EXPECT_TRUE(m.scenarios[0].expectation.requiredRunActions.empty());
+    EXPECT_TRUE(m.scenarios[0].expectation.forbiddenRunActions.empty());
+    EXPECT_EQ(m.scenarios[0].expectation.maxReplans, -1);
+    EXPECT_TRUE(m.scenarios[0].expectation.runFault.name.empty());
     std::remove(path);
 }
 

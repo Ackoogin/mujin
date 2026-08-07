@@ -16,6 +16,24 @@ public:
                const std::string& label,
                const std::function<void(ProjectModel&)>& mutation);
 
+  /// \brief Record an edit that continues the one before it.
+  ///
+  /// Typing a name is one intention and many keystrokes. Each keystroke calls
+  /// this with the same key — something identifying the field being typed in,
+  /// such as "action:3:name" — and they fold into a single undoable step, so
+  /// one press of undo puts back the name the user started with rather than
+  /// removing one letter.
+  bool executeCoalescing(ProjectModel& model,
+                         const std::string& label,
+                         const std::string& coalesceKey,
+                         const std::function<void(ProjectModel&)>& mutation);
+
+  /// \brief End the run of edits being folded together.
+  ///
+  /// Called when the user moves away from a field, so that returning to it
+  /// later starts a new undoable step rather than extending the old one.
+  void endCoalescing() { m_coalesceKey.clear(); }
+
   bool canUndo() const;
   bool canRedo() const;
   bool undo(ProjectModel& model);
@@ -33,6 +51,8 @@ private:
     ProjectModel after;
     std::string label;
   };
+
+  std::string m_coalesceKey;
 
   std::deque<Entry> m_undo;
   std::deque<Entry> m_redo;

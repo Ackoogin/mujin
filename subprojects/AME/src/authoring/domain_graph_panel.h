@@ -49,6 +49,9 @@ public:
   /// Straight links are the default here. The three columns sit in a row, so a
   /// straight line between two of them is easy to follow; a curve leaves the
   /// node sideways and can pass under a neighbour on its way across.
+  /// \brief Bring every node back into view on the next frame.
+  void requestFitToContents() { m_fitToContents = true; }
+
   void setStraightLinks(bool straight) { m_straightLinks = straight; }
   bool straightLinks() const { return m_straightLinks; }
 
@@ -72,6 +75,8 @@ private:
   int m_selectedActionIdx = -1;
   bool m_openAddPredicatePopup = false;
   bool m_openAddActionPopup = false;
+  bool m_openAddTypePopup = false;
+  char m_newTypeName[64] = {};
   char m_newPredName[64] = {};
   char m_newActionName[64] = {};
   std::vector<std::string> m_highlightedPredicates;
@@ -87,6 +92,7 @@ private:
   static constexpr float kCurvedLinkStrength = 100.0F;
 
   bool m_straightLinks = true;
+  bool m_fitToContents = false;
   float m_widestNeighbourItem = 0.0F;
   std::vector<std::string> m_neighbourItemIds;
 

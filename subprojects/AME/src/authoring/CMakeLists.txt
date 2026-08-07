@@ -90,18 +90,28 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
 endif()
 
 add_library(ame_authoring_project_model STATIC
+    assurance_report.cpp
     contingency_analyser.cpp
     fact_action_matrix.cpp
+    fact_chooser.cpp
     failure_explainer.cpp
     guided_editor_model.cpp
+    import_merge.cpp
     lifecycle_model.cpp
+    mission_commands.cpp
+    model_edits.cpp
     neighbourhood_model.cpp
     project_model.cpp
     pddl_generator.cpp
     pddl_importer.cpp
     pddl_validator.cpp
+    problem_list.cpp
+    recent_projects.cpp
     relation_index.cpp
+    review_pack.cpp
+    run_record.cpp
     scenario_runner.cpp
+    simulation_engine.cpp
     structural_validator.cpp
 )
 target_include_directories(ame_authoring_project_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -109,6 +119,20 @@ target_link_libraries(ame_authoring_project_model
   PUBLIC
     nlohmann_json::nlohmann_json
     ame_core
+)
+
+# The headless commands live in their own executable, linking only the core and
+# the project-model library. Keeping them out of the graphical tool means a
+# build agent needs no display stack to run a mission, and the conventions match
+# contingency_verifier so that both tools are scripted the same way.
+add_executable(ame_mission_cli mission_cli_main.cpp)
+target_link_libraries(ame_mission_cli
+  PRIVATE
+    ame_core
+    ame_authoring_project_model
+)
+set_target_properties(ame_mission_cli PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/..
 )
 
 add_library(imgui_lib STATIC

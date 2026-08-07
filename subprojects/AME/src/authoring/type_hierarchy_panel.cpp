@@ -1,5 +1,9 @@
 #include "type_hierarchy_panel.h"
 
+#include "model_edits.h"
+
+#include <cstdio>
+
 #include "imgui.h"
 
 #include <algorithm>
@@ -162,5 +166,39 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
 
   if (!m_validationMsg.empty()) {
     ImGui::TextColored({1.0F, 0.3F, 0.3F, 1.0F}, "%s", m_validationMsg.c_str());
+  }
+
+  // ---- Rename type modal ------------------------------------------------
+  if (m_openRenamePopup) {
+    ImGui::OpenPopup("Rename type##modal");
+    m_openRenamePopup = false;
+  }
+  if (ImGui::BeginPopupModal("Rename type##modal", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Rename '%s' everywhere it is used", m_renameTypeName.c_str());
+    ImGui::InputText("New name##renametype", m_renameTypeInput,
+                     sizeof(m_renameTypeInput));
+    const std::string wanted = m_renameTypeInput;
+    const std::string refusal =
+        ModelEdits::whyTypeCannotBeRenamed(model, m_renameTypeName, wanted);
+    if (!refusal.empty()) {
+      ImGui::TextDisabled("%s", refusal.c_str());
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Rename") && refusal.empty()) {
+      const std::string from = m_renameTypeName;
+      stack.execute(model, "Rename type", [from, wanted](ProjectModel& m) {
+        ModelEdits::renameType(m, from, wanted);
+      });
+      ImGui::CloseCurrentPopup();
+    }
+    if (!refusal.empty()) {
+      ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
   }
 }

@@ -9,9 +9,16 @@
 #include "lifecycle_model.h"
 #include "pddl_validator.h"
 #include "plan_graph_panel.h"
+#include "import_merge.h"
+#include "model_edits.h"
+#include "problem_list.h"
+#include "recent_projects.h"
 #include "scenario_runner.h"
+#include "simulation_engine.h"
 #include "structural_validator.h"
 #include "relation_index.h"
+#include "review_pack.h"
+#include "run_record.h"
 #include "type_hierarchy_panel.h"
 
 #include <ame/planner.h>
@@ -78,6 +85,12 @@ public:
   const ScenarioExpectation& selfTestScenarioExpectation(int scenarioIdx) const;
   void selfTestRunFeasibility(const std::string& scenarioName);
   void selfTestRunAllScenarios();
+  void selfTestStartBatch();
+  void selfTestStopBatch();
+  bool selfTestBatchRunning() const { return m_batchRunner.isRunning(); }
+  size_t selfTestBatchCompletedCount() const {
+    return m_batchRunner.completedCount();
+  }
   void selfTestRunContingencyAnalysis();
   bool selfTestUndo();
   bool selfTestRedo();
@@ -101,6 +114,9 @@ public:
   const PlanGraphPanel& selfTestPlanGraph() const { return m_planGraph; }
   size_t selfTestPlanGraphStepCount() const { return m_planGraph.stepCount(); }
   size_t selfTestBtNodeCount() const { return m_btGraph.nodeCount(); }
+  bool selfTestBtHasActionContract() const {
+    return m_btGraph.hasActionContract();
+  }
   const StructuralReport& selfTestStructuralReport() const { return m_structuralReport; }
   RelationIndex selfTestRelationIndex() const { return RelationIndex(m_model); }
   size_t selfTestNeighbourhoodNodeCount(int depth = 1) const;
@@ -114,6 +130,11 @@ public:
   }
   bool selfTestSelectionBack();
   bool selfTestSelectionForward();
+  /// Starts a simulated run of the named scenario, as the Run tab does.
+  bool selfTestStartRun(const std::string& scenarioName);
+  bool selfTestStepRun();
+  bool selfTestRunToCompletion();
+  const SimulationEngine& selfTestSimulation() const { return m_simulation; }
   /// Loads a saved project file, as File > Open does. Used by the offscreen
   /// self-test to exercise the views against a real domain rather than the
   /// small model the rest of the self-test builds by hand.
@@ -129,14 +150,64 @@ public:
   }
   void selfTestSetDomainView(int view);
   void selfTestShowPlanTab() { m_requestedTab = "Plan"; }
+  void selfTestShowRunTab() { m_requestedTab = "Run"; }
+  void selfTestShowPddlTab() { m_requestedTab = "PDDL"; }
   bool selfTestDomainViewRendered(int view) const;
   bool selfTestGuidedEditorRendered() const { return m_guidedEditorRendered; }
+  bool selfTestRunTimelineRendered() const { return m_runTimelineRendered; }
+  bool selfTestRunFactsRendered() const { return m_runFactsRendered; }
+  bool selfTestProblemListRendered() const { return m_problemListRendered; }
+  /// Saves the current picture under a name, as the Save this view button does.
+  void selfTestSaveCurrentView(const std::string& name);
+  bool selfTestOpenSavedView(const std::string& name);
+  bool selfTestHasUnsavedChanges() const { return m_unsavedChanges; }
+  bool selfTestRecoveryCopyWritten() const { return m_recoveryWritten; }
+  const std::vector<std::string>& selfTestRecentProjects() const {
+    return m_recentProjects;
+  }
+  std::string selfTestUndoLabel() const { return m_commandStack.topUndoLabel(); }
+  void selfTestCopySelection() { copySelection(); }
+  void selfTestPasteClipboard() { pasteClipboard(); }
+  /// Clicks the first problem that names an element, as a reader would.
+  bool selfTestClickFirstProblem();
+  void selfTestSetRunFaults(RunFaultSet faults) {
+    m_runFaults = std::move(faults);
+    m_simulation.setFaults(m_runFaults);
+  }
+  bool selfTestRunFaultPanelRendered() const {
+    return m_runFaultPanelRendered;
+  }
+  bool selfTestReplanComparisonRendered() const {
+    return m_replanComparisonRendered;
+  }
+  bool selfTestBatchProgressRendered() const {
+    return m_batchProgressRendered;
+  }
+  void selfTestReplayCurrentRun();
+  void selfTestCloseReplay() { m_replay = RecordedRun{}; }
+  void selfTestCompareCurrentRunWithItself();
+  bool selfTestReplayRendered() const { return m_replayRendered; }
+  bool selfTestRunComparisonRendered() const {
+    return m_runComparisonRendered;
+  }
 
 private:
   void renderDomainTab();
   void renderPddlTab();
   void renderPlanTab();
-  void renderBtTab();
+  void renderRunTab();
+  void revealProblemTarget(const ProblemEntry& problem);
+  bool openProjectFrom(const std::string& path);
+  void noteProjectOpened(const std::string& path);
+  void noteProjectSaved(const std::string& path);
+  void writeRecoveryCopy();
+  void applySavedView(const SavedView& view);
+  void copySelection();
+  void pasteClipboard();
+  void renderReplayRunTab();
+  void renderRunComparison();
+  void startRun();
+  void previewRunFaults();
   void renderSelectedElementEditor();
   void renderRelationsPanel();
   void renderMatrixPanel();
@@ -157,9 +228,15 @@ private:
   ValidationReport m_lastValidation;
   StructuralReport m_structuralReport;
   ScenarioBatchReport m_lastBatchReport;
+  ScenarioRunner m_batchRunner;
   ContingencyReport m_lastContingencyReport;
   FailureExplanation m_lastFailureExplanation;
   ame::PlanResult m_lastPlan;
+  SimulationEngine m_simulation;
+  RecordedRun m_replay;
+  RecordedRun m_comparisonFirst;
+  RecordedRun m_comparisonSecond;
+  RunComparison m_runComparison;
   ProjectModel m_model;
   TypeHierarchyPanel m_typeHierarchy;
   std::vector<std::string> m_lastPlanStepLabels;
@@ -168,6 +245,23 @@ private:
   std::string m_requestedTab;
   int m_selectedScenarioIdx = -1;
   bool m_autoValidateOnSave = true;
+  bool m_showRawDiagnostics = false;
+  std::string m_projectPath;
+  std::string m_settingsPath;
+  std::vector<std::string> m_recentProjects;
+  ElementClipboard m_clipboard;
+  ProjectModel m_incomingModel;
+  MergePlan m_mergePlan;
+  MergeChoices m_mergeChoices;
+  bool m_showMergeDialog = false;
+  bool m_showSaveViewDialog = false;
+  char m_saveViewNameInput[64] = {};
+  bool m_unsavedChanges = false;
+  bool m_recoveryWritten = false;
+  bool m_askBeforeQuitting = false;
+  double m_secondsSinceRecoveryCopy = 0.0;
+  size_t m_lastSeenUndoDepth = 0;
+  bool m_problemListRendered = false;
   bool m_hasLastPlan = false;
   bool showAboutModal = false;
   int m_domainViewMode = 0;
@@ -175,12 +269,34 @@ private:
   uint32_t m_neighbourFilter = ShowEverything;
   std::array<bool, 5> m_domainViewsRendered{};
   bool m_guidedEditorRendered = false;
+  bool m_runTimelineRendered = false;
+  bool m_runFactsRendered = false;
+  bool m_runFaultPanelRendered = false;
+  bool m_replanComparisonRendered = false;
+  bool m_batchProgressRendered = false;
+  bool m_replayRendered = false;
+  bool m_runComparisonRendered = false;
+  bool m_runViewingHistory = false;
+  unsigned m_runViewTick = 0;
+  size_t m_runDisplayedReplans = 0;
+  char m_runFactFilter[128] = {};
+  RunFaultSet m_runFaults;
+  std::vector<std::string> m_runFactChoices;
+  std::string m_runFaultChoiceScenario;
+  int m_runFaultActionIdx = 0;
+  int m_runFaultAttempt = 1;
+  int m_runFaultFactIdx = 0;
+  int m_runFaultTick = 1;
+  bool m_runFaultFactValue = true;
+  char m_runFaultName[64] = {};
 
   char m_scenarioNameInput[64] = {};
   char m_renameScenarioNameInput[64] = {};
   int m_renameScenarioIdx = -2;
   int m_initPredIdx = 0;
   int m_goalPredIdx = 0;
+  std::vector<std::string> m_initChosenObjects;
+  std::vector<std::string> m_goalChosenObjects;
   char m_initArgsInput[128] = {};
   char m_goalArgsInput[128] = {};
   char m_stateGroupNameInput[64] = {};

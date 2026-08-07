@@ -16,9 +16,13 @@ Use the authoring tool to:
 4. Validate the model at structural, parser, grounding, and planning levels.
 5. Preview generated PDDL, solved plans, and compiled Behavior Trees.
 6. Run scenario regression checks and contingency reachability analysis.
-7. Export domain/problem PDDL and regression reports for review or CI use.
+7. Save and replay runtime-compatible runs, and compare two runs.
+8. Export a dated review pack containing the model and its review evidence.
 
-The tool is offline and local. It does not replace the AME DevEnv, ROS2 nodes, or Foxglove runtime monitoring path. Use the authoring tool for model authoring and design-time validation; use DevEnv and the deployed AME nodes for execution monitoring.
+The tool is offline and local. It does not replace the AME DevEnv, ROS2 nodes, or Foxglove
+runtime monitoring path. Use the authoring tool for model authoring, simulation and recorded
+run review; use DevEnv and the deployed AME nodes for live execution monitoring. The two tools
+read the same three recorded-run files.
 
 ---
 
@@ -32,7 +36,7 @@ From the repository root on Windows:
 
 ```bat
 cmake --preset authoring
-cmake --build --preset authoring-release --target ame_authoring_tool --parallel %NUMBER_OF_PROCESSORS%
+cmake --build --preset authoring-release --target ame_authoring_tool ame_mission_cli --parallel %NUMBER_OF_PROCESSORS%
 build-authoring\subprojects\AME\src\Release\ame_authoring_tool.exe
 ```
 
@@ -40,7 +44,7 @@ From the repository root on Linux, using GCC or Clang:
 
 ```bash
 cmake --preset authoring -DCMAKE_BUILD_TYPE=Release
-cmake --build --preset authoring-release --target ame_authoring_tool --parallel $(nproc)
+cmake --build --preset authoring-release --target ame_authoring_tool ame_mission_cli --parallel $(nproc)
 build-authoring/subprojects/AME/src/ame_authoring_tool
 ```
 
@@ -101,9 +105,9 @@ The application has four workflow tabs:
 | Tab | Purpose |
 |-----|---------|
 | `Domain` | Main authoring surface for palette, types, objects, scenarios, properties, and the node graph |
-| `PDDL` | Editable domain PDDL, validation output, grounding report, regression results, and contingency results |
+| `PDDL` | Editable domain PDDL, the list of problems, grounding report, regression results, and contingency results |
 | `Plan` | Read-only plan graph after a successful feasibility check |
-| `BT` | Read-only Behavior Tree graph after a successful plan compile |
+| `Run` | The compiled Behavior Tree, and the controls that run a scenario against it |
 
 The status bar shows the current project name, validation state, and last operation. The layout is saved to `ame_authoring_tool.ini` during normal interactive use.
 
@@ -143,6 +147,8 @@ Use:
 
 - `File > New` to start a clean model.
 - `File > Open...` to load an existing project.
+- `File > Recent projects` to reopen one of the last eight without typing a path. A project
+  that has since been deleted is not offered.
 - `File > Save` or `File > Save As...` to write the current structured model.
 
 The project stores:
@@ -160,6 +166,19 @@ The project stores:
 Action-to-action relationships are derived from action outcomes and requirements. They are
 not stored or drawn by hand. Older version-1 files that contain `causalLinks` still load, but
 that legacy field is ignored and is not written when the project is saved again.
+
+Closing the tool with unsaved changes asks whether to save first. While there are unsaved
+changes the tool also writes a recovery copy beside the project, named `<project>.recovery`,
+and removes it once the project is saved. If the tool stops unexpectedly, open that file to
+get the work back.
+
+Renaming a type reaches everything that names it — the objects of that type, the parameters
+that ask for it, the types below it — in one step, so one press of undo puts the old name
+back everywhere. Use the `rename` button beside the type in the sidebar.
+
+Typing is undoable: a run of keystrokes in one field is a single step, so undo puts back what
+the field held before you started rather than removing one letter. The `Edit` menu names what
+would be undone.
 
 PDDL remains an import/export artefact. The structured project is the better format for ongoing graphical editing.
 
@@ -297,7 +316,11 @@ Scenarios represent PDDL problem instances for the current domain.
 In the `Domain` tab, expand `Scenarios`:
 
 1. Enter a scenario name and click `Add Scenario`.
-2. Add initial-state facts.
+2. Add initial-state facts. Choose the fact, then choose each thing it involves from the
+   list, which holds only objects of the right type. Objects of the wrong type stay in the
+   list, greyed, and say why on hover. Open `Type it instead` to type a fact if you prefer;
+   `(at uav1 base)`, `at uav1 base` and `at(uav1, base)` are all accepted, and are checked
+   against the same rules.
 3. Add goal facts.
 4. Optionally define the expected outcome.
 
@@ -343,6 +366,13 @@ Results appear in the `PDDL` tab:
 - grounding statistics,
 - warnings for predicates or action schemas with no ground instances.
 
+The lower half of the `PDDL` tab lists every problem the checkers found, worst first, one
+sentence each. Click a row to select the fact or action it names and open it on the `Domain`
+tab. When a problem comes from the PDDL reader rather than from the project's structure, the
+row says which element could not be read and keeps the reader's own words behind
+`What the reader said`. Tick `Show the raw text instead` for the whole diagnostic block as
+it used to appear.
+
 ### Check Feasibility
 
 Runs validation and then calls the AME planner for the selected scenario.
@@ -372,32 +402,263 @@ test. The right side of the report also lists every fact that no action produces
 Runs validation, planning, and Behavior Tree compilation in one workflow. The tool switches to the `Plan` tab and populates both:
 
 - `Plan`: solved action graph,
-- `BT`: compiled Behavior Tree graph.
+- `Run`: compiled Behavior Tree graph, waiting to be run.
 
 Selecting a plan step highlights the corresponding action schema in the domain graph.
 
 ### Run All Scenarios
 
-Runs every scenario in the project and compares each result with its expected outcome. The regression table appears in the `PDDL` tab.
+Plans and simulates every scenario in the project, then compares both results with its
+expected outcome. The `PDDL` tab reports which scenario is running and how many have
+finished. Use `Stop batch` to leave the remaining scenarios waiting. Each result states why
+the observed planning and execution did or did not match the expectation.
 
 Use `File > Export Regression Report...` to write the latest batch report as JSON.
+
+### Saved views
+
+`Save this view` on the `Domain` tab stores what is in focus, how far out the view reaches,
+which relationships are shown and which view is open, under a name. Saved views live in the
+project file, so they survive reopening and travel with the project. Pick one from
+`Saved views` to put the picture back.
 
 ### Run Contingency Analysis
 
 Runs an in-process contingency reachability analysis. The tool identifies context predicates from the model, enumerates context combinations, and checks whether the selected scenario remains solvable.
 
-Context predicates are predicates that:
+By default the tool works out for itself which facts are context — those that appear in
+action preconditions and are changed by no action effect — and treats the scenario's goal as
+the safe state. A scenario can say instead: name the facts that represent a contingency worth
+checking, and the facts that count as having recovered. Declaring the contingency narrows what
+is varied, which is what makes a large domain checkable.
 
-- appear in action preconditions, and
-- are not changed by any action effect.
+The result says how much of the space was covered: how many combinations were planned for, how
+many followed from those without planning, and whether anything could be carried between them
+at all. In a domain with conditions about facts being false, nothing can, and every
+combination is planned for.
 
 Results appear in the `PDDL` tab as feasible, infeasible, or error rows. Context predicate nodes are highlighted in the domain graph after a report is generated.
+
+---
+
+## 8a) Run a scenario
+
+The `Run` tab runs a scenario inside the tool. The run uses the project's generated PDDL,
+the same world model, the same planner and the same plan compiler that the runtime uses.
+The only substitution is the action nodes: every action is built as a stand-in that waits
+for the number of ticks the project gives it, then succeeds or fails as the project says,
+and records the action's declared effects. **A run is evidence about the mission model. It
+is never evidence about how the system will behave in the field**, which is why the screen
+and the status bar both say `SIMULATED` while a run is loaded.
+
+The controls sit in one row and never move:
+
+| Control | What it does |
+|---------|--------------|
+| `Run` | Starts the selected scenario, or resumes a paused one |
+| `Pause` | Stops the run advancing without ending it |
+| `Step` | Advances exactly one tick, pausing the run first |
+| `Stop` | Ends the run where it stands, leaving what it did on screen |
+| `Reset` | Plans, compiles and loads the same scenario from the beginning |
+| `speed` | How many ticks a second a running scenario advances |
+| `scenario` | Which scenario to run |
+
+### Making a run go wrong
+
+`Make this run go wrong` contains exactly two fault controls:
+
+- Choose an action and an attempt number. That attempt fails once; later attempts use the
+  action's normal settings.
+- Choose a grounded fact, a value and a tick. The world model applies that change as an
+  observed event outside the mission's control.
+
+These settings belong to the loaded run, not to the PDDL domain, and Reset keeps them. When
+a fact is made true and belongs to a declared lifecycle group, the other alternative facts
+for the same objects are made false. This prevents the injected event from leaving two
+alternative states true together.
+
+Before the first tick, the panel describes what the configured fault is expected to do. It
+names the action expected to be under way, the precondition that can be lost, and the domain
+actions that can respond. It also shows the seed used for random action failures. The same
+seed and settings produce the same random draws.
+
+When a tree step fails, the engine replans from the world model as it stands and continues
+with the replacement tree. The Run tab states why the replan happened and shows the plan that
+was abandoned beside the plan that replaced it. The timeline retains actions from both plans
+and the run counts its replans. If no replacement plan exists, the same panel uses the
+failure explanation from the Plan tab to name a fact that the domain could not bring about.
+
+Use `Save this named fault with the scenario` when the scenario batch should repeat these
+run settings and check its execution expectations.
+
+The timeline is the main view below the controls. It has one row per action and a tick axis.
+Each bar gives the action's start and finish ticks. Actions that run at the same time have
+bars that overlap on separate rows, which makes parallel work visible without having to read
+the tree structure. A marker on a bar shows the tick when that action changed a world-model
+fact.
+
+The facts panel beside the timeline lists every grounded world-model fact. Each row says
+whether the fact is true at the viewed tick and whether it was true from the start, has not
+happened yet, or last changed on a particular tick. A row is highlighted when it changed at
+the viewed tick. Enter an object name such as `uav1`, or a fact name such as `searched`, in
+the filter to reduce the list.
+
+Click a point on the timeline to inspect that moment. The playhead, facts, tree colours,
+goals, and sentence that says what is happening all move to the selected tick. This does not
+pause, rewind, or otherwise change the live run. Press `Run` or `Step` to return the screen to
+the live tick.
+
+The compiled Behavior Tree remains below the timeline to answer where the run has got to.
+Before a run it is the tree the plan compiled, waiting. During a run each node takes the
+colour of what it is doing — waiting, happening now, finished, or went wrong — and the node
+being ticked takes a bright border. A node that holds others shows what they are doing, so a
+finished branch reads as finished without opening it. Select an action node to see the
+grounded action it came from, the facts that must be true, observed, or false before it can
+run, and the facts it makes true or false.
+
+Every action in the tree is drawn as the stand-in that is actually running, so there is no
+screen you can be looking at without knowing the actions are simulated.
+
+Nothing has to be set up before the first run. An action that nobody has configured takes
+four ticks, which is one second at the default speed, and works. The duration is not one
+tick on purpose: a behaviour tree walks a sequence of actions that each finish immediately
+within a single tick, so one-tick actions would make a whole mission start and end on tick
+one, with nothing to watch and no order visible. Give an action its own duration where the
+mission depends on how long it takes.
+
+### Per-action run settings
+
+Select an action on the `Domain` tab. Under `In a simulated run`:
+
+- `how long it takes, in ticks`: how many ticks the stand-in waits before finishing.
+- `it works`: clear this to make the action fail every time it is reached.
+- `chance it goes wrong`: the probability that an otherwise working action fails.
+
+Random draws use the project's saved seed, so a run with a random element repeats exactly
+until somebody changes the seed. Settings are stored in the project file beside the action's
+behaviour-tree binding, and a project saved before runs existed takes the defaults.
+
+### Runs from the command line
+
+The same runs work without a window, which is how they are used in a test suite or in
+continuous integration. They live in their own program, `ame_mission_cli`, rather than in the
+graphical tool: it links no display libraries, so a build agent needs no display stack to run
+a mission.
+
+```bash
+ame_mission_cli run    my-mission.ameproj.json --scenario nominal --json run.json
+ame_mission_cli record my-mission.ameproj.json --scenario nominal --out runs/nominal
+ame_mission_cli batch  my-mission.ameproj.json --json regression.json
+```
+
+| Command | What it does |
+|---------|--------------|
+| `run` | Simulates one named scenario and reports what happened |
+| `record` | Simulates one named scenario and writes a folder of replay files |
+| `batch` | Simulates every scenario and checks each against the planning and execution expectations the project records for it |
+
+| Option | Meaning |
+|--------|---------|
+| `--scenario <name>` | Which scenario to run. Required by `run` and `record` |
+| `--json <file>` | Where to write the machine-readable report. Without it, no report is written |
+| `--out <folder>` | Where `record` writes the run. Required by `record` |
+| `-h`, `--help` | Show the usage summary |
+
+The exit code is `0` when the mission behaved as the project expects, and `1` when it did not
+or the command could not be carried out. Standard output carries the summary a person reads,
+which is why the report goes to the file named by `--json`: the planner writes progress lines
+of its own to standard output, so it is no place for a document another program has to parse.
+
+`record` requires `--scenario` because one folder holds one run. The scenario's saved fault
+settings and the project's random seed are applied, so the recorded run is the one the
+project describes and repeats exactly.
+
+**One convention across the tools.** These conventions are the ones
+[`contingency_verifier`](contingency_verifier.md) already used: the file being examined is a
+positional argument, `--json` names the machine-readable report, `--help` explains itself,
+and the exit code is the verdict. The three questions worth asking about a mission model —
+whether it can be planned, whether it runs, and whether it stays safe under every contingency
+— are therefore three commands that look alike:
+
+```bash
+ame_mission_cli      batch  my-mission.ameproj.json          --json runs.json
+contingency_verifier domain.pddl problem.pddl                --json contingency.json
+```
+
+The graphical tool takes no command-line options other than `--self-test`, which needs a
+window and so belongs to it.
+
+### Save and replay a run
+
+Use `File > Save Current Run...` after starting a simulation. Choose a new or empty folder.
+The folder contains:
+
+```text
+ame_bt_events.jsonl
+ame_wm_audit.jsonl
+ame_plan_audit.jsonl
+run.json
+```
+
+The first three files use the runtime observability schemas. `run.json` names the project,
+scenario, random seed and injected faults, and says that the run was simulated. It also records
+`timeBasis` as `simulated_tick_time` and gives `tickPeriodSeconds`. The period is the reciprocal
+of the engine's ticks per second. Event timestamps therefore describe how long the mission
+appeared to take on the Run tab: every event made by one tick has that tick's timestamp, and
+the next tick advances by `tickPeriodSeconds`. They do not describe how quickly the processor
+computed the simulation. The Run tab and status bar continue to show `SIMULATED` while this
+recording is replayed.
+
+Use `File > Open Recorded Run...` to replay any folder with the three JSONL files. The project
+that produced the files does not have to be open. A recording from a deployed system normally
+has no authoring `run.json`; the tool treats it as a real-system run and states `REAL SYSTEM`
+above the replay and in the status bar. The timeline, facts, tree and goal views otherwise work
+in the same way as they do for a simulation.
+
+To open an authoring-tool recording in DevEnv without conversion:
+
+1. Start DevEnv offline from the repository root:
+
+   ```bash
+   python -m subprojects.AME.tools.devenv --backend none
+   ```
+
+2. Open `Observability` and select the `JSONL Replay` tab.
+3. Select `Load Directory...`.
+4. Choose the folder containing `ame_bt_events.jsonl`, `ame_wm_audit.jsonl`, and
+   `ame_plan_audit.jsonl`.
+5. Use the `Time Scrubber` to move through the recorded events.
+
+DevEnv ignores the authoring manifest and the optional simulation tick fields. It reads the
+same core fields that it reads from a runtime recording. Its time scrubber uses the simulated
+`ts_us` timeline, so each mission tick remains a visible step. Recordings made by a real system
+keep their measured timestamps unchanged.
+
+### Compare two runs
+
+Use `File > Compare Current Run with Recorded Run...` to compare the run in memory with an
+earlier saved folder. The current run does not have to be saved first. This is the shortest
+path for checking a run before and after a domain change, or a nominal run against a faulted
+run.
+
+Use `File > Compare Two Recorded Runs...` when both results are already saved. The comparison
+appears on the Run tab. Its first line states where the trees first differ so that a reviewer
+can take the answer without reading the detail. Below it, the tool shows the two run summaries,
+actions found on only one side, and facts with different final values.
 
 ---
 
 ## 9) Import and export PDDL
 
 ### Import an existing domain
+
+Importing into a project that already has facts or actions shows what the import would do
+before it does any of it: what would be added, what would be overwritten, and what is already
+the same, with the cost of each replacement named. Anything new is always added. Tick the
+kinds of thing you are willing to have overwritten — types, facts, actions, objects — and the
+rest of your work is left alone. Replacing an action keeps its behaviour-tree binding, its run
+settings and its place on the canvas, because the imported PDDL says nothing about any of
+those.
 
 Use:
 
@@ -427,12 +688,45 @@ Use:
 
 ```text
 File > Export Domain PDDL...
+File > Export every scenario's problem file...
 File > Export Problem PDDL...
 ```
 
 Export refuses to write if structural errors are present.
 
-Current behavior: problem export writes the first scenario in the project.
+`Export every scenario's problem file...` asks where to put them and writes one file per
+scenario, named after the project and the scenario. `Export Problem PDDL...` remains for
+writing a single scenario to a name you choose.
+
+### Export assurance evidence
+
+`File > Export Assurance Evidence...` writes a Markdown report a reviewer can read without
+the tool: what the model contains, the facts nothing in the mission brings about, what each
+action is bound to, the facts that must be observed before an action will act on them, how
+every scenario behaved, and what stayed reachable under each declared contingency.
+
+The report always ends with what it does **not** cover — that its runs are simulations rather
+than evidence about the field, how many scenarios declare no contingency, and how many actions
+have nothing bound to them. The same report goes into the review pack as
+`07-assurance-evidence.md`, and `ame_mission_cli evidence <project> --json report.md` writes
+it from a script.
+
+### Export a review pack
+
+Use `File > Export Review Pack...` and choose a parent folder. The tool creates a dated folder
+whose files can be identified from their names. `00-index.md` explains each item. The pack
+contains:
+
+- the generated domain PDDL;
+- one generated problem PDDL file for every scenario;
+- the fact-by-action matrix as CSV and Markdown;
+- a Markdown table of all scenario results;
+- one replayable recorded-run folder;
+- a domain summary listing types, objects, facts, actions and facts that no action produces.
+
+If a run is currently loaded, the pack includes it without asking you to save it first.
+Otherwise it runs the first scenario for the recorded-run part of the pack. The individual
+domain, problem, regression-report and matrix export commands remain available.
 
 ---
 
@@ -443,7 +737,11 @@ Current behavior: problem export writes the first scenario in the project.
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` | Redo |
 | `Delete` | Delete selected graph nodes or links |
+| `Ctrl+C` | Copy the selected fact or action |
+| `Ctrl+V` | Paste it, under a name nothing else uses |
 | `Ctrl+D` | Duplicate selection |
+| `F` | Fit the canvas to everything on it |
+| `A` | Quick-add a fact or an action |
 | `Ctrl+Tab` | Cycle workflow tabs |
 | `F5` | Plan & Preview |
 | `F6` | Validate Now |
@@ -466,7 +764,7 @@ For a new model:
 9. Run `Validate > Check Feasibility`.
 10. Run `Validate > Plan & Preview`.
 11. Save the project.
-12. Export domain/problem PDDL when ready for runtime use or review.
+12. Export a review pack when the model is ready for review.
 
 For an existing PDDL model:
 
@@ -477,7 +775,7 @@ For an existing PDDL model:
 5. Run `Validate > Plan & Preview`.
 6. Add expected outcomes.
 7. Run `Validate > Run All Scenarios`.
-8. Export a regression report if the model is being reviewed or baselined.
+8. Export a review pack if the model is being reviewed or baselined.
 
 ---
 
@@ -485,13 +783,9 @@ For an existing PDDL model:
 
 - The generated and imported PDDL targets the AME-supported STRIPS + typing subset.
 - ADL, conditional effects, numeric fluents, temporal PDDL, and durative actions are out of scope.
-- Domain import replaces the current project rather than merging with it.
-- Problem export currently exports the first scenario.
-- Scenario facts are entered as predicate plus argument text, not as generated fluent checkboxes.
-- The canvas `Add Type` context menu item is a placeholder; add types through the sidebar.
-- Plan and BT views are read-only previews.
-- Semantic zoom is available in the whole-domain canvas, but collapsible named groups are not yet implemented.
-- Selection history is available during exploration, but saved named views are not yet stored.
+- The plan view is a read-only preview, and the tree on the `Run` tab cannot be edited.
+- Saved views are stored in the project and reopen by name. Collapsible named groups are
+  stored in the project format but nothing draws them yet.
 - The tool performs design-time validation only; live ROS2 execution monitoring remains in DevEnv/Foxglove.
 
 ---

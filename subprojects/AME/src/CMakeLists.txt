@@ -9,6 +9,7 @@ set(_AME_CORE_SOURCES
     lib/plan_compiler.cpp
     lib/pddl_parser.cpp
     lib/planner.cpp
+    lib/contingency_search.cpp
     lib/goal_allocator.cpp
     lib/execution_sink.cpp
     nodes/check_world_predicate.cpp

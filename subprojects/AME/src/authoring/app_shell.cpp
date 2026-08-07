@@ -1,19 +1,29 @@
 #include "app_shell.h"
 
+#include "assurance_report.h"
 #include "authoring_utils.h"
+#include "fact_chooser.h"
+#include "problem_list.h"
 #include "guided_editor_model.h"
 #include "imgui.h"
 #include "pddl_generator.h"
 #include "pddl_importer.h"
+#include "review_pack.h"
+#include "run_record.h"
 
 #include <tinyfiledialogs.h>
 
+#include <filesystem>
+
 #include <ame/action_registry.h>
 #include <ame/plan_compiler.h>
+#include <ame/world_model.h>
 
 #include <algorithm>
 #include <array>
 #include <cfloat>
+#include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -47,6 +57,12 @@ static std::string pickSaveFile(const char* title,
   const char* p = tinyfd_saveFileDialog(title, defaultPath.c_str(),
                                         1, patterns, filterDesc);
   return p != nullptr ? std::string(p) : std::string();
+}
+
+static std::string pickFolder(const char* title,
+                              const std::string& defaultPath) {
+  const char* path = tinyfd_selectFolderDialog(title, defaultPath.c_str());
+  return path != nullptr ? std::string(path) : std::string();
 }
 
 // Forward declarations for helpers defined later in this file.
@@ -92,6 +108,60 @@ static std::vector<std::string> parseArgList(const char* text) {
     args.push_back(arg);
   }
   return args;
+}
+
+static FactRef parseGroundedFact(const std::string& key) {
+  FactRef fact;
+  if (key.size() < 2U || key.front() != '(' || key.back() != ')') {
+    return fact;
+  }
+  std::istringstream words(key.substr(1U, key.size() - 2U));
+  words >> fact.predicateName;
+  std::string object;
+  while (words >> object) {
+    fact.objectNames.push_back(object);
+  }
+  return fact;
+}
+
+static std::vector<std::string> groundedFactsForScenario(
+    const ProjectModel& model,
+    const std::string& scenarioName) {
+  ame::WorldModel world_model;
+  const ValidationReport validation =
+      PddlValidator::validateAndBuildWorldModel(model, scenarioName,
+                                                world_model);
+  std::vector<std::string> facts;
+  if (!validation.ok) {
+    return facts;
+  }
+  facts.reserve(world_model.numFluents());
+  for (unsigned id = 0; id < world_model.numFluents(); ++id) {
+    facts.push_back(world_model.fluentName(id));
+  }
+  const RelationIndex index(model);
+  std::vector<std::string> outside_predicates;
+  for (const size_t predicate_index : index.factsNoActionMakesTrue()) {
+    if (predicate_index < model.predicates.size()) {
+      outside_predicates.push_back(model.predicates[predicate_index].name);
+    }
+  }
+  // Facts no action produces represent things that happen to the mission.
+  // Put them first because they are the usual controls for contingency paths.
+  std::stable_sort(facts.begin(), facts.end(),
+                   [&outside_predicates](const std::string& first,
+                                         const std::string& second) {
+    const FactRef first_fact = parseGroundedFact(first);
+    const FactRef second_fact = parseGroundedFact(second);
+    const bool first_outside =
+        std::find(outside_predicates.begin(), outside_predicates.end(),
+                  first_fact.predicateName) != outside_predicates.end();
+    const bool second_outside =
+        std::find(outside_predicates.begin(), outside_predicates.end(),
+                  second_fact.predicateName) != outside_predicates.end();
+    return first_outside && !second_outside;
+  });
+  return facts;
 }
 
 static bool readTextFile(const std::string& path, std::string& out) {
@@ -216,13 +286,13 @@ static std::string buildValidationOutputText(
   }
 
   if (!batch.results.empty()) {
-    output << "\nScenario regression: " << batch.passCount << " pass, "
+    output << "\nScenario simulation: " << batch.passCount << " as expected, "
            << batch.failCount << " fail, " << batch.errorCount << " error\n";
     for (const auto& result : batch.results) {
       output << result.scenarioName << ": ";
       switch (result.outcome) {
       case ScenarioOutcome::Pass:
-        output << "PASS";
+        output << "AS EXPECTED";
         break;
       case ScenarioOutcome::Fail:
         output << "FAIL";
@@ -231,7 +301,11 @@ static std::string buildValidationOutputText(
         output << "ERROR";
         break;
       }
-      output << ", steps=" << result.planStepCount
+      output << ", plan_steps=" << result.planStepCount
+             << ", goal_reached=" << (result.goalReached ? "yes" : "no")
+             << ", run_actions=" << result.runActionCount
+             << ", replans=" << result.replanCount
+             << ", seed=" << result.simulationSeed
              << ", time_ms=" << result.solveTimeMs;
       if (!result.reason.empty()) {
         output << ", notes=" << result.reason;
@@ -316,7 +390,7 @@ static void renderActionRefSection(const char* title,
 
   ImGui::PushID(tableId);
   if (model.predicates.empty()) {
-    ImGui::TextDisabled("No predicates available");
+    ImGui::TextDisabled("No facts to choose from yet");
     ImGui::PopID();
     return;
   }
@@ -597,6 +671,7 @@ static void renderFactSection(const char* title,
                               ProjectModel& model,
                               CommandStack& stack,
                               int& selectedPredicate,
+                              std::vector<std::string>& chosenObjects,
                               char* argBuffer,
                               size_t argBufferSize) {
   ImGui::TextUnformatted(title);
@@ -629,7 +704,7 @@ static void renderFactSection(const char* title,
 
   ImGui::PushID(tableId);
   if (model.predicates.empty()) {
-    ImGui::TextDisabled("No predicates available");
+    ImGui::TextDisabled("No facts to choose from yet");
     ImGui::PopID();
     return;
   }
@@ -641,7 +716,7 @@ static void renderFactSection(const char* title,
 
   const char* preview =
       model.predicates[static_cast<size_t>(selectedPredicate)].name.c_str();
-  if (ImGui::BeginCombo("Predicate", preview)) {
+  if (ImGui::BeginCombo("Fact", preview)) {
     for (int pi = 0; pi < static_cast<int>(model.predicates.size()); ++pi) {
       const bool selected = (pi == selectedPredicate);
       if (ImGui::Selectable(model.predicates[static_cast<size_t>(pi)].name.c_str(),
@@ -654,16 +729,92 @@ static void renderFactSection(const char* title,
     }
     ImGui::EndCombo();
   }
-  ImGui::InputText("Args", argBuffer, argBufferSize);
-  if (ImGui::Button(addButtonLabel)) {
-    const FactRef fact{
-      model.predicates[static_cast<size_t>(selectedPredicate)].name,
-      parseArgList(argBuffer)
-    };
-    stack.execute(model, addCommandLabel, [fact, &facts](ProjectModel&) {
-      facts.push_back(fact);
+  // One chooser per thing the fact involves, each holding only objects of the
+  // right type. Objects of the wrong type stay in the list, greyed, with the
+  // reason beside them, so the rule is learned rather than hidden.
+  const std::string factName =
+      model.predicates[static_cast<size_t>(selectedPredicate)].name;
+  const size_t arity = FactChooser::arity(model, factName);
+  chosenObjects.resize(arity);
+
+  for (size_t position = 0; position < arity; ++position) {
+    ImGui::PushID(static_cast<int>(position));
+    const std::vector<FactChoice> objects =
+        FactChooser::objectsFor(model, factName, position);
+    const std::string label =
+        model.predicates[static_cast<size_t>(selectedPredicate)]
+            .params[position]
+            .name;
+    const char* preview = chosenObjects[position].empty()
+                              ? "choose"
+                              : chosenObjects[position].c_str();
+    if (ImGui::BeginCombo(label.c_str(), preview)) {
+      for (const FactChoice& choice : objects) {
+        if (!choice.allowed) {
+          ImGui::BeginDisabled();
+          ImGui::Selectable(choice.name.c_str(), false);
+          ImGui::EndDisabled();
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("%s", choice.reason.c_str());
+          }
+          continue;
+        }
+        if (ImGui::Selectable(choice.name.c_str(),
+                              choice.name == chosenObjects[position])) {
+          chosenObjects[position] = choice.name;
+        }
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::PopID();
+  }
+
+  FactRef chosen;
+  chosen.predicateName = factName;
+  chosen.objectNames = chosenObjects;
+  const std::string chosenProblem = FactChooser::whyNotValid(model, chosen);
+  const bool chosenOk = chosenProblem.empty();
+
+  if (!chosenOk) {
+    ImGui::BeginDisabled();
+  }
+  if (ImGui::Button(addButtonLabel) && chosenOk) {
+    stack.execute(model, addCommandLabel, [chosen, &facts](ProjectModel&) {
+      facts.push_back(chosen);
     });
-    argBuffer[0] = '\0';
+    for (std::string& object : chosenObjects) {
+      object.clear();
+    }
+  }
+  if (!chosenOk) {
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", chosenProblem.c_str());
+  }
+
+  // The typed path stays for users who prefer it, held to the same rules.
+  if (ImGui::TreeNode("Type it instead")) {
+    ImGui::InputText("Fact", argBuffer, argBufferSize);
+    const FactRef typed = FactChooser::parse(argBuffer);
+    const std::string typedProblem =
+        typed.predicateName.empty() ? "nothing typed yet"
+                                    : FactChooser::whyNotValid(model, typed);
+    const bool typedOk = typedProblem.empty();
+    if (!typedOk) {
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Add what I typed") && typedOk) {
+      stack.execute(model, addCommandLabel, [typed, &facts](ProjectModel&) {
+        facts.push_back(typed);
+      });
+      argBuffer[0] = '\0';
+    }
+    if (!typedOk) {
+      ImGui::EndDisabled();
+      ImGui::SameLine();
+      ImGui::TextDisabled("%s", typedProblem.c_str());
+    }
+    ImGui::TreePop();
   }
   ImGui::PopID();
 }
@@ -700,10 +851,19 @@ static std::string uniqueScenarioCopyName(const ProjectModel& model,
 
 static std::vector<std::string>& expectationActionList(ProjectModel& model,
                                                        int scenarioIdx,
-                                                       bool forbidden) {
+                                                       int listKind) {
   ScenarioExpectation& expectation =
       model.scenarios[static_cast<size_t>(scenarioIdx)].expectation;
-  return forbidden ? expectation.forbiddenActions : expectation.expectedActions;
+  if (listKind == 1) {
+    return expectation.forbiddenActions;
+  }
+  if (listKind == 2) {
+    return expectation.requiredRunActions;
+  }
+  if (listKind == 3) {
+    return expectation.forbiddenRunActions;
+  }
+  return expectation.expectedActions;
 }
 
 static void renderExpectationActionSection(const char* title,
@@ -714,7 +874,7 @@ static void renderExpectationActionSection(const char* title,
                                            ProjectModel& model,
                                            CommandStack& stack,
                                            int scenarioIdx,
-                                           bool forbidden,
+                                           int listKind,
                                            int& selectedAction) {
   ImGui::TextUnformatted(title);
   if (ImGui::BeginTable(tableId, 2,
@@ -731,9 +891,9 @@ static void renderExpectationActionSection(const char* title,
       if (ImGui::SmallButton("Remove")) {
         const int removeIdx = ai;
         stack.execute(model, removeCommandLabel,
-                      [scenarioIdx, forbidden, removeIdx](ProjectModel& target) {
+                      [scenarioIdx, listKind, removeIdx](ProjectModel& target) {
           std::vector<std::string>& names =
-              expectationActionList(target, scenarioIdx, forbidden);
+              expectationActionList(target, scenarioIdx, listKind);
           if (removeIdx >= 0 && removeIdx < static_cast<int>(names.size())) {
             names.erase(names.begin() + removeIdx);
           }
@@ -784,9 +944,9 @@ static void renderExpectationActionSection(const char* title,
         actionNames.end();
     if (!actionName.empty() && !alreadyListed) {
       stack.execute(model, addCommandLabel,
-                    [scenarioIdx, forbidden, actionName](ProjectModel& target) {
+                    [scenarioIdx, listKind, actionName](ProjectModel& target) {
         std::vector<std::string>& names =
-            expectationActionList(target, scenarioIdx, forbidden);
+            expectationActionList(target, scenarioIdx, listKind);
         if (std::find(names.begin(), names.end(), actionName) == names.end()) {
           names.push_back(actionName);
         }
@@ -800,6 +960,163 @@ AppShell::AppShell()
   : projectName("[No Project]"),
     validationState("Not validated"),
     lastOperation("Ready") {
+  m_settingsPath = RecentProjects::defaultSettingsPath();
+  m_recentProjects = RecentProjects::load(m_settingsPath);
+}
+
+/// A label reads better after "Undo" when it does not start with a capital.
+static std::string lowerFirst(std::string text) {
+  if (!text.empty()) {
+    text[0] = static_cast<char>(
+        std::tolower(static_cast<unsigned char>(text[0])));
+  }
+  return text;
+}
+
+void AppShell::selfTestSaveCurrentView(const std::string& name) {
+  SavedView view;
+  view.name = name;
+  const int selectedAction = m_domainGraph.selectedActionIndex();
+  const int selectedFact = m_domainGraph.selectedPredicateIndex();
+  if (selectedAction >= 0 &&
+      selectedAction < static_cast<int>(m_model.actions.size())) {
+    view.focusAction = m_model.actions[static_cast<size_t>(selectedAction)].name;
+  } else if (selectedFact >= 0 &&
+             selectedFact < static_cast<int>(m_model.predicates.size())) {
+    view.focusPredicate =
+        m_model.predicates[static_cast<size_t>(selectedFact)].name;
+  }
+  view.depth = m_neighbourDepth;
+  view.relationshipFilter = m_neighbourFilter;
+  view.viewMode = m_domainViewMode;
+  m_commandStack.execute(m_model, "Save a view", [view](ProjectModel& model) {
+    model.savedViews.push_back(view);
+  });
+}
+
+bool AppShell::selfTestOpenSavedView(const std::string& name) {
+  const auto it = std::find_if(m_model.savedViews.begin(),
+                               m_model.savedViews.end(),
+                               [&name](const SavedView& view) {
+                                 return view.name == name;
+                               });
+  if (it == m_model.savedViews.end()) {
+    return false;
+  }
+  applySavedView(*it);
+  return true;
+}
+
+void AppShell::applySavedView(const SavedView& view) {
+  m_domainViewMode = view.viewMode;
+  m_neighbourDepth = view.depth < 1 ? 1 : view.depth;
+  m_neighbourFilter = view.relationshipFilter;
+
+  if (!view.focusAction.empty()) {
+    const auto it = std::find_if(m_model.actions.begin(), m_model.actions.end(),
+                                 [&view](const ActionDef& action) {
+                                   return action.name == view.focusAction;
+                                 });
+    if (it != m_model.actions.end()) {
+      m_domainGraph.setSelectedAction(
+          static_cast<int>(std::distance(m_model.actions.begin(), it)));
+      m_domainGraph.setSelectedPredicate(-1);
+    }
+  } else if (!view.focusPredicate.empty()) {
+    const auto it =
+        std::find_if(m_model.predicates.begin(), m_model.predicates.end(),
+                     [&view](const PredicateDef& predicate) {
+                       return predicate.name == view.focusPredicate;
+                     });
+    if (it != m_model.predicates.end()) {
+      m_domainGraph.setSelectedPredicate(
+          static_cast<int>(std::distance(m_model.predicates.begin(), it)));
+      m_domainGraph.setSelectedAction(-1);
+    }
+  }
+  m_requestedTab = "Domain";
+  lastOperation = "Opened the view '" + view.name + "'";
+}
+
+void AppShell::copySelection() {
+  const int selectedAction = m_domainGraph.selectedActionIndex();
+  if (selectedAction >= 0 &&
+      ModelEdits::copyAction(m_model, static_cast<size_t>(selectedAction),
+                             m_clipboard)) {
+    lastOperation = "Copied " + m_clipboard.action.name;
+    return;
+  }
+  const int selectedFact = m_domainGraph.selectedPredicateIndex();
+  if (selectedFact >= 0 &&
+      ModelEdits::copyFact(m_model, static_cast<size_t>(selectedFact),
+                           m_clipboard)) {
+    lastOperation = "Copied " + m_clipboard.fact.name;
+    return;
+  }
+  lastOperation = "Nothing selected to copy";
+}
+
+void AppShell::pasteClipboard() {
+  if (!m_clipboard.holdsSomething()) {
+    lastOperation = "Nothing to paste";
+    return;
+  }
+  const ElementClipboard clipboard = m_clipboard;
+  std::string pastedName;
+  m_commandStack.execute(m_model, "Paste",
+                         [clipboard, &pastedName](ProjectModel& model) {
+    pastedName = ModelEdits::paste(model, clipboard);
+  });
+  m_unsavedChanges = true;
+  lastOperation = pastedName.empty() ? "Nothing to paste"
+                                     : "Pasted " + pastedName;
+}
+
+bool AppShell::openProjectFrom(const std::string& path) {
+  ProjectModel loaded;
+  if (!loaded.load(path)) {
+    lastOperation = "Failed to load " + path;
+    return false;
+  }
+  m_commandStack.clear();
+  m_model = std::move(loaded);
+  projectName = m_model.projectName;
+  m_selectedScenarioIdx = -1;
+  clearDerivedResults();
+  resetScenarioEditorState();
+  noteProjectOpened(path);
+  lastOperation = "Loaded " + path;
+  return true;
+}
+
+void AppShell::noteProjectOpened(const std::string& path) {
+  m_projectPath = path;
+  m_unsavedChanges = false;
+  RecentProjects::remember(m_settingsPath, path);
+  m_recentProjects = RecentProjects::load(m_settingsPath);
+}
+
+void AppShell::noteProjectSaved(const std::string& path) {
+  noteProjectOpened(path);
+  // The work is on disk under its own name, so the recovery copy beside it has
+  // nothing left to recover.
+  const std::string recovery = RecentProjects::recoveryPathFor(path);
+  if (!recovery.empty()) {
+    std::error_code ignored;
+    std::filesystem::remove(recovery, ignored);
+  }
+}
+
+void AppShell::writeRecoveryCopy() {
+  // A copy beside the project, rewritten as the work changes, so that a tool
+  // that stops unexpectedly has not taken the day's edits with it. It is not a
+  // save: the project file itself is untouched until the user asks.
+  const std::string recovery = RecentProjects::recoveryPathFor(m_projectPath);
+  if (recovery.empty() || !m_unsavedChanges) {
+    return;
+  }
+  m_model.save(recovery);
+  m_recoveryWritten = true;
 }
 
 void AppShell::renderMenuBar() {
@@ -833,6 +1150,7 @@ void AppShell::renderMenuBar() {
             m_selectedScenarioIdx = -1;
             clearDerivedResults();
             resetScenarioEditorState();
+            noteProjectOpened(path);
             lastOperation = "Loaded " + path;
           } else {
             lastOperation = "Failed to load " + path;
@@ -849,12 +1167,25 @@ void AppShell::renderMenuBar() {
         if (path.empty()) {
           lastOperation = "Save cancelled";
         } else {
-          lastOperation = m_model.save(path) ? "Saved " + path
-                                              : "Failed to save " + path;
+          if (m_model.save(path)) {
+            noteProjectSaved(path);
+            lastOperation = "Saved " + path;
+          } else {
+            lastOperation = "Failed to save " + path;
+          }
           if (m_autoValidateOnSave) {
             runValidation();
           }
         }
+      }
+      // The projects this user opened last, so a path never has to be typed.
+      if (ImGui::BeginMenu("Recent projects", !m_recentProjects.empty())) {
+        for (const std::string& recent : m_recentProjects) {
+          if (ImGui::MenuItem(recent.c_str())) {
+            openProjectFrom(recent);
+          }
+        }
+        ImGui::EndMenu();
       }
       if (ImGui::MenuItem("Save As...")) {
         const std::string defaultPath =
@@ -888,14 +1219,24 @@ void AppShell::renderMenuBar() {
             const PddlImportResult import = PddlImporter::importDomain(pddl);
             if (!import.ok) {
               lastOperation = "Import failed: " + import.error;
-            } else {
+            } else if (m_model.predicates.empty() && m_model.actions.empty()) {
+              // Nothing to merge with, so nothing to ask about.
               m_commandStack.clear();
               m_model = import.model;
+              ImportMerge::layoutByRelationships(m_model);
               projectName = m_model.projectName;
               m_selectedScenarioIdx = -1;
               clearDerivedResults();
               resetScenarioEditorState();
               lastOperation = "Imported domain: " + projectName;
+            } else {
+              // Something is already here, so show what the import would do
+              // before doing any of it.
+              m_incomingModel = import.model;
+              m_mergePlan = ImportMerge::plan(m_model, m_incomingModel);
+              m_mergeChoices = MergeChoices{};
+              m_showMergeDialog = true;
+              lastOperation = "Reviewing what this import would change";
             }
           }
         }
@@ -948,6 +1289,44 @@ void AppShell::renderMenuBar() {
           }
         }
       }
+      if (ImGui::MenuItem("Export every scenario's problem file...")) {
+        m_structuralReport = StructuralValidator::check(m_model);
+        if (m_structuralReport.hasErrors()) {
+          lastOperation =
+              "Refusing: " + std::to_string(m_structuralReport.errorCount) +
+              " structural error(s)";
+        } else if (m_model.scenarios.empty()) {
+          lastOperation = "No scenarios to export";
+        } else {
+          // One file per scenario, named after it, into the folder the user
+          // picks. Exporting only the first was never what anybody wanted; it
+          // was what the code did.
+          const std::string anchor = pickSaveFile(
+              "Choose a folder and name for the problem files",
+              authoring::problemPddlPath(m_model.projectName,
+                                         m_model.scenarios.front().name),
+              "*.pddl", "PDDL problem (*.pddl)");
+          if (anchor.empty()) {
+            lastOperation = "Export cancelled";
+          } else {
+            const std::filesystem::path folder =
+                std::filesystem::path(anchor).parent_path();
+            size_t written = 0;
+            for (const ScenarioDef& scenario : m_model.scenarios) {
+              const std::filesystem::path path =
+                  folder / (m_model.projectName + "-" + scenario.name + ".pddl");
+              std::ofstream file(path);
+              file << PddlGenerator::generateProblem(m_model, scenario.name);
+              if (file.good()) {
+                ++written;
+              }
+            }
+            lastOperation = "Wrote " + std::to_string(written) + " of " +
+                            std::to_string(m_model.scenarios.size()) +
+                            " problem files into " + folder.string();
+          }
+        }
+      }
       if (ImGui::MenuItem("Export Problem PDDL...")) {
         m_structuralReport = StructuralValidator::check(m_model);
         if (m_structuralReport.hasErrors()) {
@@ -992,19 +1371,143 @@ void AppShell::renderMenuBar() {
           }
         }
       }
+      if (ImGui::MenuItem("Save Current Run...", nullptr, false,
+                          m_simulation.isLoaded())) {
+        const std::string folder = pickFolder("Save the recorded run in this folder",
+                                              ".");
+        if (folder.empty()) {
+          lastOperation = "Save run cancelled";
+        } else {
+          const RecordedRun run =
+              RecordedRun::fromSimulation(m_model, m_simulation);
+          lastOperation = run.save(folder) ? "Saved recorded run: " + folder
+                                           : "Could not save the recorded run";
+        }
+      }
+      if (ImGui::MenuItem("Open Recorded Run...")) {
+        const std::string folder = pickFolder("Open a recorded run", ".");
+        if (!folder.empty()) {
+          RecordedRun replay;
+          if (replay.load(folder)) {
+            m_replay = std::move(replay);
+            m_btGraph.setXml(m_replay.compiledXml());
+            m_requestedTab = "Run";
+            m_runViewingHistory = false;
+            lastOperation = "Opened recorded run: " + folder;
+          } else {
+            lastOperation = "Could not open recorded run: " +
+                            replay.errorMessage();
+          }
+        }
+      }
+      if (ImGui::MenuItem("Compare Current Run with Recorded Run...", nullptr,
+                          false, m_simulation.isLoaded())) {
+        const std::string folder = pickFolder("Choose the recorded run to compare",
+                                              ".");
+        if (!folder.empty()) {
+          RecordedRun saved;
+          if (saved.load(folder)) {
+            m_comparisonFirst =
+                RecordedRun::fromSimulation(m_model, m_simulation);
+            m_comparisonSecond = std::move(saved);
+            m_runComparison =
+                compareRuns(m_comparisonFirst, m_comparisonSecond);
+            m_requestedTab = "Run";
+            lastOperation = m_runComparison.summary;
+          } else {
+            lastOperation = "Could not compare: " + saved.errorMessage();
+          }
+        }
+      }
+      if (ImGui::MenuItem("Compare Two Recorded Runs...")) {
+        const std::string first_folder = pickFolder("Choose the first recorded run",
+                                                    ".");
+        const std::string second_folder = first_folder.empty()
+                                              ? std::string()
+                                              : pickFolder(
+                                                    "Choose the second recorded run",
+                                                    ".");
+        if (!second_folder.empty()) {
+          RecordedRun first;
+          RecordedRun second;
+          if (first.load(first_folder) && second.load(second_folder)) {
+            m_comparisonFirst = std::move(first);
+            m_comparisonSecond = std::move(second);
+            m_runComparison =
+                compareRuns(m_comparisonFirst, m_comparisonSecond);
+            m_requestedTab = "Run";
+            lastOperation = m_runComparison.summary;
+          } else {
+            lastOperation = "Could not load both recorded runs";
+          }
+        }
+      }
+      if (ImGui::MenuItem("Export Assurance Evidence...")) {
+        const std::string path = pickSaveFile(
+            "Export assurance evidence",
+            authoring::projectFilePath(m_model.projectName) + "-assurance.md",
+            "*.md", "Markdown (*.md)");
+        if (path.empty()) {
+          lastOperation = "Export cancelled";
+        } else {
+          std::ofstream file(path);
+          file << AssuranceReport::generate(m_model);
+          lastOperation = file.good() ? "Wrote " + path
+                                      : "Failed to write " + path;
+        }
+      }
+      if (ImGui::MenuItem("Export Review Pack...")) {
+        const std::string folder = pickFolder("Export the review pack here", ".");
+        if (!folder.empty()) {
+          const ReviewPackResult review = ReviewPackExporter::write(
+              m_model, folder, m_simulation.isLoaded() ? &m_simulation : nullptr);
+          lastOperation = review.success ? "Wrote review pack: " + review.folder
+                                         : "Could not write review pack: " +
+                                               review.error;
+        }
+      }
       ImGui::Separator();
       if (ImGui::MenuItem("Exit")) {
-        wantsQuit = true;
+        if (m_unsavedChanges) {
+          m_askBeforeQuitting = true;
+        } else {
+          wantsQuit = true;
+        }
       }
       ImGui::EndMenu();
     }
 
     if (ImGui::BeginMenu("Edit")) {
-      if (ImGui::MenuItem("Undo", "Ctrl+Z", false, m_commandStack.canUndo())) {
+      // The menu says what would be undone, so the user does not have to
+      // remember what they last did.
+      const std::string undoLabel =
+          m_commandStack.canUndo()
+              ? "Undo " + lowerFirst(m_commandStack.topUndoLabel())
+              : std::string("Undo");
+      const std::string redoLabel =
+          m_commandStack.canRedo()
+              ? "Redo " + lowerFirst(m_commandStack.topRedoLabel())
+              : std::string("Redo");
+      if (ImGui::MenuItem(undoLabel.c_str(), "Ctrl+Z",
+                          false, m_commandStack.canUndo())) {
         m_commandStack.undo(m_model);
+        m_unsavedChanges = true;
       }
-      if (ImGui::MenuItem("Redo", "Ctrl+Y", false, m_commandStack.canRedo())) {
+      if (ImGui::MenuItem(redoLabel.c_str(), "Ctrl+Y",
+                          false, m_commandStack.canRedo())) {
         m_commandStack.redo(m_model);
+        m_unsavedChanges = true;
+      }
+      ImGui::Separator();
+      const int selectedFact = m_domainGraph.selectedPredicateIndex();
+      const int selectedAction = m_domainGraph.selectedActionIndex();
+      const bool canCopy = selectedFact >= 0 || selectedAction >= 0;
+      if (ImGui::MenuItem("Copy", "Ctrl+C", false, canCopy)) {
+        copySelection();
+      }
+      if (ImGui::MenuItem(m_clipboard.description().c_str(), "Ctrl+V", false,
+                          m_clipboard.holdsSomething())) {
+        pasteClipboard();
       }
       ImGui::EndMenu();
     }
@@ -1054,8 +1557,13 @@ void AppShell::renderMenuBar() {
 }
 
 const std::vector<std::string>& AppShell::tabLabels() {
-  // Workflow order: author the domain -> generate PDDL -> see the plan -> see the BT.
-  static const std::vector<std::string> labels = {"Domain", "PDDL", "Plan", "BT"};
+  // Workflow order: author the domain -> generate PDDL -> see the plan -> run
+  // it. The compiled behaviour tree has no tab of its own: it is drawn on the
+  // Run tab, which is where it either sits waiting or lights up as it runs.
+  // Two tabs drawing the same tree taught users that the tree you compile and
+  // the tree that runs are different things, and they are not.
+  static const std::vector<std::string> labels = {"Domain", "PDDL", "Plan",
+                                                  "Run"};
   return labels;
 }
 
@@ -1097,12 +1605,59 @@ void AppShell::renderPanels() {
                                         std::move(warnActs));
 
   ImGuiIO& io = ImGui::GetIO();
+  // A run keeps going while the user is looking at another tab, so it is
+  // advanced here rather than while the Run tab is being drawn.
+  m_simulation.advance(static_cast<double>(io.DeltaTime));
+
+  // A recovery copy every half minute of changed work. Often enough that
+  // little is lost, rarely enough that it is never in the way.
+  // Any command on the stack means the project has moved on since it was last
+  // written, which is what the quit prompt and the recovery copy both key off.
+  if (m_commandStack.undoDepth() != m_lastSeenUndoDepth) {
+    m_lastSeenUndoDepth = m_commandStack.undoDepth();
+    m_unsavedChanges = true;
+  }
+
+  m_secondsSinceRecoveryCopy += static_cast<double>(io.DeltaTime);
+  if (m_secondsSinceRecoveryCopy > 30.0) {
+    m_secondsSinceRecoveryCopy = 0.0;
+    writeRecoveryCopy();
+  }
+
+  if (m_batchRunner.isRunning()) {
+    m_batchProgressRendered = true;
+    // One scenario runs per frame. This keeps project and planner ownership on
+    // the UI thread, while still returning control to Dear ImGui between the
+    // longer simulations so progress can be drawn and Stop can be pressed.
+    const std::string scenario_name = m_batchRunner.currentScenarioName();
+    m_batchRunner.step();
+    m_lastBatchReport = m_batchRunner.report();
+    const size_t total = m_batchRunner.totalCount();
+    validationState = "Scenarios: " +
+                      std::to_string(m_batchRunner.completedCount()) + "/" +
+                      std::to_string(total) + " simulated";
+    lastOperation = "Simulated scenario: " + scenario_name;
+    if (!m_batchRunner.isRunning()) {
+      validationState = "Scenarios: " +
+                        std::to_string(m_lastBatchReport.passCount) + "/" +
+                        std::to_string(total) + " as expected";
+      lastOperation = "Finished simulating " + std::to_string(total) +
+                      " scenarios";
+    }
+  }
+
   if (io.KeyCtrl && !io.WantTextInput) {
     if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && m_commandStack.canUndo()) {
       m_commandStack.undo(m_model);
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Y, false) && m_commandStack.canRedo()) {
       m_commandStack.redo(m_model);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_C, false)) {
+      copySelection();
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_V, false)) {
+      pasteClipboard();
     }
     // Ctrl+D: duplicate selected predicate or action
     if (ImGui::IsKeyPressed(ImGuiKey_D, false)) {
@@ -1130,6 +1685,17 @@ void AppShell::renderPanels() {
     }
     if (ImGui::IsKeyPressed(ImGuiKey_F6, false)) {
       runValidation();
+    }
+    // F: bring the whole picture back into view, for a canvas that has been
+    // panned somewhere the user cannot find their way back from.
+    if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+      m_domainGraph.requestFitToContents();
+      lastOperation = "Fitted the canvas to what is on it";
+    }
+    // A: add something without reaching for the palette.
+    if (ImGui::IsKeyPressed(ImGuiKey_A, false)) {
+      m_paletteQuickAddOpen = true;
+      m_paletteQuickAddName[0] = '\0';
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Tab, false) && io.KeyCtrl) {
       // Ctrl+Tab cycles through workflow tabs
@@ -1178,7 +1744,7 @@ void AppShell::renderPanels() {
         {"Domain", &AppShell::renderDomainTab},
         {"PDDL", &AppShell::renderPddlTab},
         {"Plan", &AppShell::renderPlanTab},
-        {"BT", &AppShell::renderBtTab},
+        {"Run", &AppShell::renderRunTab},
     }};
 
     for (const TabDescriptor& tab : kTabs) {
@@ -1196,6 +1762,155 @@ void AppShell::renderPanels() {
   }
 
   ImGui::End();
+
+  if (m_showSaveViewDialog) {
+    ImGui::OpenPopup("Save this view##modal");
+    m_showSaveViewDialog = false;
+  }
+  if (ImGui::BeginPopupModal("Save this view##modal", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::TextUnformatted("Give this picture a name to come back to.");
+    ImGui::InputText("Name##saveview", m_saveViewNameInput,
+                     sizeof(m_saveViewNameInput));
+    const std::string name = m_saveViewNameInput;
+    if (name.empty()) {
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Save") && !name.empty()) {
+      SavedView view;
+      view.name = name;
+      const int selectedFact = m_domainGraph.selectedPredicateIndex();
+      const int selectedAction = m_domainGraph.selectedActionIndex();
+      if (selectedAction >= 0 &&
+          selectedAction < static_cast<int>(m_model.actions.size())) {
+        view.focusAction =
+            m_model.actions[static_cast<size_t>(selectedAction)].name;
+      } else if (selectedFact >= 0 &&
+                 selectedFact < static_cast<int>(m_model.predicates.size())) {
+        view.focusPredicate =
+            m_model.predicates[static_cast<size_t>(selectedFact)].name;
+      }
+      view.depth = m_neighbourDepth;
+      view.relationshipFilter = m_neighbourFilter;
+      view.viewMode = m_domainViewMode;
+      m_commandStack.execute(m_model, "Save a view",
+                             [view](ProjectModel& model) {
+        const auto existing =
+            std::find_if(model.savedViews.begin(), model.savedViews.end(),
+                         [&view](const SavedView& saved) {
+                           return saved.name == view.name;
+                         });
+        if (existing == model.savedViews.end()) {
+          model.savedViews.push_back(view);
+        } else {
+          *existing = view;
+        }
+      });
+      lastOperation = "Saved the view '" + name + "'";
+      ImGui::CloseCurrentPopup();
+    }
+    if (name.empty()) {
+      ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (m_showMergeDialog) {
+    ImGui::OpenPopup("What this import would do##modal");
+    m_showMergeDialog = false;
+  }
+  if (ImGui::BeginPopupModal("What this import would do##modal", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("%zu would be added, %zu would be overwritten, %zu are already "
+                "the same.",
+                m_mergePlan.countAdded(), m_mergePlan.countReplaced(),
+                m_mergePlan.countUnchanged());
+    ImGui::Separator();
+
+    if (ImGui::BeginChild("##MergeItems", ImVec2(560.0F, 240.0F))) {
+      for (const MergeItem& item : m_mergePlan.items) {
+        if (item.disposition == MergeDisposition::Unchanged) {
+          continue;
+        }
+        const bool replacing = item.disposition == MergeDisposition::Replaced;
+        ImGui::TextColored(replacing ? ImVec4(0.88F, 0.69F, 0.32F, 1.0F)
+                                     : ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
+                           replacing ? "overwrites" : "adds");
+        ImGui::SameLine(110.0F);
+        ImGui::TextUnformatted(item.name.c_str());
+        if (replacing && !item.whatWouldBeLost.empty()) {
+          ImGui::SameLine();
+          ImGui::TextDisabled("losing %s", item.whatWouldBeLost.c_str());
+        }
+      }
+    }
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::TextDisabled("Anything new is always added. Choose what may be "
+                        "overwritten:");
+    ImGui::Checkbox("types", &m_mergeChoices.replaceTypes);
+    ImGui::SameLine();
+    ImGui::Checkbox("facts", &m_mergeChoices.replaceFacts);
+    ImGui::SameLine();
+    ImGui::Checkbox("actions", &m_mergeChoices.replaceActions);
+    ImGui::SameLine();
+    ImGui::Checkbox("objects", &m_mergeChoices.replaceObjects);
+
+    if (ImGui::Button("Import")) {
+      const ProjectModel incoming = m_incomingModel;
+      const MergeChoices choices = m_mergeChoices;
+      m_commandStack.execute(m_model, "Import a domain",
+                             [incoming, choices](ProjectModel& model) {
+        model = ImportMerge::apply(model, incoming, choices);
+      });
+      clearDerivedResults();
+      resetScenarioEditorState();
+      lastOperation = "Imported, keeping what was not replaced";
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      lastOperation = "Import cancelled";
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  if (m_askBeforeQuitting) {
+    ImGui::OpenPopup("Unsaved work##modal");
+    m_askBeforeQuitting = false;
+  }
+  if (ImGui::BeginPopupModal("Unsaved work##modal", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::TextUnformatted("This project has changes that are not saved.");
+    if (!m_projectPath.empty()) {
+      ImGui::TextDisabled("%s", m_projectPath.c_str());
+    }
+    if (ImGui::Button("Save and close")) {
+      if (!m_projectPath.empty() && m_model.save(m_projectPath)) {
+        noteProjectSaved(m_projectPath);
+        wantsQuit = true;
+      } else {
+        lastOperation = "Could not save; nothing was closed";
+      }
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Close without saving")) {
+      wantsQuit = true;
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Keep working")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
 
   if (showAboutModal) {
     ImGui::OpenPopup("About##modal");
@@ -1453,12 +2168,14 @@ void AppShell::renderDomainTab() {
       renderFactSection("Initial state", "##initialfacts", "Add Fact",
                         "Remove initial fact", "Add initial fact",
                         scenario.initialState, m_model, m_commandStack,
-                        m_initPredIdx, m_initArgsInput, sizeof(m_initArgsInput));
+                        m_initPredIdx, m_initChosenObjects, m_initArgsInput,
+                        sizeof(m_initArgsInput));
       ImGui::Separator();
       renderFactSection("Goals", "##goalfacts", "Add Fact##goal",
                         "Remove goal fact", "Add goal fact",
                         scenario.goals, m_model, m_commandStack,
-                        m_goalPredIdx, m_goalArgsInput, sizeof(m_goalArgsInput));
+                        m_goalPredIdx, m_goalChosenObjects, m_goalArgsInput,
+                        sizeof(m_goalArgsInput));
       if (ImGui::CollapsingHeader("Expected outcome")) {
         ScenarioExpectation& expectation = scenario.expectation;
         bool shouldSucceed = expectation.shouldSucceed;
@@ -1519,6 +2236,68 @@ void AppShell::renderDomainTab() {
                                        m_selectedScenarioIdx,
                                        true,
                                        s_forbiddenActionIdx);
+
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F),
+                           "Expected simulated execution");
+        bool shouldReachGoal = expectation.shouldReachGoal;
+        if (ImGui::Checkbox("Run should reach the goal", &shouldReachGoal)) {
+          const int scenarioIdx = m_selectedScenarioIdx;
+          m_commandStack.execute(m_model, "Set expected run outcome",
+                                 [scenarioIdx, shouldReachGoal](ProjectModel& model) {
+            model.scenarios[static_cast<size_t>(scenarioIdx)]
+                .expectation.shouldReachGoal = shouldReachGoal;
+          });
+        }
+        int minRunActions = expectation.minRunActions;
+        if (ImGui::InputInt("Min actions run", &minRunActions)) {
+          const int scenarioIdx = m_selectedScenarioIdx;
+          minRunActions = std::max(0, minRunActions);
+          m_commandStack.execute(m_model, "Set minimum actions run",
+                                 [scenarioIdx, minRunActions](ProjectModel& model) {
+            model.scenarios[static_cast<size_t>(scenarioIdx)]
+                .expectation.minRunActions = minRunActions;
+          });
+        }
+        int maxRunActions = expectation.maxRunActions;
+        if (ImGui::InputInt("Max actions run", &maxRunActions)) {
+          const int scenarioIdx = m_selectedScenarioIdx;
+          maxRunActions = std::max(0, maxRunActions);
+          m_commandStack.execute(m_model, "Set maximum actions run",
+                                 [scenarioIdx, maxRunActions](ProjectModel& model) {
+            model.scenarios[static_cast<size_t>(scenarioIdx)]
+                .expectation.maxRunActions = maxRunActions;
+          });
+        }
+        int maxReplans = expectation.maxReplans;
+        if (ImGui::InputInt("Max replans", &maxReplans)) {
+          const int scenarioIdx = m_selectedScenarioIdx;
+          maxReplans = std::max(-1, maxReplans);
+          m_commandStack.execute(m_model, "Set maximum replans",
+                                 [scenarioIdx, maxReplans](ProjectModel& model) {
+            model.scenarios[static_cast<size_t>(scenarioIdx)]
+                .expectation.maxReplans = maxReplans;
+          });
+        }
+        ImGui::TextDisabled("Use 0 for no action bound and -1 for no replan bound.");
+        static int s_requiredRunActionIdx = 0;
+        static int s_forbiddenRunActionIdx = 0;
+        renderExpectationActionSection("Actions that must run",
+                                       "##requiredrunactions",
+                                       "Remove required run action",
+                                       "Add required run action",
+                                       expectation.requiredRunActions,
+                                       m_model, m_commandStack,
+                                       m_selectedScenarioIdx, 2,
+                                       s_requiredRunActionIdx);
+        renderExpectationActionSection("Actions that must not run",
+                                       "##forbiddenrunactions",
+                                       "Remove forbidden run action",
+                                       "Add forbidden run action",
+                                       expectation.forbiddenRunActions,
+                                       m_model, m_commandStack,
+                                       m_selectedScenarioIdx, 3,
+                                       s_forbiddenRunActionIdx);
       }
     }
   }
@@ -1552,6 +2331,35 @@ void AppShell::renderDomainTab() {
   static constexpr const char* kDomainViews[] = {
       "Neighbourhood", "Relations", "Matrix", "Lifecycles", "Whole domain"};
   ImGui::SetNextItemWidth(150.0F);
+  // Saved views: a picture somebody wants to come back to, or show to somebody
+  // else. Stored in the project, so it survives reopening and travels with it.
+  if (ImGui::Button("Save this view")) {
+    m_saveViewNameInput[0] = '\0';
+    m_showSaveViewDialog = true;
+  }
+  if (!m_model.savedViews.empty()) {
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(220.0F);
+    if (ImGui::BeginCombo("Saved views", "open a saved view")) {
+      for (size_t i = 0; i < m_model.savedViews.size(); ++i) {
+        const SavedView& view = m_model.savedViews[i];
+        if (ImGui::Selectable(view.name.c_str())) {
+          applySavedView(view);
+        }
+        if (ImGui::IsItemHovered()) {
+          ImGui::SetTooltip("%s, %d step%s out",
+                            view.focusAction.empty()
+                                ? (view.focusPredicate.empty()
+                                       ? "no focus"
+                                       : view.focusPredicate.c_str())
+                                : view.focusAction.c_str(),
+                            view.depth, view.depth == 1 ? "" : "s");
+        }
+      }
+      ImGui::EndCombo();
+    }
+  }
+
   ImGui::Combo("View##domain", &m_domainViewMode, kDomainViews,
                static_cast<int>(std::size(kDomainViews)));
   ImGui::Separator();
@@ -1914,6 +2722,29 @@ void AppShell::renderLifecyclePanel() {
 }
 
 void AppShell::renderPddlTab() {
+  if (m_batchRunner.isRunning()) {
+    m_batchProgressRendered = true;
+    ImGui::Text("Simulating scenario %zu of %zu: %s",
+                m_batchRunner.completedCount() + 1U,
+                m_batchRunner.totalCount(),
+                m_batchRunner.currentScenarioName().c_str());
+    ImGui::SameLine();
+    if (ImGui::Button("Stop batch")) {
+      m_batchRunner.stop();
+      m_lastBatchReport = m_batchRunner.report();
+      lastOperation = "Stopped scenario simulation after " +
+                      std::to_string(m_batchRunner.completedCount()) +
+                      " scenarios";
+    }
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F), "SIMULATED");
+  } else if (!m_lastBatchReport.results.empty()) {
+    ImGui::Text("%zu of %zu scenarios were as expected",
+                m_lastBatchReport.passCount,
+                m_lastBatchReport.results.size());
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F), "SIMULATED");
+  }
   const float halfH = ImGui::GetContentRegionAvail().y * 0.5F - 4.0F;
   ImGui::BeginChild("##PddlPreview", ImVec2(0.0F, halfH),
                     ImGuiChildFlags_Border);
@@ -1976,11 +2807,75 @@ void AppShell::renderPddlTab() {
     ImGui::SetClipboardText(validationOutput.c_str());
     lastOperation = "Copied diagnostics";
   }
+  ImGui::SameLine();
+  ImGui::Checkbox("Show the raw text instead", &m_showRawDiagnostics);
   ImGui::Separator();
-  renderReadOnlyTextBox("##ValidationDiagnosticsOutput",
-                        validationOutput,
-                        remainingPanelSize());
+
+  if (m_showRawDiagnostics) {
+    renderReadOnlyTextBox("##ValidationDiagnosticsOutput",
+                          validationOutput,
+                          remainingPanelSize());
+    ImGui::EndChild();
+    return;
+  }
+
+  // Every problem is a row that selects and reveals what it is about, so a
+  // reader works down the list rather than hunting for the thing it names.
+  const std::vector<ProblemEntry> problems =
+      ProblemList::build(m_model, m_structuralReport, m_lastValidation);
+  m_problemListRendered = true;
+  if (problems.empty()) {
+    ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
+                       "Nothing is wrong with this project.");
+    ImGui::EndChild();
+    return;
+  }
+
+  ImGui::BeginChild("##ProblemRows", remainingPanelSize());
+  for (size_t i = 0; i < problems.size(); ++i) {
+    const ProblemEntry& problem = problems[i];
+    ImGui::PushID(static_cast<int>(i));
+    ImGui::TextColored(problem.isError ? ImVec4(0.95F, 0.51F, 0.42F, 1.0F)
+                                       : ImVec4(0.88F, 0.69F, 0.32F, 1.0F),
+                       problem.isError ? "problem" : "worth a look");
+    ImGui::SameLine(110.0F);
+    if (ImGui::Selectable(problem.sentence.c_str())) {
+      revealProblemTarget(problem);
+    }
+    if (problem.canReveal() && ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Click to open %s", problem.targetName.c_str());
+    }
+    if (!problem.detail.empty() && ImGui::TreeNode("What the reader said")) {
+      ImGui::TextWrapped("%s", problem.detail.c_str());
+      ImGui::TreePop();
+    }
+    ImGui::PopID();
+  }
   ImGui::EndChild();
+  ImGui::EndChild();
+}
+
+void AppShell::revealProblemTarget(const ProblemEntry& problem) {
+  if (!problem.canReveal()) {
+    lastOperation = "That problem is not about one element";
+    return;
+  }
+  switch (problem.target) {
+  case ProblemTarget::Action:
+    m_domainGraph.setSelectedAction(problem.targetIndex);
+    m_domainGraph.setSelectedPredicate(-1);
+    break;
+  case ProblemTarget::Fact:
+    m_domainGraph.setSelectedPredicate(problem.targetIndex);
+    m_domainGraph.setSelectedAction(-1);
+    break;
+  case ProblemTarget::Type:
+  case ProblemTarget::Object:
+  case ProblemTarget::None:
+    break;
+  }
+  m_requestedTab = "Domain";
+  lastOperation = "Opened " + problem.targetName;
 }
 
 void AppShell::renderPlanTab() {
@@ -2162,23 +3057,778 @@ void AppShell::renderPlanTab() {
   ImGui::EndChild();
 }
 
-void AppShell::renderBtTab() {
-  if (!m_btGraph.lastError().empty()) {
-    ImGui::TextColored(ImVec4(1.0F, 0.35F, 0.35F, 1.0F),
-                       "Parse error: %s",
-                       m_btGraph.lastError().c_str());
+// The four colours the rest of the tool already uses for made true, selected,
+// needed, and made false, applied here to what each step of a run is doing.
+static ImVec4 runStatusColour(RunNodeStatus status) {
+  switch (status) {
+  case RunNodeStatus::Finished:
+    return ImVec4(0.32F, 0.84F, 0.60F, 1.0F);
+  case RunNodeStatus::Happening:
+    return ImVec4(0.0F, 0.85F, 1.0F, 1.0F);
+  case RunNodeStatus::WentWrong:
+    return ImVec4(0.95F, 0.51F, 0.42F, 1.0F);
+  case RunNodeStatus::Waiting:
+    break;
   }
+  return ImVec4(0.55F, 0.70F, 0.80F, 1.0F);
+}
+
+static bool containsIgnoringCase(const std::string& text,
+                                 const std::string& filter) {
+  if (filter.empty()) {
+    return true;
+  }
+  std::string lowerText = text;
+  std::string lowerFilter = filter;
+  std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(lowerFilter.begin(), lowerFilter.end(), lowerFilter.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return lowerText.find(lowerFilter) != std::string::npos;
+}
+
+static std::string happeningSentence(const RunState& state) {
+  std::vector<std::string> happening;
+  size_t finished = 0;
+  for (const RunActionStep& step : state.actionSteps) {
+    if (step.status == RunNodeStatus::Happening) {
+      happening.push_back(step.signature);
+    } else if (step.status == RunNodeStatus::Finished) {
+      ++finished;
+    }
+  }
+  if (!happening.empty()) {
+    std::ostringstream sentence;
+    sentence << "At tick " << state.tick << ", ";
+    for (size_t i = 0; i < happening.size(); ++i) {
+      if (i != 0) {
+        sentence << (i + 1U == happening.size() ? " and " : ", ");
+      }
+      sentence << happening[i];
+    }
+    sentence << (happening.size() == 1U ? " is" : " are") << " happening.";
+    return sentence.str();
+  }
+  if (state.tick == 0) {
+    return "Nothing has started yet.";
+  }
+  return "At tick " + std::to_string(state.tick) + ", " +
+         std::to_string(finished) +
+         (finished == 1U ? " action has finished." : " actions have finished.");
+}
+
+static bool renderRunTimeline(unsigned current_tick,
+                              const std::vector<RunFactChange>& fact_changes,
+                              const RunState& state,
+                              unsigned& selectedTick) {
+  ImGui::TextDisabled("Timeline - click to inspect a tick");
+  ImGui::SameLine();
+  ImGui::Text("viewing tick %u", state.tick);
+
+  const float rowHeight = 34.0F;
+  const float labelWidth = 220.0F;
+  const float canvasWidth =
+      std::max(520.0F, ImGui::GetContentRegionAvail().x - 4.0F);
+  const float canvasHeight =
+      rowHeight * static_cast<float>(state.actionSteps.size() + 1U) + 8.0F;
+  ImGui::BeginChild("##RunTimelineCanvas", ImVec2(0.0F, 0.0F),
+                    ImGuiChildFlags_Border,
+                    ImGuiWindowFlags_HorizontalScrollbar);
+  const ImVec2 origin = ImGui::GetCursorScreenPos();
+  ImGui::InvisibleButton("##RunTimelineHitArea",
+                         ImVec2(canvasWidth, canvasHeight));
+
+  ImDrawList* draw = ImGui::GetWindowDrawList();
+  const float axisStart = origin.x + labelWidth;
+  const float axisEnd = origin.x + canvasWidth - 12.0F;
+  const float axisWidth = std::max(1.0F, axisEnd - axisStart);
+  const unsigned axisTicks = std::max(1U, current_tick);
+  const auto tickX = [axisStart, axisWidth, axisTicks](unsigned tick) {
+    return axisStart +
+           axisWidth * static_cast<float>(std::min(tick, axisTicks)) /
+               static_cast<float>(axisTicks);
+  };
+
+  const unsigned tickStride = std::max(1U, (axisTicks + 7U) / 8U);
+  for (unsigned tick = 0; tick <= axisTicks; tick += tickStride) {
+    const float x = tickX(tick);
+    draw->AddLine(ImVec2(x, origin.y + rowHeight - 4.0F),
+                  ImVec2(x, origin.y + canvasHeight),
+                  IM_COL32(57, 79, 91, 180));
+    draw->AddText(ImVec2(x + 3.0F, origin.y + 5.0F),
+                  IM_COL32(147, 168, 179, 255),
+                  std::to_string(tick).c_str());
+  }
+  if (axisTicks % tickStride != 0U) {
+    draw->AddText(ImVec2(axisEnd - 18.0F, origin.y + 5.0F),
+                  IM_COL32(147, 168, 179, 255),
+                  std::to_string(axisTicks).c_str());
+  }
+
+  for (size_t i = 0; i < state.actionSteps.size(); ++i) {
+    const RunActionStep& step = state.actionSteps[i];
+    const float top = origin.y + rowHeight * static_cast<float>(i + 1U);
+    const float middle = top + rowHeight * 0.5F;
+    draw->AddText(ImVec2(origin.x + 8.0F, top + 8.0F),
+                  IM_COL32(220, 230, 235, 255), step.signature.c_str());
+    draw->AddLine(ImVec2(axisStart, middle), ImVec2(axisEnd, middle),
+                  IM_COL32(67, 84, 94, 255), 2.0F);
+
+    if (step.startTick != 0U) {
+      const unsigned spanEnd =
+          step.endTick == 0U ? current_tick : step.endTick;
+      const float x1 = tickX(step.startTick);
+      const float x2 = std::max(x1 + 4.0F, tickX(spanEnd));
+      const ImVec4 colour = runStatusColour(step.status);
+      draw->AddRectFilled(ImVec2(x1, top + 7.0F),
+                          ImVec2(x2, top + rowHeight - 7.0F),
+                          ImGui::ColorConvertFloat4ToU32(colour), 3.0F);
+      const std::string span = step.endTick == 0U
+                                   ? "starts " + std::to_string(step.startTick)
+                                   : std::to_string(step.startTick) + "-" +
+                                         std::to_string(step.endTick);
+      draw->AddText(ImVec2(x1 + 4.0F, top + 9.0F),
+                    IM_COL32(235, 245, 248, 255), span.c_str());
+    }
+
+    const std::string expectedSource = "PlannedAction:" + step.signature;
+    for (const RunFactChange& change : fact_changes) {
+      if (change.source != expectedSource) {
+        continue;
+      }
+      const float x = tickX(change.tick);
+      const ImU32 markerColour = change.value
+                                     ? IM_COL32(255, 201, 77, 255)
+                                     : IM_COL32(242, 130, 107, 255);
+      draw->AddCircleFilled(ImVec2(x, middle), 4.5F, markerColour);
+    }
+  }
+
+  const float playheadX = tickX(state.tick);
+  draw->AddLine(ImVec2(playheadX, origin.y + rowHeight - 4.0F),
+                ImVec2(playheadX, origin.y + canvasHeight),
+                IM_COL32(0, 217, 255, 255), 2.0F);
+
+  bool clicked = false;
+  if (ImGui::IsItemHovered()) {
+    const float mouseX = ImGui::GetIO().MousePos.x;
+    if (mouseX >= axisStart && mouseX <= axisEnd) {
+      const float fraction = (mouseX - axisStart) / axisWidth;
+      const unsigned hoverTick = static_cast<unsigned>(
+          std::lround(fraction * static_cast<float>(axisTicks)));
+      ImGui::SetTooltip("View tick %u", hoverTick);
+      if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        selectedTick = hoverTick;
+        clicked = true;
+      }
+    }
+  }
+  ImGui::EndChild();
+  return clicked;
+}
+
+static void renderFactList(const char* title,
+                           const std::vector<std::string>& facts,
+                           const char* prefix) {
+  if (title[0] != '\0') {
+    ImGui::TextDisabled("%s", title);
+  }
+  if (facts.empty()) {
+    ImGui::TextDisabled("  none");
+    return;
+  }
+  for (const std::string& fact : facts) {
+    ImGui::BulletText("%s%s", prefix, fact.c_str());
+  }
+}
+
+void AppShell::startRun() {
+  if (m_selectedScenarioIdx < 0 ||
+      m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
+    lastOperation = "No scenario selected";
+    return;
+  }
+
+  const std::string scenarioName =
+      m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)].name;
+  m_simulation.setFaults(m_runFaults);
+  if (m_simulation.start(m_model, scenarioName)) {
+    // The tree on screen becomes the tree that is running, stand-in action
+    // nodes and all, rather than a separately compiled copy of it.
+    m_btGraph.setXml(m_simulation.compiledXml());
+    m_runDisplayedReplans = 0;
+    m_runViewingHistory = false;
+    lastOperation = "Running: " + scenarioName;
+  } else {
+    m_btGraph.clearRunProgress();
+    lastOperation = "Could not run: " + m_simulation.errorMessage();
+  }
+}
+
+void AppShell::previewRunFaults() {
+  if (m_selectedScenarioIdx < 0 ||
+      m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
+    return;
+  }
+  m_simulation.setFaults(m_runFaults);
+  const std::string& scenario_name =
+      m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)].name;
+  if (m_simulation.start(m_model, scenario_name)) {
+    m_simulation.hold();
+    m_btGraph.setXml(m_simulation.compiledXml());
+    m_runDisplayedReplans = 0;
+    m_runViewingHistory = false;
+    lastOperation = "Loaded fault preview: " + scenario_name;
+  } else {
+    lastOperation = "Could not preview faults: " +
+                    m_simulation.errorMessage();
+  }
+}
+
+void AppShell::renderRunTab() {
+  if (m_replay.loaded()) {
+    renderReplayRunTab();
+    return;
+  }
+  if (m_model.scenarios.empty()) {
+    ImGui::TextDisabled(
+        "A run needs a scenario: a situation to start from and a goal to reach. "
+        "Add one on the Domain tab.");
+    return;
+  }
+
+  if (m_selectedScenarioIdx < 0 ||
+      m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
+    m_selectedScenarioIdx = 0;
+  }
+
+  // ---- The controls, in one row that never moves -------------------------
+  const bool loaded = m_simulation.isLoaded();
+  const bool finished = m_simulation.isFinished();
+
+  // The control names are the reviewed ones. The pack proposed mission words
+  // ("Hold", "One step", "Start again"); the review settled on the ordinary
+  // machine words, because the people who use this are technical, just not
+  // software engineers, and they say "pause" and "reset" in their own speech.
+  if (ImGui::Button("Run")) {
+    if (!loaded || finished) {
+      startRun();
+    } else {
+      m_simulation.resume();
+    }
+    m_runViewingHistory = false;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Pause")) {
+    m_simulation.hold();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Step")) {
+    if (!loaded || finished) {
+      startRun();
+    }
+    m_simulation.hold();
+    m_simulation.stepOnce();
+    m_runViewingHistory = false;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Stop")) {
+    m_simulation.stop();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Reset")) {
+    if (loaded) {
+      m_simulation.startAgain();
+    } else {
+      startRun();
+    }
+    m_runViewingHistory = false;
+  }
+
+  ImGui::SameLine();
+  ImGui::SetNextItemWidth(120.0F);
+  float ticksPerSecond = static_cast<float>(m_simulation.ticksPerSecond());
+  if (ImGui::SliderFloat("speed", &ticksPerSecond, 0.5F, 20.0F,
+                         "%.1f ticks / sec")) {
+    m_simulation.setTicksPerSecond(static_cast<double>(ticksPerSecond));
+  }
+
+  ImGui::SameLine();
+  ImGui::SetNextItemWidth(200.0F);
+  const std::string& selectedScenario =
+      m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)].name;
+  if (ImGui::BeginCombo("scenario", selectedScenario.c_str())) {
+    for (int i = 0; i < static_cast<int>(m_model.scenarios.size()); ++i) {
+      const bool isSelected = i == m_selectedScenarioIdx;
+      if (ImGui::Selectable(m_model.scenarios[static_cast<size_t>(i)].name.c_str(),
+                            isSelected)) {
+        m_selectedScenarioIdx = i;
+        m_runFaultChoiceScenario.clear();
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  if (m_runFaultChoiceScenario != selectedScenario) {
+    m_runFaultChoiceScenario = selectedScenario;
+    m_runFactChoices = groundedFactsForScenario(m_model, selectedScenario);
+    m_runFaultFactIdx = 0;
+    m_runFaultActionIdx = 0;
+    m_runFaults = m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)]
+                      .expectation.runFault;
+    std::snprintf(m_runFaultName, sizeof(m_runFaultName), "%s",
+                  m_runFaults.name.c_str());
+    m_simulation.setFaults(m_runFaults);
+  }
+
+  if (ImGui::CollapsingHeader("Make this run go wrong",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    m_runFaultPanelRendered = true;
+    ImGui::SetNextItemWidth(180.0F);
+    ImGui::InputTextWithHint("fault name", "for example sensor-lost",
+                             m_runFaultName, sizeof(m_runFaultName));
+
+    ImGui::TextDisabled("An action that will not work");
+    if (!m_model.actions.empty()) {
+      m_runFaultActionIdx = std::max(
+          0, std::min(m_runFaultActionIdx,
+                      static_cast<int>(m_model.actions.size()) - 1));
+      ImGui::SetNextItemWidth(180.0F);
+      if (ImGui::BeginCombo(
+              "action##run-fault",
+              m_model.actions[static_cast<size_t>(m_runFaultActionIdx)]
+                  .name.c_str())) {
+        for (int i = 0; i < static_cast<int>(m_model.actions.size()); ++i) {
+          if (ImGui::Selectable(m_model.actions[static_cast<size_t>(i)].name.c_str(),
+                                i == m_runFaultActionIdx)) {
+            m_runFaultActionIdx = i;
+          }
+        }
+        ImGui::EndCombo();
+      }
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(90.0F);
+      ImGui::InputInt("attempt##run-fault", &m_runFaultAttempt);
+      m_runFaultAttempt = std::max(1, m_runFaultAttempt);
+      ImGui::SameLine();
+      if (ImGui::Button("Set action failure")) {
+        m_runFaults.name = m_runFaultName;
+        m_runFaults.actionFailures = {{
+            m_model.actions[static_cast<size_t>(m_runFaultActionIdx)].name,
+            static_cast<unsigned>(m_runFaultAttempt)}};
+        previewRunFaults();
+      }
+      if (!m_runFaults.actionFailures.empty()) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear action failure")) {
+          m_runFaults.actionFailures.clear();
+          previewRunFaults();
+        }
+      }
+    }
+
+    ImGui::TextDisabled("Something outside the mission");
+    if (!m_runFactChoices.empty()) {
+      m_runFaultFactIdx = std::max(
+          0, std::min(m_runFaultFactIdx,
+                      static_cast<int>(m_runFactChoices.size()) - 1));
+      ImGui::SetNextItemWidth(260.0F);
+      if (ImGui::BeginCombo(
+              "fact##run-fault",
+              m_runFactChoices[static_cast<size_t>(m_runFaultFactIdx)].c_str())) {
+        for (int i = 0; i < static_cast<int>(m_runFactChoices.size()); ++i) {
+          if (ImGui::Selectable(m_runFactChoices[static_cast<size_t>(i)].c_str(),
+                                i == m_runFaultFactIdx)) {
+            m_runFaultFactIdx = i;
+          }
+        }
+        ImGui::EndCombo();
+      }
+      ImGui::SameLine();
+      ImGui::Checkbox("make true##run-fault", &m_runFaultFactValue);
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(80.0F);
+      ImGui::InputInt("tick##run-fault", &m_runFaultTick);
+      m_runFaultTick = std::max(1, m_runFaultTick);
+      ImGui::SameLine();
+      if (ImGui::Button("Set fact change")) {
+        m_runFaults.name = m_runFaultName;
+        m_runFaults.factChanges = {{
+            parseGroundedFact(
+                m_runFactChoices[static_cast<size_t>(m_runFaultFactIdx)]),
+            m_runFaultFactValue,
+            static_cast<unsigned>(m_runFaultTick)}};
+        previewRunFaults();
+      }
+      if (!m_runFaults.factChanges.empty()) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear fact change")) {
+          m_runFaults.factChanges.clear();
+          previewRunFaults();
+        }
+      }
+    }
+
+    if (ImGui::SmallButton("Save this named fault with the scenario")) {
+      m_runFaults.name = m_runFaultName;
+      const int scenario_index = m_selectedScenarioIdx;
+      const RunFaultSet faults = m_runFaults;
+      m_commandStack.execute(m_model, "Save scenario run fault",
+                             [scenario_index, faults](ProjectModel& model) {
+        model.scenarios[static_cast<size_t>(scenario_index)]
+            .expectation.runFault = faults;
+      });
+    }
+
+    ImGui::Text("Repeatable: seed %u", m_model.simulationSeed);
+    for (const FaultEffectExplanation& explanation :
+         m_simulation.faultExplanations()) {
+      ImGui::BulletText("%s", explanation.summary.c_str());
+      if (!explanation.lostPrecondition.empty()) {
+        ImGui::TextWrapped("  It can remove the precondition %s.",
+                           explanation.lostPrecondition.c_str());
+      }
+      if (!explanation.respondingActions.empty()) {
+        std::ostringstream actions;
+        for (size_t i = 0; i < explanation.respondingActions.size(); ++i) {
+          if (i != 0U) {
+            actions << ", ";
+          }
+          actions << explanation.respondingActions[i];
+        }
+        ImGui::TextWrapped("  Domain actions that can respond: %s.",
+                           actions.str().c_str());
+      }
+    }
+  }
+
+  // Rule 3 of the concept pack: a simulation is never evidence of field
+  // behaviour, and the screen says so where it cannot be missed.
+  ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F),
+                     "SIMULATED - every action is a stand-in, not the real one");
+
+  renderRunComparison();
+
+  if (!m_simulation.errorMessage().empty()) {
+    ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F), "%s",
+                       m_simulation.errorMessage().c_str());
+  }
+
+  if (m_simulation.replanCount() != m_runDisplayedReplans) {
+    m_btGraph.setXml(m_simulation.compiledXml());
+    m_runDisplayedReplans = m_simulation.replanCount();
+  }
+
+  if (!m_simulation.replans().empty()) {
+    m_replanComparisonRendered = true;
+    const ReplanEvent& replan = m_simulation.replans().back();
+    ImGui::BeginChild("##ReplanComparison", ImVec2(0.0F, 190.0F),
+                      ImGuiChildFlags_Border);
+    ImGui::TextColored(ImVec4(0.95F, 0.51F, 0.42F, 1.0F),
+                       "Replan %zu at tick %u", m_simulation.replanCount(),
+                       replan.tick);
+    ImGui::TextWrapped("%s", replan.reason.c_str());
+    const float column_width = ImGui::GetContentRegionAvail().x * 0.5F - 4.0F;
+    ImGui::BeginChild("##AbandonedPlan", ImVec2(column_width, 115.0F),
+                      ImGuiChildFlags_Border);
+    ImGui::TextDisabled("Plan that was abandoned");
+    for (const std::string& action : replan.abandonedPlan) {
+      ImGui::BulletText("%s", action.c_str());
+    }
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##ReplacementPlan", ImVec2(0.0F, 115.0F),
+                      ImGuiChildFlags_Border);
+    if (replan.replacementFound) {
+      ImGui::TextDisabled("Plan that replaced it");
+      for (const std::string& action : replan.replacementPlan) {
+        ImGui::BulletText("%s", action.c_str());
+      }
+    } else {
+      ImGui::TextDisabled("No replacement plan exists");
+      if (replan.failureExplanation.rows.empty()) {
+        ImGui::TextWrapped("The tool could not identify one blocking fact.");
+      } else {
+        for (const FailureExplanationRow& row :
+             replan.failureExplanation.rows) {
+          ImGui::BulletText("%s", row.text.c_str());
+        }
+      }
+    }
+    ImGui::EndChild();
+    ImGui::EndChild();
+  }
+
+  RunState viewState;
+  if (m_simulation.isLoaded()) {
+    const unsigned requestedTick =
+        m_runViewingHistory ? m_runViewTick : m_simulation.tick();
+    viewState = m_simulation.stateAtTick(requestedTick);
+    ImGui::Text("%s", m_simulation.summaryLine().c_str());
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%s)", runPhaseName(m_simulation.phase()));
+    if (m_runViewingHistory) {
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(0.0F, 0.85F, 1.0F, 1.0F),
+                         "viewing tick %u; live tick %u", viewState.tick,
+                         m_simulation.tick());
+    }
+    // The tree is drawn from the run's own progress, so every node shows where
+    // the run has got to rather than what the compiler emitted.
+    m_btGraph.setRunProgress(viewState.actionSteps);
+  } else {
+    m_btGraph.clearRunProgress();
+    ImGui::TextDisabled(
+        "This is the tree the plan compiled. Press Run to watch it happen.");
+  }
+
   if (m_btGraph.nodeCount() > 0U) {
-    if (ImGui::Button("Collapse all")) {
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Collapse all")) {
       m_btGraph.collapseAll();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Expand all")) {
+    if (ImGui::SmallButton("Expand all")) {
       m_btGraph.expandAll();
     }
   }
-  ImGui::BeginChild("##BtCanvas", ImVec2(0.0F, 0.0F), ImGuiChildFlags_Border);
+  if (!m_btGraph.lastError().empty()) {
+    ImGui::TextColored(ImVec4(1.0F, 0.35F, 0.35F, 1.0F), "Parse error: %s",
+                       m_btGraph.lastError().c_str());
+  }
+
+  if (!m_simulation.isLoaded()) {
+    ImGui::BeginChild("##RunTree", ImVec2(0.0F, 0.0F), ImGuiChildFlags_Border);
+    m_btGraph.render();
+    ImGui::EndChild();
+    return;
+  }
+
+  // ---- The primary run view: timing and world facts ----------------------
+  const float primaryHeight =
+      std::max(230.0F, ImGui::GetContentRegionAvail().y * 0.53F);
+  ImGui::BeginChild("##RunPrimary", ImVec2(0.0F, primaryHeight));
+  ImGui::BeginChild("##RunTimelinePanel", ImVec2(-350.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  m_runTimelineRendered = true;
+  unsigned selectedTick = viewState.tick;
+  if (renderRunTimeline(m_simulation.tick(), m_simulation.factChanges(),
+                        viewState, selectedTick)) {
+    m_runViewTick = selectedTick;
+    m_runViewingHistory = selectedTick != m_simulation.tick();
+  }
+  ImGui::EndChild();
+
+  ImGui::SameLine();
+  ImGui::BeginChild("##RunFactsPanel", ImVec2(0.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  m_runFactsRendered = true;
+  ImGui::Text("Facts at tick %u", viewState.tick);
+  ImGui::SetNextItemWidth(-1.0F);
+  ImGui::InputTextWithHint("##RunFactFilter", "Filter by object or fact name",
+                           m_runFactFilter, sizeof(m_runFactFilter));
+  ImGui::Separator();
+  const std::string filter = m_runFactFilter;
+  for (const RunFactState& fact : viewState.facts) {
+    if (!containsIgnoringCase(fact.fact, filter)) {
+      continue;
+    }
+    const bool justChanged =
+        fact.changedDuringRun && fact.lastChangedTick == viewState.tick;
+    if (justChanged) {
+      const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+      ImGui::GetWindowDrawList()->AddRectFilled(
+          rowStart,
+          ImVec2(rowStart.x + ImGui::GetContentRegionAvail().x,
+                 rowStart.y + ImGui::GetTextLineHeightWithSpacing()),
+          IM_COL32(67, 74, 26, 220), 2.0F);
+    }
+    ImGui::TextColored(fact.value ? ImVec4(0.32F, 0.84F, 0.60F, 1.0F)
+                                  : ImVec4(0.55F, 0.70F, 0.80F, 1.0F),
+                       "%s", fact.value ? "true " : "false");
+    ImGui::SameLine(55.0F);
+    ImGui::TextUnformatted(fact.fact.c_str());
+    ImGui::SameLine();
+    if (fact.changedDuringRun) {
+      ImGui::TextDisabled("tick %u%s", fact.lastChangedTick,
+                          justChanged ? " - changed now" : "");
+    } else {
+      ImGui::TextDisabled("%s", fact.value ? "from the start" : "not yet");
+    }
+  }
+  ImGui::EndChild();
+  ImGui::EndChild();
+
+  // ---- The tree answers where the run is; selection explains one node ----
+  ImGui::TextColored(ImVec4(0.0F, 0.85F, 1.0F, 1.0F), "%s",
+                     happeningSentence(viewState).c_str());
+  ImGui::BeginChild("##RunTree", ImVec2(-350.0F, 0.0F), ImGuiChildFlags_Border);
   m_btGraph.render();
+  ImGui::EndChild();
+
+  ImGui::SameLine();
+  ImGui::BeginChild("##RunState", ImVec2(0.0F, 0.0F), ImGuiChildFlags_Border);
+  BtNodeDetail detail;
+  if (m_btGraph.nodeDetail(m_btGraph.selectedNodeIndex(), detail)) {
+    ImGui::TextDisabled("Selected tree node");
+    ImGui::TextWrapped("%s", detail.label.c_str());
+    if (detail.isAction) {
+      ImGui::Text("Action: %s", detail.action.c_str());
+      renderFactList("Before it can run - must be true",
+                     detail.preconditions, "");
+      renderFactList("Before it can run - must be observed",
+                     detail.confirmedPreconditions, "");
+      renderFactList("Before it can run - must be false",
+                     detail.negativePreconditions, "");
+      renderFactList("What it changes", detail.addEffects,
+                     "makes true: ");
+      renderFactList("", detail.deleteEffects, "makes false: ");
+    } else {
+      ImGui::TextDisabled(
+          "This node organises other parts of the mission. Select an action "
+          "node to see the facts it needs and changes.");
+    }
+  } else {
+    ImGui::TextDisabled("Select a tree node to see what it needs and changes.");
+  }
+
+  ImGui::Separator();
+  ImGui::TextDisabled("Goals at the viewed tick");
+  for (const RunGoal& goal : m_simulation.goals()) {
+    const auto found = std::find_if(
+        viewState.facts.begin(), viewState.facts.end(),
+        [&goal](const RunFactState& fact) { return fact.fact == goal.fact; });
+    const bool met = found != viewState.facts.end() && found->value;
+    ImGui::TextColored(met ? ImVec4(0.32F, 0.84F, 0.60F, 1.0F)
+                           : ImVec4(0.55F, 0.70F, 0.80F, 1.0F),
+                       "%s %s", met ? "met" : "not yet", goal.fact.c_str());
+  }
+  ImGui::EndChild();
+}
+
+void AppShell::renderRunComparison() {
+  if (!m_comparisonFirst.loaded() || !m_comparisonSecond.loaded()) {
+    return;
+  }
+  m_runComparisonRendered = true;
+  ImGui::BeginChild("##RecordedRunComparison", ImVec2(0.0F, 260.0F),
+                    ImGuiChildFlags_Border);
+  ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F), "Comparing two runs");
+  ImGui::TextWrapped("%s", m_runComparison.summary.c_str());
+
+  const float width = ImGui::GetContentRegionAvail().x * 0.5F - 4.0F;
+  ImGui::BeginChild("##ComparisonFirst", ImVec2(width, 70.0F),
+                    ImGuiChildFlags_Border);
+  ImGui::TextDisabled("First run");
+  ImGui::TextWrapped("%s · %s", m_comparisonFirst.manifest().scenario.c_str(),
+                     m_comparisonFirst.simulated() ? "SIMULATED" : "REAL SYSTEM");
+  ImGui::Text("%u ticks", m_comparisonFirst.tick());
+  ImGui::EndChild();
+  ImGui::SameLine();
+  ImGui::BeginChild("##ComparisonSecond", ImVec2(0.0F, 70.0F),
+                    ImGuiChildFlags_Border);
+  ImGui::TextDisabled("Second run");
+  ImGui::TextWrapped("%s · %s", m_comparisonSecond.manifest().scenario.c_str(),
+                     m_comparisonSecond.simulated() ? "SIMULATED" : "REAL SYSTEM");
+  ImGui::Text("%u ticks", m_comparisonSecond.tick());
+  ImGui::EndChild();
+
+  if (m_runComparison.treesDiffer) {
+    ImGui::Text("First tree difference: tick %u",
+                m_runComparison.firstDifferentTick);
+  } else {
+    ImGui::TextDisabled("The tree states do not differ.");
+  }
+  for (const std::string& action : m_runComparison.actionsOnlyInFirst) {
+    ImGui::BulletText("Only the first run: %s", action.c_str());
+  }
+  for (const std::string& action : m_runComparison.actionsOnlyInSecond) {
+    ImGui::BulletText("Only the second run: %s", action.c_str());
+  }
+  for (const std::string& fact : m_runComparison.endFactDifferences) {
+    ImGui::BulletText("Different final fact: %s", fact.c_str());
+  }
+  if (ImGui::SmallButton("Close comparison")) {
+    m_comparisonFirst = RecordedRun{};
+    m_comparisonSecond = RecordedRun{};
+  }
+  ImGui::EndChild();
+}
+
+void AppShell::renderReplayRunTab() {
+  m_replayRendered = true;
+  if (ImGui::Button("Close recorded run")) {
+    m_replay = RecordedRun{};
+    m_btGraph.clearRunProgress();
+    return;
+  }
+  ImGui::SameLine();
+  ImGui::Text("Replay: %s", m_replay.manifest().scenario.empty()
+                                  ? "recorded mission"
+                                  : m_replay.manifest().scenario.c_str());
+
+  if (m_replay.simulated()) {
+    ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F),
+                       "SIMULATED - this is a replay of stand-in actions");
+  } else {
+    ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
+                       "REAL SYSTEM - this replay came from field execution");
+  }
+  ImGui::Text("%s", m_replay.summaryLine().c_str());
+  renderRunComparison();
+
+  const unsigned requested_tick =
+      m_runViewingHistory ? m_runViewTick : m_replay.tick();
+  const RunState state = m_replay.stateAtTick(requested_tick);
+  m_btGraph.setRunProgress(state.actionSteps);
+
+  const float primary_height =
+      std::max(230.0F, ImGui::GetContentRegionAvail().y * 0.53F);
+  ImGui::BeginChild("##ReplayPrimary", ImVec2(0.0F, primary_height));
+  ImGui::BeginChild("##ReplayTimelinePanel", ImVec2(-350.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  m_runTimelineRendered = true;
+  unsigned selected_tick = state.tick;
+  if (renderRunTimeline(m_replay.tick(), m_replay.factChanges(), state,
+                        selected_tick)) {
+    m_runViewTick = selected_tick;
+    m_runViewingHistory = selected_tick != m_replay.tick();
+  }
+  ImGui::EndChild();
+  ImGui::SameLine();
+  ImGui::BeginChild("##ReplayFactsPanel", ImVec2(0.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  m_runFactsRendered = true;
+  ImGui::Text("Facts at tick %u", state.tick);
+  ImGui::SetNextItemWidth(-1.0F);
+  ImGui::InputTextWithHint("##ReplayFactFilter", "Filter by object or fact name",
+                           m_runFactFilter, sizeof(m_runFactFilter));
+  for (const RunFactState& fact : state.facts) {
+    if (!containsIgnoringCase(fact.fact, m_runFactFilter)) {
+      continue;
+    }
+    ImGui::TextColored(fact.value ? ImVec4(0.32F, 0.84F, 0.60F, 1.0F)
+                                  : ImVec4(0.55F, 0.70F, 0.80F, 1.0F),
+                       "%s  %s", fact.value ? "true" : "false",
+                       fact.fact.c_str());
+  }
+  ImGui::EndChild();
+  ImGui::EndChild();
+
+  ImGui::BeginChild("##ReplayTree", ImVec2(-350.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  m_btGraph.render();
+  ImGui::EndChild();
+  ImGui::SameLine();
+  ImGui::BeginChild("##ReplayGoals", ImVec2(0.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  ImGui::TextDisabled("Goals at the viewed tick");
+  for (const RunGoal& goal : m_replay.goalsAtTick(state.tick)) {
+    ImGui::TextColored(goal.met ? ImVec4(0.32F, 0.84F, 0.60F, 1.0F)
+                                : ImVec4(0.55F, 0.70F, 0.80F, 1.0F),
+                       "%s %s", goal.met ? "met" : "not yet",
+                       goal.fact.c_str());
+  }
   ImGui::EndChild();
 }
 
@@ -2287,6 +3937,44 @@ void AppShell::renderSelectedElementEditor() {
         }
         ImGui::EndCombo();
       }
+      // The order these are written in is the order their values are given in,
+      // so it is worth being able to change. The conditions and outcomes name
+      // their parameters, so they follow the move untouched.
+      ImGui::SameLine();
+      const bool isFirst = parameter_index == 0;
+      const bool isLast =
+          parameter_index + 1 == static_cast<int>(action.params.size());
+      if (isFirst) {
+        ImGui::BeginDisabled();
+      }
+      if (ImGui::SmallButton("up") && !isFirst) {
+        const int moved = parameter_index;
+        m_commandStack.execute(m_model, "Move it earlier",
+                               [selAction, moved](ProjectModel& model) {
+          ModelEdits::moveActionParameter(model,
+                                          static_cast<size_t>(selAction),
+                                          static_cast<size_t>(moved), false);
+        });
+      }
+      if (isFirst) {
+        ImGui::EndDisabled();
+      }
+      ImGui::SameLine();
+      if (isLast) {
+        ImGui::BeginDisabled();
+      }
+      if (ImGui::SmallButton("down") && !isLast) {
+        const int moved = parameter_index;
+        m_commandStack.execute(m_model, "Move it later",
+                               [selAction, moved](ProjectModel& model) {
+          ModelEdits::moveActionParameter(model,
+                                          static_cast<size_t>(selAction),
+                                          static_cast<size_t>(moved), true);
+        });
+      }
+      if (isLast) {
+        ImGui::EndDisabled();
+      }
       ImGui::PopID();
     }
     static char s_aname[32] = {};
@@ -2360,8 +4048,10 @@ void AppShell::renderSelectedElementEditor() {
 
     if (ImGui::InputText("behaviour tree node##bt", s_nodeType, sizeof(s_nodeType))) {
       const std::string nodeType = s_nodeType;
-      m_commandStack.execute(m_model, "Set BT node type",
-                             [selAction, nodeType](ProjectModel& model) {
+      m_commandStack.executeCoalescing(
+          m_model, "Set the behaviour tree node",
+          "action:" + std::to_string(selAction) + ":btnode",
+          [selAction, nodeType](ProjectModel& model) {
         model.actions[static_cast<size_t>(selAction)].btBinding.nodeType =
             nodeType;
       });
@@ -2380,8 +4070,10 @@ void AppShell::renderSelectedElementEditor() {
                                   sizeof(s_subtreeXml),
                                   ImVec2(-FLT_MIN, 120.0F))) {
       const std::string subtreeXml = s_subtreeXml;
-      m_commandStack.execute(m_model, "Set BT subtree XML",
-                             [selAction, subtreeXml](ProjectModel& model) {
+      m_commandStack.executeCoalescing(
+          m_model, "Set the subtree",
+          "action:" + std::to_string(selAction) + ":subtree",
+          [selAction, subtreeXml](ProjectModel& model) {
         model.actions[static_cast<size_t>(selAction)].btBinding.subtreeXml =
             subtreeXml;
       });
@@ -2403,6 +4095,47 @@ void AppShell::renderSelectedElementEditor() {
         }
       }
       ImGui::TextWrapped("%s", resolved.c_str());
+    }
+
+    // Settings a run uses in place of the real action. Everything here has a
+    // working default, so a user who never opens it can still press Run.
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "In a simulated run");
+    int ticks = action.simulation.ticks;
+    ImGui::SetNextItemWidth(140.0F);
+    if (ImGui::InputInt("how long it takes, in ticks##sim", &ticks)) {
+      const int chosen = ticks < 1 ? 1 : ticks;
+      m_commandStack.execute(m_model, "Set how long the action takes",
+                             [selAction, chosen](ProjectModel& model) {
+        model.actions[static_cast<size_t>(selAction)].simulation.ticks = chosen;
+      });
+    }
+    bool succeeds = action.simulation.succeeds;
+    if (ImGui::Checkbox("it works##sim", &succeeds)) {
+      m_commandStack.execute(m_model,
+                             succeeds ? "Let the action work"
+                                      : "Make the action fail",
+                             [selAction, succeeds](ProjectModel& model) {
+        model.actions[static_cast<size_t>(selAction)].simulation.succeeds =
+            succeeds;
+      });
+    }
+    float failureChance =
+        static_cast<float>(action.simulation.failureChance) * 100.0F;
+    ImGui::SetNextItemWidth(200.0F);
+    if (ImGui::SliderFloat("chance it goes wrong##sim", &failureChance, 0.0F,
+                           100.0F, "%.0f%%")) {
+      const double chance = static_cast<double>(failureChance) / 100.0;
+      m_commandStack.execute(m_model, "Set the chance the action goes wrong",
+                             [selAction, chance](ProjectModel& model) {
+        model.actions[static_cast<size_t>(selAction)].simulation.failureChance =
+            chance;
+      });
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+          "Runs draw against the project's seed, so the same seed gives the\n"
+          "same run every time.");
     }
 
     ImGui::Separator();
@@ -2430,6 +4163,7 @@ void AppShell::renderSelectedElementEditor() {
 }
 
 void AppShell::clearDerivedResults() {
+  m_batchRunner.stop();
   m_lastValidation = ValidationReport{};
   m_structuralReport = StructuralReport{};
   m_lastBatchReport = ScenarioBatchReport{};
@@ -2679,7 +4413,16 @@ void AppShell::selfTestRunFeasibility(const std::string& scenarioName) {
 }
 
 void AppShell::selfTestRunAllScenarios() {
+  m_lastBatchReport = ScenarioRunner::runAll(m_model);
+}
+
+void AppShell::selfTestStartBatch() {
   runAllScenarios();
+}
+
+void AppShell::selfTestStopBatch() {
+  m_batchRunner.stop();
+  m_lastBatchReport = m_batchRunner.report();
 }
 
 void AppShell::selfTestRunContingencyAnalysis() {
@@ -2826,6 +4569,62 @@ bool AppShell::selfTestSelectionForward() {
   return true;
 }
 
+bool AppShell::selfTestClickFirstProblem() {
+  const std::vector<ProblemEntry> problems =
+      ProblemList::build(m_model, m_structuralReport, m_lastValidation);
+  for (const ProblemEntry& problem : problems) {
+    if (problem.canReveal()) {
+      revealProblemTarget(problem);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool AppShell::selfTestStartRun(const std::string& scenarioName) {
+  const auto found = std::find_if(
+      m_model.scenarios.begin(), m_model.scenarios.end(),
+      [&scenarioName](const ScenarioDef& scenario) {
+        return scenario.name == scenarioName;
+      });
+  if (found != m_model.scenarios.end()) {
+    m_selectedScenarioIdx = static_cast<int>(
+        std::distance(m_model.scenarios.begin(), found));
+  }
+  startRun();
+  m_requestedTab = "Run";
+  return m_simulation.isLoaded();
+}
+
+bool AppShell::selfTestStepRun() {
+  m_simulation.hold();
+  return m_simulation.stepOnce();
+}
+
+bool AppShell::selfTestRunToCompletion() {
+  return m_simulation.runToCompletion();
+}
+
+void AppShell::selfTestReplayCurrentRun() {
+  if (!m_simulation.isLoaded()) {
+    return;
+  }
+  m_replay = RecordedRun::fromSimulation(m_model, m_simulation);
+  m_btGraph.setXml(m_replay.compiledXml());
+  m_runViewingHistory = false;
+  m_requestedTab = "Run";
+}
+
+void AppShell::selfTestCompareCurrentRunWithItself() {
+  if (!m_simulation.isLoaded()) {
+    return;
+  }
+  m_comparisonFirst = RecordedRun::fromSimulation(m_model, m_simulation);
+  m_comparisonSecond = RecordedRun::fromSimulation(m_model, m_simulation);
+  m_runComparison = compareRuns(m_comparisonFirst, m_comparisonSecond);
+  m_requestedTab = "Run";
+}
+
 void AppShell::selfTestSetDomainView(int view) {
   m_domainViewMode = std::max(0, std::min(view, 4));
   m_requestedTab = "Domain";
@@ -2961,14 +4760,14 @@ void AppShell::runFeasibilityCheck() {
 }
 
 void AppShell::runAllScenarios() {
-  m_lastBatchReport = ScenarioRunner::runAll(m_model);
-  const size_t total =
-      m_lastBatchReport.passCount + m_lastBatchReport.failCount +
-      m_lastBatchReport.errorCount;
-  validationState = "Scenarios: " + std::to_string(m_lastBatchReport.passCount) +
-                    "/" + std::to_string(total) + " passed";
-  lastOperation = "Ran " + std::to_string(m_lastBatchReport.results.size()) +
-                  " scenarios";
+  m_batchRunner.start(m_model);
+  m_lastBatchReport = m_batchRunner.report();
+  validationState = "Scenarios: 0/" +
+                    std::to_string(m_batchRunner.totalCount()) +
+                    " simulated";
+  lastOperation = m_batchRunner.isRunning()
+                      ? "Started scenario simulation"
+                      : "There are no scenarios to simulate";
 }
 
 void AppShell::runContingencyAnalysis() {
@@ -3139,6 +4938,20 @@ void AppShell::renderStatusBar() {
                   structuralIssueCount == 1U ? "" : "s");
     const ImVec4 issueColor = m_structuralReport.hasErrors() ? err : warn;
     StatusPill(buf, issueColor, issueColor);
+  }
+
+  // A loaded run says so wherever the user is looking, and says that what they
+  // are watching is a simulation. Neither can be dismissed.
+  if (m_replay.loaded()) {
+    StatusPill(m_replay.summaryLine().c_str(), cyan, cyan);
+    if (m_replay.simulated()) {
+      StatusPill("SIMULATED", warn, warn);
+    } else {
+      StatusPill("REAL SYSTEM REPLAY", ok, ok);
+    }
+  } else if (m_simulation.isLoaded()) {
+    StatusPill(m_simulation.summaryLine().c_str(), cyan, cyan);
+    StatusPill("SIMULATED", warn, warn);
   }
 
   // Last operation pill (dim — informational)

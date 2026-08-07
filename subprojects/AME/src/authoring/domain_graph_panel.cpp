@@ -277,6 +277,11 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     }
   }
 
+  if (m_fitToContents) {
+    ed::NavigateToContent();
+    m_fitToContents = false;
+  }
+
   // ---- Right-click context menu on empty canvas (must be inside Begin/End)
   ed::Suspend();
   if (ed::ShowBackgroundContextMenu()) {
@@ -291,7 +296,10 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       m_openAddActionPopup = true;
       m_newActionName[0] = '\0';
     }
-    ImGui::MenuItem("Add Type");    // placeholder
+    if (ImGui::MenuItem("Add Type")) {
+      m_openAddTypePopup = true;
+      m_newTypeName[0] = '\0';
+    }
     ImGui::EndPopup();
   }
   ed::Resume();
@@ -369,6 +377,30 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
         ActionDef action;
         action.name = name;
         m.actions.push_back(action);
+      });
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  // ---- Add Type modal --------------------------------------------------
+  if (m_openAddTypePopup) {
+    ImGui::OpenPopup("Add Type##modal");
+    m_openAddTypePopup = false;
+  }
+  if (ImGui::BeginPopupModal("Add Type##modal", nullptr,
+                              ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::InputText("Name##newtype", m_newTypeName, sizeof(m_newTypeName));
+    ImGui::TextDisabled("It will be a kind of object; change its parent in the "
+                        "sidebar.");
+    if (ImGui::Button("Add") && m_newTypeName[0] != '\0') {
+      const std::string name = m_newTypeName;
+      stack.execute(model, "Add type", [name](ProjectModel& m) {
+        m.types.push_back({name, "object"});
       });
       ImGui::CloseCurrentPopup();
     }

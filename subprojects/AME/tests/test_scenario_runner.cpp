@@ -72,7 +72,9 @@ TEST(ScenarioRunner, PassWhenExpectationMet) {
   EXPECT_EQ(report.passCount, 1U);
   EXPECT_EQ(report.results[0].outcome, ScenarioOutcome::Pass);
   EXPECT_TRUE(report.results[0].planSucceeded);
-  EXPECT_TRUE(report.results[0].reason.empty());
+  EXPECT_TRUE(report.results[0].executionAttempted);
+  EXPECT_TRUE(report.results[0].goalReached);
+  EXPECT_FALSE(report.results[0].reason.empty());
 }
 
 TEST(ScenarioRunner, FailWhenPlanShorterThanMin) {
@@ -86,7 +88,7 @@ TEST(ScenarioRunner, FailWhenPlanShorterThanMin) {
   ASSERT_EQ(report.results.size(), 1U);
   EXPECT_EQ(report.failCount, 1U);
   EXPECT_EQ(report.results[0].outcome, ScenarioOutcome::Fail);
-  EXPECT_NE(report.results[0].reason.find("plan too short"), std::string::npos);
+  EXPECT_NE(report.results[0].reason.find("at least 99"), std::string::npos);
 }
 
 TEST(ScenarioRunner, FailWhenExpectedActionMissing) {
@@ -100,7 +102,7 @@ TEST(ScenarioRunner, FailWhenExpectedActionMissing) {
   ASSERT_EQ(report.results.size(), 1U);
   EXPECT_EQ(report.failCount, 1U);
   EXPECT_EQ(report.results[0].outcome, ScenarioOutcome::Fail);
-  EXPECT_NE(report.results[0].reason.find("expected action 'nonexistent' not used"),
+  EXPECT_NE(report.results[0].reason.find("Expected planning action 'nonexistent'"),
             std::string::npos);
 }
 
@@ -118,7 +120,7 @@ TEST(ScenarioRunner, FailWhenForbiddenActionUsed) {
   EXPECT_TRUE(std::find(report.results[0].usedActionSchemas.begin(),
                         report.results[0].usedActionSchemas.end(),
                         "move") != report.results[0].usedActionSchemas.end());
-  EXPECT_NE(report.results[0].reason.find("forbidden action 'move' used"),
+  EXPECT_NE(report.results[0].reason.find("Forbidden planning action 'move'"),
             std::string::npos);
 }
 
@@ -149,6 +151,7 @@ TEST(ScenarioRunner, JsonRoundTripStructure) {
   EXPECT_EQ(json.at("passCount").get<size_t>(), 1U);
   EXPECT_EQ(json.at("failCount").get<size_t>(), 1U);
   EXPECT_EQ(json.at("errorCount").get<size_t>(), 0U);
+  EXPECT_TRUE(json.at("simulated").get<bool>());
   ASSERT_EQ(json.at("results").size(), 2U);
   EXPECT_EQ(json.at("results").at(0).at("scenarioName").get<std::string>(),
             "nominal");
@@ -159,4 +162,80 @@ TEST(ScenarioRunner, JsonRoundTripStructure) {
   EXPECT_EQ(json.at("results").at(1).at("outcome").get<std::string>(), "Fail");
   EXPECT_EQ(json.at("results").at(1).at("reason").get<std::string>(),
             "expected success but no plan found");
+}
+
+TEST(ScenarioRunner, ChecksExecutionActionCountAndRequiredActions) {
+  ProjectModel model = makeUavSearchModel();
+  ScenarioExpectation expectation;
+  expectation.minRunActions = 2;
+  expectation.maxRunActions = 2;
+  expectation.requiredRunActions = {"move", "search"};
+  expectation.forbiddenRunActions = {"land"};
+  expectation.maxReplans = 0;
+  addSearchScenario(model, expectation);
+
+  const ScenarioBatchReport report = ScenarioRunner::runAll(model);
+
+  ASSERT_EQ(report.results.size(), 1U);
+  EXPECT_EQ(report.results[0].outcome, ScenarioOutcome::Pass);
+  EXPECT_TRUE(report.results[0].goalReached);
+  EXPECT_EQ(report.results[0].runActionCount, 2U);
+  EXPECT_EQ(report.results[0].replanCount, 0U);
+  EXPECT_EQ(report.results[0].simulationSeed, model.simulationSeed);
+}
+
+TEST(ScenarioRunner, PlanningCanPassWhileExecutionFails) {
+  ProjectModel model = makeUavSearchModel();
+  model.actions[1].simulation.succeeds = false;
+  ScenarioExpectation expectation;
+  expectation.shouldSucceed = true;
+  expectation.shouldReachGoal = true;
+  addSearchScenario(model, expectation);
+
+  const ScenarioBatchReport report = ScenarioRunner::runAll(model);
+
+  ASSERT_EQ(report.results.size(), 1U);
+  EXPECT_TRUE(report.results[0].planSucceeded);
+  EXPECT_FALSE(report.results[0].goalReached);
+  EXPECT_EQ(report.results[0].outcome, ScenarioOutcome::Fail);
+  EXPECT_NE(report.results[0].reason.find("did not reach its goal"),
+            std::string::npos);
+}
+
+TEST(ScenarioRunner, AppliesNamedFaultAndChecksReplans) {
+  ProjectModel model = makeUavSearchModel();
+  ScenarioExpectation expectation;
+  expectation.runFault.name = "search-fails-once";
+  expectation.runFault.actionFailures.push_back({"search", 1U});
+  expectation.maxReplans = 1;
+  expectation.requiredRunActions = {"search"};
+  addSearchScenario(model, expectation);
+
+  const ScenarioBatchReport report = ScenarioRunner::runAll(model);
+
+  ASSERT_EQ(report.results.size(), 1U);
+  EXPECT_EQ(report.results[0].outcome, ScenarioOutcome::Pass);
+  EXPECT_EQ(report.results[0].faultName, "search-fails-once");
+  EXPECT_EQ(report.results[0].replanCount, 1U);
+  EXPECT_TRUE(report.results[0].goalReached);
+}
+
+TEST(ScenarioRunner, IncrementalBatchReportsProgressAndCanStop) {
+  ProjectModel model = makeUavSearchModel();
+  addSearchScenario(model, ScenarioExpectation{});
+  ScenarioDef second = model.scenarios.front();
+  second.name = "second";
+  model.scenarios.push_back(second);
+
+  ScenarioRunner runner;
+  runner.start(model);
+  ASSERT_TRUE(runner.isRunning());
+  EXPECT_EQ(runner.completedCount(), 0U);
+  EXPECT_TRUE(runner.step());
+  EXPECT_EQ(runner.completedCount(), 1U);
+  EXPECT_EQ(runner.report().results.size(), 1U);
+  runner.stop();
+  EXPECT_FALSE(runner.isRunning());
+  EXPECT_TRUE(runner.wasStopped());
+  EXPECT_EQ(runner.report().results.size(), 1U);
 }

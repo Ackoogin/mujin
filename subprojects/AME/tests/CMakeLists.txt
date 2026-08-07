@@ -135,6 +135,12 @@ add_executable(test_planner test_planner.cpp)
 target_link_libraries(test_planner PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_planner DISCOVERY_MODE PRE_TEST)
 
+# The contingency search is shared by the verifier, the authoring tool and the
+# generated assurance report, so it is tested once here rather than in each.
+add_executable(test_contingency_search test_contingency_search.cpp)
+target_link_libraries(test_contingency_search PRIVATE ame_core GTest::gtest_main)
+gtest_discover_tests(test_contingency_search DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_integration test_integration.cpp)
 target_link_libraries(test_integration PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_integration DISCOVERY_MODE PRE_TEST)
@@ -308,6 +314,89 @@ if(AME_BUILD_AUTHORING)
       GTest::gtest_main
   )
   gtest_discover_tests(test_scenario_runner DISCOVERY_MODE PRE_TEST)
+
+  # Drives the mission command line: the library functions behind it, and the
+  # built executable itself, because the exit code is what a build agent reads.
+  # The problem list and the fact chooser decide wording and what is legal, so
+  # both are checked without a window.
+  # Edits that reach beyond the thing being edited, the folding of a run of
+  # keystrokes into one undoable step, and the recent-projects list.
+  # Merging a second domain into a project that already has one, and the
+  # project fields that groups, saved views and contingencies are stored in.
+  # The generated assurance evidence: what it says, and what it admits it
+  # does not cover.
+  add_executable(test_assurance_report test_assurance_report.cpp)
+  target_link_libraries(test_assurance_report
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_assurance_report DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_import_merge test_import_merge.cpp)
+  target_link_libraries(test_import_merge
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_import_merge DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_model_edits
+    test_model_edits.cpp
+    ${CMAKE_SOURCE_DIR}/subprojects/AME/src/authoring/command_stack.cpp
+  )
+  target_link_libraries(test_model_edits
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_model_edits DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_problem_list test_problem_list.cpp)
+  target_link_libraries(test_problem_list
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_problem_list DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_mission_commands test_mission_commands.cpp)
+  target_link_libraries(test_mission_commands
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  target_compile_definitions(test_mission_commands
+    PRIVATE "AME_MISSION_CLI_PATH=\"$<TARGET_FILE:ame_mission_cli>\"")
+  add_dependencies(test_mission_commands ame_mission_cli)
+  gtest_discover_tests(test_mission_commands DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_simulation_engine test_simulation_engine.cpp)
+  target_link_libraries(test_simulation_engine
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_simulation_engine DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_run_records test_run_records.cpp)
+  target_link_libraries(test_run_records
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  add_dependencies(test_run_records ame_mission_cli)
+  target_compile_definitions(test_run_records PRIVATE
+    "AME_MISSION_CLI_PATH=\"$<TARGET_FILE:ame_mission_cli>\""
+  )
+  gtest_discover_tests(test_run_records DISCOVERY_MODE PRE_TEST)
 
   add_executable(test_contingency_analyser test_contingency_analyser.cpp)
   target_link_libraries(test_contingency_analyser

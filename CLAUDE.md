@@ -38,7 +38,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `doc/reports/AME/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
 | `subprojects/AME/doc/architecture/` | **Consolidated architecture reference** (see below) |
 | `subprojects/AME/doc/guides/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
-| `subprojects/AME/doc/guides/contingency_verifier.md` | **Contingency verifier tool**: exhaustive safe-state reachability, domains, pruning |
+| `subprojects/AME/doc/guides/contingency_verifier.md` | **Contingency verifier tool**: exhaustive safe-state reachability, domains, pruning. The search itself is `ame_core`'s `ContingencySearch`, shared with the authoring tool |
 | `doc/todo/AME/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
 | `doc/roadmap/` + `tools/roadmap/README.md` | **Roadmap dashboards**: roadmap data files, the generator that turns them into standalone HTML pages, and the update flow |
 | `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
@@ -76,7 +76,7 @@ This project uses CMake, with MSVC/Visual Studio 2022 the primary Windows toolch
 | Build | `release`, `debug` | Release/Debug builds using the `default` configure preset |
 | Build | `all-on-release` | Release build using `all-on` |
 | Build | `all-off-release`, `all-off-debug` | Release/Debug builds using `all-off` |
-| Build | `authoring-release`, `authoring-debug` | Release/Debug builds using `authoring` |
+| Build | `authoring-release`, `authoring-debug` | Release/Debug builds using `authoring`. Builds `ame_authoring_tool` and `ame_mission_cli` |
 | Test | `all-on-release`, `all-off-release`, `all-off-debug` | CTest runs with `outputOnFailure` enabled |
 | Test | `authoring-release`, `authoring-debug` | CTest runs covering the authoring tool's own test suites |
 
@@ -148,7 +148,7 @@ build\tests\Release\test_observability.exe
 build\tests\Release\test_world_model.exe --gtest_filter=WorldModel.SetAndGetFact
 ```
 
-The full CTest suite should pass. It spans PCL, PYRAMID, Tactical Objects, AME core (WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser), integration (BT nodes), end-to-end pipeline, observability (Layers 1-5), generated bindings, and transport adapters -- 715 registered tests at last count; use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
+The full CTest suite should pass. It spans PCL, PYRAMID, Tactical Objects, AME core (WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser), integration (BT nodes), end-to-end pipeline, observability (Layers 1-5), generated bindings, and transport adapters -- 1256 registered tests in the default build at last count, and 980 in the `authoring` build, which adds the graphical tool's own suites; use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
 
 ## Run the demo
 
