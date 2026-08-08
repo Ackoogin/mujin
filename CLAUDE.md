@@ -44,7 +44,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/plans/AME/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
 | `doc/plans/AME/authoring_tool_plan.md` | **Authoring tool plan**: what the graphical authoring tool does today, what is left to build (workstream D — the tool accepts less PDDL than `PddlParser` does), and the non-specialist walkthrough that gates a release |
-| `subprojects/AME/doc/guides/authoring_tool_user_guide.md` | How to build, launch and use the graphical authoring tool |
+| `subprojects/AME/doc/guides/authoring_tool_user_guide.md` | How to build, launch and use the graphical authoring tool. Assumes no PDDL knowledge: explains the ideas, then builds the worked example in `subprojects/AME/domains/first_survey` from an empty project |
 | `doc/research/AME/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
 | `doc/plans/AME/neuro_symbolic_infrastructure_plan.md` | **Neuro-symbolic core infrastructure work plan**: propose-verify-fallback envelope, backend/verifier abstractions, audit, policy, test harness |
 

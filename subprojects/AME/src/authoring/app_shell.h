@@ -343,4 +343,13 @@ public:
   void selfTestSelectActionFromPalette(int idx) { m_domainGraph.setSelectedAction(idx); }
   int  selfTestSelectedPredicateIndex() const { return m_domainGraph.selectedPredicateIndex(); }
   int  selfTestSelectedActionIndex() const { return m_domainGraph.selectedActionIndex(); }
+  // The same thing the F key does: bring the whole drawing into view. A
+  // headless run has no key presses and starts from whatever the canvas last
+  // saved, so a screenshot taken without this can be of empty space.
+  void selfTestFitDomainGraph() { m_domainGraph.requestFitToContents(); }
+  void selfTestClearSelection() { m_domainGraph.clearSelection(); }
+  // The PDDL tab's lower half lists the problems found. Scenario batch results
+  // and contingency results are in the raw diagnostics text behind the tick
+  // box, which is what a screenshot of either of those has to show.
+  void selfTestShowRawDiagnostics(bool show) { m_showRawDiagnostics = show; }
 };

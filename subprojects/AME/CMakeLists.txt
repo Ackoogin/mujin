@@ -28,6 +28,12 @@ list(APPEND CMAKE_MODULE_PATH "${AME_ROOT_DIR}/cmake")
 set(AME_SAMPLE_PROJECT
     "${AME_ROOT_DIR}/domains/vehicle_autonomy/vehicle-autonomy.ameproj.json")
 
+# The small worked example the user guide teaches from. The authoring tool's
+# --capture mode opens this one by default, so the guide's screenshots come from
+# the project the guide describes.
+set(AME_TUTORIAL_PROJECT
+    "${AME_ROOT_DIR}/domains/first_survey/first-survey.ameproj.json")
+
 if(AME_STANDALONE)
     project(ame LANGUAGES C CXX)
 

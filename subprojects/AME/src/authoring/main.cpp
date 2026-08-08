@@ -25,8 +25,11 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <set>
 #include <string>
 #include <vector>
@@ -358,6 +361,37 @@ static void renderAppShellFrame(SDL_Window* window, AppShell& shell,
   SDL_GL_SwapWindow(window);
 }
 
+// ---------------------------------------------------------------------------
+// Screenshot capture for the user guide
+// ---------------------------------------------------------------------------
+
+/// \brief One captured picture and the sentence that says what it shows.
+struct CapturedShot {
+  std::string file;
+  std::string caption;
+};
+
+/// \brief Render the interface until it has settled, then write one PNG.
+///
+/// Several frames are drawn on purpose. Dear ImGui sizes a panel from what it
+/// drew last frame, and the graph canvas places its nodes on the frame after
+/// the one that created them, so a picture taken on the first frame of a new
+/// screen shows a half-built one.
+static bool captureStep(SDL_Window* window, AppShell& shell,
+                        const ImVec4& clearColor, const std::string& directory,
+                        const std::string& file, const std::string& caption,
+                        std::vector<CapturedShot>& shots, int frames = 6) {
+  for (int i = 0; i < frames; ++i) {
+    renderAppShellFrame(window, shell, clearColor);
+  }
+  const std::string path = directory + "/" + file;
+  if (!captureScreenshot(window, path.c_str())) {
+    return false;
+  }
+  shots.push_back(CapturedShot{file, caption});
+  return true;
+}
+
 static void printSelfTestResult(const char* status, const char* screenshotPath,
                                 int w, int h, const char* detail) {
   std::printf(
@@ -377,19 +411,48 @@ static void printSelfTestResult(const char* status, const char* screenshotPath,
 // ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-  // --self-test is the only option this executable takes. Running a mission
-  // without a window is ame_mission_cli's job, so that a build agent needs no
-  // display stack for it.
+  // Two options, both of which drive the real interface without a person at it.
+  // --self-test checks the interface and writes one screenshot.
+  // --capture opens a project and writes the screenshots the user guide uses,
+  // so that the pictures in the documentation are the interface itself rather
+  // than a drawing of it. Running a mission without a window remains
+  // ame_mission_cli's job, so that a build agent needs no display stack for it.
   bool selfTestMode = false;
   std::string selfTestPath = "ame_authoring_self_test.png";
+  bool captureMode = false;
+  std::string capturePath = "screenshots";
+  std::string captureProject = AME_AUTHORING_TUTORIAL_PROJECT;
+  std::string captureScenario;
+  std::string captureSet = "workflow";
+  int windowWidth = 1280;
+  int windowHeight = 720;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--self-test") == 0) {
       selfTestMode = true;
       if (i + 1 < argc && argv[i + 1][0] != '-') {
         selfTestPath = argv[++i];
       }
+    } else if (std::strcmp(argv[i], "--capture") == 0) {
+      captureMode = true;
+      if (i + 1 < argc && argv[i + 1][0] != '-') {
+        capturePath = argv[++i];
+      }
+    } else if (std::strcmp(argv[i], "--project") == 0 && i + 1 < argc) {
+      captureProject = argv[++i];
+    } else if (std::strcmp(argv[i], "--scenario") == 0 && i + 1 < argc) {
+      captureScenario = argv[++i];
+    } else if (std::strcmp(argv[i], "--set") == 0 && i + 1 < argc) {
+      captureSet = argv[++i];
+    } else if (std::strcmp(argv[i], "--size") == 0 && i + 1 < argc) {
+      const std::string size = argv[++i];
+      const size_t separator = size.find('x');
+      if (separator != std::string::npos) {
+        windowWidth = std::atoi(size.substr(0, separator).c_str());
+        windowHeight = std::atoi(size.substr(separator + 1).c_str());
+      }
     }
   }
+  const bool headlessMode = selfTestMode || captureMode;
 
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
     if (selfTestMode) {
@@ -407,14 +470,14 @@ int main(int argc, char* argv[]) {
   SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
   Uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
-  if (selfTestMode) {
+  if (headlessMode) {
     windowFlags |= SDL_WINDOW_HIDDEN;
   }
 
   SDL_Window* window = SDL_CreateWindow(
     "AME Authoring Tool",
     SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-    1280, 720,
+    windowWidth, windowHeight,
     windowFlags);
   if (window == nullptr) {
     if (selfTestMode) {
@@ -461,8 +524,8 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  // Disable imgui.ini writes during self-test to keep the filesystem clean
-  if (selfTestMode) {
+  // Disable imgui.ini writes during a headless run to keep the filesystem clean
+  if (headlessMode) {
     io.IniFilename = nullptr;
   } else {
     io.IniFilename = "ame_authoring_tool.ini";
@@ -1204,6 +1267,212 @@ int main(int argc, char* argv[]) {
     SDL_DestroyWindow(window);
     SDL_Quit();
     return report.failures == 0 ? 0 : 2;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Capture: open a project, walk the workflow, write the guide's screenshots
+  // ---------------------------------------------------------------------------
+  if (captureMode) {
+    ScopedStdoutSilencer stdout_silencer(true);
+    const ImVec4 clearColor(0.06F, 0.10F, 0.14F, 1.0F);
+    AppShell shell;
+    std::vector<CapturedShot> shots;
+    std::string error;
+
+    std::error_code directoryError;
+    std::filesystem::create_directories(capturePath, directoryError);
+
+    for (int i = 0; i < 3; ++i) {
+      renderAppShellFrame(window, shell, clearColor);
+    }
+
+    if (directoryError) {
+      error = "the screenshot directory could not be created";
+    } else if (!shell.selfTestLoadProject(captureProject)) {
+      error = "the project could not be opened";
+    }
+
+    if (error.empty()) {
+      const ProjectModel& model = shell.selfTestModel();
+      // Without a named scenario, use the project's first, which is the one a
+      // person opening the project also lands on.
+      std::string scenario = captureScenario;
+      if (scenario.empty() && !model.scenarios.empty()) {
+        scenario = model.scenarios.front().name;
+      }
+      // A scenario the project expects to be unsolvable is what the failure
+      // explanation has to be photographed against.
+      std::string failingScenario;
+      for (const ScenarioDef& candidate : model.scenarios) {
+        if (!candidate.expectation.shouldSucceed) {
+          failingScenario = candidate.name;
+          break;
+        }
+      }
+
+      // The sentence editor for an action is the tallest thing in the
+      // interface, and a window sized for the workflow screens cuts it off at
+      // the status bar. A window cannot be resized part way through a headless
+      // run — the offscreen video driver keeps the size it was created with —
+      // so the editor screens are their own set, taken by a second run with a
+      // taller --size.
+      if (captureSet == "editor") {
+        shell.selfTestSetDomainView(4);
+        shell.selfTestFitDomainGraph();
+        if (!model.actions.empty()) {
+          shell.selfTestSelectActionFromPalette(0);
+          captureStep(window, shell, clearColor, capturePath,
+                      "02-action-editor.png",
+                      "An action selected, with the sentence editor that says "
+                      "what it involves, what must be true before it can "
+                      "happen, and what it changes.", shots);
+        }
+        // Nothing selected, so the sidebar ends with the scenario rather than
+        // with the editor for whatever was last clicked.
+        shell.selfTestClearSelection();
+        shell.selfTestRunFeasibility(scenario);
+        shell.selfTestSetDomainView(4);
+        captureStep(window, shell, clearColor, capturePath,
+                    "02b-scenario-editor.png",
+                    "A scenario being edited: the facts the mission starts "
+                    "from, what counts as success, and what the project "
+                    "expects of it.", shots);
+      } else if (captureSet == "reports") {
+        // Everything the checkers found, as one page of text. It is long, so
+        // this set is meant to be run with a tall --size of its own.
+        shell.selfTestValidate();
+        shell.selfTestRunFeasibility(scenario);
+        shell.selfTestRunAllScenarios();
+        shell.selfTestRunContingencyAnalysis();
+        shell.selfTestShowPddlTab();
+        shell.selfTestShowRawDiagnostics(true);
+        captureStep(window, shell, clearColor, capturePath, "15-reports.png",
+                    "The full diagnostics text: grounding counts, every "
+                    "scenario's result, and the contingency findings.", shots);
+      } else {
+
+      shell.selfTestSetDomainView(4);
+      // Fit once the canvas has drawn, not before: the first frame of a view
+      // has not placed its nodes yet, so a fit asked for then leaves the last
+      // of them off the edge.
+      for (int i = 0; i < 3; ++i) {
+        renderAppShellFrame(window, shell, clearColor);
+      }
+      shell.selfTestFitDomainGraph();
+      captureStep(window, shell, clearColor, capturePath, "01-domain-whole.png",
+                  "The Domain tab with the whole domain drawn on one canvas.",
+                  shots);
+
+      shell.selfTestFocusBusiestPredicate();
+      shell.selfTestSetDomainView(0);
+      for (int i = 0; i < 3; ++i) {
+        renderAppShellFrame(window, shell, clearColor);
+      }
+      shell.selfTestFitDomainGraph();
+      captureStep(window, shell, clearColor, capturePath,
+                  "03-neighbourhood.png",
+                  "The neighbourhood view: one fact and only what touches it.",
+                  shots);
+
+      shell.selfTestSetDomainView(1);
+      captureStep(window, shell, clearColor, capturePath, "04-relations.png",
+                  "The relations list for the selected fact.", shots);
+
+      shell.selfTestSetDomainView(2);
+      captureStep(window, shell, clearColor, capturePath, "05-matrix.png",
+                  "The fact-by-action matrix.", shots);
+
+      shell.selfTestSetDomainView(3);
+      captureStep(window, shell, clearColor, capturePath, "06-lifecycles.png",
+                  "The lifecycle view for a declared state grouping.", shots);
+
+      shell.selfTestValidate();
+      shell.selfTestShowPddlTab();
+      captureStep(window, shell, clearColor, capturePath, "07-pddl-tab.png",
+                  "The PDDL tab after Validate Now: generated domain text, and "
+                  "everything the checkers found.", shots);
+
+      shell.selfTestRunFeasibility(scenario);
+      shell.selfTestPlanAndPreview();
+      captureStep(window, shell, clearColor, capturePath, "08-plan-tab.png",
+                  "The Plan tab after Plan & Preview: the solved plan.", shots);
+
+      if (shell.selfTestStartRun(scenario)) {
+        captureStep(window, shell, clearColor, capturePath, "09-run-loaded.png",
+                    "The Run tab with the mission loaded and waiting at tick 0.",
+                    shots);
+        for (int tick = 0; tick < 12; ++tick) {
+          shell.selfTestStepRun();
+          renderAppShellFrame(window, shell, clearColor);
+        }
+        captureStep(window, shell, clearColor, capturePath,
+                    "10-run-midway.png",
+                    "A run part way through: timeline, world-model facts, and "
+                    "the behaviour tree colouring what is happening now.",
+                    shots);
+        shell.selfTestRunToCompletion();
+        captureStep(window, shell, clearColor, capturePath,
+                    "11-run-complete.png",
+                    "The same run once every goal is met.", shots);
+      }
+
+      shell.selfTestRunContingencyAnalysis();
+      shell.selfTestShowPddlTab();
+      shell.selfTestShowRawDiagnostics(true);
+      captureStep(window, shell, clearColor, capturePath,
+                  "12-contingency.png",
+                  "Contingency analysis: what stays reachable when the declared "
+                  "contingency facts vary.", shots);
+
+      shell.selfTestRunAllScenarios();
+      shell.selfTestShowPddlTab();
+      captureStep(window, shell, clearColor, capturePath, "13-batch.png",
+                  "Every scenario planned and simulated, each checked against "
+                  "what the project says it should do.", shots);
+      shell.selfTestShowRawDiagnostics(false);
+
+      if (!failingScenario.empty()) {
+        shell.selfTestRunFeasibility(failingScenario);
+        shell.selfTestShowPlanTab();
+        captureStep(window, shell, clearColor, capturePath,
+                    "14-no-plan.png",
+                    "A scenario with no plan, and the report that names the "
+                    "fact nothing in the domain can bring about.", shots);
+      }
+
+      }  // end of the workflow set
+    }
+
+    int dw = 0;
+    int dh = 0;
+    SDL_GL_GetDrawableSize(window, &dw, &dh);
+    stdout_silencer.restore();
+
+    std::printf("{\n");
+    std::printf("  \"status\": \"%s\",\n", error.empty() ? "ok" : "error");
+    std::printf("  \"project\": \"%s\",\n", captureProject.c_str());
+    std::printf("  \"directory\": \"%s\",\n", capturePath.c_str());
+    std::printf("  \"width\": %d,\n", dw);
+    std::printf("  \"height\": %d,\n", dh);
+    if (!error.empty()) {
+      std::printf("  \"detail\": \"%s\",\n", error.c_str());
+    }
+    std::printf("  \"screenshots\": [\n");
+    for (size_t i = 0; i < shots.size(); ++i) {
+      std::printf("    { \"file\": \"%s\", \"caption\": \"%s\" }%s\n",
+                  shots[i].file.c_str(), shots[i].caption.c_str(),
+                  (i + 1 < shots.size()) ? "," : "");
+    }
+    std::printf("  ]\n}\n");
+    std::fflush(stdout);
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+    SDL_GL_DeleteContext(gl_context);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return error.empty() ? 0 : 1;
   }
 
   // ---------------------------------------------------------------------------

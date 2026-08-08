@@ -122,7 +122,8 @@ add_executable(ame_authoring_tool
 # were never exercised against a domain where one action appears under several
 # headings at once. This one has that shape.
 target_compile_definitions(ame_authoring_tool PRIVATE
-  "AME_AUTHORING_SAMPLE_PROJECT=\"${AME_SAMPLE_PROJECT}\"")
+  "AME_AUTHORING_SAMPLE_PROJECT=\"${AME_SAMPLE_PROJECT}\""
+  "AME_AUTHORING_TUTORIAL_PROJECT=\"${AME_TUTORIAL_PROJECT}\"")
 
 set(AME_AUTHORING_SDL_MAIN_TARGET)
 if(WIN32 AND TARGET SDL2::SDL2main)
