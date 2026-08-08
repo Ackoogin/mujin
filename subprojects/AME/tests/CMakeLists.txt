@@ -76,6 +76,20 @@ if(UNMANNED_BUILD_PYRAMID)
     target_compile_definitions(test_ame_autonomy_contract PRIVATE
         AME_AUTONOMY_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_autonomy_backend>"
     )
+    # This test links PYRAMID libraries that are built as DLLs and left in
+    # PYRAMID's own output directory. Windows looks for a DLL beside the
+    # executable rather than anywhere in the build tree, so without this copy
+    # the test cannot start, and CTest fails while listing the tests in it.
+    # Linux finds the libraries through the run path and needs no copy.
+    if(WIN32)
+        add_custom_command(TARGET test_ame_autonomy_contract POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_RUNTIME_DLLS:test_ame_autonomy_contract>
+                    $<TARGET_FILE_DIR:test_ame_autonomy_contract>
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying the DLLs test_ame_autonomy_contract needs beside it"
+        )
+    endif()
     gtest_discover_tests(test_ame_autonomy_contract DISCOVERY_MODE PRE_TEST)
 
     if(AME_BUILD_AGRA_MA_BRIDGE)
