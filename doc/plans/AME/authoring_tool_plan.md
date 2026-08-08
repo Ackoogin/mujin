@@ -4,11 +4,14 @@
 what it can already do, what is left to build, and what still has to be reviewed before
 a release.
 
-**Status in one paragraph.** The tool is feature-complete against the plan it was built
-from. All three workstreams — finishing the authoring surface, simulation runs, and
-review and assurance artefacts — are built, and section 4 lists no remaining work. What
-is outstanding is not code but acceptance: the non-specialist walkthrough in section 5 is
-a release gate and has not been run end to end by someone who does not write software.
+**Status in one paragraph.** The tool is complete against the plan it was built from: all
+three original workstreams — finishing the authoring surface, simulation runs, and review
+and assurance artefacts — are built. Two things are outstanding. The PDDL `ame_core`
+accepts has grown since this plan was written and the tool has not kept up, so a domain
+using any of the newer forms cannot be opened at all; that is workstream D in section 4,
+and it is the larger of the two. The other is acceptance rather than code: the
+non-specialist walkthrough in section 5 is a release gate and has not been run end to end
+by someone who does not write software.
 
 **Background reading.**
 
@@ -81,7 +84,7 @@ suites run under the `authoring-release` and `authoring-debug` test presets.
 | **Files and projects** | Native dialogs, a recent-projects list held with the user's settings, a prompt on quitting with unsaved work, and a recovery copy written every half minute while there are unsaved changes | `app_shell.cpp`, `recent_projects.cpp` |
 | **Navigation** | Relation index over the whole model; relations panel with back and forward history; focused neighbourhood canvas with one- and two-step depth and a neighbour cap; whole-domain canvas with semantic zoom; saved named views held in the project | `relation_index.cpp`, `neighbourhood_model.cpp`, `domain_graph_panel.cpp` |
 | **Presentation groups** | A named set of facts and actions drawn as one labelled box on the whole-domain canvas, which closes to a single box standing in for its contents. Lines that reached a member reach the box instead, lines that would then say the same thing twice are drawn once, and a line with both ends inside a closed group is not drawn at all. Anything can be in at most one group, and the refusal says why. Nothing about a group reaches the generated PDDL | `presentation_groups.cpp`, `domain_graph_panel.cpp` |
-| **PDDL** | Generation with live preview and export; one problem file per scenario; import of existing domain and problem files through a dedicated reader that preserves names and structure, including which facts must be observed rather than predicted | `pddl_generator.cpp`, `pddl_importer.cpp` |
+| **PDDL** | Generation with live preview and export; one problem file per scenario; import of existing domain and problem files through a dedicated reader that preserves names and structure, including which facts must be observed rather than predicted. **Covers STRIPS with typing only**, which is less than `PddlParser` now accepts; workstream D in section 4 lists what is missing and what it costs | `pddl_generator.cpp`, `pddl_importer.cpp` |
 | **Import merging** | Importing into a non-empty project shows what would be added, overwritten or left alone, with the cost of each replacement stated, and asks before doing any of it. Replacing an action keeps its behaviour-tree binding, run settings and canvas position. Imported elements are laid out by their relationships | `import_merge.cpp` |
 | **Checking** | Four levels: continuous structural checks while editing, parse through `PddlParser`, grounding through `WorldModel`, and feasibility through `Planner` | `structural_validator.cpp`, `pddl_validator.cpp` |
 | **Problem reporting** | One sentence per problem; clicking a row selects the element it names and opens the Domain tab on it; parser wording is translated, with the raw message behind a details toggle. A test asserts the word "predicate" appears nowhere in the list | `problem_list.cpp` |
@@ -136,8 +139,12 @@ aborts the compile unless stub mode is on, which the authoring tool switches on.
 Unchanged and still deliberate.
 
 - Web or browser deployment. The tool is a local desktop application.
-- ADL, conditional effects, numeric fluents or temporal PDDL. AME supports STRIPS with
-  typing, and the tool targets exactly that subset.
+- Conditional effects (`when`), numeric fluents and arithmetic, and temporal or durative
+  actions. `PddlParser` rejects all of these outright, so they are out of scope for the
+  whole of AME rather than for the tool alone. Everything else the parser has since gained
+  is now in scope for the tool and is workstream D in section 4; the sentence that used to
+  stand here, saying AME supports STRIPS with typing and the tool targets exactly that
+  subset, was true when this plan was written and is no longer.
 - Replacing DevEnv. DevEnv keeps live monitoring of real ROS2 systems; the authoring tool
   simulates offline.
 - Live ROS2 connection from the authoring tool. Simulation runs are in-process against the
@@ -155,12 +162,97 @@ holds on one screen only); layout presets (the tool uses fixed tabs, and saved v
 the underlying need); and a custom animation layer for canvas navigation (the node editor
 already animates panning and zooming).
 
+One dropped decision needs its reasoning kept in full, because workstream D asks for it to
+be reconsidered. **The importer was built on its own reader rather than on `PddlParser`**,
+because the parser discards the names, comments and structure the importer exists to
+preserve, and because a round-trip test against the generator keeps the dedicated reader
+honest. That reasoning still holds as far as it goes. What has changed is that the two
+readers now accept visibly different languages, which is what produced workstream D, so the
+trade is no longer the one that was originally judged.
+
 ---
 
 ## 4. What remains to be built
 
-**Nothing.** Presentation groups, the last item, are built and are described in section 2.
-Three decisions taken while building them are worth keeping:
+Everything in workstreams A, B and C is built. What is left is new: the PDDL the core
+accepts has grown since this plan was written, and the tool has not kept up.
+
+### Workstream D — catch the tool up with the PDDL the core accepts
+
+**Why this is here.** When this plan was written, `PddlParser` accepted STRIPS with typing
+and the tool targeted exactly that. The parser has since gained a good deal more, and
+because the tool keeps its own reader and its own project format rather than sharing the
+core's, none of it arrived in the tool. The result is not a missing convenience. **A domain
+that uses any of these cannot be opened in the tool at all**, so the people this tool exists
+for — the reviewers and subject-matter experts of section 1 — are locked out of exactly the
+domains that are hardest to read unaided.
+
+**What the gap is, measured rather than assumed.** Each row below was tried against
+`PddlImporter::importDomain` on a two-predicate domain. Nothing is silently dropped, which
+is the one piece of good news: every case is refused. But the refusal names neither the
+construct nor the action it is in, so a user meets a domain they cannot open and a message
+that does not say why.
+
+| PDDL the core accepts | What the tool does today | Core reference |
+|-----------------------|--------------------------|----------------|
+| Negative precondition, `(not (q ?x))` | Refused: "expected predicate fact" | `PddlParserNegPre.AcceptsNegatedAtomInPrecondition` |
+| Disjunctive precondition, `(or ...)`, split into several grounded schemas | Refused: "expected atom argument in fact" | `PddlParser.DisjunctivePreconditionSplitsIntoSchemas` |
+| Universal quantifier, `(forall (?y - t) ...)`, expanded over the objects | Refused: "expected atom argument in fact" | `PddlParser.UniversalExpandsToConjunction` |
+| Existential quantifier, `(exists (?y - t) ...)`, expanded to a disjunction | Refused: "expected atom argument in fact" | `PddlParser.ExistentialExpandsToDisjunctionSplit` |
+| Equality and inequality as binding filters, `(= ?a ?b)`, `(not (= ?a ?b))` | Refused: "expected predicate fact" | `PddlParser.EqualityKeepsOnlyMatchingPairs` |
+| Union parameter type, `?x - (either a b)` | Refused: "expected atom in typed list" | `PddlParser.EitherTypeGroundsOverUnionOnly` |
+| Disjunctive goal, setting goal alternatives | Refused: "expected atom argument in fact" | `PddlParser.DisjunctiveGoalSetsAlternatives` |
+| Domain constants, `(:constants ...)` | **Imported**, but flattened into ordinary objects, so a re-export writes them into every problem file instead of the domain | `PddlParser.ParsesDomainConstants` |
+
+Confirmed predicates, `(:confirmed-predicates ...)`, are the one recent addition the tool
+already carries end to end, and are the model to follow.
+
+**What building this means.** Four pieces, in dependency order.
+
+- **D1. The project format learns to hold these.** `EffectRef` is a predicate name and a
+  list of argument names, which can express a positive atom and nothing else. It needs at
+  least a negation flag, and preconditions need a shape that can hold alternatives and
+  quantifiers rather than a flat list. This is a versioned change to the saved project, so
+  older projects must keep loading and must keep meaning what they meant.
+- **D2. The reader and the generator follow.** `pddl_importer.cpp` and `pddl_generator.cpp`
+  are separate from the core's parser on purpose, and the round-trip test between them is
+  what keeps them honest. Both need to cover whatever D1 adds, and the round-trip test needs
+  a case per construct.
+- **D3. The guided editor can say these things without planning vocabulary.** This is the
+  hard part and the reason D is not simply a parser job. "The vehicle must not be armed" is
+  straightforward. A disjunction is "any one of these", a universal is "every sector, not
+  just one", an inequality is "two different sectors, not the same one twice". Section 1
+  rule 1 applies unchanged, and rule 2 means the editor must offer these as choices rather
+  than accept them as typed text. **This needs a concept pack before any of it is built**,
+  per section 4's standing practice — the wording decisions are cheap now and expensive
+  afterwards.
+- **D4. Every view that reads a precondition is checked against the new shapes.** The
+  fact-by-action matrix, the relation index and neighbourhood canvas, the failure explainer,
+  the contingency analyser and the assurance report all assume a precondition is a positive
+  atom. A negative precondition inverts what several of them mean: a fact that must be false
+  is not a fact the action "needs" in the sense the matrix's `R` mark implies, and the
+  failure explainer's backward chain has to stop somewhere different.
+
+**Non-specialist acceptance.** A reviewer opens a domain written by someone else that uses
+a negative precondition and a "one of these" condition, reads what each action needs in
+plain words, runs a scenario against it, and exports a review pack — without being told
+that the domain uses anything unusual.
+
+**Effort.** Large. D1 and D2 are mechanical; D3 is a design problem with a concept pack in
+front of it; D4 is a sweep whose size is not knowable until D1 settles the shape.
+
+**One judgement to make before starting.** The tool duplicating the core's parser is what
+let this drift happen, and D2 makes the duplicate larger. It is worth asking, once, whether
+the tool should read PDDL through `PddlParser` and keep its own reader only for what the
+parser discards — the names, comments and layout the importer exists to preserve. That was
+looked at once before and rejected, and the reason is recorded in section 3's dropped list.
+The trade has changed now that the two readers accept visibly different languages, so the
+answer may be different; it should be decided deliberately rather than by writing D2 first.
+
+### Presentation groups
+
+Built, and described in section 2. Three decisions taken while building them are worth
+keeping:
 
 - **Membership is stored by name, and unresolvable members are dropped.** A fact or action
   that is deleted stops being a member, and a group left holding nothing is removed. This
@@ -183,6 +275,10 @@ no external files, the tool's own theme values, real content from
 needs answered. The format has earned its place — it settled the guided editor's wording
 before any of it was built, and the simulation pack's six questions decided what B2 to B4
 became. A pack whose questions nobody answers has failed and should not be repeated.
+
+The next one due is D3's: how the guided editor says "must not be true", "any one of these",
+"every one of these" and "two different ones" without using the words a planning textbook
+would.
 
 ---
 
@@ -229,6 +325,7 @@ from the tool. Each is still run by someone who does not write software.
 | 15 | Import a second domain into the project and see, before committing, which existing actions it would overwrite |
 | 16 | Open a saved view by name and get the picture the author saved |
 | 16a | Draw the communications-related part of a domain as one named box, close it, and still say what the rest of the picture shows |
+| 16b | Open a domain written by someone else that uses a negative precondition and a "one of these" condition, say in their own words what each action needs, run a scenario against it, and export a review pack (workstream D) |
 | 17 | Mark a fact as a contingency and another as a safe state, run the analysis, and read whether the safe state is reachable |
 | 18 | Save a run, send the folder to a colleague, and have the colleague step through the same mission |
 | 19 | Read a concept mockup pack in a browser and answer its questions without asking what anything means |
@@ -240,6 +337,7 @@ from the tool. Each is still run by someone who does not write software.
 |------|-----------|--------|--------------------|
 | Simulated behaviour diverges from real execution, so a mission that works in the tool fails in the field | Medium | High | The simulation uses the real compiled tree, the real world model and the real planner; the substitution is one stand-in node per action and nothing else, given the same preconditions and effects a deployed node would get. The difference is that the stand-in predicts the state that follows an action where a deployment establishes it. Each substitution is visible with its settings shown, and the tool never claims a run proves field behaviour |
 | Non-specialist acceptance gets signed off by developers | Medium | High | The walkthrough above is a release gate with a written-waiver exception, and nothing else |
+| The tool falls behind the core's PDDL again, because it keeps its own reader and generator | **Happened** | High | This is not a hypothetical: it is what produced workstream D. Every construct `PddlParser` accepts is now listed in D's table against what the tool does with it, so the gap is at least visible. Closing it for good means either a test that fails when the parser accepts something the importer refuses, or the consolidation D's closing paragraph asks to be decided deliberately. Neither is built yet |
 | Simulation settings per action become a modelling burden of their own | Medium | Medium | Defaults that need no configuration: four ticks, always succeeds. Settings are opened only for a specific fault, or an action whose duration matters to the mission |
 | Fault injection grows into a scripting language | Medium | Medium | Two mechanisms only, fixed: fail an action on a given attempt, and set a fact at a given tick. Anything more expressive is a separate decision, not a slow accumulation |
 | The timeline and tree views drift apart from DevEnv's, so the two tools disagree | Low | Medium | Both read the same three JSONL schemas, and the files are interchangeable in both directions, which is testable |

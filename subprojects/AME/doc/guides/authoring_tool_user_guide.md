@@ -699,6 +699,15 @@ actions found on only one side, and facts with different final values.
 
 ### Import an existing domain
 
+The importer covers STRIPS with typing. If the domain uses a negative precondition, `or`,
+`forall`, `exists`, an equality or inequality filter, an `(either ...)` parameter type or a
+disjunctive goal, the import is refused and nothing is changed. The message today names the
+form of expression it could not read rather than the action it was in, so if you meet one,
+search the domain file for `not`, `or`, `forall`, `exists`, `=` and `either`. `ame_core`
+accepts all of these, so the same domain plans and runs perfectly well outside this tool.
+Closing that gap is workstream D of
+[the authoring tool plan](../../../../doc/plans/AME/authoring_tool_plan.md).
+
 Importing into a project that already has facts or actions shows what the import would do
 before it does any of it: what would be added, what would be overwritten, and what is already
 the same, with the cost of each replacement named. Anything new is always added. Tick the
@@ -828,8 +837,16 @@ For an existing PDDL model:
 
 ## 12) Current limitations
 
-- The generated and imported PDDL targets the AME-supported STRIPS + typing subset.
-- ADL, conditional effects, numeric fluents, temporal PDDL, and durative actions are out of scope.
+- The generated and imported PDDL covers STRIPS with typing only. This is **less than
+  `ame_core` itself accepts**: the core's parser also handles negative preconditions,
+  `or`, `forall`, `exists`, equality and inequality filters, `(either ...)` parameter types
+  and disjunctive goals. A domain using any of those is refused on import, so it cannot be
+  opened in this tool at all. Closing that gap is workstream D of
+  [the authoring tool plan](../../../../doc/plans/AME/authoring_tool_plan.md).
+- Domain constants are imported, but become ordinary objects, so re-exporting writes them
+  into every problem file rather than back into the domain.
+- Conditional effects, numeric fluents, temporal PDDL and durative actions are out of scope
+  for the whole of AME, not just for this tool: `PddlParser` rejects them too.
 - The plan view is a read-only preview, and the tree on the `Run` tab cannot be edited.
 - Saved views are stored in the project and reopen by name. Named groups are drawn on the
   whole-domain canvas only; the neighbourhood view always shows individual facts and actions.
