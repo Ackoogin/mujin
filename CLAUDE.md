@@ -43,7 +43,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `doc/roadmap/` + `tools/roadmap/README.md` | **Roadmap dashboards**: roadmap data files, the generator that turns them into standalone HTML pages, and the update flow |
 | `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/plans/AME/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
-| `doc/plans/AME/authoring_tool_plan.md` | **Authoring tool plan**: what the graphical authoring tool does today, and the remaining work — finishing the authoring surface, simulation runs, review artefacts |
+| `doc/plans/AME/authoring_tool_plan.md` | **Authoring tool plan**: what the graphical authoring tool does today, what is left to build, and the non-specialist walkthrough that gates a release |
 | `subprojects/AME/doc/guides/authoring_tool_user_guide.md` | How to build, launch and use the graphical authoring tool |
 | `doc/research/AME/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
 | `doc/plans/AME/neuro_symbolic_infrastructure_plan.md` | **Neuro-symbolic core infrastructure work plan**: propose-verify-fallback envelope, backend/verifier abstractions, audit, policy, test harness |
@@ -63,7 +63,16 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 
 ## Build
 
-This project uses CMake, with MSVC/Visual Studio 2022 the primary Windows toolchain. Core dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, googletest, and optional PYRAMID transport dependencies) are fetched automatically by CMake on first configure -- no Conan or manual installs needed.
+This project uses CMake, with MSVC/Visual Studio 2022 the primary Windows toolchain. No Conan or
+manual installs are needed.
+
+AME's dependencies (BehaviorTree.CPP, LAPKT, googletest, nlohmann/json, Dear ImGui, SDL2 and the
+rest) are **checked into the repository** under
+[`subprojects/AME/external`](subprojects/AME/external/README.md), so a build needs no network
+access. Anything missing from that directory is downloaded instead, unless
+`AME_REQUIRE_VENDORED_DEPENDENCIES=ON` is set, which turns a missing copy into an error — set it
+for air-gapped builds. PYRAMID's optional transport dependencies (FlatBuffers, gRPC, Protobuf) are
+still fetched at configure time.
 
 `CMakePresets.json` lives at the repository root and defines:
 
@@ -83,6 +92,31 @@ This project uses CMake, with MSVC/Visual Studio 2022 the primary Windows toolch
 The `authoring` preset has its own build directory on purpose. `AME_BUILD_AUTHORING` is a cached
 CMake option, so if the authoring tool were configured into the shared `build/` tree it would stay
 enabled there even after switching back to the `default` preset.
+
+### Building AME on its own
+
+`subprojects/AME` is also a complete CMake project with its own `CMakePresets.json`, so it can be
+configured directly — from the command line, or by opening that folder in VS Code. It needs neither
+PCL nor PYRAMID on disk:
+
+```bat
+cd subprojects\AME
+cmake --preset default
+cmake --build --preset release --parallel %NUMBER_OF_PROCESSORS%
+ctest --preset release
+```
+
+| Preset | Purpose |
+|--------|---------|
+| `default` | Core engine, authoring tool, `ame_mission_cli` and the contingency verifier, in `build/` |
+| `no-authoring` | The same without the graphical tool, in `build-engine/`. Leaves SDL2, OpenGL and Dear ImGui out, which is what a headless build agent wants |
+| `networked` | As `default`, but downloads a dependency missing from `external/` instead of failing. For adding a dependency, never for an air-gapped build |
+
+What the standalone build leaves out is the PCL component layer (`ame_pcl_components`,
+`ame_pcl_main`) and the PYRAMID autonomy bridge, which are the only parts of AME that need those
+subprojects, together with the tests covering them. The workspace build is unchanged and still
+builds everything. `AME_BUILD_PCL_COMPONENTS` is worked out from whether the `pcl_core` target
+exists rather than being an option, because it is not a preference.
 
 ### Contract tree
 
@@ -148,7 +182,7 @@ build\tests\Release\test_observability.exe
 build\tests\Release\test_world_model.exe --gtest_filter=WorldModel.SetAndGetFact
 ```
 
-The full CTest suite should pass. It spans PCL, PYRAMID, Tactical Objects, AME core (WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser), integration (BT nodes), end-to-end pipeline, observability (Layers 1-5), generated bindings, and transport adapters -- 1256 registered tests in the default build at last count, and 980 in the `authoring` build, which adds the graphical tool's own suites; use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
+The full CTest suite should pass. It spans PCL, PYRAMID, Tactical Objects, AME core (WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser), integration (BT nodes), end-to-end pipeline, observability (Layers 1-5), generated bindings, and transport adapters -- 1452 registered tests in the workspace `authoring` build at last count. AME's standalone build runs the subset that does not need PCL or PYRAMID: 451 with the graphical tool, 255 without it. Use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
 
 ## Run the demo
 

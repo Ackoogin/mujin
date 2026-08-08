@@ -8,6 +8,7 @@
 #include "imgui.h"
 #include "pddl_generator.h"
 #include "pddl_importer.h"
+#include "presentation_groups.h"
 #include "review_pack.h"
 #include "run_record.h"
 
@@ -1007,6 +1008,38 @@ bool AppShell::selfTestOpenSavedView(const std::string& name) {
   return true;
 }
 
+bool AppShell::selfTestCreateGroup(const std::string& name,
+                                   std::vector<std::string> factNames,
+                                   std::vector<std::string> actionNames) {
+  if (!PresentationGroups::whyGroupCannotBeMade(m_model, name, factNames,
+                                                actionNames)
+           .empty()) {
+    return false;
+  }
+  m_commandStack.execute(m_model, "Group as '" + name + "'",
+                         [name, factNames, actionNames](ProjectModel& model) {
+    PresentationGroups::create(model, name, factNames, actionNames);
+  });
+  return true;
+}
+
+bool AppShell::selfTestSetGroupCollapsed(const std::string& name,
+                                         bool collapsed) {
+  for (size_t i = 0; i < m_model.presentationGroups.size(); ++i) {
+    if (m_model.presentationGroups[i].name != name) {
+      continue;
+    }
+    const size_t groupIdx = i;
+    m_commandStack.execute(m_model,
+                           collapsed ? "Close the group" : "Open the group",
+                           [groupIdx, collapsed](ProjectModel& model) {
+      PresentationGroups::setCollapsed(model, groupIdx, collapsed);
+    });
+    return true;
+  }
+  return false;
+}
+
 void AppShell::applySavedView(const SavedView& view) {
   m_domainViewMode = view.viewMode;
   m_neighbourDepth = view.depth < 1 ? 1 : view.depth;
@@ -1721,13 +1754,18 @@ void AppShell::renderPanels() {
       // Delete: remove selected predicate or action
       const int selPred = m_domainGraph.selectedPredicateIndex();
       const int selAct  = m_domainGraph.selectedActionIndex();
+      // A group names what it holds, so anything deleted has to stop being a
+      // member, and a group left holding nothing goes with it. Pruning inside
+      // the same command keeps that on one step of the undo stack.
       if (selPred >= 0 && selPred < static_cast<int>(m_model.predicates.size())) {
         m_commandStack.execute(m_model, "Delete predicate", [selPred](ProjectModel& m) {
           m.predicates.erase(m.predicates.begin() + selPred);
+          PresentationGroups::prune(m);
         });
       } else if (selAct >= 0 && selAct < static_cast<int>(m_model.actions.size())) {
         m_commandStack.execute(m_model, "Delete action", [selAct](ProjectModel& m) {
           m.actions.erase(m.actions.begin() + selAct);
+          PresentationGroups::prune(m);
         });
       }
     }
@@ -2424,9 +2462,171 @@ void AppShell::renderDomainTab() {
   } else {
     m_domainViewsRendered[4] = true;
     ImGui::TextDisabled("Derived relationships are read-only. Zoom out for compact nodes.");
+    renderGroupControls();
     m_domainGraph.render(m_model, m_commandStack);
   }
   ImGui::EndChild();
+}
+
+void AppShell::renderGroupControls() {
+  // Groups are a way of talking about a domain in a review: a named set of
+  // facts and actions drawn as one labelled box, which closes to a single box
+  // so that a large picture can be shown a part at a time. Nothing about them
+  // reaches the generated PDDL.
+  const CanvasSelection& selection = m_domainGraph.canvasSelection();
+  // The name is supplied in the dialog that follows, so only the contents can
+  // be judged at this point.
+  const std::string refusal = PresentationGroups::whyContentsCannotBeGrouped(
+      m_model, selection.factNames, selection.actionNames);
+  const bool contentsAreUsable = !selection.empty() && refusal.empty();
+
+  if (!contentsAreUsable) {
+    ImGui::BeginDisabled();
+  }
+  if (ImGui::Button("Group these") && contentsAreUsable) {
+    m_pendingGroupSelection = selection;
+    m_groupNameInput[0] = '\0';
+    m_showCreateGroupDialog = true;
+  }
+  if (!contentsAreUsable) {
+    ImGui::EndDisabled();
+  }
+  if (ImGui::IsItemHovered()) {
+    if (selection.empty()) {
+      ImGui::SetTooltip("Select the facts and actions to group first.");
+    } else if (!refusal.empty()) {
+      ImGui::SetTooltip("%s", refusal.c_str());
+    } else {
+      ImGui::SetTooltip("Draw the %zu selected as one labelled box.",
+                        selection.size());
+    }
+  }
+
+  if (!m_model.presentationGroups.empty()) {
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(240.0F);
+    if (ImGui::BeginCombo("Groups", "open, rename or remove a group")) {
+      for (size_t i = 0; i < m_model.presentationGroups.size(); ++i) {
+        const PresentationGroup& group = m_model.presentationGroups[i];
+        const size_t groupIdx = i;
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::TextUnformatted(group.name.c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)",
+                            PresentationGroups::describeContents(group).c_str());
+        ImGui::SameLine();
+        if (ImGui::SmallButton(group.collapsed ? "Open" : "Close")) {
+          const bool collapse = !group.collapsed;
+          const std::string label =
+              (collapse ? "Close the group '" : "Open the group '") +
+              group.name + "'";
+          m_commandStack.execute(m_model, label,
+                                 [groupIdx, collapse](ProjectModel& model) {
+            PresentationGroups::setCollapsed(model, groupIdx, collapse);
+          });
+          lastOperation = label;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Rename")) {
+          m_renameGroupIdx = static_cast<int>(i);
+          std::snprintf(m_renameGroupNameInput, sizeof(m_renameGroupNameInput),
+                        "%s", group.name.c_str());
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Remove")) {
+          const std::string label = "Remove the group '" + group.name + "'";
+          m_commandStack.execute(m_model, label, [groupIdx](ProjectModel& model) {
+            PresentationGroups::remove(model, groupIdx);
+          });
+          lastOperation = label;
+          ImGui::PopID();
+          break;
+        }
+        ImGui::PopID();
+      }
+      ImGui::EndCombo();
+    }
+  }
+
+  // ---- Naming a new group ------------------------------------------------
+  if (m_showCreateGroupDialog) {
+    ImGui::OpenPopup("Group these##modal");
+    m_showCreateGroupDialog = false;
+  }
+  if (ImGui::BeginPopupModal("Group these##modal", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Drawing %zu things as one box.",
+                m_pendingGroupSelection.size());
+    ImGui::TextDisabled(
+        "Groups change how the domain is drawn. They do not change the "
+        "mission.");
+    ImGui::InputText("Name##newgroup", m_groupNameInput,
+                     sizeof(m_groupNameInput));
+    const std::string name = m_groupNameInput;
+    const std::string why = PresentationGroups::whyGroupCannotBeMade(
+        m_model, name, m_pendingGroupSelection.factNames,
+        m_pendingGroupSelection.actionNames);
+    if (!why.empty()) {
+      ImGui::TextDisabled("%s", why.c_str());
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Group") && why.empty()) {
+      const CanvasSelection contents = m_pendingGroupSelection;
+      const std::string label = "Group as '" + name + "'";
+      m_commandStack.execute(m_model, label, [name, contents](ProjectModel& model) {
+        PresentationGroups::create(model, name, contents.factNames,
+                                   contents.actionNames);
+      });
+      lastOperation = label;
+      ImGui::CloseCurrentPopup();
+    }
+    if (!why.empty()) {
+      ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+
+  // ---- Renaming an existing group ----------------------------------------
+  if (m_renameGroupIdx >= 0 &&
+      m_renameGroupIdx < static_cast<int>(m_model.presentationGroups.size())) {
+    ImGui::OpenPopup("Rename group##modal");
+  }
+  if (ImGui::BeginPopupModal("Rename group##modal", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::InputText("Name##renamegroup", m_renameGroupNameInput,
+                     sizeof(m_renameGroupNameInput));
+    const std::string newName = m_renameGroupNameInput;
+    const size_t groupIdx = static_cast<size_t>(m_renameGroupIdx);
+    const std::string why =
+        PresentationGroups::whyGroupCannotBeRenamed(m_model, groupIdx, newName);
+    if (!why.empty()) {
+      ImGui::TextDisabled("%s", why.c_str());
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Rename") && why.empty()) {
+      const std::string label = "Rename the group to '" + newName + "'";
+      m_commandStack.execute(m_model, label,
+                             [groupIdx, newName](ProjectModel& model) {
+        PresentationGroups::rename(model, groupIdx, newName);
+      });
+      lastOperation = label;
+      m_renameGroupIdx = -1;
+      ImGui::CloseCurrentPopup();
+    }
+    if (!why.empty()) {
+      ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      m_renameGroupIdx = -1;
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
 }
 
 void AppShell::renderRelationsPanel() {

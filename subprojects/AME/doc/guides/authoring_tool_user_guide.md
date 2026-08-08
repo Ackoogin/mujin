@@ -59,6 +59,24 @@ to be given explicitly, because the generators normally used there choose one co
 configure time rather than at build time. The executable also lands directly in
 `build-authoring/subprojects/AME/src/` rather than in a `Release` subdirectory, for the same reason.
 
+### Building AME on its own
+
+You do not need the whole workspace. `subprojects/AME` is a complete CMake project with its own
+presets, and it needs neither PCL nor PYRAMID on disk. Open that folder in VS Code, or configure it
+from the command line:
+
+```bash
+cd subprojects/AME
+cmake --preset default
+cmake --build --preset release --parallel
+build/src/ame_authoring_tool
+```
+
+Every third-party dependency is checked in under `subprojects/AME/external`, so this works with no
+network access. The `default` preset sets `AME_REQUIRE_VENDORED_DEPENDENCIES=ON`, which means a
+dependency missing from that directory is an error naming what is absent, rather than a silent
+attempt to download it.
+
 If you would rather configure by hand than use the preset, note that **two** options are needed,
 not one:
 
@@ -126,7 +144,7 @@ The right side of the `Domain` tab has five views over the same project model:
 | `Relations` | Lists everything that needs, makes true, or makes false the selection |
 | `Matrix` | Shows all facts against all actions as `R`, `+`, and `-` marks |
 | `Lifecycles` | Shows transitions within user-declared state groups for each object type |
-| `Whole domain` | Retains the complete canvas for small domains and presentation use |
+| `Whole domain` | Retains the complete canvas for small domains and presentation use, and is where named groups are drawn |
 
 Use the back and forward buttons to retrace selections made in the palette, relation lists,
 or graph. The neighbourhood view has one-step and two-step depth settings and filters for the
@@ -278,6 +296,35 @@ are read-only because the PDDL action definitions are authoritative.
 Open the `Matrix` view and use `Export CSV` or `Export Markdown`. Both formats include the
 complete table and preserve cells with more than one mark. Use these exports as review or
 assurance evidence alongside the generated PDDL.
+
+### Named groups on the whole-domain canvas
+
+A large domain drawn all at once is hard to talk about in a meeting. A group is a named set
+of facts and actions that the canvas draws as one labelled box, and which you can close so
+that the box stands in for everything inside it.
+
+To make one, open the `Whole domain` view, select the facts and actions you want on the
+canvas, and choose `Group these`. The button is unavailable until the selection can be
+grouped, and hovering over it says why: nothing is selected, or something in the selection
+is already in another group. Anything can be in at most one group, because two boxes each
+claiming to stand for the same fact would make closing them ambiguous.
+
+The `Groups` list beside the button opens, closes, renames and removes each group. Closing a
+group replaces its contents with a single box carrying the group's name and what it holds,
+such as `3 facts and 2 actions`. Lines that reached one of its members now reach the box
+instead; lines that would then be drawn twice on top of each other are drawn once; and a line
+with both ends inside the closed group is not drawn at all, because it would start and finish
+on the same box. Selecting the closed box and choosing `Open` puts the contents back. Every
+one of these is a single step on the undo stack.
+
+You never place or size a group's box. It is drawn around wherever its contents are, and a
+group closed for the first time appears in the middle of what it held.
+
+Two things to know. Groups change only how the domain is drawn: nothing about them reaches
+the generated PDDL, and adding, closing or removing one cannot change what the planner does.
+And membership is stored by name, so deleting a fact or an action takes it out of any group
+it was in, and a group left holding nothing is removed with it — undoing the deletion brings
+both back.
 
 ### Lifecycle groupings
 
@@ -784,8 +831,8 @@ For an existing PDDL model:
 - The generated and imported PDDL targets the AME-supported STRIPS + typing subset.
 - ADL, conditional effects, numeric fluents, temporal PDDL, and durative actions are out of scope.
 - The plan view is a read-only preview, and the tree on the `Run` tab cannot be edited.
-- Saved views are stored in the project and reopen by name. Collapsible named groups are
-  stored in the project format but nothing draws them yet.
+- Saved views are stored in the project and reopen by name. Named groups are drawn on the
+  whole-domain canvas only; the neighbourhood view always shows individual facts and actions.
 - The tool performs design-time validation only; live ROS2 execution monitoring remains in DevEnv/Foxglove.
 
 ---
@@ -796,7 +843,8 @@ For an existing PDDL model:
 |---------|--------------|-----|
 | `ame_authoring_tool` target is missing | Configure was run without authoring enabled | Run `cmake --preset authoring`. If configuring by hand, pass both `-DUNMANNED_BUILD_AME=ON` and `-DAME_BUILD_AUTHORING=ON` — see section 2 |
 | Configure reports "Manually-specified variables were not used by the project: AME_BUILD_AUTHORING" | `UNMANNED_BUILD_AME` was off, so the option was never declared and the setting was discarded | Add `-DUNMANNED_BUILD_AME=ON`, or use the `authoring` preset, which sets both |
-| First configure fails while fetching dependencies | Network or Git access issue during `FetchContent` | Retry from a network-enabled developer environment |
+| Configure reports that a dependency is not checked in | Something was deleted from `subprojects/AME/external`, or a dependency was added to the build without being vendored | Restore the directory from version control, or run `subprojects/AME/scripts/vendor_dependencies.py --fetch` on a machine with network access and commit the result |
+| Configure tries to download something | The build is not requiring the checked-in copies | Configure with `-DAME_REQUIRE_VENDORED_DEPENDENCIES=ON`, which AME's own presets already set, so that a missing copy fails immediately instead |
 | Window opens but font differs | `JetBrainsMono-Regular.ttf` was not copied next to the executable | Rebuild the `ame_authoring_tool` target |
 | Export is refused | Structural validation has errors | Open the `PDDL` tab, fix `ERR` entries, then export again |
 | Planner returns no plan | Scenario goal is unreachable from the initial state, or action preconditions/effects are incomplete | Inspect generated PDDL, run validation, and check action schemas |

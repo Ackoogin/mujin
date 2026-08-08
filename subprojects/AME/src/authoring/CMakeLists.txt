@@ -1,76 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 
-include(FetchContent)
-
 find_package(OpenGL REQUIRED)
 
-set(SDL_SHARED ON CACHE BOOL "Build SDL2 shared library" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "Build SDL2 static library" FORCE)
-set(SDL_TEST OFF CACHE BOOL "Build SDL2 tests" FORCE)
-set(SDL_TESTS OFF CACHE BOOL "Build SDL2 tests" FORCE)
-
-FetchContent_Declare(
-  imgui
-  GIT_REPOSITORY https://github.com/ocornut/imgui
-  GIT_TAG v1.91.6-docking
-  GIT_SHALLOW TRUE
-)
-
-FetchContent_Declare(
-  imgui_node_editor
-  GIT_REPOSITORY https://github.com/thedmd/imgui-node-editor
-  GIT_TAG develop
-  GIT_SHALLOW TRUE
-  SOURCE_SUBDIR cmake/unused
-)
-
-FetchContent_Declare(
-  sdl2
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL
-  GIT_TAG release-2.30.10
-  GIT_SHALLOW TRUE
-)
-
-# stb — single-header libs; we only need stb_image_write.h for self-test screenshots
-FetchContent_Declare(
-  stb
-  GIT_REPOSITORY https://github.com/nothings/stb
-  GIT_TAG 5736b15f7ea0ffb08dd38af21067c314d6a3aae9
-  GIT_SHALLOW FALSE
-)
-
-# JetBrains Mono — distinctive technical UI font that fits the HUD aesthetic.
-# Vendored at build time and copied next to the executable so the runtime can
-# load it via AddFontFromFileTTF.
-FetchContent_Declare(
-  jetbrains_mono
-  GIT_REPOSITORY https://github.com/JetBrains/JetBrainsMono
-  GIT_TAG v2.304
-  GIT_SHALLOW TRUE
-)
-
-# tinyfiledialogs — single-file C library for native open/save dialogs.
-# Cross-platform; on Windows pops up the standard comdlg32 dialogs.
-FetchContent_Declare(
-  tinyfiledialogs
-  GIT_REPOSITORY https://git.code.sf.net/p/tinyfiledialogs/code
-  GIT_TAG master
-  GIT_SHALLOW TRUE
-)
-
-FetchContent_MakeAvailable(imgui imgui_node_editor sdl2)
-FetchContent_GetProperties(stb)
-if(NOT stb_POPULATED)
-  FetchContent_Populate(stb)
-endif()
-FetchContent_GetProperties(jetbrains_mono)
-if(NOT jetbrains_mono_POPULATED)
-  FetchContent_Populate(jetbrains_mono)
-endif()
-FetchContent_GetProperties(tinyfiledialogs)
-if(NOT tinyfiledialogs_POPULATED)
-  FetchContent_Populate(tinyfiledialogs)
-endif()
+# Dear ImGui, the node editor, SDL2, stb, the interface font and
+# tinyfiledialogs. All of them are taken from AME's checked-in copies under
+# subprojects/AME/external when those are present, so that this tool builds
+# with no network access; see cmake/AmeDependencies.cmake.
+ame_add_authoring_dependencies()
 
 add_library(tinyfiledialogs STATIC
   ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c
@@ -78,15 +14,6 @@ add_library(tinyfiledialogs STATIC
 target_include_directories(tinyfiledialogs PUBLIC ${tinyfiledialogs_SOURCE_DIR})
 if(WIN32)
   target_link_libraries(tinyfiledialogs PUBLIC comdlg32 ole32)
-endif()
-
-if(NOT TARGET nlohmann_json::nlohmann_json)
-  add_library(nlohmann_json INTERFACE)
-  add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
-  target_include_directories(nlohmann_json
-    INTERFACE
-      "${PYRAMID_ROOT_DIR}/core/external"
-  )
 endif()
 
 add_library(ame_authoring_project_model STATIC
@@ -105,6 +32,7 @@ add_library(ame_authoring_project_model STATIC
     pddl_generator.cpp
     pddl_importer.cpp
     pddl_validator.cpp
+    presentation_groups.cpp
     problem_list.cpp
     recent_projects.cpp
     relation_index.cpp
@@ -194,7 +122,7 @@ add_executable(ame_authoring_tool
 # were never exercised against a domain where one action appears under several
 # headings at once. This one has that shape.
 target_compile_definitions(ame_authoring_tool PRIVATE
-  "AME_AUTHORING_SAMPLE_PROJECT=\"${CMAKE_SOURCE_DIR}/vehicle-autonomy.ameproj.json\"")
+  "AME_AUTHORING_SAMPLE_PROJECT=\"${AME_SAMPLE_PROJECT}\"")
 
 set(AME_AUTHORING_SDL_MAIN_TARGET)
 if(WIN32 AND TARGET SDL2::SDL2main)

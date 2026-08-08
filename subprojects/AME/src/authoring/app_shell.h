@@ -160,6 +160,18 @@ public:
   /// Saves the current picture under a name, as the Save this view button does.
   void selfTestSaveCurrentView(const std::string& name);
   bool selfTestOpenSavedView(const std::string& name);
+  bool selfTestCreateGroup(const std::string& name,
+                           std::vector<std::string> factNames,
+                           std::vector<std::string> actionNames);
+  bool selfTestSetGroupCollapsed(const std::string& name, bool collapsed);
+  /// How many boxes the whole-domain canvas drew last time it was rendered,
+  /// closed groups counted as one box each.
+  size_t selfTestCanvasNodeCount() const {
+    return m_domainGraph.visibleNodeCount();
+  }
+  size_t selfTestCollapsedGroupCount() const {
+    return m_domainGraph.collapsedGroupCount();
+  }
   bool selfTestHasUnsavedChanges() const { return m_unsavedChanges; }
   bool selfTestRecoveryCopyWritten() const { return m_recoveryWritten; }
   const std::vector<std::string>& selfTestRecentProjects() const {
@@ -212,6 +224,9 @@ private:
   void renderRelationsPanel();
   void renderMatrixPanel();
   void renderLifecyclePanel();
+  /// \brief The controls above the whole-domain canvas for making, opening,
+  /// renaming and removing named groups of facts and actions.
+  void renderGroupControls();
   void clearDerivedResults();
   void resetScenarioEditorState();
   void runValidation();
@@ -256,6 +271,13 @@ private:
   bool m_showMergeDialog = false;
   bool m_showSaveViewDialog = false;
   char m_saveViewNameInput[64] = {};
+  bool m_showCreateGroupDialog = false;
+  char m_groupNameInput[64] = {};
+  /// What was selected when the user asked to group it. Held separately because
+  /// opening the naming dialog takes the selection off the canvas.
+  CanvasSelection m_pendingGroupSelection;
+  int m_renameGroupIdx = -1;
+  char m_renameGroupNameInput[64] = {};
   bool m_unsavedChanges = false;
   bool m_recoveryWritten = false;
   bool m_askBeforeQuitting = false;

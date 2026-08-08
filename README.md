@@ -59,9 +59,8 @@ For full architecture details, see `subprojects/AME/doc/architecture/` and the c
 
 - CMake 3.21+
 - C++17 compiler (MSVC 2019+, GCC 9+, Clang 10+)
-- Git (for automatic dependency fetching)
 
-Core dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, GoogleTest, and optional PYRAMID transport dependencies) are fetched automatically by CMake.
+AME's dependencies (BehaviorTree.CPP, LAPKT, GoogleTest, nlohmann/json, Dear ImGui, SDL2 and the rest) are checked into the repository under [`subprojects/AME/external`](subprojects/AME/external/README.md), so no network access is needed to build. PYRAMID's optional transport dependencies (FlatBuffers, gRPC, Protobuf) are still fetched by CMake, so Git and a network connection are needed when those are enabled.
 
 Clone the workspace with its submodules:
 
@@ -203,7 +202,7 @@ cmake/                   Shared CMake support files
 | [Assurance Plan](doc/plans/AME/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
 | [Authoring Tool User Guide](subprojects/AME/doc/guides/authoring_tool_user_guide.md) | Mission and systems engineers, reviewers | Build, launch, and use the graphical authoring tool, and run a mission from a script with `ame_mission_cli` |
 | [Contingency Verifier](subprojects/AME/doc/guides/contingency_verifier.md) | Safety engineers, integrators | Prove from the command line that a safe state stays reachable however the equipment is behaving |
-| [Authoring Tool Plan](doc/plans/AME/authoring_tool_plan.md) | Engineers, programme leads | What the authoring tool does today and the remaining work. Simulation runs, run records and review artefacts are now built; the release gate is the non-specialist walkthrough in its section 9, which has not been run |
+| [Authoring Tool Plan](doc/plans/AME/authoring_tool_plan.md) | Engineers, programme leads | What the authoring tool does today. Every planned feature is built; the release gate is the non-specialist walkthrough in its section 5, which has not been run |
 | [PYRAMID User Guide](subprojects/PYRAMID/doc/guides/pyramid_user_guide.md) | Engineers, integrators | High-level PYRAMID design/usage with diagrams; entry point to all PYRAMID docs |
 | [PYRAMID Plugin System](subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md) | Component authors, deployers | Plugin types, ABI, loading/configuration, routing, capabilities, staging, and known limitations |
 | [PCL/PYRAMID Offline SDK](subprojects/PYRAMID/doc/architecture/sdk_packaging.md) | Maintainers, downstream SDK users | Package and verify a self-contained proto-to-plugin SDK, including custom contracts and the GRA runtime profile |
@@ -223,7 +222,20 @@ cmake/                   Shared CMake support files
 | websocketpp 0.8.2 | Foxglove WebSocket server (optional) |
 | Standalone Asio 1.28 | Async I/O for WebSocket (optional) |
 
-All dependencies are fetched automatically via CMake FetchContent.
+All of these are checked into [`subprojects/AME/external`](subprojects/AME/external/README.md) rather than fetched, so that AME builds in air-gapped environments. See that directory's README for what is kept from each and how to update one.
+
+### Building AME on its own
+
+`subprojects/AME` is a complete CMake project in its own right, with its own presets, and needs neither PCL nor PYRAMID on disk. Configure it directly, or open that folder in VS Code:
+
+```bash
+cd subprojects/AME
+cmake --preset default          # or no-authoring, for a headless build
+cmake --build --preset release --parallel
+ctest --preset release
+```
+
+The standalone build leaves out the PCL component layer and the PYRAMID autonomy bridge, which are the only parts of AME that need those subprojects. The core engine, the authoring tool, `ame_mission_cli` and the contingency verifier are all present.
 
 ## License
 

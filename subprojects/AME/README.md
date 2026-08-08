@@ -2,7 +2,24 @@
 
 `subprojects/AME` contains the Autonomous Mission Engine libraries, tests, PDDL domains, ROS2 package, and AME-owned developer tooling.
 
-It depends on the `PCL` and `PYRAMID` subprojects and is structured as a future extraction boundary for the planning/execution stack.
+## Two ways to build it
+
+This directory is both a subproject of the `unmanned` workspace and a complete CMake project in its own right.
+
+**Inside the workspace**, it is pulled in with `add_subdirectory()` and builds everything, including the PCL component layer and the PYRAMID autonomy bridge.
+
+**On its own**, it needs neither `PCL` nor `PYRAMID` on disk. Configure this directory directly, or open it in VS Code, and its own `CMakePresets.json` takes over:
+
+```bash
+cd subprojects/AME
+cmake --preset default          # or no-authoring, for a headless build
+cmake --build --preset release --parallel
+ctest --preset release
+```
+
+The core engine, the graphical authoring tool, `ame_mission_cli` and the contingency verifier all build that way. What is left out is `ame_pcl_components`, `ame_pcl_main` and the PYRAMID bridge, which genuinely need those subprojects, along with the tests covering them. Nothing has to be switched on or off by hand: the component layer is built exactly when the `pcl_core` target exists.
+
+Third-party dependencies are checked in under [`external/`](external/README.md) rather than downloaded, so both builds work with no network access. See that directory's README for what is kept from each dependency and how to update one.
 
 ## What It Builds
 
@@ -10,7 +27,8 @@ It depends on the `PCL` and `PYRAMID` subprojects and is structured as a future 
 
 | Target | Build | Purpose |
 |--------|-------|---------|
-| `ame_core` | always | World model, PDDL parser, planner, plan compiler, BT nodes, audit logs, PCL/PYRAMID adapters |
+| `ame_core` | always | World model, PDDL parser, planner, plan compiler, BT nodes, audit logs |
+| `ame_pcl_components` | when PCL is in the build | PCL component layer and the PYRAMID autonomy bridge |
 | `ame_foxglove` | `AME_FOXGLOVE` (default ON) | Foxglove WebSocket bridge for live monitoring |
 | `ame_neuro` | `AME_NEURO` (default OFF) | Neuro-symbolic core infrastructure (propose–verify–fallback backends, verifiers, neuro audit log); also compiles the `ame_core` seam via `AME_NEURO=1` |
 | `_ame_py` | `AME_BUILD_PYTHON` (default OFF) | pybind11 Python module wrapping `ame_core`; copied to `build/python/` and consumed by the AutoMTK Python AME backend |
@@ -20,7 +38,8 @@ It depends on the `PCL` and `PYRAMID` subprojects and is structured as a future 
 | Target | Build | Purpose |
 |--------|-------|---------|
 | `ame_test_app` | always | Standalone UAV search-and-classify demo (emits `ame_bt_events.jsonl`, `ame_wm_audit.jsonl`, `ame_plan_audit.jsonl`) |
-| `ame_pcl_main` | always | PCL-hosted AME component executable (no ROS2 dependency) |
+| `ame_pcl_main` | when PCL is in the build | PCL-hosted AME component executable (no ROS2 dependency) |
+| `ame_mission_cli` | `AME_BUILD_AUTHORING` | Runs, records or batch-checks an authoring project's scenarios without a window |
 | `contingency_verifier` | always | Exhaustive safe-state reachability / contingency-domain verifier tool |
 | `ame_authoring_tool` | `AME_BUILD_AUTHORING` (default OFF) | Graphical PDDL/scenario authoring tool (requires SDL2/OpenGL) |
 

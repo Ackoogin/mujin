@@ -3,6 +3,7 @@
 #include <imgui_node_editor.h>
 #include "command_stack.h"
 #include "neighbourhood_model.h"
+#include "presentation_groups.h"
 #include "project_model.h"
 #include "relation_index.h"
 
@@ -10,6 +11,19 @@
 #include <vector>
 
 namespace ed = ax::NodeEditor;
+
+/// \brief The facts and actions the user has selected on the canvas at once.
+///
+/// The single selected fact and action are what the rest of the tool works
+/// from, but making a group needs everything that is selected rather than the
+/// last thing clicked.
+struct CanvasSelection {
+  std::vector<std::string> factNames;
+  std::vector<std::string> actionNames;
+
+  bool empty() const { return factNames.empty() && actionNames.empty(); }
+  size_t size() const { return factNames.size() + actionNames.size(); }
+};
 
 class DomainGraphPanel {
 public:
@@ -30,6 +44,15 @@ public:
                                std::vector<std::string> warnActs);
   int selectedPredicateIndex() const { return m_selectedPredIdx; }
   int selectedActionIndex() const { return m_selectedActionIdx; }
+
+  /// \brief Everything selected on the canvas at once, for making a group from.
+  const CanvasSelection& canvasSelection() const { return m_selection; }
+  /// \brief Which collapsed group is selected, or -1 when none is.
+  int selectedGroupIndex() const { return m_selectedGroupIdx; }
+  /// \brief How many boxes the last whole-domain render drew, groups included.
+  size_t visibleNodeCount() const { return m_visibleNodeCount; }
+  /// \brief How many of those boxes were groups standing in for their contents.
+  size_t collapsedGroupCount() const { return m_collapsedGroupCount; }
 
   /// Width in pixels of the widest clickable name drawn by the last
   /// neighbourhood render. These items must stay as wide as their text; if one
@@ -96,5 +119,20 @@ private:
   float m_widestNeighbourItem = 0.0F;
   std::vector<std::string> m_neighbourItemIds;
 
+  CanvasSelection m_selection;
+  int m_selectedGroupIdx = -1;
+  size_t m_visibleNodeCount = 0;
+  size_t m_collapsedGroupCount = 0;
+  /// Groups whose closed box has already been placed once, by name, so that it
+  /// is put where its contents are the first time and left alone afterwards.
+  std::vector<std::string> m_positionedGroups;
+  int m_requestedGroupToOpen = -1;
+
   void select(DomainElementRef element, bool addToHistory);
+  /// \brief Draw a labelled box behind the contents of every open group.
+  void drawGroupBoxes(const ProjectModel& model, const CanvasLayout& layout);
+  /// \brief Draw one box for each group that is closed.
+  void drawCollapsedGroups(ProjectModel& model,
+                           const CanvasLayout& layout,
+                           CommandStack& stack);
 };

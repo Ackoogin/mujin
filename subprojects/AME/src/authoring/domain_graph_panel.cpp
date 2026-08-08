@@ -2,19 +2,66 @@
 
 #include "authoring_utils.h"
 #include "imgui.h"
+#include "presentation_groups.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
 
+// Connection points are numbered so that no two can ever come out the same.
+// The strides are deliberately generous: an earlier scheme gave each action a
+// hundred numbers starting at 4000 for its conditions and 5000 for its
+// outcomes, which meant the eleventh action's first condition and the first
+// action's first outcome were both 5000, and the canvas drew lines between the
+// wrong boxes on any domain with eleven or more actions. The shipped sample
+// project has seventeen.
+static constexpr int kSlotsPerAction = 1000;
+
+static ed::PinId factOutputPinId(int factIdx) {
+  return 200000 + factIdx;
+}
+
+static ed::PinId factInputPinId(int factIdx) {
+  return 300000 + factIdx;
+}
+
 static ed::PinId actionPreconditionPinId(int actionIdx, int slotIdx) {
-  return 4000 + actionIdx * 100 + slotIdx;
+  return 400000 + actionIdx * kSlotsPerAction + slotIdx;
 }
 
 static ed::PinId actionEffectPinId(int actionIdx, int slotIdx) {
-  return 5000 + actionIdx * 100 + slotIdx;
+  return 600000 + actionIdx * kSlotsPerAction + slotIdx;
 }
+
+// A collapsed group stands in for everything inside it, so it has one
+// connection point in each direction rather than a row for every condition and
+// outcome the actions inside it have.
+static ed::PinId groupInputPinId(int groupIdx) {
+  return 800000 + groupIdx;
+}
+
+static ed::PinId groupOutputPinId(int groupIdx) {
+  return 900000 + groupIdx;
+}
+
+static ed::NodeId openGroupNodeId(int groupIdx) {
+  return 9000 + groupIdx;
+}
+
+static ed::NodeId collapsedGroupNodeId(int groupIdx) {
+  return 10000 + groupIdx;
+}
+
+/// How big a box is assumed to be before it has been drawn once and the node
+/// editor can report its real size.
+static constexpr float kAssumedNodeWidth = 180.0F;
+static constexpr float kAssumedNodeHeight = 70.0F;
+/// Space left between a group's box and the boxes inside it, and the height of
+/// the strip along the top of the box that carries the group's name.
+static constexpr float kGroupPadding = 18.0F;
+static constexpr float kGroupTitleHeight = 30.0F;
 
 static bool containsName(const std::vector<std::string>& names,
                          const std::string& name) {
@@ -99,6 +146,171 @@ void DomainGraphPanel::setStructuralHighlights(std::vector<std::string> errPreds
   m_structuralWarningActions = std::move(warnActs);
 }
 
+void DomainGraphPanel::drawGroupBoxes(const ProjectModel& model,
+                                      const CanvasLayout& layout) {
+  if (layout.boxes.empty()) {
+    return;
+  }
+  // Group boxes are drawn before the boxes they hold, so that they sit behind
+  // them rather than over them.
+  ed::PushStyleColor(ed::StyleColor_NodeBg, ImVec4(0.10F, 0.10F, 0.14F, 0.55F));
+  ed::PushStyleColor(ed::StyleColor_NodeBorder,
+                     ImVec4(0.62F, 0.55F, 0.85F, 0.85F));
+
+  for (const CanvasGroupBox& box : layout.boxes) {
+    const PresentationGroup& group = model.presentationGroups[box.groupIndex];
+
+    // The box wraps whatever it holds. Nothing about its position or size is
+    // stored, because a box the user had to keep dragging back over its own
+    // contents would be work the model never reads.
+    float minX = 0.0F;
+    float minY = 0.0F;
+    float maxX = 0.0F;
+    float maxY = 0.0F;
+    bool first = true;
+    for (const size_t memberNode : box.memberNodes) {
+      const CanvasNode& member = layout.nodes[memberNode];
+      const bool isFact = member.kind == CanvasNodeKind::Fact;
+      const ed::NodeId memberId =
+          isFact ? 1000 + static_cast<int>(member.index)
+                 : 3000 + static_cast<int>(member.index);
+      const float x = isFact ? model.predicates[member.index].posX
+                             : model.actions[member.index].posX;
+      const float y = isFact ? model.predicates[member.index].posY
+                             : model.actions[member.index].posY;
+      // A box that has not been drawn yet reports no size, so assume one until
+      // the next frame can measure it.
+      ImVec2 size = ed::GetNodeSize(memberId);
+      if (size.x <= 0.0F || size.y <= 0.0F) {
+        size = ImVec2(kAssumedNodeWidth, kAssumedNodeHeight);
+      }
+      if (first) {
+        minX = x;
+        minY = y;
+        maxX = x + size.x;
+        maxY = y + size.y;
+        first = false;
+      } else {
+        minX = std::min(minX, x);
+        minY = std::min(minY, y);
+        maxX = std::max(maxX, x + size.x);
+        maxY = std::max(maxY, y + size.y);
+      }
+    }
+    if (first) {
+      continue;  // nothing left to wrap
+    }
+
+    const ed::NodeId groupNodeId =
+        openGroupNodeId(static_cast<int>(box.groupIndex));
+    const ImVec2 position(minX - kGroupPadding,
+                          minY - kGroupPadding - kGroupTitleHeight);
+    const ImVec2 size(maxX - minX + kGroupPadding * 2.0F,
+                      maxY - minY + kGroupPadding * 2.0F + kGroupTitleHeight);
+    ed::SetNodePosition(groupNodeId, position);
+    ed::SetGroupSize(groupNodeId, size);
+
+    ed::BeginNode(groupNodeId);
+    ImGui::TextColored(ImVec4(0.78F, 0.72F, 0.98F, 1.0F), "%s",
+                       group.name.c_str());
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%s)",
+                        PresentationGroups::describeContents(group).c_str());
+    ed::Group(size);
+    ed::EndNode();
+  }
+
+  ed::PopStyleColor(2);
+}
+
+void DomainGraphPanel::drawCollapsedGroups(ProjectModel& model,
+                                           const CanvasLayout& layout,
+                                           CommandStack& stack) {
+  ed::PushStyleColor(ed::StyleColor_NodeBg, ImVec4(0.16F, 0.12F, 0.26F, 1.0F));
+  ed::PushStyleColor(ed::StyleColor_NodeBorder,
+                     ImVec4(0.62F, 0.55F, 0.85F, 0.9F));
+
+  for (const CanvasNode& node : layout.nodes) {
+    if (node.kind != CanvasNodeKind::CollapsedGroup) {
+      continue;
+    }
+    const PresentationGroup& group = model.presentationGroups[node.index];
+    const ed::NodeId nodeId = collapsedGroupNodeId(static_cast<int>(node.index));
+
+    // The first time a group is drawn closed it appears in the middle of what
+    // it holds, so that it turns up where the user was looking rather than at
+    // the corner of the canvas. After that the editor remembers where it was
+    // dragged to.
+    if (std::find(m_positionedGroups.begin(), m_positionedGroups.end(),
+                  group.name) == m_positionedGroups.end()) {
+      float sumX = 0.0F;
+      float sumY = 0.0F;
+      float count = 0.0F;
+      for (const std::string& name : group.predicateNames) {
+        for (const PredicateDef& fact : model.predicates) {
+          if (fact.name == name) {
+            sumX += fact.posX;
+            sumY += fact.posY;
+            count += 1.0F;
+          }
+        }
+      }
+      for (const std::string& name : group.actionNames) {
+        for (const ActionDef& action : model.actions) {
+          if (action.name == name) {
+            sumX += action.posX;
+            sumY += action.posY;
+            count += 1.0F;
+          }
+        }
+      }
+      if (count > 0.0F) {
+        ed::SetNodePosition(nodeId, ImVec2(sumX / count, sumY / count));
+      }
+      m_positionedGroups.push_back(group.name);
+    }
+
+    ed::BeginNode(nodeId);
+    ImGui::TextColored(ImVec4(0.78F, 0.72F, 0.98F, 1.0F), "[Group]");
+    ImGui::Text("%s", group.name.c_str());
+    ImGui::TextDisabled("%s",
+                        PresentationGroups::describeContents(group).c_str());
+
+    ed::BeginPin(groupInputPinId(static_cast<int>(node.index)),
+                 ed::PinKind::Input);
+    ImGui::TextUnformatted(" ");
+    ed::EndPin();
+    ImGui::SameLine();
+    ed::BeginPin(groupOutputPinId(static_cast<int>(node.index)),
+                 ed::PinKind::Output);
+    ImGui::TextUnformatted(" ");
+    ed::EndPin();
+
+    ImGui::PushID(static_cast<int>(node.index));
+    if (ImGui::SmallButton("Open")) {
+      m_requestedGroupToOpen = static_cast<int>(node.index);
+    }
+    ImGui::PopID();
+    ed::EndNode();
+  }
+
+  ed::PopStyleColor(2);
+
+  // Applied after the loop, because changing the project while walking the
+  // picture computed from it would leave the two disagreeing for a frame.
+  if (m_requestedGroupToOpen >= 0) {
+    const int groupIdx = m_requestedGroupToOpen;
+    m_requestedGroupToOpen = -1;
+    if (groupIdx < static_cast<int>(model.presentationGroups.size())) {
+      const std::string label =
+          "Open the group '" + model.presentationGroups[groupIdx].name + "'";
+      stack.execute(model, label, [groupIdx](ProjectModel& m) {
+        PresentationGroups::setCollapsed(m, static_cast<size_t>(groupIdx), false);
+      });
+    }
+  }
+}
+
 void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   ed::SetCurrentEditor(m_context);
   ed::Begin("DomainGraphCanvas");
@@ -107,15 +319,33 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   const bool showCounts = zoom >= 0.45F;
   const RelationIndex relation_index(model);
 
+  // What the canvas should draw once named groups are taken into account:
+  // which boxes are hidden inside a collapsed group, which group boxes to draw,
+  // and where every line runs. Working that out is not a drawing job, so it
+  // happens in PresentationGroups where it has tests around it.
+  const CanvasLayout layout = PresentationGroups::computeLayout(model);
+  m_collapsedGroupCount = 0;
+  for (const CanvasNode& node : layout.nodes) {
+    if (node.kind == CanvasNodeKind::CollapsedGroup) {
+      ++m_collapsedGroupCount;
+    }
+  }
+  m_visibleNodeCount = layout.nodes.size();
+
+  drawGroupBoxes(model, layout);
+
   // ---- Predicate nodes (green) ----------------------------------------
   ed::PushStyleColor(ed::StyleColor_NodeBg,     ImVec4(0.05f, 0.28f, 0.10f, 1.0f));
   ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.18f, 0.65f, 0.25f, 0.9f));
 
   for (int i = 0; i < static_cast<int>(model.predicates.size()); ++i) {
+    if (layout.factIsHidden(static_cast<size_t>(i))) {
+      continue;  // a collapsed group is standing in for it
+    }
     PredicateDef& pred = model.predicates[i];
     const ed::NodeId nodeId = 1000 + i;
-    const ed::PinId outputPinId = 2000 + i;
-    const ed::PinId inputPinId = 2100 + i;
+    const ed::PinId outputPinId = factOutputPinId(i);
+    const ed::PinId inputPinId = factInputPinId(i);
 
     // Place unpositioned nodes in a row
     if (pred.posX == 0.0f && pred.posY == 0.0f) {
@@ -170,6 +400,9 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.18f, 0.65f, 0.95f, 0.9f));
 
   for (int i = 0; i < static_cast<int>(model.actions.size()); ++i) {
+    if (layout.actionIsHidden(static_cast<size_t>(i))) {
+      continue;  // a collapsed group is standing in for it
+    }
     ActionDef& action = model.actions[i];
     const ed::NodeId nodeId = 3000 + i;
 
@@ -250,30 +483,47 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
 
   ed::PopStyleColor(2);
 
+  drawCollapsedGroups(model, layout, stack);
+
+  // ---- Lines, taken straight from the computed picture ------------------
   int link_id = 6000;
-  for (size_t predicate_index = 0; predicate_index < model.predicates.size();
-       ++predicate_index) {
-    const PredicateRelations& relations = relation_index.predicate(predicate_index);
-    for (const auto& relation : relations.requiredBy) {
-      ed::Link(link_id++, 2000 + static_cast<int>(predicate_index),
-               actionPreconditionPinId(static_cast<int>(relation.actionIndex),
-                                       static_cast<int>(relation.referenceIndex)),
+  for (const CanvasLink& link : layout.links) {
+    const CanvasNode& fact_node = layout.nodes[link.factNode];
+    const CanvasNode& action_node = layout.nodes[link.actionNode];
+    const bool fact_end_is_group =
+        fact_node.kind == CanvasNodeKind::CollapsedGroup;
+    const bool action_end_is_group =
+        action_node.kind == CanvasNodeKind::CollapsedGroup;
+
+    const ed::PinId fact_out =
+        fact_end_is_group ? groupOutputPinId(static_cast<int>(fact_node.index))
+                          : factOutputPinId(static_cast<int>(fact_node.index));
+    const ed::PinId fact_in =
+        fact_end_is_group ? groupInputPinId(static_cast<int>(fact_node.index))
+                          : factInputPinId(static_cast<int>(fact_node.index));
+    const ed::PinId action_in =
+        action_end_is_group
+            ? groupInputPinId(static_cast<int>(action_node.index))
+            : actionPreconditionPinId(static_cast<int>(action_node.index),
+                                      link.slot);
+    const ed::PinId action_out =
+        action_end_is_group
+            ? groupOutputPinId(static_cast<int>(action_node.index))
+            : actionEffectPinId(static_cast<int>(action_node.index), link.slot);
+
+    switch (link.kind) {
+    case CanvasLinkKind::Requires:
+      ed::Link(link_id++, fact_out, action_in,
                ImVec4(0.88F, 0.69F, 0.32F, 1.0F));
-    }
-    for (const auto& relation : relations.madeTrueBy) {
-      ed::Link(link_id++,
-               actionEffectPinId(static_cast<int>(relation.actionIndex),
-                                 static_cast<int>(relation.referenceIndex)),
-               2100 + static_cast<int>(predicate_index),
+      break;
+    case CanvasLinkKind::MakesTrue:
+      ed::Link(link_id++, action_out, fact_in,
                ImVec4(0.32F, 0.84F, 0.60F, 1.0F));
-    }
-    for (const auto& relation : relations.madeFalseBy) {
-      const ActionDef& action = model.actions[relation.actionIndex];
-      const int slot = static_cast<int>(action.addEffects.size() + relation.referenceIndex);
-      ed::Link(link_id++,
-               actionEffectPinId(static_cast<int>(relation.actionIndex), slot),
-               2100 + static_cast<int>(predicate_index),
+      break;
+    case CanvasLinkKind::MakesFalse:
+      ed::Link(link_id++, action_out, fact_in,
                ImVec4(0.95F, 0.51F, 0.42F, 1.0F));
+      break;
     }
   }
 
@@ -314,26 +564,50 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     if (total > 0) {
       m_selectedPredIdx = -1;
       m_selectedActionIdx = -1;
+      m_selectedGroupIdx = -1;
+      m_selection = CanvasSelection{};
       std::vector<ed::NodeId> sel(static_cast<size_t>(total));
       const int cnt = ed::GetSelectedNodes(sel.data(), total);
       for (int i = 0; i < cnt; ++i) {
         const int id = static_cast<int>(sel[static_cast<size_t>(i)].Get());
         if (id >= 1000 && id < 2000) {
-          setSelectedPredicate(id - 1000);
+          const int factIdx = id - 1000;
+          setSelectedPredicate(factIdx);
+          if (factIdx < static_cast<int>(model.predicates.size())) {
+            m_selection.factNames.push_back(
+                model.predicates[static_cast<size_t>(factIdx)].name);
+          }
         } else if (id >= 3000 && id < 4000) {
-          setSelectedAction(id - 3000);
+          const int actionIdx = id - 3000;
+          setSelectedAction(actionIdx);
+          if (actionIdx < static_cast<int>(model.actions.size())) {
+            m_selection.actionNames.push_back(
+                model.actions[static_cast<size_t>(actionIdx)].name);
+          }
+        } else if (id >= 10000 &&
+                   id < 10000 + static_cast<int>(model.presentationGroups.size())) {
+          m_selectedGroupIdx = id - 10000;
         }
       }
     }
   }
 
   // ---- Persist node positions back to model ----------------------------
+  // Only boxes that were drawn this frame have a position to read. Asking for
+  // the position of one hidden inside a collapsed group would write a zero back
+  // to the project and lose where the user had put it.
   for (int i = 0; i < static_cast<int>(model.predicates.size()); ++i) {
+    if (layout.factIsHidden(static_cast<size_t>(i))) {
+      continue;
+    }
     const ImVec2 pos = ed::GetNodePosition(1000 + i);
     model.predicates[i].posX = pos.x;
     model.predicates[i].posY = pos.y;
   }
   for (int i = 0; i < static_cast<int>(model.actions.size()); ++i) {
+    if (layout.actionIsHidden(static_cast<size_t>(i))) {
+      continue;
+    }
     const ImVec2 pos = ed::GetNodePosition(3000 + i);
     model.actions[i].posX = pos.x;
     model.actions[i].posY = pos.y;

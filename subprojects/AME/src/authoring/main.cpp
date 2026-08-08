@@ -1132,6 +1132,39 @@ int main(int argc, char* argv[]) {
                  view_opened && shell.selfTestSelectedActionIndex() == 0,
                  "expected a saved view to put the focus back where it was");
 
+    // A6: a group is a named set of facts and actions the whole-domain canvas
+    // draws as one labelled box, and closes to a single box. Closing one has to
+    // leave fewer boxes on the canvas than were there before.
+    shell.selfTestSetDomainView(4);  // the whole-domain canvas
+    renderAppShellFrame(window, shell, clearColor);
+    const size_t nodes_before_grouping = shell.selfTestCanvasNodeCount();
+    const bool group_made =
+        shell.selfTestCreateGroup("getting about", {"at"}, {"move"});
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("open_group_hides_nothing",
+                 group_made &&
+                     shell.selfTestCanvasNodeCount() == nodes_before_grouping &&
+                     shell.selfTestCollapsedGroupCount() == 0U,
+                 "expected an open group to draw a box round its contents "
+                 "without hiding any of them");
+    const bool group_closed =
+        shell.selfTestSetGroupCollapsed("getting about", true);
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("closed_group_draws_fewer_boxes",
+                 group_closed &&
+                     shell.selfTestCollapsedGroupCount() == 1U &&
+                     shell.selfTestCanvasNodeCount() < nodes_before_grouping,
+                 "expected closing a group to replace its contents with one box");
+    shell.selfTestUndo();  // open it again
+    shell.selfTestUndo();  // and remove the group
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("undo_puts_the_grouped_boxes_back",
+                 shell.selfTestCanvasNodeCount() == nodes_before_grouping &&
+                     shell.selfTestCollapsedGroupCount() == 0U,
+                 "expected undo to restore the canvas to what it was before "
+                 "the group was made");
+    shell.selfTestSetDomainView(0);
+
     const auto& labels = AppShell::tabLabels();
     report.check("tabs_in_workflow_order",
                  labels.size() == 4 &&
