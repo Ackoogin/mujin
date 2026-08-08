@@ -83,6 +83,11 @@ public:
   /// when the user clicks the canvas — palette selection is one-shot.
   void setSelectedPredicate(int idx);
   void setSelectedAction(int idx);
+  /// Leave nothing selected, so that the sidebar shows no element editor.
+  void clearSelection() {
+    m_selectedPredIdx = -1;
+    m_selectedActionIdx = -1;
+  }
   bool canGoBack() const { return m_historyPosition > 0; }
   bool canGoForward() const {
     return m_historyPosition + 1 < static_cast<int>(m_history.size());

@@ -1,0 +1,66 @@
+[
+  {
+    "file": "01-domain-whole.png",
+    "caption": "The Domain tab with the whole domain drawn on one canvas."
+  },
+  {
+    "file": "03-neighbourhood.png",
+    "caption": "The neighbourhood view: one fact and only what touches it."
+  },
+  {
+    "file": "04-relations.png",
+    "caption": "The relations list for the selected fact."
+  },
+  {
+    "file": "05-matrix.png",
+    "caption": "The fact-by-action matrix."
+  },
+  {
+    "file": "06-lifecycles.png",
+    "caption": "The lifecycle view for a declared state grouping."
+  },
+  {
+    "file": "07-pddl-tab.png",
+    "caption": "The PDDL tab after Validate Now: generated domain text, and everything the checkers found."
+  },
+  {
+    "file": "08-plan-tab.png",
+    "caption": "The Plan tab after Plan & Preview: the solved plan."
+  },
+  {
+    "file": "09-run-loaded.png",
+    "caption": "The Run tab with the mission loaded and waiting at tick 0."
+  },
+  {
+    "file": "10-run-midway.png",
+    "caption": "A run part way through: timeline, world-model facts, and the behaviour tree colouring what is happening now."
+  },
+  {
+    "file": "11-run-complete.png",
+    "caption": "The same run once every goal is met."
+  },
+  {
+    "file": "12-contingency.png",
+    "caption": "Contingency analysis: what stays reachable when the declared contingency facts vary."
+  },
+  {
+    "file": "13-batch.png",
+    "caption": "Every scenario planned and simulated, each checked against what the project says it should do."
+  },
+  {
+    "file": "14-no-plan.png",
+    "caption": "A scenario with no plan, and the report that names the fact nothing in the domain can bring about."
+  },
+  {
+    "file": "02-action-editor.png",
+    "caption": "An action selected, with the sentence editor that says what it involves, what must be true before it can happen, and what it changes."
+  },
+  {
+    "file": "02b-scenario-editor.png",
+    "caption": "A scenario being edited: the facts the mission starts from, what counts as success, and what the project expects of it."
+  },
+  {
+    "file": "15-reports.png",
+    "caption": "The full diagnostics text: grounding counts, every scenario's result, and the contingency findings."
+  }
+]

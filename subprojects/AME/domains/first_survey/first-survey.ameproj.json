@@ -1,0 +1,297 @@
+{
+  "version": 2,
+  "projectName": "first-survey",
+  "types": [
+    { "name": "location", "parent": "object" },
+    { "name": "sector", "parent": "location" },
+    { "name": "robot", "parent": "object" }
+  ],
+  "predicates": [
+    {
+      "name": "at",
+      "params": [
+        { "name": "?r", "type": "robot" },
+        { "name": "?l", "type": "location" }
+      ],
+      "posX": 80.0,
+      "posY": 60.0,
+      "confirmed": false
+    },
+    {
+      "name": "on-ground",
+      "params": [{ "name": "?r", "type": "robot" }],
+      "posX": 340.0,
+      "posY": 60.0,
+      "confirmed": false
+    },
+    {
+      "name": "airborne",
+      "params": [{ "name": "?r", "type": "robot" }],
+      "posX": 600.0,
+      "posY": 60.0,
+      "confirmed": false
+    },
+    {
+      "name": "searched",
+      "params": [{ "name": "?s", "type": "sector" }],
+      "posX": 860.0,
+      "posY": 60.0,
+      "confirmed": false
+    },
+    {
+      "name": "reported",
+      "params": [{ "name": "?s", "type": "sector" }],
+      "posX": 1120.0,
+      "posY": 60.0,
+      "confirmed": false
+    },
+    {
+      "name": "comms-available",
+      "params": [],
+      "posX": 1120.0,
+      "posY": 200.0,
+      "confirmed": false
+    }
+  ],
+  "actions": [
+    {
+      "name": "take-off",
+      "params": [
+        { "name": "?r", "type": "robot" },
+        { "name": "?l", "type": "location" }
+      ],
+      "preconditions": [
+        { "predicateName": "at", "argNames": ["?r", "?l"] },
+        { "predicateName": "on-ground", "argNames": ["?r"] }
+      ],
+      "addEffects": [{ "predicateName": "airborne", "argNames": ["?r"] }],
+      "delEffects": [{ "predicateName": "on-ground", "argNames": ["?r"] }],
+      "posX": 80.0,
+      "posY": 420.0,
+      "btBinding": {
+        "nodeType": "",
+        "subtreeXml": "<InvokeService service=\"mobility\" operation=\"take-off\" robot=\"{param0}\" from=\"{param1}\" />",
+        "reactive": false
+      },
+      "simulation": { "ticks": 6, "succeeds": true, "failureChance": 0.0 },
+      "hasConditionExpression": false,
+      "conditionExpression": { "kind": "all" }
+    },
+    {
+      "name": "fly",
+      "params": [
+        { "name": "?r", "type": "robot" },
+        { "name": "?from", "type": "location" },
+        { "name": "?to", "type": "location" }
+      ],
+      "preconditions": [
+        { "predicateName": "at", "argNames": ["?r", "?from"] },
+        { "predicateName": "airborne", "argNames": ["?r"] }
+      ],
+      "addEffects": [{ "predicateName": "at", "argNames": ["?r", "?to"] }],
+      "delEffects": [{ "predicateName": "at", "argNames": ["?r", "?from"] }],
+      "posX": 340.0,
+      "posY": 420.0,
+      "btBinding": {
+        "nodeType": "",
+        "subtreeXml": "<InvokeService service=\"mobility\" operation=\"fly\" robot=\"{param0}\" from=\"{param1}\" target=\"{param2}\" />",
+        "reactive": false
+      },
+      "simulation": { "ticks": 10, "succeeds": true, "failureChance": 0.0 },
+      "hasConditionExpression": false,
+      "conditionExpression": { "kind": "all" }
+    },
+    {
+      "name": "survey",
+      "params": [
+        { "name": "?r", "type": "robot" },
+        { "name": "?s", "type": "sector" }
+      ],
+      "preconditions": [
+        { "predicateName": "at", "argNames": ["?r", "?s"] },
+        { "predicateName": "airborne", "argNames": ["?r"] }
+      ],
+      "addEffects": [{ "predicateName": "searched", "argNames": ["?s"] }],
+      "delEffects": [],
+      "posX": 600.0,
+      "posY": 420.0,
+      "btBinding": {
+        "nodeType": "",
+        "subtreeXml": "<InvokeService service=\"sensor\" operation=\"survey\" robot=\"{param0}\" sector=\"{param1}\" />",
+        "reactive": false
+      },
+      "simulation": { "ticks": 8, "succeeds": true, "failureChance": 0.0 },
+      "hasConditionExpression": false,
+      "conditionExpression": { "kind": "all" }
+    },
+    {
+      "name": "report",
+      "params": [
+        { "name": "?r", "type": "robot" },
+        { "name": "?s", "type": "sector" }
+      ],
+      "preconditions": [
+        { "predicateName": "at", "argNames": ["?r", "?s"] },
+        { "predicateName": "searched", "argNames": ["?s"] },
+        { "predicateName": "comms-available", "argNames": [] }
+      ],
+      "addEffects": [{ "predicateName": "reported", "argNames": ["?s"] }],
+      "delEffects": [],
+      "posX": 860.0,
+      "posY": 420.0,
+      "btBinding": {
+        "nodeType": "",
+        "subtreeXml": "<InvokeService service=\"comms\" operation=\"send-report\" robot=\"{param0}\" sector=\"{param1}\" />",
+        "reactive": true
+      },
+      "simulation": { "ticks": 3, "succeeds": true, "failureChance": 0.0 },
+      "hasConditionExpression": false,
+      "conditionExpression": { "kind": "all" }
+    },
+    {
+      "name": "land",
+      "params": [
+        { "name": "?r", "type": "robot" },
+        { "name": "?l", "type": "location" }
+      ],
+      "preconditions": [
+        { "predicateName": "at", "argNames": ["?r", "?l"] },
+        { "predicateName": "airborne", "argNames": ["?r"] }
+      ],
+      "addEffects": [{ "predicateName": "on-ground", "argNames": ["?r"] }],
+      "delEffects": [{ "predicateName": "airborne", "argNames": ["?r"] }],
+      "posX": 1120.0,
+      "posY": 420.0,
+      "btBinding": {
+        "nodeType": "",
+        "subtreeXml": "<InvokeService service=\"mobility\" operation=\"land\" robot=\"{param0}\" at=\"{param1}\" />",
+        "reactive": false
+      },
+      "simulation": { "ticks": 6, "succeeds": true, "failureChance": 0.0 },
+      "hasConditionExpression": false,
+      "conditionExpression": { "kind": "all" }
+    }
+  ],
+  "stateGroups": [
+    {
+      "name": "flight state",
+      "type": "robot",
+      "predicateNames": ["on-ground", "airborne"]
+    }
+  ],
+  "objects": [
+    { "name": "uav1", "type": "robot" },
+    { "name": "base", "type": "location" },
+    { "name": "sector_a", "type": "sector" },
+    { "name": "sector_b", "type": "sector" }
+  ],
+  "constants": [],
+  "scenarios": [
+    {
+      "name": "survey-sector-a",
+      "initialState": [
+        { "predicateName": "at", "objectNames": ["uav1", "base"] },
+        { "predicateName": "on-ground", "objectNames": ["uav1"] },
+        { "predicateName": "comms-available", "objectNames": [] }
+      ],
+      "goals": [
+        { "predicateName": "reported", "objectNames": ["sector_a"] },
+        { "predicateName": "at", "objectNames": ["uav1", "base"] },
+        { "predicateName": "on-ground", "objectNames": ["uav1"] }
+      ],
+      "expectation": {
+        "shouldSucceed": true,
+        "minPlanSteps": 5,
+        "maxPlanSteps": 8,
+        "expectedActions": ["survey", "report", "land"],
+        "forbiddenActions": [],
+        "shouldReachGoal": true,
+        "minRunActions": 0,
+        "maxRunActions": 0,
+        "requiredRunActions": ["report"],
+        "forbiddenRunActions": [],
+        "maxReplans": 0,
+        "runFault": { "name": "", "actionFailures": [], "factChanges": [] }
+      },
+      "contingency": {
+        "contingencyPredicates": ["comms-available"],
+        "safeState": [
+          { "predicateName": "at", "objectNames": ["uav1", "base"] },
+          { "predicateName": "on-ground", "objectNames": ["uav1"] }
+        ]
+      },
+      "goalAlternatives": []
+    },
+    {
+      "name": "survey-both-sectors",
+      "initialState": [
+        { "predicateName": "at", "objectNames": ["uav1", "base"] },
+        { "predicateName": "on-ground", "objectNames": ["uav1"] },
+        { "predicateName": "comms-available", "objectNames": [] }
+      ],
+      "goals": [
+        { "predicateName": "reported", "objectNames": ["sector_a"] },
+        { "predicateName": "reported", "objectNames": ["sector_b"] },
+        { "predicateName": "at", "objectNames": ["uav1", "base"] },
+        { "predicateName": "on-ground", "objectNames": ["uav1"] }
+      ],
+      "expectation": {
+        "shouldSucceed": true,
+        "minPlanSteps": 0,
+        "maxPlanSteps": 0,
+        "expectedActions": ["survey", "report"],
+        "forbiddenActions": [],
+        "shouldReachGoal": true,
+        "minRunActions": 0,
+        "maxRunActions": 0,
+        "requiredRunActions": [],
+        "forbiddenRunActions": [],
+        "maxReplans": -1,
+        "runFault": {
+          "name": "first survey attempt fails",
+          "actionFailures": [{ "actionName": "survey", "attempt": 1 }],
+          "factChanges": []
+        }
+      },
+      "contingency": {
+        "contingencyPredicates": [],
+        "safeState": []
+      },
+      "goalAlternatives": []
+    },
+    {
+      "name": "comms-lost-before-take-off",
+      "initialState": [
+        { "predicateName": "at", "objectNames": ["uav1", "base"] },
+        { "predicateName": "on-ground", "objectNames": ["uav1"] }
+      ],
+      "goals": [
+        { "predicateName": "reported", "objectNames": ["sector_a"] },
+        { "predicateName": "at", "objectNames": ["uav1", "base"] },
+        { "predicateName": "on-ground", "objectNames": ["uav1"] }
+      ],
+      "expectation": {
+        "shouldSucceed": false,
+        "minPlanSteps": 0,
+        "maxPlanSteps": 0,
+        "expectedActions": [],
+        "forbiddenActions": [],
+        "shouldReachGoal": false,
+        "minRunActions": 0,
+        "maxRunActions": 0,
+        "requiredRunActions": [],
+        "forbiddenRunActions": [],
+        "maxReplans": -1,
+        "runFault": { "name": "", "actionFailures": [], "factChanges": [] }
+      },
+      "contingency": {
+        "contingencyPredicates": [],
+        "safeState": []
+      },
+      "goalAlternatives": []
+    }
+  ],
+  "presentationGroups": [],
+  "savedViews": [],
+  "simulationSeed": 4471
+}

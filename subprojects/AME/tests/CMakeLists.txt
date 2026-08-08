@@ -470,4 +470,17 @@ if(AME_BUILD_AUTHORING)
   target_compile_definitions(test_vehicle_autonomy_workflow
     PRIVATE "AME_DOMAINS_DIR=\"${AME_SOURCE_DIR}/domains\"")
   gtest_discover_tests(test_vehicle_autonomy_workflow DISCOVERY_MODE PRE_TEST)
+
+  # The worked example in the authoring tool user guide: the saved project, the
+  # PDDL exported beside it, and the three scenarios the guide walks through.
+  add_executable(test_first_survey_tutorial test_first_survey_tutorial.cpp)
+  target_link_libraries(test_first_survey_tutorial
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  target_compile_definitions(test_first_survey_tutorial
+    PRIVATE "AME_DOMAINS_DIR=\"${AME_SOURCE_DIR}/domains\"")
+  gtest_discover_tests(test_first_survey_tutorial DISCOVERY_MODE PRE_TEST)
 endif()
