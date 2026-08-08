@@ -263,9 +263,24 @@ The editor presents these as the sentence groups `It involves`, `Before it can h
 do not fit the required type remain visible in grey with a short reason, such as `applies to
 a sector`. This makes the type rule visible without allowing the illegal choice.
 
-An outcome that removes a fact is shown as `becomes false` on the same row. The generated PDDL
-and current checks remain visible below the sentences, and the PDDL tab remains the editable
-text path for experienced authors.
+`Afterwards` has two parts, because an action can both make facts true and make them false:
+
+| Part | Button | What it writes in the PDDL |
+|------|--------|----------------------------|
+| `These become true` | `+ add a fact it makes true` | The fact, as an add effect |
+| `These become false` | `+ add a fact it makes false` | `(not FACT)`, as a delete effect |
+
+Both work the same way: choose the fact from the dropdown, press the button, then choose
+which of the action's involved names each slot refers to. An existing row says `becomes true`
+in green or `becomes false` in red at its end, so a long list can be read at a glance.
+
+Making a fact false is how an action stops something being the case — a vehicle that moves
+away from the base makes `at base` false as well as making `at sector` true. An action that
+only ever adds facts usually means a lifecycle has been half-modelled, and the `Lifecycles`
+view is where that shows up.
+
+The generated PDDL and current checks remain visible below the sentences, and the PDDL tab
+remains the editable text path for experienced authors.
 
 Example action:
 

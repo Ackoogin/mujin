@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -1164,6 +1165,18 @@ int main(int argc, char* argv[]) {
                  "expected undo to restore the canvas to what it was before "
                  "the group was made");
     shell.selfTestSetDomainView(0);
+
+    // Making a fact false is a thing an action can do, and the button offering
+    // it has to say so. The three buttons are drawn by one function and look
+    // alike, so two of them once read "+ add an outcome" and the way to make a
+    // fact false could only be found by guessing.
+    const auto& addLabels = AppShell::guidedGroupAddLabels();
+    const std::set<std::string> distinctAddLabels(addLabels.begin(),
+                                                  addLabels.end());
+    report.check("action_editor_names_all_three_kinds_of_fact",
+                 addLabels.size() == 3 && distinctAddLabels.size() == 3,
+                 "the condition, becomes-true and becomes-false buttons must "
+                 "each say which they are");
 
     const auto& labels = AppShell::tabLabels();
     report.check("tabs_in_workflow_order",

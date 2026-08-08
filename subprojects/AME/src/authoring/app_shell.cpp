@@ -485,7 +485,9 @@ static void renderGuidedReferenceGroup(const char* visibleTitle,
                                        PredicateRelationKind kind,
                                        ProjectModel& model,
                                        CommandStack& stack) {
-  ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "%s", visibleTitle);
+  if (visibleTitle != nullptr && visibleTitle[0] != '\0') {
+    ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "%s", visibleTitle);
+  }
   // Everything this function draws is scoped to the group it is drawing.
   //
   // The three groups an action shows -- what must be true beforehand, what
@@ -1590,6 +1592,21 @@ void AppShell::renderMenuBar() {
               ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + menuH - 0.5F),
               ImGui::GetColorU32(ImVec4(0.0F, 0.85F, 1.0F, 0.55F)),
               1.0F);
+}
+
+const std::vector<std::string>& AppShell::guidedGroupAddLabels() {
+  // The three things an action can say about a fact: it has to be true before,
+  // it becomes true after, or it becomes false after. Each button names which,
+  // because the three groups are drawn by the same function and otherwise look
+  // the same. They are listed here so that a test can check they stay distinct:
+  // when the last two both read "+ add an outcome", making a fact false was a
+  // feature nobody could find.
+  static const std::vector<std::string> labels = {
+      "+ add a condition",
+      "+ add a fact it makes true",
+      "+ add a fact it makes false",
+  };
+  return labels;
 }
 
 const std::vector<std::string>& AppShell::tabLabels() {
@@ -4218,19 +4235,27 @@ void AppShell::renderSelectedElementEditor() {
       }
     }
 
+    const auto& addLabels = guidedGroupAddLabels();
     ImGui::Separator();
     renderGuidedReferenceGroup("Before it can happen", "##before-guided",
-                               "+ add a condition", "must be", "",
+                               addLabels[0].c_str(), "must be", "",
                                selAction, PredicateRelationKind::Requires,
                                m_model, m_commandStack);
     ImGui::Separator();
     ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "Afterwards");
-    renderGuidedReferenceGroup("", "##after-true-guided",
-                               "+ add an outcome", "is", "becomes true",
+    // These two groups look alike, so each has to say which it is on its own
+    // heading and on its own button. They used to share the heading "Afterwards"
+    // and the button "+ add an outcome", with the only difference being the
+    // "becomes true" or "becomes false" written beside a row that already
+    // existed. An action with no outcomes yet therefore showed two identical
+    // buttons, and the way to make a fact false could only be found by picking
+    // one of them and seeing what happened.
+    renderGuidedReferenceGroup("These become true", "##after-true-guided",
+                               addLabels[1].c_str(), "is", "becomes true",
                                selAction, PredicateRelationKind::MakesTrue,
                                m_model, m_commandStack);
-    renderGuidedReferenceGroup("", "##after-false-guided",
-                               "+ add an outcome", "is", "becomes false",
+    renderGuidedReferenceGroup("These become false", "##after-false-guided",
+                               addLabels[2].c_str(), "is", "becomes false",
                                selAction, PredicateRelationKind::MakesFalse,
                                m_model, m_commandStack);
 

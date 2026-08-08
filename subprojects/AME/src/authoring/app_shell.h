@@ -43,6 +43,9 @@ public:
 
   /// Workflow-ordered tab labels. Stable list — self-tests assert against it.
   static const std::vector<std::string>& tabLabels();
+  /// \brief What the three "add a fact" buttons in the action editor say, in
+  /// the order condition, becomes true, becomes false.
+  static const std::vector<std::string>& guidedGroupAddLabels();
 
   // --- Test interface (used by --self-test mode only) ---
   void selfTestNew();
