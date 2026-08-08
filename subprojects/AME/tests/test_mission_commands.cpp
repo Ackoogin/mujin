@@ -3,6 +3,7 @@
 #include "mission_commands.h"
 #include "project_model.h"
 #include "run_record.h"
+#include "test_shell_command.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -186,9 +187,14 @@ TEST(MissionCommands, AReportIsWrittenWhereItIsAskedFor) {
                                            result.reportJson, error))
       << error;
 
-  std::ifstream in(reportPath);
-  ASSERT_TRUE(in.good());
-  const nlohmann::json written = nlohmann::json::parse(in);
+  // The stream is closed before the file is deleted: Windows refuses to
+  // delete a file that is still open.
+  nlohmann::json written;
+  {
+    std::ifstream in(reportPath);
+    ASSERT_TRUE(in.good());
+    written = nlohmann::json::parse(in);
+  }
   EXPECT_EQ(written["results"][0]["scenarioName"], "nominal");
 
   fs::remove(reportPath);
@@ -210,23 +216,26 @@ TEST(MissionCli, ExitCodeIsTheVerdict) {
   ProjectModel model = makeProject();
   model.scenarios.pop_back();
   const fs::path project = saveProject(model, "exit-good");
-  const std::string good = std::string(AME_MISSION_CLI_PATH) + " run " +
-                           project.string() + " --scenario nominal > /dev/null 2>&1";
+  const std::string cli = ame_test::shellQuote(AME_MISSION_CLI_PATH);
+  const std::string good = ame_test::shellCommand(
+      cli + " run " + ame_test::shellQuote(project) +
+      " --scenario nominal" + ame_test::discardOutput());
   EXPECT_EQ(std::system(good.c_str()), 0);
   fs::remove(project);
 
   const fs::path both = saveProject(makeProject(), "exit-bad");
-  const std::string bad = std::string(AME_MISSION_CLI_PATH) + " run " +
-                          both.string() + " --scenario impossible > /dev/null 2>&1";
+  const std::string bad = ame_test::shellCommand(
+      cli + " run " + ame_test::shellQuote(both) +
+      " --scenario impossible" + ame_test::discardOutput());
   EXPECT_NE(std::system(bad.c_str()), 0);
 
-  const std::string unknown = std::string(AME_MISSION_CLI_PATH) +
-                              " frobnicate " + both.string() +
-                              " > /dev/null 2>&1";
+  const std::string unknown = ame_test::shellCommand(
+      cli + " frobnicate " + ame_test::shellQuote(both) +
+      ame_test::discardOutput());
   EXPECT_NE(std::system(unknown.c_str()), 0);
 
   const std::string help =
-      std::string(AME_MISSION_CLI_PATH) + " --help > /dev/null 2>&1";
+      ame_test::shellCommand(cli + " --help" + ame_test::discardOutput());
   EXPECT_EQ(std::system(help.c_str()), 0);
   fs::remove(both);
 }

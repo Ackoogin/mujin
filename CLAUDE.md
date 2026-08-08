@@ -182,7 +182,7 @@ build\tests\Release\test_observability.exe
 build\tests\Release\test_world_model.exe --gtest_filter=WorldModel.SetAndGetFact
 ```
 
-The full CTest suite should pass. It spans PCL, PYRAMID, Tactical Objects, AME core (WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser), integration (BT nodes), end-to-end pipeline, observability (Layers 1-5), generated bindings, and transport adapters -- 1452 registered tests in the workspace `authoring` build at last count. AME's standalone build runs the subset that does not need PCL or PYRAMID: 451 with the graphical tool, 255 without it. Use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
+The full CTest suite should pass. It spans PCL, PYRAMID, Tactical Objects, AME core (WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser), integration (BT nodes), end-to-end pipeline, observability (Layers 1-5), generated bindings, and transport adapters -- 1452 registered tests in the workspace `authoring` build at last count. AME's standalone build runs the subset that does not need PCL or PYRAMID: 451 with the graphical tool, 260 without it. Use `ctest --test-dir build -N -C Release` to list the exact set in your build tree.
 
 ## Run the demo
 

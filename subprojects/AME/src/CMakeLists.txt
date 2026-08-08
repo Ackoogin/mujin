@@ -57,6 +57,14 @@ target_include_directories(ame_core PUBLIC
     ${AME_ROOT_DIR}/include
 )
 
+# ActionRegistry parses behaviour-tree XML with tinyxml2, which comes bundled
+# inside BehaviorTree.CPP. BehaviorTree.CPP keeps its 3rdparty directory to
+# itself, so name it here rather than relying on a system-wide tinyxml2 that
+# only some machines have.
+target_include_directories(ame_core PRIVATE
+    ${behaviortree_cpp_SOURCE_DIR}/3rdparty
+)
+
 target_link_libraries(ame_core
     PUBLIC
         behaviortree_cpp

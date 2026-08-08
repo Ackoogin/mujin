@@ -4,6 +4,7 @@
 #include "review_pack.h"
 #include "run_record.h"
 #include "simulation_engine.h"
+#include "test_shell_command.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -84,9 +85,7 @@ std::vector<nlohmann::json> jsonLines(const fs::path& path) {
   return result;
 }
 
-std::string shellQuote(const fs::path& path) {
-  return "\"" + path.string() + "\"";
-}
+using ame_test::shellQuote;
 
 bool containsAction(const std::vector<std::string>& actions,
                     const std::string& name) {
@@ -205,10 +204,10 @@ TEST(RunRecordCli, WritesFolderThatRecordedRunLoads) {
 
   // Recording from a script is ame_mission_cli's job: the graphical tool takes
   // no options but --self-test, so driving it here would open a window and hang.
-  const std::string command =
+  const std::string command = ame_test::shellCommand(
       shellQuote(AME_MISSION_CLI_PATH) + " record " + shellQuote(project_path) +
       " --scenario nominal --json " + shellQuote(report_path) + " --out " +
-      shellQuote(record_path) + " > /dev/null 2>&1";
+      shellQuote(record_path) + ame_test::discardOutput());
   ASSERT_EQ(std::system(command.c_str()), 0);
 
   RecordedRun recorded;
@@ -287,9 +286,14 @@ TEST(ReviewPack, WritesEveryPromisedFile) {
   EXPECT_TRUE(fs::is_regular_file(run / "ame_wm_audit.jsonl"));
   EXPECT_TRUE(fs::is_regular_file(run / "ame_plan_audit.jsonl"));
 
-  std::ifstream summary_input(folder / "06-domain-summary.md");
-  const std::string summary((std::istreambuf_iterator<char>(summary_input)),
-                            std::istreambuf_iterator<char>());
+  // The stream is closed before the folder is deleted: Windows refuses to
+  // delete a file that is still open.
+  std::string summary;
+  {
+    std::ifstream summary_input(folder / "06-domain-summary.md");
+    summary.assign((std::istreambuf_iterator<char>(summary_input)),
+                   std::istreambuf_iterator<char>());
+  }
   EXPECT_NE(summary.find("Types"), std::string::npos);
   EXPECT_NE(summary.find("Objects"), std::string::npos);
   EXPECT_NE(summary.find("Facts nothing produces"), std::string::npos);

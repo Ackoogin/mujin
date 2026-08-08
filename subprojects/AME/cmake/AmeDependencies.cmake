@@ -148,8 +148,11 @@ function(ame_add_lapkt)
     )
     if(MSVC)
         # LAPKT is written for GCC; the shims supply what MSVC does not have.
+        # CMAKE_CURRENT_FUNCTION_LIST_DIR is this file's directory. Inside a
+        # function CMAKE_CURRENT_LIST_DIR would be the caller's directory
+        # instead, which is not where the shims live.
         target_include_directories(lapkt_core BEFORE PUBLIC
-            "${CMAKE_CURRENT_LIST_DIR}/compat")
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/compat")
         target_compile_definitions(lapkt_core PRIVATE WIN32)
         target_compile_options(lapkt_core PRIVATE /W0)
     else()
