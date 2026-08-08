@@ -269,6 +269,42 @@ TEST(ProjectModel, ClearResetsVersion) {
     ProjectModel m;
     m.version = 99; m.types.push_back({"x",""});
     m.clear();
-    EXPECT_EQ(m.version, 1);
+    EXPECT_EQ(m.version, 2);
     EXPECT_TRUE(m.types.empty());
+}
+
+TEST(ProjectModel, ExpressiveConditionsAndConstantsRoundTrip) {
+    ProjectModel model;
+    model.constants.push_back({"home", "location"});
+    ActionDef action;
+    action.name = "move";
+    action.params.push_back({"?where", "", {"base", "sector"}});
+    action.hasConditionExpression = true;
+    action.conditionExpression.kind = ConditionKind::AnyOf;
+    ConditionExpression positive;
+    positive.kind = ConditionKind::Fact;
+    positive.fact = {"clear", {"?where"}};
+    ConditionExpression negative = positive;
+    negative.fact.predicateName = "blocked";
+    negative.negated = true;
+    action.conditionExpression.children = {positive, negative};
+    action.preconditions = actionConditionFacts(action);
+    model.actions.push_back(action);
+    ScenarioDef scenario;
+    scenario.name = "either-goal";
+    scenario.goalAlternatives = {{{"at", {"home"}}},
+                                 {{"safe", {"home"}}}};
+    scenario.goals = scenario.goalAlternatives.front();
+    model.scenarios.push_back(scenario);
+
+    const nlohmann::json stored = model;
+    const ProjectModel loaded = stored.get<ProjectModel>();
+    ASSERT_EQ(loaded.constants.size(), 1U);
+    ASSERT_EQ(loaded.actions.size(), 1U);
+    EXPECT_TRUE(loaded.actions[0].hasConditionExpression);
+    EXPECT_TRUE(actionHasNegativeCondition(loaded.actions[0]));
+    EXPECT_EQ(loaded.actions[0].params[0].eitherTypes,
+              (std::vector<std::string>{"base", "sector"}));
+    ASSERT_EQ(loaded.scenarios.size(), 1U);
+    EXPECT_EQ(loaded.scenarios[0].goalAlternatives.size(), 2U);
 }

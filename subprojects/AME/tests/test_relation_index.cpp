@@ -102,3 +102,31 @@ TEST(RelationIndex, RejectsCausalRelationshipWhenParameterTypesDoNotOverlap) {
   EXPECT_FALSE(relationTypeCompatible(model, 0, 0, 1, 0));
   EXPECT_TRUE(RelationIndex(model).causalLinks().empty());
 }
+
+TEST(RelationIndex, KeepsFalseConditionsOutOfPositiveEnablingLinks) {
+  ProjectModel model;
+  model.types = {{"agent", "object"}};
+  model.predicates = {{"armed", {{"?a", "agent"}}}};
+  ActionDef arm;
+  arm.name = "arm";
+  arm.params = {{"?a", "agent"}};
+  arm.addEffects = {{"armed", {"?a"}}};
+  ActionDef inspect;
+  inspect.name = "inspect";
+  inspect.params = {{"?a", "agent"}};
+  ConditionExpression condition;
+  condition.kind = ConditionKind::Fact;
+  condition.fact = {"armed", {"?a"}};
+  condition.negated = true;
+  inspect.hasConditionExpression = true;
+  inspect.conditionExpression = condition;
+  inspect.preconditions = actionConditionFacts(inspect);
+  model.actions = {arm, inspect};
+
+  const RelationIndex index(model);
+  const PredicateRelations& relations = index.predicate(0);
+  EXPECT_TRUE(relations.requiredBy.empty());
+  ASSERT_EQ(relations.requiredFalseBy.size(), 1U);
+  EXPECT_EQ(relations.requiredFalseBy.front().actionIndex, 1U);
+  EXPECT_TRUE(index.causalLinks().empty());
+}

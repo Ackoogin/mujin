@@ -19,6 +19,11 @@ bool guidedTypeCompatible(const ProjectModel& model,
                           const std::string& actualType,
                           const std::string& expectedType);
 
+/// \brief Return whether an action input, including a union-typed input, can fill a fact slot.
+bool guidedParameterCompatible(const ProjectModel& model,
+                               const Parameter& actual,
+                               const std::string& expectedType);
+
 /// \brief Return every predicate, including illegal choices with an explanation.
 std::vector<GuidedEditorChoice> guidedPredicateChoices(
     const ProjectModel& model, const ActionDef& action);
@@ -32,3 +37,9 @@ std::vector<GuidedEditorChoice> guidedArgumentChoices(
 EffectRef makeGuidedReference(const ProjectModel& model,
                               const ActionDef& action,
                               const PredicateDef& predicate);
+
+/// \brief Describe a saved condition with the words used by the guided editor.
+std::string guidedConditionText(const ActionDef& action);
+
+/// \brief Add an expressive condition while preserving existing simple conditions.
+void appendGuidedCondition(ActionDef& action, ConditionExpression condition);

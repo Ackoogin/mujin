@@ -152,7 +152,18 @@ StructuralReport StructuralValidator::check(const ProjectModel& model) {
 
   for (const auto& action : model.actions) {
     for (const auto& param : action.params) {
-      if (!param.type.empty() && typeNames.find(param.type) == typeNames.end()) {
+      if (!param.eitherTypes.empty()) {
+        for (const std::string& type : param.eitherTypes) {
+          if (typeNames.find(type) == typeNames.end()) {
+            addIssue(report,
+                     Severity::Error,
+                     "Action '" + action.name + "' name '" + param.name +
+                         "' accepts undeclared type '" + type + "'",
+                     {}, action.name);
+          }
+        }
+      } else if (!param.type.empty() &&
+                 typeNames.find(param.type) == typeNames.end()) {
         addIssue(report,
                  Severity::Error,
                  "Action '" + action.name +
@@ -163,11 +174,12 @@ StructuralReport StructuralValidator::check(const ProjectModel& model) {
       }
     }
 
+    const std::vector<EffectRef> conditions = actionConditionFacts(action);
     checkActionPredicateRefs(report,
                              action,
                              predicateNames,
-                             action.preconditions,
-                             "precondition");
+                             conditions,
+                             "condition");
     checkActionPredicateRefs(report,
                              action,
                              predicateNames,
@@ -191,11 +203,20 @@ StructuralReport StructuralValidator::check(const ProjectModel& model) {
                object.type);
     }
   }
+  for (const auto& constant : model.constants) {
+    if (typeNames.find(constant.type) == typeNames.end()) {
+      addIssue(report,
+               Severity::Error,
+               "Domain constant '" + constant.name + "' uses undeclared type '" +
+                   constant.type + "'",
+               {}, {}, constant.type);
+    }
+  }
 
   std::set<std::string> actionReferencedPredicates;
   std::set<std::string> effectPredicates;
   for (const auto& action : model.actions) {
-    collectRefs(action.preconditions, actionReferencedPredicates);
+    collectRefs(actionConditionFacts(action), actionReferencedPredicates);
     collectRefs(action.addEffects, actionReferencedPredicates);
     collectRefs(action.delEffects, actionReferencedPredicates);
     collectRefs(action.addEffects, effectPredicates);
@@ -221,6 +242,11 @@ StructuralReport StructuralValidator::check(const ProjectModel& model) {
   for (const auto& scenario : model.scenarios) {
     for (const auto& goal : scenario.goals) {
       goalPredicates.insert(goal.predicateName);
+    }
+    for (const std::vector<FactRef>& alternative : scenario.goalAlternatives) {
+      for (const FactRef& goal : alternative) {
+        goalPredicates.insert(goal.predicateName);
+      }
     }
   }
 
@@ -255,6 +281,18 @@ StructuralReport StructuralValidator::check(const ProjectModel& model) {
   std::unordered_set<std::string> typesWithObjectsInSubtree;
   for (const auto& object : model.objects) {
     std::string current = object.type;
+    std::unordered_set<std::string> visited;
+    while (!current.empty() && visited.insert(current).second) {
+      typesWithObjectsInSubtree.insert(current);
+      const auto parentIt = parents.find(current);
+      if (parentIt == parents.end()) {
+        break;
+      }
+      current = parentIt->second;
+    }
+  }
+  for (const auto& constant : model.constants) {
+    std::string current = constant.type;
     std::unordered_set<std::string> visited;
     while (!current.empty() && visited.insert(current).second) {
       typesWithObjectsInSubtree.insert(current);

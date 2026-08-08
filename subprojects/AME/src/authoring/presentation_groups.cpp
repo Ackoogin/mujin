@@ -436,6 +436,14 @@ CanvasLayout PresentationGroups::computeLayout(const ProjectModel& model) {
       addLink(f, relation.actionIndex, CanvasLinkKind::Requires,
               static_cast<int>(relation.referenceIndex));
     }
+    for (const auto& relation : factRelations.requiredFalseBy) {
+      addLink(f, relation.actionIndex, CanvasLinkKind::RequiresFalse,
+              static_cast<int>(relation.referenceIndex));
+    }
+    for (const auto& relation : factRelations.acceptedAsAlternativeBy) {
+      addLink(f, relation.actionIndex, CanvasLinkKind::AcceptsAlternative,
+              static_cast<int>(relation.referenceIndex));
+    }
     for (const auto& relation : factRelations.madeTrueBy) {
       addLink(f, relation.actionIndex, CanvasLinkKind::MakesTrue,
               static_cast<int>(relation.referenceIndex));

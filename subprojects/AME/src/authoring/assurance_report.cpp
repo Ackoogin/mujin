@@ -1,6 +1,7 @@
 #include "assurance_report.h"
 
 #include "contingency_analyser.h"
+#include "guided_editor_model.h"
 #include "relation_index.h"
 #include "scenario_runner.h"
 #include "structural_validator.h"
@@ -79,7 +80,8 @@ std::string AssuranceReport::generate(const ProjectModel& model,
   out << "## 1. What the model contains\n\n";
   tableHeader(out, {"", "How many"});
   row(out, {"Types", std::to_string(model.types.size())});
-  row(out, {"Things", std::to_string(model.objects.size())});
+  row(out, {"Things in scenarios", std::to_string(model.objects.size())});
+  row(out, {"Things fixed by the domain", std::to_string(model.constants.size())});
   row(out, {"Facts", std::to_string(model.predicates.size())});
   row(out, {"Actions", std::to_string(model.actions.size())});
   row(out, {"Scenarios", std::to_string(model.scenarios.size())});
@@ -112,8 +114,9 @@ std::string AssuranceReport::generate(const ProjectModel& model,
       const std::string& name = model.predicates[index].name;
       std::vector<std::string> users;
       for (const ActionDef& action : model.actions) {
-        const bool uses = std::any_of(action.preconditions.begin(),
-                                      action.preconditions.end(),
+        const std::vector<EffectRef> conditions = actionConditionFacts(action);
+        const bool uses = std::any_of(conditions.begin(),
+                                      conditions.end(),
                                       [&name](const EffectRef& reference) {
                                         return reference.predicateName == name;
                                       });
@@ -149,6 +152,12 @@ std::string AssuranceReport::generate(const ProjectModel& model,
     out << "**" << unbound << " of " << model.actions.size()
         << " actions have nothing bound to them.**\n\n";
   }
+  out << "### What must be the case before each action can happen\n\n";
+  tableHeader(out, {"Action", "Before it can happen"});
+  for (const ActionDef& action : model.actions) {
+    row(out, {action.name, guidedConditionText(action)});
+  }
+  out << '\n';
 
   // ---- Facts that must be observed ---------------------------------------
   std::vector<std::string> confirmed;

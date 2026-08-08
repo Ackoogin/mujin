@@ -14,11 +14,18 @@ void from_json(const nlohmann::json& j, TypeDef& value) {
 
 void to_json(nlohmann::json& j, const Parameter& value) {
     j = nlohmann::json{{"name", value.name}, {"type", value.type}};
+    if (!value.eitherTypes.empty()) {
+        j["eitherTypes"] = value.eitherTypes;
+    }
 }
 
 void from_json(const nlohmann::json& j, Parameter& value) {
+    value = Parameter{};
     j.at("name").get_to(value.name);
     j.at("type").get_to(value.type);
+    if (j.contains("eitherTypes")) {
+        j.at("eitherTypes").get_to(value.eitherTypes);
+    }
 }
 
 void to_json(nlohmann::json& j, const PredicateDef& value) {
@@ -44,12 +51,102 @@ void from_json(const nlohmann::json& j, PredicateDef& value) {
 }
 
 void to_json(nlohmann::json& j, const EffectRef& value) {
-    j = nlohmann::json{{"predicateName", value.predicateName}, {"argNames", value.argNames}};
+    j = nlohmann::json{{"predicateName", value.predicateName},
+                       {"argNames", value.argNames}};
+    if (value.negated) {
+        j["negated"] = true;
+    }
+    if (value.alternative) {
+        j["alternative"] = true;
+    }
 }
 
 void from_json(const nlohmann::json& j, EffectRef& value) {
+    value = EffectRef{};
     j.at("predicateName").get_to(value.predicateName);
     j.at("argNames").get_to(value.argNames);
+    if (j.contains("negated")) {
+        j.at("negated").get_to(value.negated);
+    }
+    if (j.contains("alternative")) {
+        j.at("alternative").get_to(value.alternative);
+    }
+}
+
+namespace {
+
+std::string conditionKindName(ConditionKind kind) {
+    switch (kind) {
+    case ConditionKind::Fact: return "fact";
+    case ConditionKind::AllOf: return "all";
+    case ConditionKind::AnyOf: return "any";
+    case ConditionKind::ForEvery: return "every";
+    case ConditionKind::AtLeastOne: return "some";
+    case ConditionKind::Equality: return "equal";
+    }
+    return "all";
+}
+
+ConditionKind conditionKind(const std::string& name) {
+    if (name == "fact") return ConditionKind::Fact;
+    if (name == "any") return ConditionKind::AnyOf;
+    if (name == "every") return ConditionKind::ForEvery;
+    if (name == "some") return ConditionKind::AtLeastOne;
+    if (name == "equal") return ConditionKind::Equality;
+    return ConditionKind::AllOf;
+}
+
+void appendConditionFacts(const ConditionExpression& expression,
+                          std::vector<EffectRef>& facts,
+                          bool alternative = false) {
+    if (expression.kind == ConditionKind::Fact) {
+        EffectRef fact = expression.fact;
+        fact.negated = expression.negated || fact.negated;
+        fact.alternative = alternative || fact.alternative;
+        facts.push_back(std::move(fact));
+        return;
+    }
+    const bool child_alternative = alternative ||
+        expression.kind == ConditionKind::AnyOf ||
+        expression.kind == ConditionKind::AtLeastOne;
+    for (const ConditionExpression& child : expression.children) {
+        appendConditionFacts(child, facts, child_alternative);
+    }
+}
+
+}  // namespace
+
+void to_json(nlohmann::json& j, const ConditionExpression& value) {
+    j = nlohmann::json{{"kind", conditionKindName(value.kind)}};
+    if (value.kind == ConditionKind::Fact) {
+        j["fact"] = value.fact;
+    }
+    if (!value.children.empty()) {
+        j["children"] = value.children;
+    }
+    if (!value.variables.empty()) {
+        j["variables"] = value.variables;
+    }
+    if (!value.terms.empty()) {
+        j["terms"] = value.terms;
+    }
+    if (value.negated) {
+        j["negated"] = true;
+    }
+}
+
+void from_json(const nlohmann::json& j, ConditionExpression& value) {
+    value = ConditionExpression{};
+    std::string kind = "all";
+    if (j.contains("kind")) {
+        j.at("kind").get_to(kind);
+    }
+    value.kind = conditionKind(kind);
+    if (j.contains("fact")) j.at("fact").get_to(value.fact);
+    if (j.contains("children")) j.at("children").get_to(value.children);
+    if (j.contains("variables")) j.at("variables").get_to(value.variables);
+    if (j.contains("terms")) j.at("terms").get_to(value.terms);
+    if (j.contains("negated")) j.at("negated").get_to(value.negated);
 }
 
 void to_json(nlohmann::json& j, const BtBinding& value) {
@@ -114,6 +211,8 @@ void to_json(nlohmann::json& j, const ActionDef& value) {
         {"posY", value.posY},
         {"btBinding", value.btBinding},
         {"simulation", value.simulation},
+        {"hasConditionExpression", value.hasConditionExpression},
+        {"conditionExpression", value.conditionExpression},
     };
 }
 
@@ -133,6 +232,12 @@ void from_json(const nlohmann::json& j, ActionDef& value) {
     // the defaults: four ticks, always works.
     if (j.contains("simulation")) {
         j.at("simulation").get_to(value.simulation);
+    }
+    if (j.contains("hasConditionExpression")) {
+        j.at("hasConditionExpression").get_to(value.hasConditionExpression);
+    }
+    if (value.hasConditionExpression && j.contains("conditionExpression")) {
+        j.at("conditionExpression").get_to(value.conditionExpression);
     }
 }
 
@@ -356,6 +461,7 @@ void to_json(nlohmann::json& j, const ScenarioDef& value) {
         {"goals", value.goals},
         {"expectation", value.expectation},
         {"contingency", value.contingency},
+        {"goalAlternatives", value.goalAlternatives},
     };
 }
 
@@ -372,6 +478,9 @@ void from_json(const nlohmann::json& j, ScenarioDef& value) {
     if (j.contains("contingency")) {
         j.at("contingency").get_to(value.contingency);
     }
+    if (j.contains("goalAlternatives")) {
+        j.at("goalAlternatives").get_to(value.goalAlternatives);
+    }
 }
 
 void to_json(nlohmann::json& j, const ProjectModel& value) {
@@ -383,6 +492,7 @@ void to_json(nlohmann::json& j, const ProjectModel& value) {
         {"actions", value.actions},
         {"stateGroups", value.stateGroups},
         {"objects", value.objects},
+        {"constants", value.constants},
         {"scenarios", value.scenarios},
         {"presentationGroups", value.presentationGroups},
         {"savedViews", value.savedViews},
@@ -401,6 +511,10 @@ void from_json(const nlohmann::json& j, ProjectModel& value) {
         j.at("stateGroups").get_to(value.stateGroups);
     }
     j.at("objects").get_to(value.objects);
+    value.constants.clear();
+    if (j.contains("constants")) {
+        j.at("constants").get_to(value.constants);
+    }
     j.at("scenarios").get_to(value.scenarios);
     // Projects saved before groups and saved views existed have neither.
     value.presentationGroups.clear();
@@ -437,7 +551,11 @@ bool ProjectModel::load(const std::string& path) {
         nlohmann::json j;
         file >> j;
         *this = j.get<ProjectModel>();
-        return version == 1;
+        if (version != 1 && version != 2) {
+            return false;
+        }
+        version = 2;
+        return true;
     } catch (...) {
         return false;
     }
@@ -445,4 +563,20 @@ bool ProjectModel::load(const std::string& path) {
 
 void ProjectModel::clear() {
     *this = ProjectModel{};
+}
+
+std::vector<EffectRef> actionConditionFacts(const ActionDef& action) {
+    if (!action.hasConditionExpression) {
+        return action.preconditions;
+    }
+    std::vector<EffectRef> facts;
+    appendConditionFacts(action.conditionExpression, facts);
+    return facts;
+}
+
+bool actionHasNegativeCondition(const ActionDef& action) {
+    const std::vector<EffectRef> facts = actionConditionFacts(action);
+    return std::any_of(facts.begin(), facts.end(), [](const EffectRef& fact) {
+        return fact.negated;
+    });
 }

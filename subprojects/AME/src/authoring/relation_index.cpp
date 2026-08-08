@@ -9,12 +9,19 @@ namespace {
 const PredicateRelations kEmptyPredicateRelations;
 const ActionRelations kEmptyActionRelations;
 
-std::string argumentType(const ActionDef& action, const std::string& argument) {
+std::vector<std::string> argumentTypes(const ActionDef& action,
+                                       const std::string& argument) {
   const auto found = std::find_if(action.params.begin(), action.params.end(),
                                   [&argument](const Parameter& parameter) {
                                     return parameter.name == argument;
                                   });
-  return found == action.params.end() ? std::string{} : found->type;
+  if (found == action.params.end()) {
+    return {};
+  }
+  if (!found->eitherTypes.empty()) {
+    return found->eitherTypes;
+  }
+  return {found->type};
 }
 
 bool isSubtype(const ProjectModel& model,
@@ -49,6 +56,22 @@ bool typesOverlap(const ProjectModel& model,
          isSubtype(model, first, second) || isSubtype(model, second, first);
 }
 
+bool anyTypesOverlap(const ProjectModel& model,
+                     const std::vector<std::string>& first,
+                     const std::vector<std::string>& second) {
+  if (first.empty() || second.empty()) {
+    return true;
+  }
+  for (const std::string& first_type : first) {
+    for (const std::string& second_type : second) {
+      if (typesOverlap(model, first_type, second_type)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void appendUnique(std::vector<size_t>& values, size_t value) {
   if (std::find(values.begin(), values.end(), value) == values.end()) {
     values.push_back(value);
@@ -69,22 +92,26 @@ bool relationTypeCompatible(const ProjectModel& model,
 
   const ActionDef& source = model.actions[fromAction];
   const ActionDef& target = model.actions[toAction];
+  const std::vector<EffectRef> target_conditions = actionConditionFacts(target);
   if (fromAddEffect >= source.addEffects.size() ||
-      toPrecondition >= target.preconditions.size()) {
+      toPrecondition >= target_conditions.size()) {
     return false;
   }
 
   const EffectRef& effect = source.addEffects[fromAddEffect];
-  const EffectRef& precondition = target.preconditions[toPrecondition];
+  const EffectRef& precondition = target_conditions[toPrecondition];
+  if (precondition.negated) {
+    return false;
+  }
   if (effect.predicateName != precondition.predicateName ||
       effect.argNames.size() != precondition.argNames.size()) {
     return false;
   }
 
   for (size_t i = 0; i < effect.argNames.size(); ++i) {
-    if (!typesOverlap(model,
-                      argumentType(source, effect.argNames[i]),
-                      argumentType(target, precondition.argNames[i]))) {
+    if (!anyTypesOverlap(model,
+                         argumentTypes(source, effect.argNames[i]),
+                         argumentTypes(target, precondition.argNames[i]))) {
       return false;
     }
   }
@@ -115,12 +142,27 @@ RelationIndex::RelationIndex(const ProjectModel& model) {
         continue;
       }
       const size_t predicate_index = found->second;
-      PredicateActionRelation predicate_relation{action_index, reference_index, kind};
-      ActionPredicateRelation action_relation{predicate_index, reference_index, kind};
-      if (kind == PredicateRelationKind::Requires) {
+      const PredicateRelationKind actual_kind =
+          kind == PredicateRelationKind::Requires && references[reference_index].negated
+              ? PredicateRelationKind::RequiresFalse
+              : kind == PredicateRelationKind::Requires &&
+                    references[reference_index].alternative
+                  ? PredicateRelationKind::AcceptsAlternative : kind;
+      PredicateActionRelation predicate_relation{action_index, reference_index,
+                                                  actual_kind};
+      ActionPredicateRelation action_relation{predicate_index, reference_index,
+                                              actual_kind};
+      if (actual_kind == PredicateRelationKind::Requires) {
         predicate_relations_[predicate_index].requiredBy.push_back(predicate_relation);
         action_relations_[action_index].requires.push_back(action_relation);
-      } else if (kind == PredicateRelationKind::MakesTrue) {
+      } else if (actual_kind == PredicateRelationKind::RequiresFalse) {
+        predicate_relations_[predicate_index].requiredFalseBy.push_back(predicate_relation);
+        action_relations_[action_index].requiresFalse.push_back(action_relation);
+      } else if (actual_kind == PredicateRelationKind::AcceptsAlternative) {
+        predicate_relations_[predicate_index].acceptedAsAlternativeBy.push_back(
+            predicate_relation);
+        action_relations_[action_index].acceptsAlternatives.push_back(action_relation);
+      } else if (actual_kind == PredicateRelationKind::MakesTrue) {
         predicate_relations_[predicate_index].madeTrueBy.push_back(predicate_relation);
         action_relations_[action_index].makesTrue.push_back(action_relation);
       } else {
@@ -133,7 +175,8 @@ RelationIndex::RelationIndex(const ProjectModel& model) {
 
   for (size_t action_index = 0; action_index < model.actions.size(); ++action_index) {
     const ActionDef& action = model.actions[action_index];
-    addReferences(action_index, action.preconditions, PredicateRelationKind::Requires);
+    const std::vector<EffectRef> conditions = actionConditionFacts(action);
+    addReferences(action_index, conditions, PredicateRelationKind::Requires);
     addReferences(action_index, action.addEffects, PredicateRelationKind::MakesTrue);
     addReferences(action_index, action.delEffects, PredicateRelationKind::MakesFalse);
   }
@@ -156,8 +199,10 @@ RelationIndex::RelationIndex(const ProjectModel& model) {
         continue;
       }
       for (size_t to_action = 0; to_action < model.actions.size(); ++to_action) {
+        const std::vector<EffectRef> target_conditions =
+            actionConditionFacts(model.actions[to_action]);
         for (size_t precondition_index = 0;
-             precondition_index < model.actions[to_action].preconditions.size();
+             precondition_index < target_conditions.size();
              ++precondition_index) {
           if (!relationTypeCompatible(model, from_action, add_index,
                                       to_action, precondition_index)) {

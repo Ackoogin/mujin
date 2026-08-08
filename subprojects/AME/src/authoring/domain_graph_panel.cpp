@@ -376,6 +376,8 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     } else if (showCounts) {
       const PredicateRelations& relations = relation_index.predicate(static_cast<size_t>(i));
       ImGui::TextDisabled("%zu links", relations.requiredBy.size() +
+                          relations.requiredFalseBy.size() +
+                          relations.acceptedAsAlternativeBy.size() +
                           relations.madeTrueBy.size() + relations.madeFalseBy.size());
     }
 
@@ -404,6 +406,7 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       continue;  // a collapsed group is standing in for it
     }
     ActionDef& action = model.actions[i];
+    const std::vector<EffectRef> conditions = actionConditionFacts(action);
     const ed::NodeId nodeId = 3000 + i;
 
     if (action.posX == 0.0f && action.posY == 0.0f) {
@@ -433,23 +436,26 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       }
     } else if (showCounts) {
       ImGui::TextDisabled("%zu conditions, %zu outcomes",
-                          action.preconditions.size(),
+                          conditions.size(),
                           action.addEffects.size() + action.delEffects.size());
     }
 
-    if (showDetails && !action.preconditions.empty()) {
+    if (showDetails && !conditions.empty()) {
       // No ImGui::Separator here — it would stretch across the full canvas
       // width inside an ed::BeginNode block. The TextDisabled label alone
       // is enough to demarcate the section.
       ImGui::Spacing();
-      ImGui::TextDisabled("Preconditions");
+      ImGui::TextDisabled("Before it can happen");
     }
-    for (int pi = 0; pi < static_cast<int>(action.preconditions.size()); ++pi) {
+    for (int pi = 0; pi < static_cast<int>(conditions.size()); ++pi) {
       const ed::PinId pinId = actionPreconditionPinId(i, pi);
       ed::BeginPin(pinId, ed::PinKind::Input);
       const std::string label = showDetails
-          ? authoring::formatEffectRef(action.preconditions[pi]) : " ";
-      ImGui::TextColored(ImVec4(0.88F, 0.69F, 0.32F, 1.0F), "%s", label.c_str());
+          ? authoring::formatEffectRef(conditions[pi]) : " ";
+      const ImVec4 colour = conditions[pi].negated
+          ? ImVec4(0.95F, 0.51F, 0.42F, 1.0F)
+          : ImVec4(0.88F, 0.69F, 0.32F, 1.0F);
+      ImGui::TextColored(colour, "%s", label.c_str());
       ed::EndPin();
     }
 
@@ -515,6 +521,14 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     case CanvasLinkKind::Requires:
       ed::Link(link_id++, fact_out, action_in,
                ImVec4(0.88F, 0.69F, 0.32F, 1.0F));
+      break;
+    case CanvasLinkKind::RequiresFalse:
+      ed::Link(link_id++, fact_out, action_in,
+               ImVec4(0.95F, 0.51F, 0.42F, 1.0F));
+      break;
+    case CanvasLinkKind::AcceptsAlternative:
+      ed::Link(link_id++, fact_out, action_in,
+               ImVec4(0.38F, 0.72F, 0.92F, 1.0F));
       break;
     case CanvasLinkKind::MakesTrue:
       ed::Link(link_id++, action_out, fact_in,
@@ -839,8 +853,11 @@ void DomainGraphPanel::renderFocused(const ProjectModel& model,
     ImVec4 colour(0.88F, 0.69F, 0.32F, 1.0F);
     if (edge.kind == PredicateRelationKind::MakesTrue) {
       colour = ImVec4(0.32F, 0.84F, 0.60F, 1.0F);
-    } else if (edge.kind == PredicateRelationKind::MakesFalse) {
+    } else if (edge.kind == PredicateRelationKind::MakesFalse ||
+               edge.kind == PredicateRelationKind::RequiresFalse) {
       colour = ImVec4(0.95F, 0.51F, 0.42F, 1.0F);
+    } else if (edge.kind == PredicateRelationKind::AcceptsAlternative) {
+      colour = ImVec4(0.38F, 0.72F, 0.92F, 1.0F);
     }
     ed::Link(300000 + static_cast<int>(i),
              200001 + edge.fromNode * 2,

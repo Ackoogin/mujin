@@ -26,6 +26,30 @@ bool nameTaken(const ProjectModel& model,
                      });
 }
 
+void renameTypeInParameter(Parameter& parameter,
+                           const std::string& old_name,
+                           const std::string& new_name) {
+  if (parameter.type == old_name) {
+    parameter.type = new_name;
+  }
+  for (std::string& type : parameter.eitherTypes) {
+    if (type == old_name) {
+      type = new_name;
+    }
+  }
+}
+
+void renameTypeInCondition(ConditionExpression& condition,
+                           const std::string& old_name,
+                           const std::string& new_name) {
+  for (Parameter& variable : condition.variables) {
+    renameTypeInParameter(variable, old_name, new_name);
+  }
+  for (ConditionExpression& child : condition.children) {
+    renameTypeInCondition(child, old_name, new_name);
+  }
+}
+
 }  // namespace
 
 std::string ElementClipboard::description() const {
@@ -76,21 +100,25 @@ bool ModelEdits::renameType(ProjectModel& model,
   }
   for (PredicateDef& predicate : model.predicates) {
     for (Parameter& parameter : predicate.params) {
-      if (parameter.type == oldName) {
-        parameter.type = newName;
-      }
+      renameTypeInParameter(parameter, oldName, newName);
     }
   }
   for (ActionDef& action : model.actions) {
     for (Parameter& parameter : action.params) {
-      if (parameter.type == oldName) {
-        parameter.type = newName;
-      }
+      renameTypeInParameter(parameter, oldName, newName);
+    }
+    if (action.hasConditionExpression) {
+      renameTypeInCondition(action.conditionExpression, oldName, newName);
     }
   }
   for (ObjectDef& object : model.objects) {
     if (object.type == oldName) {
       object.type = newName;
+    }
+  }
+  for (ObjectDef& constant : model.constants) {
+    if (constant.type == oldName) {
+      constant.type = newName;
     }
   }
   for (StateGroupDef& group : model.stateGroups) {

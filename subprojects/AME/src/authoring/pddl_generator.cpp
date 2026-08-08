@@ -26,7 +26,13 @@ void emitParameters(std::ostringstream& out, const std::vector<Parameter>& param
       out << " ";
     }
     out << parameterName(params[i].name);
-    if (!params[i].type.empty()) {
+    if (!params[i].eitherTypes.empty()) {
+      out << " - (either";
+      for (const std::string& type : params[i].eitherTypes) {
+        out << " " << type;
+      }
+      out << ")";
+    } else if (!params[i].type.empty()) {
       out << " - " << params[i].type;
     }
   }
@@ -46,6 +52,52 @@ void emitFact(std::ostringstream& out, const FactRef& ref) {
     out << " " << arg;
   }
   out << ")";
+}
+
+void emitCondition(std::ostringstream& out,
+                   const ConditionExpression& condition) {
+  const bool negated = condition.negated ||
+      (condition.kind == ConditionKind::Fact && condition.fact.negated);
+  if (negated) {
+    out << "(not ";
+  }
+  switch (condition.kind) {
+  case ConditionKind::Fact:
+    emitFact(out, condition.fact);
+    break;
+  case ConditionKind::AllOf:
+  case ConditionKind::AnyOf:
+    out << "(" << (condition.kind == ConditionKind::AllOf ? "and" : "or");
+    for (const ConditionExpression& child : condition.children) {
+      out << " ";
+      emitCondition(out, child);
+    }
+    out << ")";
+    break;
+  case ConditionKind::ForEvery:
+  case ConditionKind::AtLeastOne:
+    out << "(" << (condition.kind == ConditionKind::ForEvery
+                        ? "forall" : "exists") << " (";
+    emitParameters(out, condition.variables);
+    out << ") ";
+    if (condition.children.empty()) {
+      out << "(and)";
+    } else {
+      emitCondition(out, condition.children.front());
+    }
+    out << ")";
+    break;
+  case ConditionKind::Equality:
+    out << "(=";
+    for (const std::string& term : condition.terms) {
+      out << " " << term;
+    }
+    out << ")";
+    break;
+  }
+  if (negated) {
+    out << ")";
+  }
 }
 
 bool isParameterRef(const std::string& arg) {
@@ -95,29 +147,41 @@ std::vector<ObjectDef> problemObjectsWithImplicitLiterals(
     const ScenarioDef& scenario) {
   std::vector<ObjectDef> objects = model.objects;
 
+  const auto appendLiteral = [&](const std::string& predicate_name,
+                                 const std::vector<std::string>& args) {
+    std::vector<ObjectDef> known = objects;
+    known.insert(known.end(), model.constants.begin(), model.constants.end());
+    appendImplicitLiteralObjects(model, predicate_name, args, known);
+    for (const ObjectDef& object : known) {
+      if (!hasObjectNamed(objects, object.name) &&
+          !hasObjectNamed(model.constants, object.name)) {
+        objects.push_back(object);
+      }
+    }
+  };
+
   for (const auto& action : model.actions) {
-    for (const auto& ref : action.preconditions) {
-      appendImplicitLiteralObjects(model, ref.predicateName, ref.argNames, objects);
+    for (const auto& ref : actionConditionFacts(action)) {
+      appendLiteral(ref.predicateName, ref.argNames);
     }
     for (const auto& ref : action.addEffects) {
-      appendImplicitLiteralObjects(model, ref.predicateName, ref.argNames, objects);
+      appendLiteral(ref.predicateName, ref.argNames);
     }
     for (const auto& ref : action.delEffects) {
-      appendImplicitLiteralObjects(model, ref.predicateName, ref.argNames, objects);
+      appendLiteral(ref.predicateName, ref.argNames);
     }
   }
 
   for (const auto& fact : scenario.initialState) {
-    appendImplicitLiteralObjects(model,
-                                 fact.predicateName,
-                                 fact.objectNames,
-                                 objects);
+    appendLiteral(fact.predicateName, fact.objectNames);
   }
   for (const auto& fact : scenario.goals) {
-    appendImplicitLiteralObjects(model,
-                                 fact.predicateName,
-                                 fact.objectNames,
-                                 objects);
+    appendLiteral(fact.predicateName, fact.objectNames);
+  }
+  for (const std::vector<FactRef>& alternative : scenario.goalAlternatives) {
+    for (const FactRef& fact : alternative) {
+      appendLiteral(fact.predicateName, fact.objectNames);
+    }
   }
 
   return objects;
@@ -207,6 +271,18 @@ std::string PddlGenerator::generateDomain(const ProjectModel& model) {
   }
   out << "  )\n\n";
 
+  if (!model.constants.empty()) {
+    out << "  (:constants\n";
+    for (const ObjectDef& constant : model.constants) {
+      out << "    " << constant.name;
+      if (!constant.type.empty()) {
+        out << " - " << constant.type;
+      }
+      out << "\n";
+    }
+    out << "  )\n\n";
+  }
+
   out << "  (:predicates\n";
   for (const auto& predicate : model.predicates) {
     out << "    (" << predicate.name;
@@ -245,9 +321,13 @@ std::string PddlGenerator::generateDomain(const ProjectModel& model) {
     out << "    :parameters (";
     emitParameters(out, action.params);
     out << ")\n";
-    if (!action.preconditions.empty()) {
+    if (action.hasConditionExpression || !action.preconditions.empty()) {
       out << "    :precondition ";
-      emitFactList(out, action.preconditions, "      ");
+      if (action.hasConditionExpression) {
+        emitCondition(out, action.conditionExpression);
+      } else {
+        emitFactList(out, action.preconditions, "      ");
+      }
       out << "\n";
     }
     out << "    :effect ";
@@ -295,7 +375,23 @@ std::string PddlGenerator::generateProblem(const ProjectModel& model,
   out << "  )\n\n";
 
   out << "  (:goal ";
-  if (scenario->goals.size() == 1U) {
+  if (!scenario->goalAlternatives.empty()) {
+    out << "(or";
+    for (const std::vector<FactRef>& alternative : scenario->goalAlternatives) {
+      out << " ";
+      if (alternative.size() == 1U) {
+        emitFact(out, alternative.front());
+      } else {
+        out << "(and";
+        for (const FactRef& goal : alternative) {
+          out << " ";
+          emitFact(out, goal);
+        }
+        out << ")";
+      }
+    }
+    out << "))\n";
+  } else if (scenario->goals.size() == 1U) {
     emitFact(out, scenario->goals.front());
     out << ")\n";
   } else {

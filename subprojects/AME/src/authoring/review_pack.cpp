@@ -107,6 +107,8 @@ std::string domainSummary(const ProjectModel& model,
           [](const TypeDef& value) { return value.name + " — child of " + value.parent; });
   section("Objects", model.objects,
           [](const ObjectDef& value) { return value.name + " — " + value.type; });
+  section("Domain constants", model.constants,
+          [](const ObjectDef& value) { return value.name + " — " + value.type; });
   section("Facts", model.predicates,
           [](const PredicateDef& value) { return value.name; });
   section("Actions", model.actions,
@@ -242,4 +244,3 @@ ReviewPackResult ReviewPackExporter::write(
   }
   return result;
 }
-

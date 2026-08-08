@@ -159,23 +159,50 @@ std::vector<std::string> collectAtoms(const Sexpr& list, size_t start) {
   return atoms;
 }
 
-std::vector<Parameter> parseParameters(const Sexpr& list, size_t start = 0U) {
-  const std::vector<std::string> atoms = collectAtoms(list, start);
+std::vector<Parameter> parseParameters(const Sexpr& list,
+                                       size_t start = 0U,
+                                       bool allow_either = false) {
+  if (!list.isList) {
+    throw std::runtime_error("expected parameter list");
+  }
   std::vector<Parameter> params;
   std::vector<std::string> pending;
 
-  for (size_t i = 0; i < atoms.size(); ++i) {
-    if (atoms[i] == "-") {
-      if (i + 1U >= atoms.size()) {
+  for (size_t i = start; i < list.children.size(); ++i) {
+    const Sexpr& item = list.children[i];
+    if (!item.isList && item.atom == "-") {
+      if (pending.empty() || i + 1U >= list.children.size()) {
         throw std::runtime_error("missing type after '-'");
       }
-      const std::string type = atoms[++i];
+      const Sexpr& type_expr = list.children[++i];
+      Parameter type;
+      if (!type_expr.isList) {
+        type.type = type_expr.atom;
+      } else if (allow_either && !type_expr.children.empty() &&
+                 isKeyword(type_expr.children.front(), "either")) {
+        for (size_t type_index = 1; type_index < type_expr.children.size();
+             ++type_index) {
+          if (type_expr.children[type_index].isList) {
+            throw std::runtime_error("type names in '(either ...)' must be names");
+          }
+          type.eitherTypes.push_back(type_expr.children[type_index].atom);
+        }
+        if (type.eitherTypes.empty()) {
+          throw std::runtime_error("'(either ...)' needs at least one type");
+        }
+      } else {
+        throw std::runtime_error("expected a type name or '(either ...)' after '-'");
+      }
       for (const auto& name : pending) {
-        params.push_back({name, type});
+        Parameter parameter = type;
+        parameter.name = name;
+        params.push_back(std::move(parameter));
       }
       pending.clear();
+    } else if (!item.isList) {
+      pending.push_back(item.atom);
     } else {
-      pending.push_back(atoms[i]);
+      throw std::runtime_error("expected a parameter name");
     }
   }
 
@@ -251,6 +278,9 @@ void appendUniqueObjects(std::vector<ObjectDef>& target,
 }
 
 EffectRef parseEffectRef(const Sexpr& expr) {
+  if (!expr.isList) {
+    return {expr.atom, {}};
+  }
   if (!expr.isList || expr.children.empty() || expr.children.front().isList) {
     throw std::runtime_error("expected fact expression");
   }
@@ -270,20 +300,101 @@ EffectRef parseEffectRef(const Sexpr& expr) {
   return ref;
 }
 
+ConditionExpression parseCondition(const Sexpr& expr,
+                                   const std::string& action_name) {
+  const auto malformed = [&action_name](const std::string& detail) {
+    throw std::runtime_error("action '" + action_name + "': " + detail);
+  };
+
+  if (!expr.isList) {
+    ConditionExpression condition;
+    condition.kind = ConditionKind::Fact;
+    condition.fact = parseEffectRef(expr);
+    return condition;
+  }
+  if (expr.children.empty() || expr.children.front().isList) {
+    malformed("expected a condition");
+  }
+
+  const std::string head = toLower(expr.children.front().atom);
+  ConditionExpression condition;
+  if (head == "and" || head == "or") {
+    condition.kind = head == "and" ? ConditionKind::AllOf
+                                     : ConditionKind::AnyOf;
+    for (size_t i = 1; i < expr.children.size(); ++i) {
+      condition.children.push_back(parseCondition(expr.children[i], action_name));
+    }
+    return condition;
+  }
+  if (head == "not") {
+    if (expr.children.size() != 2U) {
+      malformed("'must not be true' needs exactly one fact");
+    }
+    condition = parseCondition(expr.children[1], action_name);
+    if (condition.kind != ConditionKind::Fact &&
+        condition.kind != ConditionKind::Equality) {
+      malformed("'must not be true' can only apply to one fact or comparison");
+    }
+    condition.negated = true;
+    return condition;
+  }
+  if (head == "forall" || head == "exists") {
+    if (expr.children.size() != 3U || !expr.children[1].isList) {
+      malformed("'" + head + "' needs a list of names and one condition");
+    }
+    condition.kind = head == "forall" ? ConditionKind::ForEvery
+                                        : ConditionKind::AtLeastOne;
+    condition.variables = parseParameters(expr.children[1]);
+    condition.children.push_back(parseCondition(expr.children[2], action_name));
+    return condition;
+  }
+  if (head == "=") {
+    if (expr.children.size() != 3U || expr.children[1].isList ||
+        expr.children[2].isList) {
+      malformed("a comparison needs exactly two names");
+    }
+    condition.kind = ConditionKind::Equality;
+    condition.terms = {expr.children[1].atom, expr.children[2].atom};
+    return condition;
+  }
+
+  condition.kind = ConditionKind::Fact;
+  condition.fact = parseEffectRef(expr);
+  return condition;
+}
+
+void appendConditionFacts(const ConditionExpression& condition,
+                          std::vector<EffectRef>& facts,
+                          bool alternative = false) {
+  if (condition.kind == ConditionKind::Fact) {
+    EffectRef fact = condition.fact;
+    fact.negated = fact.negated || condition.negated;
+    fact.alternative = alternative || fact.alternative;
+    facts.push_back(std::move(fact));
+    return;
+  }
+  const bool child_alternative = alternative ||
+      condition.kind == ConditionKind::AnyOf ||
+      condition.kind == ConditionKind::AtLeastOne;
+  for (const ConditionExpression& child : condition.children) {
+    appendConditionFacts(child, facts, child_alternative);
+  }
+}
+
+bool isSimplePositiveCondition(const ConditionExpression& condition) {
+  if (condition.kind == ConditionKind::Fact) {
+    return !condition.negated && !condition.fact.negated;
+  }
+  if (condition.kind != ConditionKind::AllOf) {
+    return false;
+  }
+  return std::all_of(condition.children.begin(), condition.children.end(),
+                     isSimplePositiveCondition);
+}
+
 FactRef parseFactRef(const Sexpr& expr) {
   const EffectRef effect = parseEffectRef(expr);
   return {effect.predicateName, effect.argNames};
-}
-
-void parseFactExpressionList(const Sexpr& expr, std::vector<EffectRef>& refs) {
-  if (expr.isList && !expr.children.empty() && isKeyword(expr.children.front(), "and")) {
-    for (size_t i = 1; i < expr.children.size(); ++i) {
-      refs.push_back(parseEffectRef(expr.children[i]));
-    }
-    return;
-  }
-
-  refs.push_back(parseEffectRef(expr));
 }
 
 void parseGoalExpressionList(const Sexpr& expr, std::vector<FactRef>& refs) {
@@ -373,12 +484,18 @@ ActionDef parseAction(const Sexpr& expr) {
       if (i + 1U >= expr.children.size()) {
         throw std::runtime_error("missing :parameters list");
       }
-      action.params = parseParameters(expr.children[++i]);
+      action.params = parseParameters(expr.children[++i], 0U, true);
     } else if (keyword == ":precondition") {
       if (i + 1U >= expr.children.size()) {
         throw std::runtime_error("missing :precondition expression");
       }
-      parseFactExpressionList(expr.children[++i], action.preconditions);
+      const ConditionExpression condition =
+          parseCondition(expr.children[++i], action.name);
+      appendConditionFacts(condition, action.preconditions);
+      action.hasConditionExpression = !isSimplePositiveCondition(condition);
+      if (action.hasConditionExpression) {
+        action.conditionExpression = condition;
+      }
     } else if (keyword == ":effect") {
       if (i + 1U >= expr.children.size()) {
         throw std::runtime_error("missing :effect expression");
@@ -442,7 +559,7 @@ PddlImportResult PddlImporter::importDomain(const std::string& domainPddl) {
     }
 
     if (const Sexpr* constants = findListSection(root, ":constants")) {
-      appendUniqueObjects(model.objects, parseObjects(*constants));
+      model.constants = parseObjects(*constants);
     }
 
     for (const auto& child : root.children) {
@@ -497,7 +614,21 @@ PddlImportResult PddlImporter::importProblem(const ProjectModel& model,
       if (goal->children.size() < 2U) {
         throw std::runtime_error("missing goal expression");
       }
-      parseGoalExpressionList(goal->children[1], scenario.goals);
+      const Sexpr& expression = goal->children[1];
+      if (expression.isList && !expression.children.empty() &&
+          isKeyword(expression.children.front(), "or")) {
+        if (expression.children.size() == 1U) {
+          throw std::runtime_error("goal says 'any one of these' but has no choices");
+        }
+        for (size_t i = 1; i < expression.children.size(); ++i) {
+          std::vector<FactRef> alternative;
+          parseGoalExpressionList(expression.children[i], alternative);
+          scenario.goalAlternatives.push_back(std::move(alternative));
+        }
+        scenario.goals = scenario.goalAlternatives.front();
+      } else {
+        parseGoalExpressionList(expression, scenario.goals);
+      }
     }
 
     imported.scenarios.push_back(std::move(scenario));

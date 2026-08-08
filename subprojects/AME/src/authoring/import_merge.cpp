@@ -15,7 +15,8 @@ bool sameParameters(const std::vector<Parameter>& a,
     return false;
   }
   for (size_t i = 0; i < a.size(); ++i) {
-    if (a[i].name != b[i].name || a[i].type != b[i].type) {
+    if (a[i].name != b[i].name || a[i].type != b[i].type ||
+        a[i].eitherTypes != b[i].eitherTypes) {
       return false;
     }
   }
@@ -29,7 +30,8 @@ bool sameReferences(const std::vector<EffectRef>& a,
   }
   for (size_t i = 0; i < a.size(); ++i) {
     if (a[i].predicateName != b[i].predicateName ||
-        a[i].argNames != b[i].argNames) {
+        a[i].argNames != b[i].argNames || a[i].negated != b[i].negated ||
+        a[i].alternative != b[i].alternative) {
       return false;
     }
   }
@@ -44,12 +46,16 @@ bool sameFact(const PredicateDef& a, const PredicateDef& b) {
 bool sameAction(const ActionDef& a, const ActionDef& b) {
   return a.name == b.name && sameParameters(a.params, b.params) &&
          sameReferences(a.preconditions, b.preconditions) &&
+         a.hasConditionExpression == b.hasConditionExpression &&
+         (!a.hasConditionExpression ||
+          nlohmann::json(a.conditionExpression) ==
+              nlohmann::json(b.conditionExpression)) &&
          sameReferences(a.addEffects, b.addEffects) &&
          sameReferences(a.delEffects, b.delEffects);
 }
 
 std::string describeLoss(const ActionDef& action) {
-  const size_t conditions = action.preconditions.size();
+  const size_t conditions = actionConditionFacts(action).size();
   const size_t outcomes = action.addEffects.size() + action.delEffects.size();
   return std::to_string(conditions) + " condition" +
          (conditions == 1U ? "" : "s") + " and " + std::to_string(outcomes) +
@@ -192,6 +198,24 @@ MergePlan ImportMerge::plan(const ProjectModel& current,
     }
     plan.items.push_back(std::move(item));
   }
+  for (const ObjectDef& constant : incoming.constants) {
+    const ObjectDef* existing =
+        findBy(current.constants, [&constant](const ObjectDef& item) {
+          return item.name == constant.name;
+        });
+    MergeItem item;
+    item.kind = MergeKind::Object;
+    item.name = constant.name;
+    if (existing == nullptr) {
+      item.disposition = MergeDisposition::Added;
+    } else if (existing->type == constant.type) {
+      item.disposition = MergeDisposition::Unchanged;
+    } else {
+      item.disposition = MergeDisposition::Replaced;
+      item.whatWouldBeLost = "its type, " + existing->type;
+    }
+    plan.items.push_back(std::move(item));
+  }
 
   return plan;
 }
@@ -266,6 +290,18 @@ ProjectModel ImportMerge::apply(const ProjectModel& current,
       *it = object;
     }
   }
+  for (const ObjectDef& constant : incoming.constants) {
+    const auto it = std::find_if(
+        merged.constants.begin(), merged.constants.end(),
+        [&constant](const ObjectDef& item) {
+          return item.name == constant.name;
+        });
+    if (it == merged.constants.end()) {
+      merged.constants.push_back(constant);
+    } else if (choices.replaces(MergeKind::Object)) {
+      *it = constant;
+    }
+  }
 
   return merged;
 }
@@ -305,7 +341,7 @@ void ImportMerge::layoutByRelationships(ProjectModel& model) {
         row += 1.0F;
       }
     };
-    place(action.preconditions);
+    place(actionConditionFacts(action));
     place(action.addEffects);
     place(action.delEffects);
     column += 1.0F;

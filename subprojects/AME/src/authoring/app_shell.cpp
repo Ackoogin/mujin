@@ -29,6 +29,7 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <sstream>
 #include <string>
@@ -515,7 +516,7 @@ static void renderGuidedReferenceGroup(const char* visibleTitle,
             predicate != nullptr && !predicate->params.empty()
                 ? predicate->params.front().type : std::string{};
         for (const Parameter& parameter : action.params) {
-          const bool legal = guidedTypeCompatible(model, parameter.type, expected);
+          const bool legal = guidedParameterCompatible(model, parameter, expected);
           if (ImGui::Selectable(parameter.name.c_str(),
                                 parameter.name == reference.argNames.front(),
                                 legal ? ImGuiSelectableFlags_None
@@ -575,7 +576,7 @@ static void renderGuidedReferenceGroup(const char* visibleTitle,
       const std::string combo_id = "##arg" + std::to_string(argument_index);
       if (ImGui::BeginCombo(combo_id.c_str(), reference.argNames[argument_index].c_str())) {
         for (const Parameter& parameter : action.params) {
-          const bool legal = guidedTypeCompatible(model, parameter.type, expected);
+          const bool legal = guidedParameterCompatible(model, parameter, expected);
           if (ImGui::Selectable(parameter.name.c_str(),
                                 parameter.name == reference.argNames[argument_index],
                                 legal ? ImGuiSelectableFlags_None
@@ -665,6 +666,387 @@ static void renderGuidedReferenceGroup(const char* visibleTitle,
   ImGui::PopID();
 }
 
+static ConditionExpression guidedFactCondition(const ProjectModel& model,
+                                                const ActionDef& action,
+                                                bool negated) {
+  ConditionExpression condition;
+  condition.kind = ConditionKind::Fact;
+  const std::vector<GuidedEditorChoice> choices =
+      guidedPredicateChoices(model, action);
+  const auto legal = std::find_if(
+      choices.begin(), choices.end(),
+      [](const GuidedEditorChoice& choice) { return choice.legal; });
+  if (legal != choices.end()) {
+    condition.fact = makeGuidedReference(
+        model, action, model.predicates[legal->index]);
+  }
+  condition.negated = negated;
+  return condition;
+}
+
+static ConditionExpression guidedQuantifiedFactCondition(
+    const ProjectModel& model,
+    const ActionDef& action,
+    const Parameter& variable) {
+  ActionDef names_in_scope = action;
+  names_in_scope.params.push_back(variable);
+  for (const PredicateDef& predicate : model.predicates) {
+    const auto argument = std::find_if(
+        predicate.params.begin(), predicate.params.end(),
+        [&](const Parameter& expected) {
+          return guidedParameterCompatible(model, variable, expected.type);
+        });
+    if (argument == predicate.params.end()) {
+      continue;
+    }
+    const std::vector<GuidedEditorChoice> choices =
+        guidedArgumentChoices(model, names_in_scope, predicate,
+                              static_cast<size_t>(argument -
+                                  predicate.params.begin()));
+    if (std::none_of(choices.begin(), choices.end(),
+                     [](const GuidedEditorChoice& choice) {
+                       return choice.legal;
+                     })) {
+      continue;
+    }
+    ConditionExpression condition;
+    condition.kind = ConditionKind::Fact;
+    condition.fact = makeGuidedReference(model, names_in_scope, predicate);
+    condition.fact.argNames[static_cast<size_t>(
+        argument - predicate.params.begin())] = variable.name;
+    return condition;
+  }
+  return {};
+}
+
+static void renderConditionShapeButtons(int action_index,
+                                        ProjectModel& model,
+                                        CommandStack& stack) {
+  if (model.predicates.empty()) {
+    return;
+  }
+  const ActionDef& action = model.actions[static_cast<size_t>(action_index)];
+  const ConditionExpression fact = guidedFactCondition(model, action, false);
+  if (fact.fact.predicateName.empty()) {
+    ImGui::TextDisabled("No fact fits the names this action involves");
+    return;
+  }
+
+  if (ImGui::SmallButton("+ Add a fact that must be false")) {
+    ConditionExpression negative = fact;
+    negative.negated = true;
+    stack.execute(model, "Add a condition about a false fact",
+                  [action_index, negative](ProjectModel& target) {
+      appendGuidedCondition(
+          target.actions[static_cast<size_t>(action_index)], negative);
+    });
+  }
+  ImGui::SameLine();
+  if (ImGui::SmallButton("+ Add choices where any one is enough")) {
+    ConditionExpression choices;
+    choices.kind = ConditionKind::AnyOf;
+    choices.children = {fact, fact};
+    stack.execute(model, "Add alternative conditions",
+                  [action_index, choices](ProjectModel& target) {
+      appendGuidedCondition(
+          target.actions[static_cast<size_t>(action_index)], choices);
+    });
+  }
+
+  if (!model.types.empty()) {
+    const std::string type = model.types.front().name;
+    const Parameter variable{"?each", type};
+    ConditionExpression body =
+        guidedQuantifiedFactCondition(model, action, variable);
+    if (!body.fact.predicateName.empty()) {
+      const auto add_quantified = [&](ConditionKind kind,
+                                      const char* command) {
+        ConditionExpression quantified;
+        quantified.kind = kind;
+        quantified.variables.push_back(variable);
+        quantified.children.push_back(body);
+        stack.execute(model, command,
+                      [action_index, quantified](ProjectModel& target) {
+          appendGuidedCondition(
+              target.actions[static_cast<size_t>(action_index)], quantified);
+        });
+      };
+      if (ImGui::SmallButton("+ Add a condition for every one")) {
+        add_quantified(ConditionKind::ForEvery,
+                       "Add a condition for every matching thing");
+      }
+      ImGui::SameLine();
+      if (ImGui::SmallButton("+ Add a condition for at least one")) {
+        add_quantified(ConditionKind::AtLeastOne,
+                       "Add a condition for at least one matching thing");
+      }
+    }
+  }
+
+  if (action.params.size() >= 2U) {
+    if (ImGui::SmallButton("+ Require two names to be different")) {
+      ConditionExpression comparison;
+      comparison.kind = ConditionKind::Equality;
+      comparison.negated = true;
+      comparison.terms = {action.params[0].name, action.params[1].name};
+      stack.execute(model, "Require two names to be different",
+                    [action_index, comparison](ProjectModel& target) {
+        appendGuidedCondition(
+            target.actions[static_cast<size_t>(action_index)], comparison);
+      });
+    }
+  }
+}
+
+static ConditionExpression* conditionAt(ActionDef& action,
+                                        const std::vector<size_t>& path) {
+  ConditionExpression* condition = &action.conditionExpression;
+  for (const size_t child : path) {
+    if (child >= condition->children.size()) {
+      return nullptr;
+    }
+    condition = &condition->children[child];
+  }
+  return condition;
+}
+
+static void editCondition(ProjectModel& model,
+                          CommandStack& stack,
+                          int action_index,
+                          std::vector<size_t> path,
+                          const char* label,
+                          std::function<void(ConditionExpression&)> edit) {
+  stack.execute(model, label,
+                [action_index, path = std::move(path),
+                 edit = std::move(edit)](ProjectModel& target) {
+    ActionDef& action = target.actions[static_cast<size_t>(action_index)];
+    ConditionExpression* condition = conditionAt(action, path);
+    if (condition != nullptr) {
+      edit(*condition);
+      action.preconditions = actionConditionFacts(action);
+    }
+  });
+}
+
+static void renameConditionTerm(ConditionExpression& condition,
+                                const std::string& old_name,
+                                const std::string& new_name) {
+  for (std::string& term : condition.terms) {
+    if (term == old_name) term = new_name;
+  }
+  for (std::string& argument : condition.fact.argNames) {
+    if (argument == old_name) argument = new_name;
+  }
+  for (ConditionExpression& child : condition.children) {
+    renameConditionTerm(child, old_name, new_name);
+  }
+}
+
+static void renderConditionEditor(int action_index,
+                                  std::vector<size_t> path,
+                                  ActionDef names_in_scope,
+                                  ProjectModel& model,
+                                  CommandStack& stack) {
+  ActionDef& stored_action = model.actions[static_cast<size_t>(action_index)];
+  ConditionExpression* condition = conditionAt(stored_action, path);
+  if (condition == nullptr) {
+    return;
+  }
+
+  ImGui::PushID(condition);
+  if (condition->kind == ConditionKind::Fact) {
+    const bool negated = condition->negated || condition->fact.negated;
+    ImGui::SetNextItemWidth(125.0F);
+    if (ImGui::BeginCombo("##truth", negated ? "must be false" : "must be true")) {
+      if (ImGui::Selectable("must be true", !negated)) {
+        editCondition(model, stack, action_index, path, "Need a fact to be true",
+                      [](ConditionExpression& item) {
+          item.negated = false;
+          item.fact.negated = false;
+        });
+      }
+      if (ImGui::Selectable("must be false", negated)) {
+        editCondition(model, stack, action_index, path, "Need a fact to be false",
+                      [](ConditionExpression& item) {
+          item.negated = true;
+          item.fact.negated = false;
+        });
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(145.0F);
+    if (ImGui::BeginCombo("##condition-fact", condition->fact.predicateName.c_str())) {
+      const std::vector<GuidedEditorChoice> choices =
+          guidedPredicateChoices(model, names_in_scope);
+      for (const GuidedEditorChoice& choice : choices) {
+        const bool selected = choice.name == condition->fact.predicateName;
+        if (ImGui::Selectable(choice.name.c_str(), selected,
+                              choice.legal ? ImGuiSelectableFlags_None
+                                           : ImGuiSelectableFlags_Disabled)) {
+          const EffectRef replacement = makeGuidedReference(
+              model, names_in_scope, model.predicates[choice.index]);
+          editCondition(model, stack, action_index, path, "Choose a condition fact",
+                        [replacement](ConditionExpression& item) {
+            item.fact = replacement;
+          });
+        }
+        if (!choice.legal) {
+          ImGui::SameLine();
+          ImGui::TextDisabled("%s", choice.reason.c_str());
+        }
+      }
+      ImGui::EndCombo();
+    }
+    const PredicateDef* predicate =
+        predicateByName(model, condition->fact.predicateName);
+    for (size_t argument = 0; argument < condition->fact.argNames.size();
+         ++argument) {
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(90.0F);
+      const std::string combo_id = "##condition-arg" + std::to_string(argument);
+      if (ImGui::BeginCombo(combo_id.c_str(),
+                            condition->fact.argNames[argument].c_str())) {
+        if (predicate != nullptr) {
+          const std::vector<GuidedEditorChoice> choices = guidedArgumentChoices(
+              model, names_in_scope, *predicate, argument);
+          for (const GuidedEditorChoice& choice : choices) {
+            if (ImGui::Selectable(choice.name.c_str(),
+                                  choice.name == condition->fact.argNames[argument],
+                                  choice.legal ? ImGuiSelectableFlags_None
+                                               : ImGuiSelectableFlags_Disabled)) {
+              const std::string name = choice.name;
+              editCondition(model, stack, action_index, path,
+                            "Choose a condition name",
+                            [argument, name](ConditionExpression& item) {
+                item.fact.argNames[argument] = name;
+              });
+            }
+            if (!choice.legal) {
+              ImGui::SameLine();
+              ImGui::TextDisabled("%s", choice.reason.c_str());
+            }
+          }
+        }
+        ImGui::EndCombo();
+      }
+    }
+  } else if (condition->kind == ConditionKind::Equality) {
+    for (size_t term = 0; term < 2U; ++term) {
+      if (term > 0U) ImGui::SameLine();
+      if (term == 1U) {
+        ImGui::TextUnformatted(condition->negated ? "must be different from"
+                                                  : "must be the same as");
+        ImGui::SameLine();
+      }
+      const std::string shown = term < condition->terms.size()
+          ? condition->terms[term] : "choose a name";
+      const std::string combo_id = "##comparison-term" + std::to_string(term);
+      ImGui::SetNextItemWidth(105.0F);
+      if (ImGui::BeginCombo(combo_id.c_str(), shown.c_str())) {
+        for (const Parameter& parameter : names_in_scope.params) {
+          if (ImGui::Selectable(parameter.name.c_str(), parameter.name == shown)) {
+            const std::string name = parameter.name;
+            editCondition(model, stack, action_index, path,
+                          "Choose a name to compare",
+                          [term, name](ConditionExpression& item) {
+              item.terms.resize(2U);
+              item.terms[term] = name;
+            });
+          }
+        }
+        ImGui::EndCombo();
+      }
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(condition->negated ? "Use same" : "Use different")) {
+      editCondition(model, stack, action_index, path,
+                    condition->negated ? "Require the same name"
+                                       : "Require different names",
+                    [](ConditionExpression& item) {
+        item.negated = !item.negated;
+      });
+    }
+  } else {
+    const bool quantified = condition->kind == ConditionKind::ForEvery ||
+                            condition->kind == ConditionKind::AtLeastOne;
+    if (quantified) {
+      ImGui::TextUnformatted(condition->kind == ConditionKind::ForEvery
+                                 ? "For every" : "For at least one");
+      ImGui::SameLine();
+      if (!condition->variables.empty()) {
+        Parameter& variable = condition->variables.front();
+        ImGui::SetNextItemWidth(120.0F);
+        if (ImGui::BeginCombo("##quantified-type", variable.type.c_str())) {
+          for (const TypeDef& type : model.types) {
+            if (ImGui::Selectable(type.name.c_str(), type.name == variable.type)) {
+              const std::string new_type = type.name;
+              editCondition(model, stack, action_index, path,
+                            "Choose what the condition ranges over",
+                            [new_type](ConditionExpression& item) {
+                if (item.variables.empty()) return;
+                const std::string old_name = item.variables.front().name;
+                const std::string new_name = "?each-" + new_type;
+                item.variables.front().type = new_type;
+                item.variables.front().name = new_name;
+                renameConditionTerm(item, old_name, new_name);
+              });
+            }
+          }
+          ImGui::EndCombo();
+        }
+        names_in_scope.params.push_back(variable);
+      }
+    } else {
+      ImGui::TextUnformatted(condition->kind == ConditionKind::AnyOf
+                                 ? "Any one of these is enough"
+                                 : "All of these must hold");
+      ImGui::SameLine();
+      if (ImGui::SmallButton(condition->kind == ConditionKind::AnyOf
+                                 ? "Require all" : "Any one is enough")) {
+        editCondition(model, stack, action_index, path, "Change condition group",
+                      [](ConditionExpression& item) {
+          item.kind = item.kind == ConditionKind::AnyOf
+              ? ConditionKind::AllOf : ConditionKind::AnyOf;
+        });
+      }
+    }
+
+    for (size_t child = 0; child < condition->children.size(); ++child) {
+      ImGui::Indent(16.0F);
+      std::vector<size_t> child_path = path;
+      child_path.push_back(child);
+      renderConditionEditor(action_index, child_path, names_in_scope,
+                            model, stack);
+      ImGui::SameLine();
+      ImGui::PushID(static_cast<int>(child));
+      if (ImGui::SmallButton("Remove")) {
+        editCondition(model, stack, action_index, path, "Remove a condition",
+                      [child](ConditionExpression& item) {
+          if (child < item.children.size()) {
+            item.children.erase(item.children.begin() +
+                                static_cast<std::ptrdiff_t>(child));
+          }
+        });
+        ImGui::PopID();
+        ImGui::Unindent(16.0F);
+        break;
+      }
+      ImGui::PopID();
+      ImGui::Unindent(16.0F);
+    }
+    if (!quantified && ImGui::SmallButton("+ Add a fact to this group")) {
+      const ConditionExpression added =
+          guidedFactCondition(model, names_in_scope, false);
+      editCondition(model, stack, action_index, path, "Add a fact to a group",
+                    [added](ConditionExpression& item) {
+        item.children.push_back(added);
+      });
+    }
+  }
+  ImGui::PopID();
+}
+
 static void renderFactSection(const char* title,
                               const char* tableId,
                               const char* addButtonLabel,
@@ -676,7 +1058,8 @@ static void renderFactSection(const char* title,
                               int& selectedPredicate,
                               std::vector<std::string>& chosenObjects,
                               char* argBuffer,
-                              size_t argBufferSize) {
+                              size_t argBufferSize,
+                              std::function<void(ProjectModel&)> afterMutation = {}) {
   ImGui::TextUnformatted(title);
   if (ImGui::BeginTable(tableId, 2,
                         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
@@ -693,8 +1076,9 @@ static void renderFactSection(const char* title,
       ImGui::PushID(fi);
       if (ImGui::SmallButton("Remove")) {
         const int removeIdx = fi;
-        stack.execute(model, removeCommandLabel, [&](ProjectModel&) {
+        stack.execute(model, removeCommandLabel, [&](ProjectModel& target) {
           facts.erase(facts.begin() + removeIdx);
+          if (afterMutation) afterMutation(target);
         });
         ImGui::PopID();
         --fi;
@@ -782,8 +1166,10 @@ static void renderFactSection(const char* title,
     ImGui::BeginDisabled();
   }
   if (ImGui::Button(addButtonLabel) && chosenOk) {
-    stack.execute(model, addCommandLabel, [chosen, &facts](ProjectModel&) {
+    stack.execute(model, addCommandLabel,
+                  [chosen, &facts, afterMutation](ProjectModel& target) {
       facts.push_back(chosen);
+      if (afterMutation) afterMutation(target);
     });
     for (std::string& object : chosenObjects) {
       object.clear();
@@ -807,8 +1193,10 @@ static void renderFactSection(const char* title,
       ImGui::BeginDisabled();
     }
     if (ImGui::Button("Add what I typed") && typedOk) {
-      stack.execute(model, addCommandLabel, [typed, &facts](ProjectModel&) {
+      stack.execute(model, addCommandLabel,
+                    [typed, &facts, afterMutation](ProjectModel& target) {
         facts.push_back(typed);
+        if (afterMutation) afterMutation(target);
       });
       argBuffer[0] = '\0';
     }
@@ -2237,11 +2625,95 @@ void AppShell::renderDomainTab() {
                         m_initPredIdx, m_initChosenObjects, m_initArgsInput,
                         sizeof(m_initArgsInput));
       ImGui::Separator();
-      renderFactSection("Goals", "##goalfacts", "Add Fact##goal",
-                        "Remove goal fact", "Add goal fact",
-                        scenario.goals, m_model, m_commandStack,
-                        m_goalPredIdx, m_goalChosenObjects, m_goalArgsInput,
-                        sizeof(m_goalArgsInput));
+      if (scenario.goalAlternatives.empty()) {
+        renderFactSection("Goals", "##goalfacts", "Add Fact##goal",
+                          "Remove goal fact", "Add goal fact",
+                          scenario.goals, m_model, m_commandStack,
+                          m_goalPredIdx, m_goalChosenObjects, m_goalArgsInput,
+                          sizeof(m_goalArgsInput));
+        const bool cannot_add_choice = scenario.goals.empty();
+        if (cannot_add_choice) {
+          ImGui::BeginDisabled();
+        }
+        if (ImGui::SmallButton("+ Add another acceptable goal")) {
+          const int scenario_index = m_selectedScenarioIdx;
+          m_commandStack.execute(
+              m_model, "Add another acceptable goal",
+              [scenario_index](ProjectModel& model) {
+                ScenarioDef& edited =
+                    model.scenarios[static_cast<size_t>(scenario_index)];
+                edited.goalAlternatives = {edited.goals, edited.goals};
+              });
+        }
+        if (cannot_add_choice) {
+          ImGui::EndDisabled();
+          ImGui::SameLine();
+          ImGui::TextDisabled("add the first goal fact before adding a choice");
+        }
+      } else {
+        ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F),
+                           "Goal: any one of these is enough");
+        bool removed_alternative = false;
+        for (size_t alternative_index = 0;
+             alternative_index < scenario.goalAlternatives.size();
+             ++alternative_index) {
+          ImGui::PushID(static_cast<int>(alternative_index));
+          ImGui::Text("Choice %zu", alternative_index + 1U);
+          ImGui::SameLine();
+          if (ImGui::SmallButton("Remove this choice")) {
+            const int scenario_index = m_selectedScenarioIdx;
+            m_commandStack.execute(
+                m_model, "Remove an acceptable goal",
+                [scenario_index, alternative_index](ProjectModel& model) {
+                  ScenarioDef& edited =
+                      model.scenarios[static_cast<size_t>(scenario_index)];
+                  edited.goalAlternatives.erase(
+                      edited.goalAlternatives.begin() +
+                      static_cast<std::ptrdiff_t>(alternative_index));
+                  if (edited.goalAlternatives.empty()) {
+                    edited.goals.clear();
+                  } else if (edited.goalAlternatives.size() == 1U) {
+                    edited.goals = edited.goalAlternatives.front();
+                    edited.goalAlternatives.clear();
+                  } else {
+                    edited.goals = edited.goalAlternatives.front();
+                  }
+                });
+            removed_alternative = true;
+            ImGui::PopID();
+            break;
+          }
+          renderFactSection("Facts that complete this choice", "##goal-choice-facts",
+                            "Add Fact##goal-choice", "Remove goal choice fact",
+                            "Add goal choice fact",
+                            scenario.goalAlternatives[alternative_index],
+                            m_model, m_commandStack, m_goalPredIdx,
+                            m_goalChosenObjects, m_goalArgsInput,
+                            sizeof(m_goalArgsInput),
+                            [scenario_index = m_selectedScenarioIdx](
+                                ProjectModel& model) {
+                              ScenarioDef& edited = model.scenarios[
+                                  static_cast<size_t>(scenario_index)];
+                              if (!edited.goalAlternatives.empty()) {
+                                edited.goals = edited.goalAlternatives.front();
+                              }
+                            });
+          ImGui::PopID();
+        }
+        if (!removed_alternative && !scenario.goalAlternatives.empty()) {
+          if (ImGui::SmallButton("+ Add another acceptable goal")) {
+            const int scenario_index = m_selectedScenarioIdx;
+            m_commandStack.execute(
+                m_model, "Add another acceptable goal",
+                [scenario_index](ProjectModel& model) {
+                  ScenarioDef& edited =
+                      model.scenarios[static_cast<size_t>(scenario_index)];
+                  edited.goalAlternatives.push_back(
+                      edited.goalAlternatives.front());
+                });
+          }
+        }
+      }
       if (ImGui::CollapsingHeader("Expected outcome")) {
         ScenarioExpectation& expectation = scenario.expectation;
         bool shouldSucceed = expectation.shouldSucceed;
@@ -2704,9 +3176,11 @@ void AppShell::renderRelationsPanel() {
         }
         ImGui::SameLine();
         std::string reason;
-        for (const EffectRef& condition : action.preconditions) {
+        for (const EffectRef& condition : actionConditionFacts(action)) {
           if (condition.predicateName != predicate.name) {
-            reason = "also needs " + condition.predicateName;
+            reason = condition.negated
+                ? "also needs " + condition.predicateName + " to be false"
+                : "also needs " + condition.predicateName;
             break;
           }
         }
@@ -2723,6 +3197,11 @@ void AppShell::renderRelationsPanel() {
     };
     render_action_list("Actions that need this to be true", relations.requiredBy,
                        amber, "R", 100000);
+    render_action_list("Actions that need this to be false",
+                       relations.requiredFalseBy, red, "F", 150000);
+    render_action_list("Actions that can use this as one choice",
+                       relations.acceptedAsAlternativeBy,
+                       ImVec4(0.38F, 0.72F, 0.92F, 1.0F), "A", 175000);
     render_action_list("Actions that make it true", relations.madeTrueBy,
                        green, "+", 200000);
     render_action_list("Actions that make it false", relations.madeFalseBy,
@@ -4237,10 +4716,18 @@ void AppShell::renderSelectedElementEditor() {
 
     const auto& addLabels = guidedGroupAddLabels();
     ImGui::Separator();
-    renderGuidedReferenceGroup("Before it can happen", "##before-guided",
-                               addLabels[0].c_str(), "must be", "",
-                               selAction, PredicateRelationKind::Requires,
-                               m_model, m_commandStack);
+    if (action.hasConditionExpression) {
+      ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F),
+                         "Before it can happen");
+      ImGui::TextWrapped("%s", guidedConditionText(action).c_str());
+      renderConditionEditor(selAction, {}, action, m_model, m_commandStack);
+    } else {
+      renderGuidedReferenceGroup("Before it can happen", "##before-guided",
+                                 addLabels[0].c_str(), "must be", "",
+                                 selAction, PredicateRelationKind::Requires,
+                                 m_model, m_commandStack);
+    }
+    renderConditionShapeButtons(selAction, m_model, m_commandStack);
     ImGui::Separator();
     ImGui::TextColored(ImVec4(0.31F, 0.66F, 0.78F, 1.0F), "Afterwards");
     // These two groups look alike, so each has to say which it is on its own
@@ -4391,9 +4878,10 @@ void AppShell::renderSelectedElementEditor() {
       ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
                          "Every name has a type");
       ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
-                         "Parses as STRIPS");
+                         "Can be read by the AME runtime");
       ImGui::TextColored(ImVec4(0.32F, 0.84F, 0.60F, 1.0F),
-                         "Grounds against %zu objects", m_model.objects.size());
+                         "Grounds against %zu things",
+                         m_model.objects.size() + m_model.constants.size());
     }
   }
 }

@@ -4,7 +4,12 @@
 #include <nlohmann/json.hpp>
 
 struct TypeDef { std::string name, parent; };
-struct Parameter { std::string name, type; };
+struct Parameter {
+    std::string name, type;
+    // An action input may accept one of several unrelated types. `type` stays
+    // empty in that case, and this list holds the accepted types.
+    std::vector<std::string> eitherTypes;
+};
 // `confirmed` marks a fact that an action may only act on once it has been
 // observed. It becomes an entry in the domain's (:confirmed-predicates ...)
 // section, which the plan compiler turns into a confirmed precondition. It is
@@ -16,7 +21,32 @@ struct PredicateDef {
     float posX=0,posY=0;
     bool confirmed=false;
 };
-struct EffectRef { std::string predicateName; std::vector<std::string> argNames; };
+struct EffectRef {
+    std::string predicateName;
+    std::vector<std::string> argNames;
+    bool negated = false;
+    // True when this fact is one route through an "any one" condition rather
+    // than something every grounded form of the action needs.
+    bool alternative = false;
+};
+/// \brief The shapes a condition in an action can take.
+enum class ConditionKind {
+    Fact,
+    AllOf,
+    AnyOf,
+    ForEvery,
+    AtLeastOne,
+    Equality,
+};
+/// \brief A condition tree preserved from PDDL and editable without raw text.
+struct ConditionExpression {
+    ConditionKind kind = ConditionKind::AllOf;
+    EffectRef fact;
+    std::vector<ConditionExpression> children;
+    std::vector<Parameter> variables;
+    std::vector<std::string> terms;
+    bool negated = false;
+};
 struct BtBinding {
     std::string nodeType;
     std::string subtreeXml;
@@ -48,6 +78,11 @@ struct ActionDef {
     float posX=0,posY=0;
     BtBinding btBinding;
     SimulationSettings simulation;
+    // Simple projects continue to use `preconditions`. More expressive input
+    // uses this tree; `preconditions` then contains its fact references for
+    // older views and file compatibility, but the tree is authoritative.
+    bool hasConditionExpression = false;
+    ConditionExpression conditionExpression;
 };
 struct StateGroupDef {
     std::string name;
@@ -128,16 +163,22 @@ struct ScenarioDef {
     std::vector<FactRef> initialState, goals;
     ScenarioExpectation expectation;
     ContingencyDeclaration contingency;
+    // Empty means the legacy `goals` conjunction. Otherwise, each inner list
+    // is one acceptable conjunction and `goals` mirrors the first one.
+    std::vector<std::vector<FactRef>> goalAlternatives;
 };
 
 struct ProjectModel {
-    int version = 1;
+    int version = 2;
     std::string projectName = "[Untitled]";
     std::vector<TypeDef> types;
     std::vector<PredicateDef> predicates;
     std::vector<ActionDef> actions;
     std::vector<StateGroupDef> stateGroups;
     std::vector<ObjectDef> objects;
+    // Domain constants are available to every scenario and are emitted in the
+    // domain rather than copied into each problem file.
+    std::vector<ObjectDef> constants;
     std::vector<ScenarioDef> scenarios;
     std::vector<PresentationGroup> presentationGroups;
     std::vector<SavedView> savedViews;
@@ -158,6 +199,8 @@ void to_json(nlohmann::json&, const PredicateDef&);
 void from_json(const nlohmann::json&, PredicateDef&);
 void to_json(nlohmann::json&, const EffectRef&);
 void from_json(const nlohmann::json&, EffectRef&);
+void to_json(nlohmann::json&, const ConditionExpression&);
+void from_json(const nlohmann::json&, ConditionExpression&);
 void to_json(nlohmann::json&, const BtBinding&);
 void from_json(const nlohmann::json&, BtBinding&);
 void to_json(nlohmann::json&, const SimulationSettings&);
@@ -188,3 +231,9 @@ void to_json(nlohmann::json&, const ScenarioDef&);
 void from_json(const nlohmann::json&, ScenarioDef&);
 void to_json(nlohmann::json&, const ProjectModel&);
 void from_json(const nlohmann::json&, ProjectModel&);
+
+/// \brief Return every fact mentioned by an action's effective condition.
+std::vector<EffectRef> actionConditionFacts(const ActionDef& action);
+
+/// \brief Return whether an action has any condition requiring a fact to be false.
+bool actionHasNegativeCondition(const ActionDef& action);

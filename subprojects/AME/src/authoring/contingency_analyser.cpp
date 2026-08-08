@@ -87,7 +87,7 @@ std::vector<std::string> identifyContextPredicates(const ProjectModel& model) {
     for (const auto& effect : action.delEffects) {
       effectPredicates.insert(effect.predicateName);
     }
-    for (const auto& precondition : action.preconditions) {
+    for (const auto& precondition : actionConditionFacts(action)) {
       preconditionPredicates.insert(precondition.predicateName);
     }
   }
@@ -107,12 +107,16 @@ std::vector<std::string> identifyContextPredicates(const ProjectModel& model) {
 std::vector<const ObjectDef*> matchingObjects(const ProjectModel& model,
                                               const Parameter& parameter) {
   std::vector<const ObjectDef*> objects;
-  for (const auto& object : model.objects) {
-    if (parameter.type.empty() || parameter.type == "object" ||
-        object.type == parameter.type) {
-      objects.push_back(&object);
+  const auto append = [&](const std::vector<ObjectDef>& candidates) {
+    for (const auto& object : candidates) {
+      if (parameter.type.empty() || parameter.type == "object" ||
+          object.type == parameter.type) {
+        objects.push_back(&object);
+      }
     }
-  }
+  };
+  append(model.objects);
+  append(model.constants);
   return objects;
 }
 

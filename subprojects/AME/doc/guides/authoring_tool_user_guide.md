@@ -2,7 +2,7 @@
 
 The AME authoring tool is a local graphical workbench for creating, importing, validating, and reviewing AME PDDL domains and mission scenarios.
 
-It is intended for systems engineers, autonomy developers, and reviewers who need to work with AME mission models without hand-editing every PDDL file. The tool keeps a structured project model as its working format, generates AME-compatible STRIPS PDDL, and uses the same parser, world model, planner, and plan compiler as the runtime stack.
+It is intended for systems engineers, autonomy developers, and reviewers who need to work with AME mission models without hand-editing every PDDL file. The tool keeps a structured project model as its working format, generates AME-compatible PDDL, and uses the same parser, world model, planner, and plan compiler as the runtime stack.
 
 ---
 
@@ -279,6 +279,21 @@ away from the base makes `at base` false as well as making `at sector` true. An 
 only ever adds facts usually means a lifecycle has been half-modelled, and the `Lifecycles`
 view is where that shows up.
 
+`Before it can happen` also supports conditions beyond a simple list of true facts. The
+buttons and dropdowns use these phrases:
+
+| Screen wording | Meaning |
+|----------------|---------|
+| `must be false` | The selected fact must not hold |
+| `Any one of these is enough` | At least one fact or nested group must hold |
+| `For every` | The inner condition must hold for every thing of the selected type |
+| `For at least one` | The inner condition must hold for one or more things of the selected type |
+| `must be the same as` / `must be different from` | Restrict the two selected names to equal or unequal values |
+
+Completed groups are summarised in one plain sentence. Select a group or fact to change it;
+the dropdowns include only names and types that are legal in that position. Imported actions
+using these forms open in the same editor rather than falling back to raw PDDL.
+
 The generated PDDL and current checks remain visible below the sentences, and the PDDL tab
 remains the editable text path for experienced authors.
 
@@ -298,9 +313,12 @@ parameter names such as `?r` and `?to` in its dropdowns.
 
 ### Derived relationships
 
-Amber means an action needs a fact, green means an action makes a fact true, and red-orange
-means it makes a fact false. The same colours are used in the relations panel, both graph
-views, the matrix, and the failure report.
+Amber means an action needs a fact to be true, green means an action makes a fact true, and
+red-orange means either that an action needs a fact to be false or makes it false. The label
+beside the line distinguishes the two. The same colours and words are used in the relations
+panel, both graph views, the matrix, and the failure report. Matrix mark `F` means “must be
+false”; `R` remains the mark for a fact that must be true, and `A` marks one fact in a set of
+alternatives.
 
 The tool also derives that action A may enable action B when A makes a fact true that B needs
 and their parameter types can describe at least one common grounded value. These relationships
@@ -714,14 +732,12 @@ actions found on only one side, and facts with different final values.
 
 ### Import an existing domain
 
-The importer covers STRIPS with typing. If the domain uses a negative precondition, `or`,
-`forall`, `exists`, an equality or inequality filter, an `(either ...)` parameter type or a
-disjunctive goal, the import is refused and nothing is changed. The message today names the
-form of expression it could not read rather than the action it was in, so if you meet one,
-search the domain file for `not`, `or`, `forall`, `exists`, `=` and `either`. `ame_core`
-accepts all of these, so the same domain plans and runs perfectly well outside this tool.
-Closing that gap is workstream D of
-[the authoring tool plan](../../../../doc/plans/AME/authoring_tool_plan.md).
+The importer covers the same finite PDDL subset as `ame_core`: typed STRIPS, negative facts in
+action conditions, nested `and` and `or` groups, finite `forall` and `exists` groups, equality
+and inequality filters, `(either ...)` action-input types, domain constants, confirmed facts,
+and top-level goal alternatives. An invalid condition message names the action that contains
+it. Conditional effects, numeric expressions and temporal actions remain unsupported by both
+the tool and the runtime.
 
 Importing into a project that already has facts or actions shows what the import would do
 before it does any of it: what would be added, what would be overwritten, and what is already
@@ -737,7 +753,8 @@ Use:
 File > Import PDDL Domain...
 ```
 
-This imports types, predicates, actions, and an initial graph layout from a domain `.pddl` file.
+This imports types, domain constants, facts, actions, their full condition trees, and an
+initial graph layout from a domain `.pddl` file.
 
 Current behavior: domain import replaces the current project model and clears undo history.
 
@@ -750,6 +767,9 @@ File > Import PDDL Problem...
 ```
 
 This imports objects, initial-state facts, and goals as a scenario on the current project.
+If the goal offers alternatives, the scenario shows them under `any one of these is enough`.
+Each choice remains editable with the ordinary fact chooser, and `Add another acceptable
+goal` creates another route to mission success.
 
 Import the matching domain first, then import one or more problem files.
 
@@ -852,14 +872,6 @@ For an existing PDDL model:
 
 ## 12) Current limitations
 
-- The generated and imported PDDL covers STRIPS with typing only. This is **less than
-  `ame_core` itself accepts**: the core's parser also handles negative preconditions,
-  `or`, `forall`, `exists`, equality and inequality filters, `(either ...)` parameter types
-  and disjunctive goals. A domain using any of those is refused on import, so it cannot be
-  opened in this tool at all. Closing that gap is workstream D of
-  [the authoring tool plan](../../../../doc/plans/AME/authoring_tool_plan.md).
-- Domain constants are imported, but become ordinary objects, so re-exporting writes them
-  into every problem file rather than back into the domain.
 - Conditional effects, numeric fluents, temporal PDDL and durative actions are out of scope
   for the whole of AME, not just for this tool: `PddlParser` rejects them too.
 - The plan view is a read-only preview, and the tree on the `Run` tab cannot be edited.

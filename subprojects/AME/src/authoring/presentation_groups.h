@@ -42,6 +42,10 @@ struct CanvasNode {
 enum class CanvasLinkKind {
   /// The fact has to be true before the action can happen.
   Requires,
+  /// The fact has to be false before the action can happen.
+  RequiresFalse,
+  /// The fact is one of several ways the action's condition may be met.
+  AcceptsAlternative,
   /// The action makes the fact true.
   MakesTrue,
   /// The action makes the fact false.
@@ -52,7 +56,7 @@ enum class CanvasLinkKind {
 ///
 /// The line always runs between a fact and an action, or between whichever
 /// collapsed groups those two ended up inside. Which way round it is drawn
-/// follows from `kind`: a requirement runs from the fact to the action, and an
+/// follows from `kind`: a condition runs from the fact to the action, and an
 /// outcome runs from the action to the fact.
 struct CanvasLink {
   /// Index into CanvasLayout::nodes for the fact end of the line.

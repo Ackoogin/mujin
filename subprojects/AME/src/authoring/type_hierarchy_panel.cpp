@@ -46,7 +46,11 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
       const bool hasObject =
         std::any_of(model.objects.begin(), model.objects.end(), [&](const ObjectDef& object) {
           return object.type == typeName;
-        });
+        }) ||
+        std::any_of(model.constants.begin(), model.constants.end(),
+                    [&](const ObjectDef& object) {
+                      return object.type == typeName;
+                    });
       const bool canDelete = typeName != "object" && !hasChildType && !hasObject;
 
       ImGui::SameLine();
@@ -121,7 +125,8 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
     }
   }
 
-  if (ImGui::CollapsingHeader("Objects", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("Things in scenarios",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
     if (ImGui::BeginTable("Objects##table",
                           3,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
@@ -158,7 +163,11 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
       const bool duplicateName =
         std::any_of(model.objects.begin(), model.objects.end(), [&](const ObjectDef& object) {
           return object.name == name;
-        });
+        }) ||
+        std::any_of(model.constants.begin(), model.constants.end(),
+                    [&](const ObjectDef& object) {
+                      return object.name == name;
+                    });
 
       if (name.empty() || type.empty()) {
         m_validationMsg = "Object name and type are required";
@@ -174,6 +183,16 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
         m_newObjType[0] = '\0';
         m_validationMsg.clear();
       }
+    }
+  }
+
+  if (!model.constants.empty() &&
+      ImGui::CollapsingHeader("Things fixed by the domain",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::TextDisabled("These are available in every scenario.");
+    for (const ObjectDef& constant : model.constants) {
+      ImGui::BulletText("%s — %s", constant.name.c_str(),
+                        constant.type.c_str());
     }
   }
 

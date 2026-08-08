@@ -23,7 +23,15 @@ const ObjectDef* findObject(const ProjectModel& model,
                                [&name](const ObjectDef& object) {
                                  return object.name == name;
                                });
-  return it == model.objects.end() ? nullptr : &(*it);
+  if (it != model.objects.end()) {
+    return &(*it);
+  }
+  const auto constant =
+      std::find_if(model.constants.begin(), model.constants.end(),
+                   [&name](const ObjectDef& object) {
+                     return object.name == name;
+                   });
+  return constant == model.constants.end() ? nullptr : &(*constant);
 }
 
 }  // namespace
@@ -89,8 +97,9 @@ std::vector<FactChoice> FactChooser::objectsFor(const ProjectModel& model,
   }
 
   const std::string& requiredType = predicate->params[position].type;
-  choices.reserve(model.objects.size());
-  for (const ObjectDef& object : model.objects) {
+  choices.reserve(model.objects.size() + model.constants.size());
+  const auto append_objects = [&](const std::vector<ObjectDef>& objects) {
+    for (const ObjectDef& object : objects) {
     FactChoice choice;
     choice.name = object.name;
     if (!typeMatches(model, object.type, requiredType)) {
@@ -100,7 +109,10 @@ std::vector<FactChoice> FactChooser::objectsFor(const ProjectModel& model,
                       ", and this has to be a " + requiredType;
     }
     choices.push_back(std::move(choice));
-  }
+    }
+  };
+  append_objects(model.objects);
+  append_objects(model.constants);
   return choices;
 }
 
