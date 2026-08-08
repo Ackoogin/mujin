@@ -61,6 +61,44 @@ TEST(FactActionMatrix, RepresentsMultipleMarksAndExportsEvidence) {
             std::string::npos);
 }
 
+TEST(FactActionMatrix, MarksAConditionThatNeedsTheFactToBeFalse) {
+  ProjectModel model;
+  model.predicates = {{"armed", {}}};
+  ActionDef action;
+  action.name = "inspect";
+  action.preconditions = {{"armed", {}, true}};
+  model.actions.push_back(action);
+  const RelationIndex index(model);
+  const FactActionMatrix matrix(model, index);
+
+  EXPECT_FALSE(matrix.cell(0, 0).requires);
+  EXPECT_TRUE(matrix.cell(0, 0).requiresFalse);
+  EXPECT_NE(matrix.toCsv(model).find("armed,F"), std::string::npos);
+}
+
+TEST(FactActionMatrix, MarksFactsThatAreAlternativesWithoutCallingThemRequired) {
+  ProjectModel model;
+  model.predicates = {{"ready", {}}, {"waived", {}}};
+  ActionDef action;
+  action.name = "start";
+  action.hasConditionExpression = true;
+  action.conditionExpression.kind = ConditionKind::AnyOf;
+  ConditionExpression ready;
+  ready.kind = ConditionKind::Fact;
+  ready.fact = {"ready", {}};
+  ConditionExpression waived = ready;
+  waived.fact.predicateName = "waived";
+  action.conditionExpression.children = {ready, waived};
+  action.preconditions = actionConditionFacts(action);
+  model.actions.push_back(action);
+  const RelationIndex index(model);
+  const FactActionMatrix matrix(model, index);
+
+  EXPECT_FALSE(matrix.cell(0, 0).requires);
+  EXPECT_TRUE(matrix.cell(0, 0).alternative);
+  EXPECT_NE(matrix.toCsv(model).find("ready,A"), std::string::npos);
+}
+
 TEST(GuidedEditorModel, KeepsIllegalChoicesVisibleWithTypeReasons) {
   const ProjectModel model = loadDomain();
   const auto action = std::find_if(
@@ -84,6 +122,28 @@ TEST(GuidedEditorModel, KeepsIllegalChoicesVisibleWithTypeReasons) {
       });
   ASSERT_NE(available, predicateChoices.end());
   EXPECT_TRUE(available->legal);
+}
+
+TEST(GuidedEditorModel, DescribesExpressiveConditionsWithoutParserTerms) {
+  ActionDef action;
+  ConditionExpression alternative;
+  alternative.kind = ConditionKind::AnyOf;
+  ConditionExpression ready;
+  ready.kind = ConditionKind::Fact;
+  ready.fact = {"ready", {"?agent"}};
+  ConditionExpression not_armed;
+  not_armed.kind = ConditionKind::Fact;
+  not_armed.fact = {"armed", {"?agent"}};
+  not_armed.negated = true;
+  alternative.children = {ready, not_armed};
+  action.hasConditionExpression = true;
+  action.conditionExpression = alternative;
+
+  const std::string text = guidedConditionText(action);
+  EXPECT_NE(text.find("any one of"), std::string::npos);
+  EXPECT_NE(text.find("must be false"), std::string::npos);
+  EXPECT_EQ(text.find("predicate"), std::string::npos);
+  EXPECT_EQ(text.find("disjunction"), std::string::npos);
 }
 
 TEST(NeighbourhoodModel, TaskAssignedUsesThreeColumnsAndKeepsDuplicateRoles) {

@@ -1,0 +1,177 @@
+<title>AME condition authoring — concepts for review</title>
+
+<style>
+:root {
+  --ground: #0a0f13;
+  --paper: #0f171c;
+  --ink: #dce9ef;
+  --muted: #93a8b3;
+  --line: #1e313c;
+  --cyan: #00e6ff;
+  --cyan-dark: #005a78;
+  --window: #060a0e;
+  --child: #0a1016;
+  --frame: #04080e;
+  --hair: #003c55;
+  --text: #dcf0fa;
+  --dim: #648296;
+  --required: #e0b152;
+  --false: #f2836a;
+  --true: #52d69a;
+  --font: system-ui, "Segoe UI", Arial, sans-serif;
+  --mono: ui-monospace, "JetBrains Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 16px/1.6 var(--font);
+}
+header, main, footer { width: min(1080px, calc(100% - 3rem)); margin: auto; }
+header { padding: 4rem 0 2rem; border-top: 2px solid var(--cyan); }
+h1 { max-width: 19ch; font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.05; }
+h2 { margin-bottom: .25rem; }
+p { max-width: 70ch; color: var(--muted); }
+.eyebrow { color: var(--cyan); font: 700 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; }
+.rule { border-left: 3px solid var(--cyan); padding: .8rem 1.2rem; background: var(--paper); }
+.concept { padding: 3rem 0; border-top: 1px solid var(--line); }
+.ui { margin-top: 1.4rem; border: 1px solid #008cb4; background: var(--window); color: var(--text); font-size: 13px; }
+.tabs { display: flex; border-bottom: 2px solid var(--hair); background: #020406; }
+.tab { padding: 6px 18px; color: var(--dim); }
+.tab.on { color: #eafbff; background: var(--cyan-dark); border-top: 2px solid var(--cyan); }
+.body { display: grid; grid-template-columns: 230px 1fr; gap: 1px; background: var(--hair); }
+.pane { padding: 12px; background: var(--child); }
+.title { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--hair); color: #4fa9c6; font: 700 10px var(--font); letter-spacing: .14em; text-transform: uppercase; }
+.row { padding: 5px 7px; border-bottom: 1px solid rgba(0,60,85,.45); font-family: var(--mono); }
+.row.on { border-left: 2px solid var(--cyan); background: #0c1822; }
+.section { margin-top: 14px; color: #6fbcd4; font: 700 11px var(--font); letter-spacing: .1em; text-transform: uppercase; }
+.sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 0; }
+.indent { margin-left: 16px; padding-left: 12px; border-left: 1px solid var(--hair); }
+.combo { padding: 2px 7px; border: 1px solid #0a6e8c; background: var(--frame); color: var(--text); font-family: var(--mono); }
+.combo::after { content: " ▾"; color: var(--cyan); }
+.choice { color: var(--cyan); }
+.name { color: #ffd9a0; }
+.not { color: var(--false); }
+.help { color: var(--dim); font-size: 11.5px; }
+.button { display: inline-block; margin-top: 7px; padding: 3px 9px; border: 1px solid var(--hair); color: var(--cyan); background: #121e28; }
+.preview { padding: 8px 10px; border: 1px solid var(--hair); background: var(--frame); color: #a8cada; font: 12px/1.55 var(--mono); white-space: pre-wrap; }
+.callout { margin-top: 1.2rem; padding: 1rem 1.2rem; border-left: 3px solid var(--required); background: var(--paper); color: var(--muted); }
+.questions { padding: 0; list-style: none; counter-reset: q; }
+.questions li { display: grid; grid-template-columns: 3rem 1fr; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.questions li::before { counter-increment: q; content: "Q" counter(q); color: var(--cyan); font: 700 12px var(--mono); }
+.questions strong { display: block; }
+footer { padding: 2rem 0 4rem; border-top: 1px solid var(--line); color: var(--muted); }
+@media (max-width: 700px) { .body { grid-template-columns: 1fr; } }
+</style>
+
+<header>
+  <span class="eyebrow">AME · Workstream D3 · Concept review</span>
+  <h1>Conditions in plain words</h1>
+  <p>
+    These concepts extend the existing guided sentence editor. They let a mission author say that
+    something must be false, that any one choice is enough, that a rule covers every matching
+    thing, or that two names must be different. The screen never asks the author to type PDDL.
+  </p>
+</header>
+
+<main>
+  <section class="rule">
+    <strong>The proposed interaction.</strong>
+    <p>
+      A condition is a sentence or a labelled group of sentences. The author chooses the group
+      meaning first, then fills only legal fact and name choices. The generated PDDL remains visible
+      in its existing preview, but it is not an input field.
+    </p>
+  </section>
+
+  <section class="concept">
+    <span class="eyebrow">Concept 1 · One fact must be false</span>
+    <h2>Use the same sentence, with a visible “not” choice</h2>
+    <p>The sentence reads naturally and does not introduce a second editing mode.</p>
+    <div class="ui">
+      <div class="tabs"><span class="tab on">Domain</span><span class="tab">PDDL</span><span class="tab">Plan</span></div>
+      <div class="body">
+        <div class="pane"><div class="title">Actions</div><div class="row on">search-degraded</div><div class="row">classify</div><div class="row">reallocate-task</div></div>
+        <div class="pane">
+          <div class="title">Before search-degraded can happen</div>
+          <div class="sentence"><span class="combo not">must not be true</span><span class="combo choice">sensor-operational</span><span>for</span><span class="combo name">?s</span></div>
+          <div class="help">Only facts whose names can be filled by this action are selectable.</div>
+          <span class="button">+ Add another condition</span>
+          <div class="section">Generated PDDL</div>
+          <div class="preview">(not (sensor-operational ?s))</div>
+        </div>
+      </div>
+    </div>
+    <div class="callout">In review views this is labelled “must be false,” never “requires.” An action that makes the fact false may help; an action that makes it true may prevent this action.</div>
+  </section>
+
+  <section class="concept">
+    <span class="eyebrow">Concept 2 · Any one choice is enough</span>
+    <h2>Show alternatives as a named group</h2>
+    <p>The group border makes it clear that the two lines are choices, not two things both needed.</p>
+    <div class="ui"><div class="tabs"><span class="tab on">Domain</span><span class="tab">PDDL</span></div><div class="body">
+      <div class="pane"><div class="title">Actions</div><div class="row">search</div><div class="row on">classify</div></div>
+      <div class="pane"><div class="title">Before classify can happen</div>
+        <div class="section">Any one of these is enough</div>
+        <div class="indent">
+          <div class="sentence"><span class="combo">is true</span><span class="combo choice">searched</span><span>for</span><span class="combo name">?sector</span></div>
+          <div class="sentence"><span class="combo">is true</span><span class="combo choice">search-waived</span><span>for</span><span class="combo name">?sector</span></div>
+          <span class="button">+ Add another choice</span>
+        </div>
+        <div class="section">Generated PDDL</div><div class="preview">(or (searched ?sector) (search-waived ?sector))</div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="concept">
+    <span class="eyebrow">Concept 3 · Every or at least one</span>
+    <h2>Introduce a local name, then use the ordinary fact sentence</h2>
+    <p>The author chooses a type from the model. The editor creates the temporary name and prevents it from hiding an action input.</p>
+    <div class="ui"><div class="tabs"><span class="tab on">Domain</span><span class="tab">PDDL</span></div><div class="body">
+      <div class="pane"><div class="title">Actions</div><div class="row on">complete-search</div><div class="row">classify</div></div>
+      <div class="pane"><div class="title">Before complete-search can happen</div>
+        <div class="sentence"><span class="combo">for every</span><span class="combo choice">sector</span><span>call it</span><span class="combo name">?each-sector</span></div>
+        <div class="indent"><div class="sentence"><span class="combo">is true</span><span class="combo choice">searched</span><span>for</span><span class="combo name">?each-sector</span></div></div>
+        <div class="sentence" style="margin-top:12px"><span class="combo">for at least one</span><span class="combo choice">agent</span><span>call it</span><span class="combo name">?an-agent</span></div>
+        <div class="indent"><div class="sentence"><span class="combo">is true</span><span class="combo choice">agent-available</span><span>for</span><span class="combo name">?an-agent</span></div></div>
+        <div class="section">Generated PDDL</div><div class="preview">(and
+  (forall (?each-sector - sector) (searched ?each-sector))
+  (exists (?an-agent - agent) (agent-available ?an-agent)))</div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="concept">
+    <span class="eyebrow">Concept 4 · Same or different</span>
+    <h2>Compare two legal names in one short sentence</h2>
+    <p>Only action inputs and local names with overlapping types appear in the second list.</p>
+    <div class="ui"><div class="tabs"><span class="tab on">Domain</span><span class="tab">PDDL</span></div><div class="body">
+      <div class="pane"><div class="title">Actions</div><div class="row on">reallocate-task</div><div class="row">mark-task-failed</div></div>
+      <div class="pane"><div class="title">Before reallocate-task can happen</div>
+        <div class="sentence"><span class="combo name">?new-agent</span><span class="combo">must be different from</span><span class="combo name">?old-agent</span></div>
+        <div class="help">“must be the same as” is available from the middle list. Names of unrelated types remain visible but unavailable, with the reason beside them.</div>
+        <div class="section">Generated PDDL</div><div class="preview">(not (= ?new-agent ?old-agent))</div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="concept">
+    <span class="eyebrow">For this review</span>
+    <h2>Questions the implementation decision depends on</h2>
+    <ol class="questions">
+      <li><div><strong>Does “must not be true” read clearly?</strong><p>Alternatives are “must be false” and “is not the case.” The first matches the existing “is true” choice most directly.</p></div></li>
+      <li><div><strong>Is “Any one of these is enough” unambiguous?</strong><p>The key question is whether a reviewer understands that two displayed lines are alternatives rather than two requirements.</p></div></li>
+      <li><div><strong>Do “for every” and “for at least one” need examples beside them?</strong><p>The proposed editor previews a concrete sentence when the type has known objects, such as “every sector: sector-a, sector-b.”</p></div></li>
+      <li><div><strong>Should equality be phrased only as “same” and “different”?</strong><p>Those words avoid mathematical notation and say exactly why the comparison affects which action combinations exist.</p></div></li>
+      <li><div><strong>Should nested groups be limited on screen?</strong><p>The core accepts nesting. The proposal allows it but collapses completed inner groups to a one-line summary so the action remains readable.</p></div></li>
+    </ol>
+  </section>
+</main>
+
+<footer>
+  Concept pack for Workstream D3. The examples use names from
+  <code>subprojects/AME/domains/mission_autonomy</code>. The colours match the authoring tool's
+  Holo-Cyan theme. The implementation should be changed if non-specialist review answers any of
+  the questions above differently.
+</footer>

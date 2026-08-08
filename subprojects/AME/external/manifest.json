@@ -1,0 +1,112 @@
+{
+  "dependencies": [
+    {
+      "name": "nlohmann_json",
+      "repository": "https://github.com/nlohmann/json",
+      "tag": "v3.11.3",
+      "purpose": "JSON for the authoring project format, run records and reports",
+      "files": 1,
+      "bytes": 834398,
+      "sha256": "ac9319fedad386d2e1e6ac815cbf637517fdec17aa78c20bf7248ccc30ea1b7f"
+    },
+    {
+      "name": "behaviortree_cpp",
+      "repository": "https://github.com/BehaviorTree/BehaviorTree.CPP.git",
+      "tag": "4.6.2",
+      "purpose": "Behaviour tree engine that runs compiled plans",
+      "files": 272,
+      "bytes": 3145614,
+      "sha256": "73b6ea1be66f51c560b347c4d7e143d6c157b48568458258d5a9301ea3654d64"
+    },
+    {
+      "name": "lapkt",
+      "repository": "https://github.com/LAPKT-dev/LAPKT-public.git",
+      "tag": "Devel2.0",
+      "purpose": "Classical planner used by ame_core's Planner",
+      "files": 254,
+      "bytes": 1559062,
+      "sha256": "acf4421447a00673932328e8bfff48ff7ef21898ebe96cf483a158aba3e5e8ee"
+    },
+    {
+      "name": "googletest",
+      "repository": "https://github.com/google/googletest.git",
+      "tag": "v1.14.0",
+      "purpose": "Test framework for every AME test binary",
+      "files": 45,
+      "bytes": 1025027,
+      "sha256": "123672976ff1ea7ea4fca535508642d7482f0243e1fd6b235c1a807dba9061d0"
+    },
+    {
+      "name": "imgui",
+      "repository": "https://github.com/ocornut/imgui",
+      "tag": "v1.91.6-docking",
+      "purpose": "Immediate-mode user interface for the authoring tool",
+      "files": 17,
+      "bytes": 3912015,
+      "sha256": "9edd829546cfc5325525c4badeb0309fa0d7d2ff6526bfe9d73e6c927f84de97"
+    },
+    {
+      "name": "imgui_node_editor",
+      "repository": "https://github.com/thedmd/imgui-node-editor",
+      "tag": "develop",
+      "purpose": "Canvas widget behind the domain, plan and behaviour-tree views",
+      "files": 14,
+      "bytes": 362493,
+      "sha256": "8b529145708fcd96b75549ab4a2caff38d089ab69936be3c2f754a1c5b982cf7"
+    },
+    {
+      "name": "sdl2",
+      "repository": "https://github.com/libsdl-org/SDL",
+      "tag": "release-2.30.10",
+      "purpose": "Window, input and OpenGL context for the authoring tool",
+      "files": 1236,
+      "bytes": 19547864,
+      "sha256": "95e4e67b765d5e6b7272283411a3a98620a4b7e239165e82c2ae1c89345d8d78"
+    },
+    {
+      "name": "stb",
+      "repository": "https://github.com/nothings/stb",
+      "tag": "5736b15f7ea0ffb08dd38af21067c314d6a3aae9",
+      "purpose": "Writing the self-test screenshot as a PNG",
+      "files": 2,
+      "bytes": 73731,
+      "sha256": "be457e111c1bdbc4d3ac42cc61a13413f6b399c13ea6f88b28f3240fd1e74152"
+    },
+    {
+      "name": "tinyfiledialogs",
+      "repository": "https://git.code.sf.net/p/tinyfiledialogs/code",
+      "tag": "master",
+      "purpose": "Native open and save dialogs",
+      "files": 3,
+      "bytes": 279360,
+      "sha256": "eec97b73c86a29a6458e431cb51c15e2194318dd82cf552c622d335ba7bc1b44"
+    },
+    {
+      "name": "jetbrains_mono",
+      "repository": "https://github.com/JetBrains/JetBrainsMono",
+      "tag": "v2.304",
+      "purpose": "The authoring tool's interface font",
+      "files": 2,
+      "bytes": 278299,
+      "sha256": "b98c879af5455db69455e24513e38efe6a86b48b4bf1b9b5618a9dfa71923ef7"
+    },
+    {
+      "name": "websocketpp",
+      "repository": "https://github.com/zaphoyd/websocketpp.git",
+      "tag": "0.8.2",
+      "purpose": "Foxglove bridge WebSocket server (only when AME_FOXGLOVE is on)",
+      "files": 95,
+      "bytes": 891113,
+      "sha256": "ed5aea7c970fb3071b806d8b50336a6e4ddd4719d72c41d7e64fe3580b209be6"
+    },
+    {
+      "name": "asio",
+      "repository": "https://github.com/chriskohlhoff/asio.git",
+      "tag": "asio-1-28-0",
+      "purpose": "Standalone Asio, which websocketpp needs",
+      "files": 675,
+      "bytes": 5759555,
+      "sha256": "f94ac02849d5ec791b10a93115f3093fcf5e24be8c8e32de7f5291e0967b601f"
+    }
+  ]
+}

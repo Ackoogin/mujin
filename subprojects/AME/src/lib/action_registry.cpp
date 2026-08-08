@@ -6,7 +6,10 @@
 #include <sstream>
 #include <stdexcept>
 
-#include <tinyxml2.h>
+// BehaviorTree.CPP publishes its bundled copy of tinyxml2 under a "tinyxml2/"
+// prefix, which is how its own sources include it. Including it as plain
+// <tinyxml2.h> only works where a system-wide copy happens to be installed.
+#include <tinyxml2/tinyxml2.h>
 
 namespace ame {
 

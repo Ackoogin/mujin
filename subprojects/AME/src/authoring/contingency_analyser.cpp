@@ -1,9 +1,12 @@
 #include "contingency_analyser.h"
 
 #include "authoring_utils.h"
+#include "pddl_generator.h"
 #include "pddl_validator.h"
 #include "project_model.h"
 
+#include <ame/contingency_search.h>
+#include <ame/pddl_parser.h>
 #include <ame/planner.h>
 #include <ame/world_model.h>
 
@@ -84,7 +87,7 @@ std::vector<std::string> identifyContextPredicates(const ProjectModel& model) {
     for (const auto& effect : action.delEffects) {
       effectPredicates.insert(effect.predicateName);
     }
-    for (const auto& precondition : action.preconditions) {
+    for (const auto& precondition : actionConditionFacts(action)) {
       preconditionPredicates.insert(precondition.predicateName);
     }
   }
@@ -104,12 +107,16 @@ std::vector<std::string> identifyContextPredicates(const ProjectModel& model) {
 std::vector<const ObjectDef*> matchingObjects(const ProjectModel& model,
                                               const Parameter& parameter) {
   std::vector<const ObjectDef*> objects;
-  for (const auto& object : model.objects) {
-    if (parameter.type.empty() || parameter.type == "object" ||
-        object.type == parameter.type) {
-      objects.push_back(&object);
+  const auto append = [&](const std::vector<ObjectDef>& candidates) {
+    for (const auto& object : candidates) {
+      if (parameter.type.empty() || parameter.type == "object" ||
+          object.type == parameter.type) {
+        objects.push_back(&object);
+      }
     }
-  }
+  };
+  append(model.objects);
+  append(model.constants);
   return objects;
 }
 
@@ -178,86 +185,142 @@ void addUniqueFact(std::vector<FactRef>& facts, FactRef fact) {
 
 } // namespace
 
+std::string ContingencyReport::coverageSentence() const {
+  if (!ok) {
+    return error;
+  }
+  std::string sentence =
+      "Checked all " + std::to_string(combinationsChecked) +
+      " ways the context could be: " + std::to_string(plannerCalls) +
+      " were planned for, and " + std::to_string(answeredByReasoning) +
+      " followed from those without planning.";
+  if (pruningRefused) {
+    sentence +=
+        " Nothing could be carried between them, because this domain has "
+        "conditions about facts being false, so every one was planned for.";
+  }
+  sentence += declaredByUser
+                  ? " The facts varied and the safe state are the ones this "
+                    "scenario declares."
+                  : " Nothing was declared, so the facts varied and the safe "
+                    "state were both worked out from the model.";
+  return sentence;
+}
+
 ContingencyReport ContingencyAnalyser::analyse(const ProjectModel& model,
                                                const std::string& scenarioName,
                                                size_t maxFluents) {
   ContingencyReport report;
 
-  if (findScenario(model, scenarioName) == nullptr) {
+  const ScenarioDef* scenario = findScenario(model, scenarioName);
+  if (scenario == nullptr) {
     report.error = "scenario not found: " + scenarioName;
     return report;
   }
 
-  report.contextPredicates = identifyContextPredicates(model);
-  report.contextFluents =
-      enumerateContextFluents(model, report.contextPredicates);
+  // The same search the contingency verifier runs from the command line, and
+  // the same one the assurance report quotes. See ame/contingency_search.h.
+  const std::string domain_pddl = PddlGenerator::generateDomain(model);
+  const std::string problem_pddl =
+      PddlGenerator::generateProblem(model, scenarioName);
 
-  if (report.contextFluents.size() > maxFluents) {
-    report.error = "too many context fluents (" +
-                   std::to_string(report.contextFluents.size()) +
-                   "), max is " + std::to_string(maxFluents);
+  ame::ContingencySearchOptions options;
+  options.only_predicates = scenario->contingency.contingencyPredicates;
+  if (!scenario->contingency.safeState.empty()) {
+    std::vector<std::string> safe;
+    for (const FactRef& fact : scenario->contingency.safeState) {
+      safe.push_back(formatFluent(fact.predicateName, fact.objectNames));
+    }
+    options.goal_options.push_back(std::move(safe));
+  }
+  report.declaredByUser = !scenario->contingency.isEmpty();
+
+  ame::ContingencySearchReport search;
+  try {
+    // Count the facts before running, so a domain far too large to enumerate
+    // is refused with a number rather than by taking all afternoon.
+    ame::WorldModel counting_wm;
+    ame::PddlParser::parseFromString(domain_pddl, problem_pddl, counting_wm);
+    size_t factCount =
+        ame::ContingencySearch::identifyContextFacts(counting_wm).size();
+    if (!options.only_predicates.empty()) {
+      size_t declared = 0;
+      for (const auto& fact :
+           ame::ContingencySearch::identifyContextFacts(counting_wm)) {
+        const std::string predicate =
+            fact.short_name.substr(0, fact.short_name.find(' '));
+        if (std::find(options.only_predicates.begin(),
+                      options.only_predicates.end(),
+                      predicate) != options.only_predicates.end()) {
+          ++declared;
+        }
+      }
+      factCount = declared;
+    }
+    if (!options.only_predicates.empty() && factCount == 0) {
+      // The declaration named something that is not a fact the plan cannot
+      // change, so there was nothing to vary. Reporting "checked all 1 ways"
+      // here would put a claim of complete coverage into the assurance report
+      // for a contingency that was never varied at all.
+      std::string named;
+      for (size_t i = 0; i < options.only_predicates.size(); ++i) {
+        named += (i == 0 ? "" : ", ") + options.only_predicates[i];
+      }
+      report.error =
+          "this scenario says the contingency is " + named +
+          ", but nothing by that name is a fact the plan cannot change. Either "
+          "some action makes it true or false, or it is not a fact in this "
+          "model. Nothing was checked.";
+      return report;
+    }
+
+    if (factCount > maxFluents) {
+      report.error = "there are " + std::to_string(factCount) +
+                     " facts the plan cannot change, and this checks at most " +
+                     std::to_string(maxFluents) +
+                     ". Say which of them represent a contingency to narrow it.";
+      return report;
+    }
+
+    search = ame::ContingencySearch::run(domain_pddl, problem_pddl, options);
+  } catch (const std::exception& ex) {
+    report.error = std::string("the model could not be read: ") + ex.what();
     return report;
   }
-  if (report.contextFluents.size() >= 64U) {
-    report.error = "too many context fluents (" +
-                   std::to_string(report.contextFluents.size()) +
-                   "), max is 63";
-    return report;
+
+  for (const ame::ContextFact& fact : search.context_facts) {
+    report.contextFluents.push_back(fact.fluent_name);
+    const std::string predicate =
+        fact.short_name.substr(0, fact.short_name.find(' '));
+    if (!containsName(report.contextPredicates, predicate)) {
+      report.contextPredicates.push_back(predicate);
+    }
   }
 
-  const size_t totalAssignments = size_t{1} << report.contextFluents.size();
-  report.results.reserve(totalAssignments);
-
-  for (size_t mask = 0; mask < totalAssignments; ++mask) {
+  report.results.reserve(search.cases.size());
+  for (const ame::ContingencyCase& item : search.cases) {
     ContingencyContext context;
-    ProjectModel modifiedModel = model;
-    ScenarioDef* scenario = findScenario(modifiedModel, scenarioName);
-    if (scenario == nullptr) {
-      context.errorMessage = "scenario not found: " + scenarioName;
-      ++report.errorCount;
-      report.results.push_back(std::move(context));
-      continue;
-    }
-
-    for (size_t i = 0; i < report.contextFluents.size(); ++i) {
-      if ((mask & (size_t{1} << i)) == 0U) {
-        continue;
+    for (size_t i = 0; i < search.context_facts.size(); ++i) {
+      if (((item.combination >> i) & 1u) != 0u) {
+        context.trueFluents.push_back(search.context_facts[i].fluent_name);
       }
-      const std::string& fluent = report.contextFluents[i];
-      context.trueFluents.push_back(fluent);
-      addUniqueFact(scenario->initialState, parseGroundFluent(fluent));
     }
-
-    ame::WorldModel wm;
-    const ValidationReport validation =
-        PddlValidator::validateAndBuildWorldModel(modifiedModel, scenarioName, wm);
-    if (!validation.ok) {
-      context.errorMessage = "parse failed: " + firstValidationError(validation);
-      ++report.errorCount;
-      report.results.push_back(std::move(context));
-      continue;
+    context.planFound = item.reachable();
+    context.planSteps = item.plan_length;
+    if (context.planFound) {
+      ++report.feasibleCount;
+    } else {
+      ++report.infeasibleCount;
     }
-
-    try {
-      const ame::PlanResult result = ame::Planner{}.solve(wm);
-      context.planFound = result.success;
-      context.planSteps = result.steps.size();
-      if (result.success) {
-        ++report.feasibleCount;
-      } else {
-        ++report.infeasibleCount;
-      }
-    } catch (const std::exception& ex) {
-      context.errorMessage = std::string("planner threw: ") + ex.what();
-      ++report.errorCount;
-    } catch (...) {
-      context.errorMessage = "planner threw: unknown exception";
-      ++report.errorCount;
-    }
-
     report.results.push_back(std::move(context));
   }
 
+  report.combinationsChecked = search.cases.size();
+  report.plannerCalls = search.solver_calls;
+  report.answeredByReasoning =
+      static_cast<size_t>(search.implied_reachable + search.implied_unreachable);
+  report.pruningUsed = search.pruning_used;
+  report.pruningRefused = search.pruning_unsound_for_domain;
   report.ok = true;
   return report;
 }

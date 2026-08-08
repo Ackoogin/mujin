@@ -34,6 +34,14 @@ TEST(ProjectModel, RoundTrip) {
     s.expectation.maxPlanSteps = 10;
     s.expectation.expectedActions = {"move"};
     s.expectation.forbiddenActions = {"explode"};
+    s.expectation.shouldReachGoal = true;
+    s.expectation.minRunActions = 1;
+    s.expectation.maxRunActions = 12;
+    s.expectation.requiredRunActions = {"move"};
+    s.expectation.forbiddenRunActions = {"explode"};
+    s.expectation.maxReplans = 2;
+    s.expectation.runFault.name = "move-fails-once";
+    s.expectation.runFault.actionFailures.push_back({"move", 1U});
     m.scenarios.push_back(s);
 
     const char* path = "test_project_model_tmp.json";
@@ -90,6 +98,16 @@ TEST(ProjectModel, RoundTrip) {
               std::vector<std::string>{"move"});
     EXPECT_EQ(m2.scenarios[0].expectation.forbiddenActions,
               std::vector<std::string>{"explode"});
+    EXPECT_TRUE(m2.scenarios[0].expectation.shouldReachGoal);
+    EXPECT_EQ(m2.scenarios[0].expectation.minRunActions, 1);
+    EXPECT_EQ(m2.scenarios[0].expectation.maxRunActions, 12);
+    EXPECT_EQ(m2.scenarios[0].expectation.requiredRunActions,
+              std::vector<std::string>{"move"});
+    EXPECT_EQ(m2.scenarios[0].expectation.forbiddenRunActions,
+              std::vector<std::string>{"explode"});
+    EXPECT_EQ(m2.scenarios[0].expectation.maxReplans, 2);
+    EXPECT_EQ(m2.scenarios[0].expectation.runFault.name, "move-fails-once");
+    ASSERT_EQ(m2.scenarios[0].expectation.runFault.actionFailures.size(), 1U);
     std::remove(path);
 }
 
@@ -156,6 +174,13 @@ TEST(ProjectModel, LoadOldScenarioWithoutExpectationDefaults) {
     EXPECT_EQ(m.scenarios[0].expectation.maxPlanSteps, 0);
     EXPECT_TRUE(m.scenarios[0].expectation.expectedActions.empty());
     EXPECT_TRUE(m.scenarios[0].expectation.forbiddenActions.empty());
+    EXPECT_TRUE(m.scenarios[0].expectation.shouldReachGoal);
+    EXPECT_EQ(m.scenarios[0].expectation.minRunActions, 0);
+    EXPECT_EQ(m.scenarios[0].expectation.maxRunActions, 0);
+    EXPECT_TRUE(m.scenarios[0].expectation.requiredRunActions.empty());
+    EXPECT_TRUE(m.scenarios[0].expectation.forbiddenRunActions.empty());
+    EXPECT_EQ(m.scenarios[0].expectation.maxReplans, -1);
+    EXPECT_TRUE(m.scenarios[0].expectation.runFault.name.empty());
     std::remove(path);
 }
 
@@ -244,6 +269,42 @@ TEST(ProjectModel, ClearResetsVersion) {
     ProjectModel m;
     m.version = 99; m.types.push_back({"x",""});
     m.clear();
-    EXPECT_EQ(m.version, 1);
+    EXPECT_EQ(m.version, 2);
     EXPECT_TRUE(m.types.empty());
+}
+
+TEST(ProjectModel, ExpressiveConditionsAndConstantsRoundTrip) {
+    ProjectModel model;
+    model.constants.push_back({"home", "location"});
+    ActionDef action;
+    action.name = "move";
+    action.params.push_back({"?where", "", {"base", "sector"}});
+    action.hasConditionExpression = true;
+    action.conditionExpression.kind = ConditionKind::AnyOf;
+    ConditionExpression positive;
+    positive.kind = ConditionKind::Fact;
+    positive.fact = {"clear", {"?where"}};
+    ConditionExpression negative = positive;
+    negative.fact.predicateName = "blocked";
+    negative.negated = true;
+    action.conditionExpression.children = {positive, negative};
+    action.preconditions = actionConditionFacts(action);
+    model.actions.push_back(action);
+    ScenarioDef scenario;
+    scenario.name = "either-goal";
+    scenario.goalAlternatives = {{{"at", {"home"}}},
+                                 {{"safe", {"home"}}}};
+    scenario.goals = scenario.goalAlternatives.front();
+    model.scenarios.push_back(scenario);
+
+    const nlohmann::json stored = model;
+    const ProjectModel loaded = stored.get<ProjectModel>();
+    ASSERT_EQ(loaded.constants.size(), 1U);
+    ASSERT_EQ(loaded.actions.size(), 1U);
+    EXPECT_TRUE(loaded.actions[0].hasConditionExpression);
+    EXPECT_TRUE(actionHasNegativeCondition(loaded.actions[0]));
+    EXPECT_EQ(loaded.actions[0].params[0].eitherTypes,
+              (std::vector<std::string>{"base", "sector"}));
+    ASSERT_EQ(loaded.scenarios.size(), 1U);
+    EXPECT_EQ(loaded.scenarios[0].goalAlternatives.size(), 2U);
 }

@@ -2,7 +2,10 @@
 
 #include "pddl_generator.h"
 #include "pddl_importer.h"
+#include "ame/pddl_parser.h"
+#include "ame/world_model.h"
 
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -167,16 +170,148 @@ TEST(PddlImporter, ImportsUavSearchProblem) {
   EXPECT_GE(problem.model.scenarios.back().goals.size(), 1U);
 }
 
-TEST(PddlImporter, ImportsDomainConstantsAsObjects) {
+TEST(PddlImporter, ImportsDomainConstantsSeparatelyFromProblemObjects) {
   const PddlImportResult result =
       PddlImporter::importDomain(kDomainWithConstantsPddl);
 
   ASSERT_TRUE(result.ok) << result.error;
-  ASSERT_EQ(result.model.objects.size(), 2U);
-  EXPECT_EQ(result.model.objects[0].name, "routine");
-  EXPECT_EQ(result.model.objects[0].type, "priority");
-  EXPECT_EQ(result.model.objects[1].name, "critical");
-  EXPECT_EQ(result.model.objects[1].type, "priority");
+  EXPECT_TRUE(result.model.objects.empty());
+  ASSERT_EQ(result.model.constants.size(), 2U);
+  EXPECT_EQ(result.model.constants[0].name, "routine");
+  EXPECT_EQ(result.model.constants[0].type, "priority");
+  EXPECT_EQ(result.model.constants[1].name, "critical");
+  EXPECT_EQ(result.model.constants[1].type, "priority");
+}
+
+TEST(PddlImporter, RoundTripsEverySupportedActionConditionShape) {
+  const char* domain = R"pddl(
+(define (domain expressive)
+  (:requirements :strips :typing)
+  (:types item left right - object)
+  (:constants fixed - item)
+  (:predicates (p ?x - object) (q ?x - object))
+  (:action inspect
+    :parameters (?a - (either left right) ?b - item)
+    :precondition (and
+      (not (q ?a))
+      (or (p ?a) (q ?b))
+      (forall (?each - item) (p ?each))
+      (exists (?one - item) (q ?one))
+      (not (= ?a ?b)))
+    :effect (p ?a))
+)
+)pddl";
+
+  const PddlImportResult first = PddlImporter::importDomain(domain);
+  ASSERT_TRUE(first.ok) << first.error;
+  ASSERT_EQ(first.model.actions.size(), 1U);
+  const ActionDef& action = first.model.actions.front();
+  EXPECT_TRUE(action.hasConditionExpression);
+  EXPECT_TRUE(actionHasNegativeCondition(action));
+  const std::vector<EffectRef> condition_facts = actionConditionFacts(action);
+  EXPECT_TRUE(std::any_of(condition_facts.begin(), condition_facts.end(),
+                          [](const EffectRef& fact) {
+                            return fact.alternative;
+                          }));
+  ASSERT_EQ(action.params.size(), 2U);
+  EXPECT_EQ(action.params[0].eitherTypes,
+            (std::vector<std::string>{"left", "right"}));
+  ASSERT_EQ(first.model.constants.size(), 1U);
+
+  const std::string generated = PddlGenerator::generateDomain(first.model);
+  EXPECT_NE(generated.find("(not (q ?a))"), std::string::npos) << generated;
+  EXPECT_NE(generated.find("(or (p ?a) (q ?b))"), std::string::npos) << generated;
+  EXPECT_NE(generated.find("(forall (?each - item) (p ?each))"),
+            std::string::npos) << generated;
+  EXPECT_NE(generated.find("(exists (?one - item) (q ?one))"),
+            std::string::npos) << generated;
+  EXPECT_NE(generated.find("(not (= ?a ?b))"), std::string::npos) << generated;
+  EXPECT_NE(generated.find("?a - (either left right)"), std::string::npos)
+      << generated;
+  EXPECT_NE(generated.find("fixed - item"), std::string::npos) << generated;
+
+  const PddlImportResult second = PddlImporter::importDomain(generated);
+  ASSERT_TRUE(second.ok) << second.error;
+  EXPECT_TRUE(second.model.actions.front().hasConditionExpression);
+  EXPECT_EQ(second.model.actions.front().params.front().eitherTypes,
+            action.params.front().eitherTypes);
+  EXPECT_EQ(second.model.constants.size(), first.model.constants.size());
+
+  ProjectModel executable = second.model;
+  executable.objects = {{"left-1", "left"}, {"right-1", "right"},
+                        {"item-1", "item"}};
+  ScenarioDef scenario;
+  scenario.name = "nominal";
+  scenario.initialState = {{"p", {"left-1"}}, {"p", {"fixed"}},
+                           {"p", {"item-1"}}, {"q", {"item-1"}}};
+  scenario.goals = {{"p", {"right-1"}}};
+  executable.scenarios.push_back(scenario);
+  ame::WorldModel world;
+  EXPECT_NO_THROW(ame::PddlParser::parseFromString(
+      PddlGenerator::generateDomain(executable),
+      PddlGenerator::generateProblem(executable, "nominal"), world));
+  EXPECT_GT(world.numGroundActions(), 0U);
+}
+
+TEST(PddlImporter, ImportsAndRoundTripsDisjunctiveGoal) {
+  const PddlImportResult domain = PddlImporter::importDomain(kUavSearchDomainPddl);
+  ASSERT_TRUE(domain.ok) << domain.error;
+  const char* problem = R"pddl(
+(define (problem alternatives)
+  (:domain uav-search)
+  (:objects uav1 - robot sector_a sector_b - sector)
+  (:init (at uav1 sector_a))
+  (:goal (or
+    (searched sector_a)
+    (and (searched sector_b) (classified sector_b))))
+)
+)pddl";
+
+  const PddlImportResult imported =
+      PddlImporter::importProblem(domain.model, problem);
+  ASSERT_TRUE(imported.ok) << imported.error;
+  const ScenarioDef& scenario = imported.model.scenarios.back();
+  ASSERT_EQ(scenario.goalAlternatives.size(), 2U);
+  EXPECT_EQ(scenario.goalAlternatives[0].size(), 1U);
+  EXPECT_EQ(scenario.goalAlternatives[1].size(), 2U);
+  ASSERT_EQ(scenario.goals.size(), 1U);
+  EXPECT_EQ(scenario.goals.front().predicateName, "searched");
+
+  const std::string generated =
+      PddlGenerator::generateProblem(imported.model, scenario.name);
+  EXPECT_NE(generated.find("(:goal (or (searched sector_a) (and "),
+            std::string::npos) << generated;
+  const PddlImportResult second =
+      PddlImporter::importProblem(domain.model, generated, scenario.name);
+  ASSERT_TRUE(second.ok) << second.error;
+  EXPECT_EQ(second.model.scenarios.back().goalAlternatives.size(), 2U);
+}
+
+TEST(PddlImporter, ErrorNamesActionContainingMalformedCondition) {
+  const PddlImportResult result = PddlImporter::importDomain(R"pddl(
+(define (domain broken)
+  (:predicates (ready))
+  (:action launch
+    :parameters ()
+    :precondition (not (and (ready)))
+    :effect (ready)))
+)pddl");
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_NE(result.error.find("action 'launch'"), std::string::npos)
+      << result.error;
+}
+
+TEST(PddlImporter, RejectsUnionTypesOutsideActionInputsLikeTheCoreReader) {
+  const PddlImportResult result = PddlImporter::importDomain(R"pddl(
+(define (domain broken-union)
+  (:requirements :strips :typing)
+  (:types aircraft surface - object)
+  (:predicates (available ?asset - (either aircraft surface))))
+)pddl");
+
+  EXPECT_FALSE(result.ok);
+  EXPECT_FALSE(result.error.empty());
 }
 
 TEST(PddlImporter, RejectsMalformedPddl) {

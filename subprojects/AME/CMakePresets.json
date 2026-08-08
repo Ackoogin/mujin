@@ -1,0 +1,84 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "AME standalone",
+            "description": "Builds the core engine, the graphical authoring tool, ame_mission_cli and the contingency verifier from this directory alone. Needs neither PCL nor PYRAMID, and takes every third-party dependency from the copies checked in under external/, so it works with no network access.",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "AME_BUILD_AUTHORING": "ON",
+                "AME_REQUIRE_VENDORED_DEPENDENCIES": "ON"
+            }
+        },
+        {
+            "name": "no-authoring",
+            "displayName": "AME standalone, engine only",
+            "description": "The core engine, ame_mission_cli and the contingency verifier, without the graphical tool. Leaves SDL2, OpenGL and Dear ImGui out of the build, which is what a headless machine or a build agent wants.",
+            "binaryDir": "${sourceDir}/build-engine",
+            "cacheVariables": {
+                "AME_BUILD_AUTHORING": "OFF",
+                "AME_REQUIRE_VENDORED_DEPENDENCIES": "ON"
+            }
+        },
+        {
+            "name": "networked",
+            "displayName": "AME standalone, dependencies downloaded",
+            "description": "As the default preset, but a dependency missing from external/ is downloaded rather than treated as an error. Use this when adding a dependency, before vendoring it. Never use it for an air-gapped build.",
+            "binaryDir": "${sourceDir}/build-networked",
+            "cacheVariables": {
+                "AME_BUILD_AUTHORING": "ON",
+                "AME_REQUIRE_VENDORED_DEPENDENCIES": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release",
+            "displayName": "Release",
+            "configurePreset": "default",
+            "configuration": "Release"
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "configurePreset": "default",
+            "configuration": "Debug"
+        },
+        {
+            "name": "engine-release",
+            "displayName": "Release, engine only",
+            "configurePreset": "no-authoring",
+            "configuration": "Release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "release",
+            "displayName": "Release",
+            "configurePreset": "default",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "configurePreset": "default",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "engine-release",
+            "displayName": "Release, engine only",
+            "configurePreset": "no-authoring",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

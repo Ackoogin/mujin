@@ -11,6 +11,8 @@ enum class PredicateRelationKind {
   Requires,
   MakesTrue,
   MakesFalse,
+  RequiresFalse,
+  AcceptsAlternative,
 };
 
 /// \brief One action reference associated with a predicate.
@@ -23,6 +25,8 @@ struct PredicateActionRelation {
 /// \brief All action references associated with one predicate.
 struct PredicateRelations {
   std::vector<PredicateActionRelation> requiredBy;
+  std::vector<PredicateActionRelation> requiredFalseBy;
+  std::vector<PredicateActionRelation> acceptedAsAlternativeBy;
   std::vector<PredicateActionRelation> madeTrueBy;
   std::vector<PredicateActionRelation> madeFalseBy;
 };
@@ -46,6 +50,8 @@ struct DerivedCausalLink {
 /// \brief All predicate and action relationships associated with one action.
 struct ActionRelations {
   std::vector<ActionPredicateRelation> requires;
+  std::vector<ActionPredicateRelation> requiresFalse;
+  std::vector<ActionPredicateRelation> acceptsAlternatives;
   std::vector<ActionPredicateRelation> makesTrue;
   std::vector<ActionPredicateRelation> makesFalse;
   std::vector<size_t> mayEnable;

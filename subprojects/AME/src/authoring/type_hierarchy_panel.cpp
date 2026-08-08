@@ -1,5 +1,9 @@
 #include "type_hierarchy_panel.h"
 
+#include "model_edits.h"
+
+#include <cstdio>
+
 #include "imgui.h"
 
 #include <algorithm>
@@ -42,7 +46,11 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
       const bool hasObject =
         std::any_of(model.objects.begin(), model.objects.end(), [&](const ObjectDef& object) {
           return object.type == typeName;
-        });
+        }) ||
+        std::any_of(model.constants.begin(), model.constants.end(),
+                    [&](const ObjectDef& object) {
+                      return object.type == typeName;
+                    });
       const bool canDelete = typeName != "object" && !hasChildType && !hasObject;
 
       ImGui::SameLine();
@@ -61,6 +69,19 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
                            [&](const TypeDef& type) { return type.name == typeName; }),
             m.types.end());
         });
+      }
+
+      // Renaming reaches everything that names this type, in one undoable
+      // step: the things of that type, the parameters that ask for it, the
+      // types below it, and the state groups about it.
+      if (typeName != "object") {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("rename")) {
+          m_renameTypeName = typeName;
+          std::snprintf(m_renameTypeInput, sizeof(m_renameTypeInput), "%s",
+                        typeName.c_str());
+          m_openRenamePopup = true;
+        }
       }
 
       if (open) {
@@ -104,7 +125,8 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
     }
   }
 
-  if (ImGui::CollapsingHeader("Objects", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("Things in scenarios",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
     if (ImGui::BeginTable("Objects##table",
                           3,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
@@ -141,7 +163,11 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
       const bool duplicateName =
         std::any_of(model.objects.begin(), model.objects.end(), [&](const ObjectDef& object) {
           return object.name == name;
-        });
+        }) ||
+        std::any_of(model.constants.begin(), model.constants.end(),
+                    [&](const ObjectDef& object) {
+                      return object.name == name;
+                    });
 
       if (name.empty() || type.empty()) {
         m_validationMsg = "Object name and type are required";
@@ -160,7 +186,51 @@ void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
     }
   }
 
+  if (!model.constants.empty() &&
+      ImGui::CollapsingHeader("Things fixed by the domain",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::TextDisabled("These are available in every scenario.");
+    for (const ObjectDef& constant : model.constants) {
+      ImGui::BulletText("%s — %s", constant.name.c_str(),
+                        constant.type.c_str());
+    }
+  }
+
   if (!m_validationMsg.empty()) {
     ImGui::TextColored({1.0F, 0.3F, 0.3F, 1.0F}, "%s", m_validationMsg.c_str());
+  }
+
+  // ---- Rename type modal ------------------------------------------------
+  if (m_openRenamePopup) {
+    ImGui::OpenPopup("Rename type##modal");
+    m_openRenamePopup = false;
+  }
+  if (ImGui::BeginPopupModal("Rename type##modal", nullptr,
+                             ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("Rename '%s' everywhere it is used", m_renameTypeName.c_str());
+    ImGui::InputText("New name##renametype", m_renameTypeInput,
+                     sizeof(m_renameTypeInput));
+    const std::string wanted = m_renameTypeInput;
+    const std::string refusal =
+        ModelEdits::whyTypeCannotBeRenamed(model, m_renameTypeName, wanted);
+    if (!refusal.empty()) {
+      ImGui::TextDisabled("%s", refusal.c_str());
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Rename") && refusal.empty()) {
+      const std::string from = m_renameTypeName;
+      stack.execute(model, "Rename type", [from, wanted](ProjectModel& m) {
+        ModelEdits::renameType(m, from, wanted);
+      });
+      ImGui::CloseCurrentPopup();
+    }
+    if (!refusal.empty()) {
+      ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
   }
 }

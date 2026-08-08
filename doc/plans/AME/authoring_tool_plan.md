@@ -1,15 +1,15 @@
 # AME Authoring Tool — Plan
 
-**What this is.** The single plan for the AME graphical authoring tool. It states what
-the tool is for, what it can already do, and what is left to build.
+**What this is.** The single plan for the AME graphical authoring tool: what it is for,
+what it can already do, what is left to build, and what still has to be reviewed before
+a release.
 
-**What it replaces.** This document supersedes `graphical_authoring_tool_workplan.md`,
-which recorded every work item from the first line of build code onwards, each with a
-tick box and a note about what was deferred. That per-item history has served its
-purpose and has been folded into section 3, which describes the tool as it stands
-rather than the order in which it was built. The reasoning behind the design, and the
-survey of comparable tools, stays where it belongs, in the research documents listed
-below.
+**Status in one paragraph.** All four workstreams are built: the authoring surface,
+simulation runs, review and assurance artefacts, and the workstream D update that keeps the
+tool's PDDL reader and project format aligned with `ame_core`. One thing is outstanding, and
+it is acceptance rather than code: the
+non-specialist walkthrough in section 5 is a release gate and has not been run end to end
+by someone who does not write software.
 
 **Background reading.**
 
@@ -18,699 +18,347 @@ below.
 | [`doc/research/AME/graphical_autonomy_authoring_tool_options.md`](../../research/AME/graphical_autonomy_authoring_tool_options.md) | Why a tool was built rather than adopted, and the licence constraints |
 | [`doc/research/AME/graphical_authoring_option1_extend_existing.md`](../../research/AME/graphical_authoring_option1_extend_existing.md) | Why the tool is a C++ application linked against `ame_core` |
 | [`doc/research/AME/pddl_authoring_usability_and_navigation.md`](../../research/AME/pddl_authoring_usability_and_navigation.md) | The navigation and non-programmer authoring research, with prior art and sources |
-| [`doc/design/AME/pddl_authoring_hmi_concepts.html`](../../design/AME/pddl_authoring_hmi_concepts.html) | The last round of screen concepts, which the current views were built from |
+| [`doc/design/AME/pddl_authoring_hmi_concepts.html`](../../design/AME/pddl_authoring_hmi_concepts.html) | The screen concepts the domain-authoring views were built from |
+| [`doc/design/AME/simulation_run_hmi_concepts.html`](../../design/AME/simulation_run_hmi_concepts.html) | The screen concepts the simulation-run views were built from, with the six review questions and their answers |
 | [`subprojects/AME/doc/guides/authoring_tool_user_guide.md`](../../../subprojects/AME/doc/guides/authoring_tool_user_guide.md) | How to build, launch and use what exists today |
 
 ---
 
 ## 1. Purpose and audience
 
-The authoring tool is a local desktop workbench for creating, reviewing and checking
-AME mission models. It keeps a structured project as its working format, generates
-PDDL from that project, and uses the same parser, world model, planner and plan
-compiler as the runtime stack, so what the tool says about a model is what the runtime
-will do with it.
+The authoring tool is a local desktop workbench for creating, reviewing and checking AME
+mission models. It keeps a structured project as its working format, generates PDDL from
+that project, and uses the same parser, world model, planner and plan compiler as the
+runtime stack, so what the tool says about a model is what the runtime will do with it.
 
 Its users are mission and systems engineers, safety and assurance reviewers, and
-operational subject-matter experts. Some of them write software. Most of them do not,
-and the ones who do not are the people the tool exists for. An autonomy developer can
-already write PDDL in a text editor faster than any graphical tool will let them; that
-is a consistent finding in the published evaluations, and this plan does not try to
-beat it. The tool earns its place by letting people who cannot write PDDL contribute
-to a mission model safely, and by letting reviewers understand a model they did not
-write.
+operational subject-matter experts. Some of them write software. Most of them do not, and
+the ones who do not are the people the tool exists for. An autonomy developer can already
+write PDDL in a text editor faster than any graphical tool will let them; that is a
+consistent finding in the published evaluations, and this plan does not try to beat it.
+The tool earns its place by letting people who cannot write PDDL contribute to a mission
+model safely, and by letting reviewers understand a model they did not write.
 
----
+### The requirement that outranks the others
 
-## 2. The requirement that outranks the others
+**A person who does not write software must be able to author, run and review a mission
+model without help.** In practice that means five rules, which apply to anything built
+from here on as much as they applied to what exists:
 
-**A person who does not write software must be able to author, run and review a
-mission model without help.** Every work item in this plan is measured against that
-before it is measured against anything else. In practice it means five rules.
-
-1. **No planning vocabulary appears as a label.** The words "precondition", "add
-   effect", "delete effect", "fluent", "grounding" and "predicate" belong in the
-   generated PDDL, not on a form. The screen says "Before it can happen", "Afterwards",
-   and "fact". The generated PDDL stays visible for anyone who wants it.
-2. **An illegal choice is impossible to express, not reported afterwards.** Every slot
-   the user fills in is a list restricted to what is legal at that point. Choices that
-   are not legal stay visible, greyed, with the reason beside them, so the user learns
-   the rule rather than wondering where the option went.
-3. **Every failure is explained in terms of the mission, not the machinery.** "No plan
-   found" is the least useful message a planning tool can produce. The tool says which
-   fact could not be brought about, what would have produced it, and offers the two or
-   three edits that would fix it.
+1. **No planning vocabulary appears as a label.** "Precondition", "add effect", "delete
+   effect", "fluent", "grounding" and "predicate" belong in the generated PDDL, not on a
+   form. The screen says "Before it can happen", "Afterwards", and "fact". The generated
+   PDDL stays visible for anyone who wants it.
+2. **An illegal choice is impossible to express, not reported afterwards.** Every slot the
+   user fills in is a list restricted to what is legal at that point. Illegal choices stay
+   visible, greyed, with the reason beside them, so the user learns the rule rather than
+   wondering where the option went.
+3. **Every failure is explained in terms of the mission, not the machinery.** The tool says
+   which fact could not be brought about, what would have produced it, and offers the two
+   or three edits that would fix it.
 4. **Every view is readable without training.** If a screen needs a briefing before a
-   reviewer can use it, the screen is wrong. Views are judged by whether someone seeing
-   them for the first time in a review meeting can follow the discussion.
-5. **The tool never asks the user to maintain something the model does not use.** Hand
-   arranged node positions and hand-drawn links that no generator reads are work the
-   user does for nothing. Anything that can be computed is computed.
-
-**How this is checked.** Each work item below carries a *non-specialist acceptance*
-line: a task, phrased as a mission question, that someone with no planning background
-must be able to complete unaided. These are not a substitute for unit tests; they are
-the acceptance criteria that decide whether the item is done. Section 9 collects every
-one of them into a walkthrough, and that walkthrough is a release gate. Section 9 also
-states the single exception, which needs a named person to accept it in writing.
+   reviewer can use it, the screen is wrong.
+5. **The tool never asks the user to maintain something the model does not use.** Anything
+   that can be computed is computed, rather than hand-maintained.
 
 ---
 
-## 3. What exists today
+## 2. What exists today
 
 The tool builds as `ame_authoring_tool` behind the `authoring` CMake preset, on Windows
-with MSVC 2022 and on Linux with GCC or Clang. It has a headless `--self-test` mode
-that renders frames off-screen and writes a PNG plus a JSON result, so an automated
-agent can check the user interface without a display attached. Source lives in
+with MSVC 2022 and on Linux with GCC or Clang. It has a headless `--self-test` mode that
+renders frames off-screen and writes a PNG plus a JSON result, so an automated agent can
+check the user interface without a display attached. Source lives in
 [`subprojects/AME/src/authoring`](../../../subprojects/AME/src/authoring); its own test
 suites run under the `authoring-release` and `authoring-debug` test presets.
+
+### Authoring a model
 
 | Capability | What works | Where |
 |------------|-----------|-------|
 | **Project format** | Versioned JSON project holding types, objects, facts, actions, scenarios, state groups and behaviour-tree bindings, with round-trip tests | `project_model.cpp` |
-| **Authoring a domain** | Type hierarchy and objects in the sidebar; facts and actions as nodes; guided sentence editor for actions with type-aware dropdowns; undo and redo for adding and deleting | `app_shell.cpp`, `guided_editor_model.cpp`, `type_hierarchy_panel.cpp` |
-| **Navigation** | Relation index over the whole model; relations panel with back and forward history; focused neighbourhood canvas with one- and two-step depth and a neighbour cap; whole-domain canvas retained with semantic zoom | `relation_index.cpp`, `neighbourhood_model.cpp`, `domain_graph_panel.cpp` |
-| **Review views** | Fact-by-action matrix with CSV and Markdown export; object lifecycle view derived from user-declared groups of alternative facts | `fact_action_matrix.cpp`, `lifecycle_model.cpp` |
-| **PDDL** | Generation with live preview and export; import of existing domain and problem files through a dedicated importer that preserves names and structure, including which facts the domain says must be observed rather than predicted | `pddl_generator.cpp`, `pddl_importer.cpp` |
+| **Domain editing** | Type hierarchy and objects in the sidebar; facts and actions as nodes; guided sentence editor with type-aware dropdowns; type rename that reaches every use; parameter reordering; copy and paste; quick-add and fit-to-contents from the keyboard | `app_shell.cpp`, `guided_editor_model.cpp`, `model_edits.cpp`, `type_hierarchy_panel.cpp` |
+| **Undo and redo** | Covers structural edits and typing, with a run of keystrokes in one field folded into one undoable step; the Edit menu names what would be undone | `command_stack.cpp` |
+| **Files and projects** | Native dialogs, a recent-projects list held with the user's settings, a prompt on quitting with unsaved work, and a recovery copy written every half minute while there are unsaved changes | `app_shell.cpp`, `recent_projects.cpp` |
+| **Navigation** | Relation index over the whole model; relations panel with back and forward history; focused neighbourhood canvas with one- and two-step depth and a neighbour cap; whole-domain canvas with semantic zoom; saved named views held in the project | `relation_index.cpp`, `neighbourhood_model.cpp`, `domain_graph_panel.cpp` |
+| **Presentation groups** | A named set of facts and actions drawn as one labelled box on the whole-domain canvas, which closes to a single box standing in for its contents. Lines that reached a member reach the box instead, lines that would then say the same thing twice are drawn once, and a line with both ends inside a closed group is not drawn at all. Anything can be in at most one group, and the refusal says why. Nothing about a group reaches the generated PDDL | `presentation_groups.cpp`, `domain_graph_panel.cpp` |
+| **PDDL** | Generation with live preview and export; one problem file per scenario; import through a dedicated reader that preserves names and condition structure. Covers the finite subset `PddlParser` accepts: negative and alternative conditions, finite quantifiers, equality filters, union input types, goal alternatives, domain constants and confirmed facts | `pddl_generator.cpp`, `pddl_importer.cpp` |
+| **Import merging** | Importing into a non-empty project shows what would be added, overwritten or left alone, with the cost of each replacement stated, and asks before doing any of it. Replacing an action keeps its behaviour-tree binding, run settings and canvas position. Imported elements are laid out by their relationships | `import_merge.cpp` |
 | **Checking** | Four levels: continuous structural checks while editing, parse through `PddlParser`, grounding through `WorldModel`, and feasibility through `Planner` | `structural_validator.cpp`, `pddl_validator.cpp` |
-| **Scenarios** | Scenario list with starting facts, goals and expected outcomes; batch regression run with a results table and a JSON report | `scenario_runner.cpp` |
-| **Contingency** | Reachability analysis run in process against the generated model, with a per-context results table | `contingency_analyser.cpp` |
-| **Previews** | Plan view as a causal graph with computed layers; compiled behaviour tree view parsed from the generated XML | `plan_graph_panel.cpp`, `bt_graph_panel.cpp` |
+| **Problem reporting** | One sentence per problem; clicking a row selects the element it names and opens the Domain tab on it; parser wording is translated, with the raw message behind a details toggle. A test asserts the word "predicate" appears nowhere in the list | `problem_list.cpp` |
 | **Failure explanation** | Backward chain from a failed goal to the first fact nothing produces, with buttons that apply the likely fixes | `failure_explainer.cpp` |
 | **Behaviour-tree binding** | Per-action node type, reactive flag and subtree template with parameter placeholders, previewed against stand-in arguments | `app_shell.cpp` |
 
-**Known gaps carried into this plan.** File open and save-as still use hard-coded paths
-rather than a file dialog. Text edits are not undoable, only additions and deletions.
-Validation messages name the offending element but are not clickable. Importing a
-domain replaces the project rather than merging. Problem export writes only the first
-scenario. Scenario facts are typed as text rather than chosen from the grounded set.
-Types cannot be renamed and action parameters cannot be reordered. Named presentation
-groups and saved named views were both deferred. Workstream A picks these up; section 11
-lists every unfinished item from the previous plan and says where each one went.
+### Running and watching a model
 
-**The largest gap is not in that list.** The tool can tell you that a plan exists and
-show you the tree it compiled. It cannot show you that tree running. That is
-workstream B, and it is the main new work in this plan.
+| Capability | What works | Where |
+|------------|-----------|-------|
+| **Scenarios** | Scenario list with starting facts and goals chosen from the grounded set rather than typed, with typing kept as an alternative held to the same rules; planning and execution expectations per scenario | `app_shell.cpp`, `fact_chooser.cpp` |
+| **Simulation runs** | A scenario runs against the real compiled tree with stand-in action nodes bound to every action. Run, Pause, Step, Stop and Reset; per-action run settings defaulting to four ticks and always succeeds; a saved random seed. Starting facts are recorded as observed and everything a run produces as predicted, so an action that requires an observed fact refuses a merely predicted one | `simulation_engine.cpp` |
+| **Watching a run** | The timeline is the primary view, one row per action against a tick axis, with fact changes marked on the action that caused them. Beside it, the facts as they stand and the compiled tree coloured by what each node is doing. Clicking the timeline moves the whole screen to that tick without disturbing a live run | `app_shell.cpp`, `bt_graph_panel.cpp` |
+| **Faults and replanning** | Two mechanisms only: fail one action attempt, or set one grounded fact at a chosen tick. Lifecycle alternatives stay consistent. A failed tree replans from current state and continues the same run, with the abandoned and replacement plans shown together and the reason stated in a sentence | `simulation_engine.cpp`, `app_shell.cpp` |
+| **Batch regression** | Each scenario is planned and simulated against its expectations — goal reached, action-count bounds, actions that must or must not run, acceptable replans, behaviour under a named fault — with progress, a Stop button, a reason per result and a JSON report. Older project files take defaults that preserve their previous meaning | `scenario_runner.cpp`, `mission_commands.cpp` |
+| **Recorded runs and replay** | A run is saved in the runtime's three JSONL formats plus a `run.json` manifest naming project, scenario, seed and injected faults. Recordings from this tool or a real system replay through the same views without an open project; a recording with no manifest is labelled a real-system run rather than assumed simulated | `run_record.cpp` |
+| **Comparing runs** | The current in-memory run against a saved one, or two saved folders, compared by first differing tree tick, differing actions and differing final facts, stated first in one sentence | `run_record.cpp` |
+| **Contingency analysis** | Per-scenario declaration of which facts represent a contingency and which a safe state, with the old inference kept as the default. No fact-count cap; a domain too large to enumerate is refused with the numbers and advice. Results say how much of the space was covered. The exhaustive search and its pruning are `ame_core`'s `ContingencySearch`, shared with the contingency verifier | `contingency_analyser.cpp`, `ame/contingency_search.h` |
 
-**One thing the tool inherits from the core needs fixing before that work starts.** The
-tree the tool shows is the tree the plan compiler produces, and that tree currently
-carries a pair of helper nodes around every action, one reading a fact and one writing
-one. They were written to get the pipeline working end to end. They are the wrong shape
-both for the screens in workstream B and for a deployed system, for reasons set out in
-B0 below, and B0 is where they are dealt with.
+### Producing artefacts
+
+| Capability | What works | Where |
+|------------|-----------|-------|
+| **Review views** | Fact-by-action matrix with CSV and Markdown export; object lifecycle view derived from user-declared groups of alternative facts; plan view as a causal graph; compiled behaviour-tree view parsed from the generated XML | `fact_action_matrix.cpp`, `lifecycle_model.cpp`, `plan_graph_panel.cpp`, `bt_graph_panel.cpp` |
+| **Review packs** | One export writes a dated, indexed folder holding the generated domain, a problem file per scenario, both matrix formats, a scenario results table, a replayable run and a domain summary | `review_pack.cpp` |
+| **Assurance evidence** | A generated Markdown report of what the model contains, what nothing brings about, what each action is bound to, how every scenario behaved and what stayed reachable under each contingency — ending with what the report does *not* tell you. Reachable from the File menu, from the review pack, and from `ame_mission_cli evidence` | `assurance_report.cpp` |
+| **Command line** | `ame_mission_cli` with `run`, `record`, `batch` and `evidence`, linking only the core and the project-model library, so a build agent needs no display stack. Conventions match the contingency verifier: positional project file, `--json` naming the machine-readable report, `--help`, and an exit code that states the verdict | `mission_cli_main.cpp`, `mission_commands.cpp` |
+
+### One core change the tool depended on
+
+The plan compiler used to surround every action with helper nodes, one `CheckWorldPredicate`
+per precondition and one `SetWorldPredicate` per effect. It now emits **one node per plan
+step**, carrying its grounded preconditions and effects as attributes on the emitted
+element, so a saved tree still describes itself without the project that produced it. A
+planned-action base class in `ame_core` checks the preconditions and applies the effects
+around the action's own work; simulation uses a stand-in derived from that base class.
+Neither helper node type appears in generated output any more.
+
+This mattered for two reasons. A three-step mission used to arrive on screen as roughly
+twenty boxes, of which three were the mission. And writing an effect as a node asserts that
+the world changed because the action returned success, which is reasonable for a simulation
+but wrong for a deployed system, where establishing the state after an action is the
+deployment's business. The follow-ups a review of this work raised are tracked in
+[`doc/todo/AME/TODO.md`](../../todo/AME/TODO.md) under "Planned-action contract:
+follow-ups". One consequence to know about: an action with no registered implementation now
+aborts the compile unless stub mode is on, which the authoring tool switches on.
 
 ---
 
-## 4. Scope
+## 3. Non-goals
 
-Three workstreams, in dependency order but overlapping in time.
-
-- **A — Finish the authoring surface.** Close the gaps above so the tool stops asking
-  users to work around it.
-- **B — Simulation runs.** Let a user run a mission model inside the tool and watch it
-  execute, in the way DevEnv shows a live system and in the way Groot showed a running
-  behaviour tree, without depending on either.
-- **C — Artefacts for review and evidence.** Make the tool produce the documents that
-  reviews and assurance cases actually need, and keep designing screens the way the last
-  round was designed: concept mockups first, reviewed, then built.
-
-**Non-goals, unchanged from the previous plan and still deliberate.**
+Unchanged and still deliberate.
 
 - Web or browser deployment. The tool is a local desktop application.
-- ADL, conditional effects, numeric fluents or temporal PDDL. AME supports STRIPS with
-  typing, and the tool targets exactly that subset.
-- Replacing DevEnv. DevEnv keeps live monitoring of real ROS2 systems; the authoring
-  tool simulates offline.
-- Live ROS2 connection from the authoring tool. Simulation runs are in-process against
-  the world model, with no transport involved.
+- Conditional effects (`when`), numeric fluents and arithmetic, and temporal or durative
+  actions. `PddlParser` rejects all of these outright, so they are out of scope for the
+  whole of AME rather than for the tool alone. Everything else the parser has since gained
+  is now in scope for the tool and is workstream D in section 4; the sentence that used to
+  stand here, saying AME supports STRIPS with typing and the tool targets exactly that
+  subset, was true when this plan was written and is no longer.
+- Replacing DevEnv. DevEnv keeps live monitoring of real ROS2 systems; the authoring tool
+  simulates offline.
+- Live ROS2 connection from the authoring tool. Simulation runs are in-process against the
+  world model, with no transport involved.
 - Multi-user collaboration and concurrent editing.
-- Graph-first authoring, where a domain is built by wiring nodes together. Every
-  published evaluation that measured it found it slower than typing, and it does not
-  help the people the tool is for. The graph is for looking, not for writing.
+- Graph-first authoring, where a domain is built by wiring nodes together. Every published
+  evaluation that measured it found it slower than typing. The graph is for looking, not
+  for writing.
+
+Also considered and dropped, so they are not re-proposed: a light theme (one dark theme is
+the house style across DevEnv and this tool); icons for node types (a legend to learn works
+against rule 4); dragging from the palette onto the canvas (the canvas is not where
+authoring happens); per-flow colour-coding in the plan view (a second colour language that
+holds on one screen only); layout presets (the tool uses fixed tabs, and saved views cover
+the underlying need); and a custom animation layer for canvas navigation (the node editor
+already animates panning and zooming).
+
+One dropped decision needs its reasoning kept in full, because workstream D asks for it to
+be reconsidered. **The importer was built on its own reader rather than on `PddlParser`**,
+because the parser discards the names, comments and structure the importer exists to
+preserve, and because a round-trip test against the generator keeps the dedicated reader
+honest. That reasoning still holds as far as it goes. What has changed is that the two
+readers now accept visibly different languages, which is what produced workstream D, so the
+trade is no longer the one that was originally judged.
 
 ---
 
-## 5. Workstream A — Finish the authoring surface
+## 4. What remains to be built
 
-### A1. Files and projects behave the way users expect
+Everything in workstreams A, B, C and D is built. The remaining item is the acceptance
+walkthrough in section 5.
 
-**Build.** Native file dialogs for New, Open, Save, Save As, Import and Export.
-A recent-projects list. A prompt on quitting with unsaved changes. Autosave of a
-recovery copy alongside the project file.
+### Workstream D — catch the tool up with the PDDL the core accepts
 
-**Non-specialist acceptance.** A user opens the tool, opens a project they saved
-yesterday from the recent list, changes it, closes the tool, and is asked whether to
-save. No file path is ever typed.
+**Built.** Project format version 2 preserves condition trees, union input types, goal
+alternatives and domain constants while version 1 projects still load with their old meaning.
+The reader and generator round-trip every construct in the table below, and the generated
+files are parsed again through `PddlParser` in tests. The guided editor uses the wording from
+[`condition_authoring_hmi_concepts.html`](../../design/AME/condition_authoring_hmi_concepts.html).
+Relations, both domain views, the matrix, failure explanation, contingency analysis and the
+assurance report distinguish a fact that must be false, a fact that must be true, and a fact
+that is one alternative from the others.
 
-**Effort.** Small.
+**Reader decision.** The dedicated reader remains. `PddlParser` deliberately lowers
+alternatives and finite quantifiers into grounded action schemas, so using it alone would lose
+the source structure that the editor must show and write back. The drift is instead guarded by
+round-trip cases for every accepted construct followed by a parse through the core reader.
 
-### A2. Undo covers everything, including typing
+**Why this is here.** When this plan was written, `PddlParser` accepted STRIPS with typing
+and the tool targeted exactly that. The parser has since gained a good deal more, and
+because the tool keeps its own reader and its own project format rather than sharing the
+core's, none of it arrived in the tool. The result is not a missing convenience. **A domain
+that uses any of these cannot be opened in the tool at all**, so the people this tool exists
+for — the reviewers and subject-matter experts of section 1 — are locked out of exactly the
+domains that are hardest to read unaided.
 
-**Build.** Extend the command stack to text edits and dropdown changes, coalescing a
-run of keystrokes in one field into a single undoable step. Show the name of the next
-undoable action in the Edit menu, so the menu says "Undo rename action" rather than
-"Undo".
+**What the original gap was, measured rather than assumed.** Each row below was tried against
+the reader before D. The completed-work column records the corresponding behaviour now.
 
-**Non-specialist acceptance.** A user renames an action, decides against it, presses
-the undo shortcut once, and the old name is back.
+| PDDL the core accepts | Completed work | Core reference |
+|-----------------------|--------------------------|----------------|
+| Negative precondition, `(not (q ?x))` | Preserved and shown as “must be false” | `PddlParserNegPre.AcceptsNegatedAtomInPrecondition` |
+| Disjunctive precondition, `(or ...)`, split into several grounded schemas | Preserved and shown as “any one of these is enough” | `PddlParser.DisjunctivePreconditionSplitsIntoSchemas` |
+| Universal quantifier, `(forall (?y - t) ...)`, expanded over the objects | Preserved and shown as “for every” | `PddlParser.UniversalExpandsToConjunction` |
+| Existential quantifier, `(exists (?y - t) ...)`, expanded to a disjunction | Preserved and shown as “for at least one” | `PddlParser.ExistentialExpandsToDisjunctionSplit` |
+| Equality and inequality as binding filters, `(= ?a ?b)`, `(not (= ?a ?b))` | Preserved and shown as “same” or “different” | `PddlParser.EqualityKeepsOnlyMatchingPairs` |
+| Union parameter type, `?x - (either a b)` | Preserved as the legal set of accepted types | `PddlParser.EitherTypeGroundsOverUnionOnly` |
+| Disjunctive goal, setting goal alternatives | Preserved and shown as goal choices | `PddlParser.DisjunctiveGoalSetsAlternatives` |
+| Domain constants, `(:constants ...)` | Kept in the domain and available in every scenario | `PddlParser.ParsesDomainConstants` |
 
-**Effort.** Small to medium.
+Confirmed predicates, `(:confirmed-predicates ...)`, are the one recent addition the tool
+already carries end to end, and are the model to follow.
 
-### A3. Problems point at the thing that is wrong
+**What was built.** Four pieces, in dependency order.
 
-**Build.** Make every entry in the validation list select and reveal the element it
-refers to, in whichever view is open. Replace parser error text with a sentence naming
-the element and what is wrong with it, keeping the raw parser message available behind
-a details toggle.
+- **D1. The project format holds these constructs.** `EffectRef` records whether a fact must
+  be false, and a recursive condition expression holds alternatives, quantifiers and
+  comparisons. Saved projects use version 2; version 1 projects still load with their old
+  meaning.
+- **D2. The reader and generator preserve them.** `pddl_importer.cpp` and
+  `pddl_generator.cpp` remain separate from the core parser for the reason above. A
+  round-trip case covers every construct and sends the generated result through the core
+  parser.
+- **D3. The guided editor says these things without planning vocabulary.** It uses phrases
+  such as "must be false", "any one of these is enough", "for every", "for at least one",
+  "the same" and "different". The editor offers legal names and types as choices. The
+  concept pack fixed the wording before implementation.
+- **D4. Every view that reads a condition understands the new shapes.** The fact-by-action
+  matrix, relation index, neighbourhood canvas, failure explainer, contingency analyser and
+  assurance report distinguish positive, negative and alternative conditions. The concise
+  backward failure chain stops when an alternative or quantified condition cannot be
+  reduced safely to one mandatory fact.
 
-**Non-specialist acceptance.** A user is shown a project with three deliberate faults,
-clicks the first problem in the list, lands on the offending action, fixes it, and
-watches the entry disappear.
+**Non-specialist acceptance.** A reviewer opens a domain written by someone else that uses
+a negative precondition and a "one of these" condition, reads what each action needs in
+plain words, runs a scenario against it, and exports a review pack — without being told
+that the domain uses anything unusual.
 
-**Effort.** Small.
+**Effort.** Large. D1 and D2 are mechanical; D3 is a design problem with a concept pack in
+front of it; D4 is a sweep whose size is not knowable until D1 settles the shape.
 
-### A4. Scenario facts are chosen, not typed
+**One judgement to make before starting.** The tool duplicating the core's parser is what
+let this drift happen, and D2 makes the duplicate larger. It is worth asking, once, whether
+the tool should read PDDL through `PddlParser` and keep its own reader only for what the
+parser discards — the names, comments and layout the importer exists to preserve. That was
+looked at once before and rejected, and the reason is recorded in section 3's dropped list.
+The trade has changed now that the two readers accept visibly different languages, so the
+answer may be different; it should be decided deliberately rather than by writing D2 first.
 
-**Build.** Replace the free-text fact rows in the scenario editor with a chooser over
-the grounded fact set: pick the fact, then pick each object from a list restricted by
-the parameter type. Keep a text entry as an alternate path for users who prefer it, and
-validate it against the same set.
+### Presentation groups
 
-**Non-specialist acceptance.** A user sets up a starting situation of six facts for a
-domain they did not write, without knowing what a fluent is, and cannot produce a fact
-that does not exist.
+Built, and described in section 2. Three decisions taken while building them are worth
+keeping:
 
-**Effort.** Medium.
+- **Membership is stored by name, and unresolvable members are dropped.** A fact or action
+  that is deleted stops being a member, and a group left holding nothing is removed. This
+  happens inside the same undoable step as the deletion, so one press of undo puts both
+  back. The same pruning covers a member that a rename left pointing at nothing.
+- **Nothing about a group's shape is stored.** The box is computed from where its contents
+  are, and a closed group first appears in the middle of what it holds. Section 1 rule 5
+  says the tool never asks the user to maintain something the model does not read, and a
+  box that had to be dragged back over its own contents would be exactly that.
+- **Anything can be in at most one group.** Two boxes each claiming to stand for the same
+  fact would make closing them ambiguous. The refusal says so in a sentence rather than
+  hiding the option, which is rule 2.
 
-### A5. Import merges instead of replacing
+Everything else in this plan is an ongoing practice rather than an item:
 
-**Build.** On importing a domain into a non-empty project, show what would be added,
-what would be replaced and what would conflict, and let the user choose per group.
-Export every scenario as its own problem file rather than only the first. Lay imported
-elements out by following the relationships between them, rather than the two long rows
-of facts and actions that import produces today.
+**Concept mockups before code.** Any new screen gets a concept pack first, in the form the
+two existing packs use: one standalone HTML page under [`doc/design/AME/`](../../design/AME/),
+no external files, the tool's own theme values, real content from
+`subprojects/AME/domains/mission_autonomy`, ending in the specific questions the review
+needs answered. The format has earned its place — it settled the guided editor's wording
+before any of it was built, and the simulation pack's six questions decided what B2 to B4
+became. A pack whose questions nobody answers has failed and should not be repeated.
 
-**Non-specialist acceptance.** A user imports a second domain file into an existing
-project and can see, before committing, exactly which of their existing actions it
-would overwrite.
-
-**Effort.** Medium.
-
-### A6. Named groups and saved views
-
-**Build.** Presentation groups, which are a named set of facts and actions drawn as a
-labelled box that collapses to a single node on the whole-domain canvas. Saved views,
-which store a focus element, a depth and a relationship filter under a name, held in
-the project file so they survive reopening. Both were deferred from the previous plan;
-both exist to turn the canvas into a set of small curated diagrams for review meetings,
-which is how stakeholders will actually use it.
-
-**Non-specialist acceptance.** A reviewer opens a project, picks the saved view called
-"communications loss", and sees the same picture the author saw when they saved it.
-
-**Effort.** Medium.
-
-### A7. Editing operations that are still missing
-
-**Build.** Seven small things a user reasonably expects and cannot currently do:
-rename a type; reorder an action's parameters; add a type from the canvas menu, where
-the entry exists today but does nothing; copy and paste facts and actions, rather than
-only duplicate; fit the canvas to its contents with a key; open the quick-add box from
-the canvas rather than only from the palette; and expand or collapse a subtree in the
-behaviour-tree view, so a large tree can be read a branch at a time.
-
-Together these also finish the keyboard-only path, which the previous plan claimed and
-did not deliver: with them in place, a user can create, edit, navigate and check a
-domain without reaching for the mouse.
-
-**Non-specialist acceptance.** A user renames a type that is already used by four
-actions and by objects in two scenarios, and nothing else in the project breaks.
-
-**Effort.** Medium.
-
-### A8. Contingency analysis the user controls
-
-**Build.** Let the user say, per scenario, which facts represent a contingency and
-which represent a safe state, instead of the tool inferring them from where they appear
-in the model. Keep the inference as the starting suggestion. Add monotonicity pruning to
-the search so the analysis is not limited to eight facts at a time, and say in the
-results how much of the space was covered.
-
-**Non-specialist acceptance.** A user marks "communications lost" as a contingency and
-"at the recovery point" as a safe state, runs the analysis, and reads whether the safe
-state is reachable from the contingency.
-
-**Effort.** Medium.
+The D3 pack is
+[`condition_authoring_hmi_concepts.html`](../../design/AME/condition_authoring_hmi_concepts.html):
+how the guided editor says "must not be true", "any one of these", "every one of these" and
+"two different ones" without using the words a planning textbook would.
 
 ---
 
-## 6. Workstream B — Simulation runs
-
-This is the substantial new work. Today a user can establish that a plan exists. They
-cannot see it play out, cannot see what happens when a step fails, and cannot show a
-reviewer the mission behaving. Two existing pieces of the project show what that should
-feel like:
-
-- **DevEnv** ([`subprojects/AME/tools/devenv`](../../../subprojects/AME/tools/devenv))
-  shows a live system: the behaviour tree with per-node status, a timeline of status
-  changes, world-model facts as they change, tick controls, and a replay mode that
-  loads recorded runs from the three JSONL files the runtime writes.
-- **Groot** was the BehaviorTree.CPP tool that showed a tree lighting up as it ran.
-  Groot2 is commercial and Groot 1 is unmaintained, which is why AME's observability
-  stack was built to replace it (see
-  [`subprojects/AME/doc/architecture/05-observability.md`](../../../subprojects/AME/doc/architecture/05-observability.md)).
-  The live tree view described below is the replacement for what Groot did, built on
-  AME's own event stream, with no dependency on either version.
-
-The authoring tool should give the same experience against a simulated world rather
-than a real one, at design time, before anything is deployed.
-
-### B0. Each planned action carries its own state checks
-
-**This item is done.** It was core work rather than authoring-tool work, and it is
-recorded, along with the follow-ups a review of it raised, in
-[`doc/todo/AME/TODO.md`](../../todo/AME/TODO.md) under "Planned-action contract:
-follow-ups". The rest of this item is kept as written because it states why the
-simulation-run screens needed the change, and because the walkthrough in section 9 still
-checks it. One caveat for workstream B: an action with no registered implementation now
-aborts the compile unless stub mode is switched on, which the authoring tool does.
-
-**The problem.** The plan compiler surrounds every action with helper nodes: one
-`CheckWorldPredicate` for each of the action's preconditions before it, and one
-`SetWorldPredicate` for each add effect and each delete effect after it
-([`plan_compiler.cpp`](../../../subprojects/AME/src/lib/plan_compiler.cpp), function
-`emitActionUnit`). Those nodes were written to get planning and execution working from
-end to end, and they have two problems.
-
-The first is a presentation problem, and it is the smaller of the two. A three-step
-mission arrives on screen as roughly twenty boxes, of which three are the mission and
-the rest are bookkeeping. Their labels are the planning vocabulary that section 2 rule 1
-keeps off the screen, and a reviewer watching a run has to be told which boxes to
-ignore before the picture means anything, which is what section 2 rule 4 exists to
-prevent.
-
-The second matters more. Writing an effect as a node in the tree asserts that the world
-changed because the action returned success. For a simulated run that is reasonable:
-predicted state is the only state there is. For a deployed system it is not. Whether the
-vehicle actually arrived is something that deployment establishes for itself, and the
-compiled tree should not be asserting it on the action's behalf. The world model already
-draws the distinction the two cases need — every fact is recorded as either believed,
-meaning predicted from a plan effect, or confirmed, meaning observed (`FactAuthority` in
-[`world_model.h`](../../../subprojects/AME/include/ame/world_model.h)) — and it already
-has a check for the two disagreeing. What is missing is a place for an action node to
-make that choice, because at present the tree makes it first.
-
-**Build.**
-
-- The compiler emits one node per plan step. The step's grounded preconditions and
-  effects travel with that node instead of being spread around it, so the tree has one
-  box per thing the mission does and nothing else.
-- A planned-action base class in `ame_core` reads that information, checks the
-  preconditions before the action's own work runs, and applies the effects after it
-  succeeds. Concrete action nodes derive from the base class and implement only the
-  work. Neither the check nor the write is a node on the tree any more.
-- Simulation and validation use a stand-in node derived from that base class. It takes
-  the number of ticks the action is configured to take, succeeds or fails as configured,
-  and applies the declared effects as believed facts. This is what the tree does today,
-  moved inside the node.
-- The goal guard at the top of a compiled tree is the other place `CheckWorldPredicate`
-  appears. It becomes a single condition node asking whether the mission's goal has been
-  met, so no fact-level plumbing is left anywhere in generated output.
-- `CheckWorldPredicate` and `SetWorldPredicate` then appear in no generated tree. No
-  hand-written tree in the repository uses them either; they occur only in compiler
-  output and in the tests that assert on that output, so they can be withdrawn from
-  mission execution once the compiler and the executor are updated.
-
-**What this deliberately does not do.** It does not decide how a deployed system
-establishes the state after an action. That is the deployment's business: a real
-deployment supplies its own action nodes and already confirms, in whatever way suits the
-system it is commanding, that the thing it asked for happened. Nothing in this plan or in
-`ame_core` changes that. What the work above gives those nodes is the declared
-preconditions and effects to work from, and a compiled tree that has stopped writing the
-world model over their heads.
-
-**How the information reaches the node.** Put it on the emitted element, as attributes
-listing the fact names for preconditions, add effects and delete effects. The compiled
-XML then still describes itself, which matters because the authoring tool's tree view,
-DevEnv and every recorded run read that XML, and a saved tree should stay meaningful
-without the project that produced it. The alternative, giving each node a step
-identifier that keys into a table stored alongside the tree, keeps the XML shorter but
-makes a tree file useless on its own; take it only if the attribute lists turn out to be
-unworkable in practice.
-
-**What it touches.** The compiler, the behaviour-tree node headers, the executor
-component and the ROS2 executor node, together with seven test binaries and four
-architecture files that describe the current tree shape. The core TODO entry lists them
-individually. Most of the effort is in those tests and documents rather than in the
-compiler itself.
-
-**Non-specialist acceptance.** A user opens the compiled tree for a three-step mission,
-sees three boxes named after the three things the mission does, and can say what every
-box on the screen is for.
-
-**Effort.** Medium.
-
-### B1. Simulation engine
-
-**Build.** An in-process runner that takes the compiled behaviour-tree XML the tool
-already produces, builds it with a BehaviorTree.CPP factory, and ticks it against a
-world model populated from the scenario's starting facts. Every action in the tree is
-built as the stand-in node from B0, which checks the action's preconditions against the
-world model, takes the configured number of ticks, and applies the action's effects as
-believed facts. Real action nodes talk to external systems and are never built here. The
-substitution follows the pattern the demo application already uses
-([`subprojects/AME/src/apps/main.cpp`](../../../subprojects/AME/src/apps/main.cpp)),
-with the difference that after B0 one stand-in covers every action instead of one being
-written per action.
-
-Each action gets simulation settings stored in the project beside its behaviour-tree
-binding: how many ticks it takes, whether it succeeds, and optionally a probability of
-failure with a fixed random seed so a run is reproducible. Defaults are one tick and
-always succeeds, so a user who never opens these settings still gets a working
-simulation.
-
-Run control offers step one tick, run to completion, run at a chosen speed, pause and
-reset. The whole engine is separable from the user interface and driven by a headless
-entry point, so simulations can also run in the test suite and in continuous
-integration.
-
-**Non-specialist acceptance.** A user selects a scenario, presses Run, and watches the
-mission complete, without configuring anything first.
-
-**Effort.** Large.
-
-### B2. Live tree view
-
-**Build.** Extend the existing behaviour-tree view so that during a run each node is
-coloured by its current status, the node being ticked is marked, and completed branches
-are visibly finished. Because of B0 there is one node per action, so a user can click it
-to see the action it came from, the facts that had to be true before it could run, and
-the facts it changed. Nodes keep the plain-language names the guided editor gave them
-rather than the generated identifiers.
-
-**Non-specialist acceptance.** Someone watching over the author's shoulder can say
-which part of the mission is happening now, and which parts already finished, without
-being told how to read the picture.
-
-**Effort.** Medium.
-
-### B3. Facts and timeline
-
-**Build.** Two panels beside the tree, both fed from the same run.
-
-- A **fact panel** listing the world-model facts, showing which are currently true,
-  highlighting each change as it happens, and letting the user filter to one object or
-  one fact.
-- A **timeline** with one row per action, showing when it started and finished, and
-  markers for fact changes. Clicking any point in the timeline moves the whole screen,
-  tree and facts included, to that moment.
-
-This is the same division of labour as DevEnv's execution and world-model tabs, applied
-to a simulated run.
-
-**Non-specialist acceptance.** A user is asked "when did the vehicle stop being at the
-base?" and can answer it from the timeline.
-
-**Effort.** Medium.
-
-### B4. Fault injection and replanning
-
-**Build.** Let the user make a run go wrong on purpose, in the two ways that matter:
-force a chosen action to fail on a chosen attempt, and change a fact part-way through
-the run to represent something happening outside the mission's control, such as
-communications being lost.
-
-When a step fails, the tool does what the runtime does: replans from the world model as
-it stands and compiles a new tree. The screen shows both the plan that was abandoned
-and the plan that replaced it, with the reason for the change stated in a sentence. If
-no new plan exists, the failure explainer from the existing tool takes over and says
-which fact could not be brought about.
-
-**Non-specialist acceptance.** A user makes one action fail, sees the mission recover
-by a different route, and can say in their own words why the new plan is different.
-
-**Effort.** Large.
-
-### B5. Scenario simulation in batch
-
-**Build.** Extend the existing regression runner so a scenario's expectations cover
-execution as well as planning: whether the run reached the goal, how many actions ran,
-which actions must or must not appear, how many replans were acceptable, and how the
-run behaved under a named fault. Running the set produces a pass or fail per scenario
-with the reason for each failure written out. Because a simulated run takes longer than
-a planning check, the run reports progress as it goes and can be stopped part-way, which
-the current planning-only batch run does not need to do and does not do.
-
-**Non-specialist acceptance.** A reviewer runs the whole scenario set, sees eight
-passes and one failure, and can read what the failing scenario expected and what it
-actually did.
-
-**Effort.** Medium.
-
-### B6. Recorded runs, replayable in DevEnv
-
-**Build.** Every simulation run is recorded to the three JSONL files the runtime
-already writes, using the same schemas: behaviour-tree events through `AmeBTLogger`
-with a callback sink, fact changes through `WmAuditLog`, and planning episodes through
-`PlanAuditLog`. Because DevEnv's replay loader
-([`subprojects/AME/tools/devenv/models/replay.py`](../../../subprojects/AME/tools/devenv/models/replay.py))
-reads exactly these three files, a run recorded in the authoring tool opens in DevEnv
-with no conversion, and a run recorded from a real system opens in the authoring tool's
-timeline the same way.
-
-The tool gains a replay mode over any recorded run, its own or the runtime's, using the
-same tree, fact and timeline views as a live simulation.
-
-**Non-specialist acceptance.** A user saves a run, sends the folder to a colleague, and
-the colleague opens it and steps through the same mission.
-
-**Effort.** Medium.
-
-### B7. Comparing runs
-
-**Build.** Put two recorded runs side by side and show where they diverge: the first
-tick at which the trees differ, which actions differ, and which facts differ at the
-end. The obvious uses are a run before and after a domain change, and a nominal run
-against the same scenario with a fault injected.
-
-**Non-specialist acceptance.** A user changes one action, re-runs a scenario, and the
-comparison tells them in one line what their change did to the mission.
-
-**Effort.** Medium.
-
----
-
-## 7. Workstream C — Artefacts
-
-### C1. Concept mockups before code
-
-**Build.** Every screen in workstream B gets a concept mockup before it is implemented,
-in the form the last round used: a single standalone HTML page under
-[`doc/design/AME/`](../../design/AME/), self-contained with no external files, drawn
-with the tool's own theme values, using real content from
-`subprojects/AME/domains/mission_autonomy`, and ending with the specific questions the
-review needs answered. That format worked. It got the wording of the guided editor
-settled before any of it was built, and it found two real properties of the mission
-domain while it was being drawn.
-
-The pack for the simulation screens is written and is at
-[`doc/design/AME/simulation_run_hmi_concepts.html`](../../design/AME/simulation_run_hmi_concepts.html).
-It has six concepts, one for each item from B1 to B7: run controls and the live tree,
-the fact panel and timeline, the fault-injection controls, the abandoned-plan and
-new-plan comparison, the batch results table, and run records with the comparison of two
-runs. It asks six questions, the first three being the ones this plan committed to
-asking — what the run controls are called, whether the timeline or the tree is the
-primary view, and how a change of plan is announced without using the word "replan".
-Those answers are needed before B2, B3 and B4 start.
-
-**Non-specialist acceptance.** A reviewer reads the pack in a browser with no tools
-installed and can answer its questions without asking what anything means.
-
-**Effort.** Medium per pack.
-
-### C2. Exports that reviews can use
-
-**Build.** Consolidate exporting into one place, covering: the generated domain and
-every scenario's problem file; the fact-by-action matrix as CSV and Markdown, which
-already exists; the scenario results table; a recorded run folder; and a domain summary
-listing types, objects, facts, actions and the facts nothing produces. Everything
-written in one operation into one dated folder, so a review pack is one action rather
-than nine.
-
-**Non-specialist acceptance.** A user exports a review pack before a meeting and can
-say what each file in it is from its name alone.
-
-**Effort.** Small to medium.
-
-### C3. Evidence for the assurance case
-
-**Build.** A generated report tying a mission model to the claims made about it: which
-scenarios were run, which passed, which contingencies were checked and what was
-reachable, which facts nothing produces, and which actions are bound to which
-behaviour-tree nodes. The framework this feeds is described in
-[`doc/plans/AME/autonomy_assurance_plan.md`](autonomy_assurance_plan.md); the point of
-generating it from the tool is that the evidence and the model cannot drift apart.
-
-**Non-specialist acceptance.** A safety reviewer reads the report without opening the
-tool and can tell which parts of the mission have been checked and which have not.
-
-**Effort.** Medium.
-
----
-
-## 8. Sequence and milestones
-
-| Milestone | Items | What it delivers |
-|-----------|-------|------------------|
-| **M1 — Concepts reviewed** | C1 (simulation pack) | The simulation screens are agreed on paper before code is written |
-| **M2 — It runs** | B0, B1, B2 | The compiled tree shows one box per mission step, and a scenario can be run inside the tool and watched |
-| **M3 — It is legible** | B3, A3, A4 | Facts and timing are visible; problems and scenarios are workable without planning knowledge |
-| **M4 — It survives contact** | B4, B5 | Faults, replanning and batch expectations |
-| **M5 — It is shareable** | B6, B7, C2 | Recorded runs, comparison, and a one-action review pack |
-| **M6 — Finished surface** | A1, A2, A5, A6, A7, A8 | The remaining authoring gaps closed |
-| **M7 — Evidence** | C3 | Generated assurance material |
-
-The ordering is deliberate. C1 comes first because the wording and layout decisions in
-it are cheap now and expensive after the screens exist. B0 comes before any of the run
-screens because it changes the shape of the tree those screens draw, and doing it
-afterwards would mean building the live tree view twice. The rest of workstream A sits
-late because those items are irritations rather than obstacles, and because a user who
-can simulate a mission but has to type a file path is better off than one with polished
-file handling and no way to see their mission run. A3 and A4 are pulled forward into M3
-because they block the non-specialist acceptance for everything else: a user who cannot
-build a starting situation cannot run a simulation.
-
-**Dependencies.**
-
-```
-B0 ──> B1 ──> B2 ──> B3 ──> B4 ──> B5
-        │       │      │            │
-        │       │      └──> B6 ──> B7
-        │       │             │
-        │       └─────────────┴──> C2 ──> C3
-        └──> A4 (scenario facts feed the run)
-
-C1 precedes B2, B3 and B4
-A1, A2, A3, A5, A6, A7, A8 are independent
-```
-
----
-
-## 9. The walkthrough
-
-This is the acceptance test for the requirement in section 2. It collects the
-non-specialist acceptance line from every work item in this plan, so that no item can be
-called done without its own line having been checked. Steps 2 and 3 exercise parts of the
-tool that already exist, and are included because the rest of the walkthrough depends on
-them working.
-
-**Who runs it, and what it decides.** It is run by someone who does not write software,
-working alone, with no help and no documentation open. It is a release gate: a release
-does not go ahead until every step covering an item in that release has been completed by
-such a person. A step that needs help is a defect against the item in brackets, not
-against the user, and the release waits for the fix. The one exception is stated in
-section 10 and requires a named person to accept it in writing; a developer running the
-steps themselves is not an acceptable substitute, because a developer cannot tell whether
-a screen makes sense to someone who has never seen a planning model.
-
-**The main session.** One sitting, in the order a real user meets these tasks.
-
-| Step | Task | Item |
-|------|------|------|
-| 1 | Open the tool and open a mission project saved yesterday, from the recent list | A1 |
-| 2 | Find the action that makes a sector count as searched, using the relations panel | Exists today |
-| 3 | Add an action the domain did not previously have, using the guided editor | Exists today |
-| 4 | Rename a type that four actions and two scenarios already use, and check nothing broke | A7 |
-| 5 | Rename the new action, decide against it, and undo with one keystroke | A2 |
-| 6 | Fix the three problems the tool reports, by clicking each one | A3 |
-| 7 | Build a starting situation of six facts for a scenario | A4 |
-| 8 | Open the compiled tree for the scenario and say what every box on it is for | B0 |
-| 9 | Run the scenario and watch it complete | B1, B2 |
-| 10 | Say when a particular fact stopped being true | B3 |
-| 11 | Make one action fail, run again, and explain why the mission took a different route | B4 |
-| 12 | Run the whole scenario set and say which one failed and why | B5 |
-| 13 | Change one action, re-run, and say from the comparison what the change did | B7 |
-| 14 | Export a review pack and name what each file in it is | C2 |
-
-**Separate checks.** These do not fit one sitting, either because they need a second
-person, a second machine, or a document read away from the tool. Each is still run by
-someone who does not write software.
-
-| Check | Task | Item |
-|-------|------|------|
-| 15 | Import a second domain into the project and see, before committing, which existing actions it would overwrite | A5 |
-| 16 | Open a saved view by name and get the picture the author saved | A6 |
-| 17 | Mark a fact as a contingency and another as a safe state, run the analysis, and read whether the safe state is reachable | A8 |
-| 18 | Save a run, send the folder to a colleague, and have the colleague step through the same mission | B6 |
-| 19 | Read a concept mockup pack in a browser and answer its questions without asking what anything means | C1 |
-| 20 | Read the generated assurance report without opening the tool and say which parts of the mission have been checked | C3 |
-
----
-
-## 10. Risks
+## 5. What needs reviewing
+
+### The walkthrough, which is a release gate
+
+This is the acceptance test for the requirement in section 1. **It is run by someone who
+does not write software, working alone, with no help and no documentation open.** A release
+does not go ahead until every step covering something in that release has been completed by
+such a person. A step that needs help is a defect against the tool, not against the user,
+and the release waits for the fix.
+
+The one exception: if nobody suitable is available, the person who owns the release may
+accept the gap **in writing**, naming which steps were not run and why. That waiver is
+recorded with the release and does not carry over to the next one. A developer running the
+steps themselves is not a substitute — a developer cannot tell whether a screen makes sense
+to someone who has never seen a planning model.
+
+**Main session**, one sitting, in the order a real user meets these tasks.
+
+| Step | Task |
+|------|------|
+| 1 | Open the tool and open a mission project saved yesterday, from the recent list |
+| 2 | Find the action that makes a sector count as searched, using the relations panel |
+| 3 | Add an action the domain did not previously have, using the guided editor |
+| 4 | Rename a type that four actions and two scenarios already use, and check nothing broke |
+| 5 | Rename the new action, decide against it, and undo with one keystroke |
+| 6 | Fix the three problems the tool reports, by clicking each one |
+| 7 | Build a starting situation of six facts for a scenario |
+| 8 | Open the compiled tree for the scenario and say what every box on it is for |
+| 9 | Run the scenario and watch it complete |
+| 10 | Say when a particular fact stopped being true |
+| 11 | Make one action fail, run again, and explain why the mission took a different route |
+| 12 | Run the whole scenario set and say which one failed and why |
+| 13 | Change one action, re-run, and say from the comparison what the change did |
+| 14 | Export a review pack and name what each file in it is |
+
+**Separate checks**, which need a second person, a second machine, or a document read away
+from the tool. Each is still run by someone who does not write software.
+
+| Check | Task |
+|-------|------|
+| 15 | Import a second domain into the project and see, before committing, which existing actions it would overwrite |
+| 16 | Open a saved view by name and get the picture the author saved |
+| 16a | Draw the communications-related part of a domain as one named box, close it, and still say what the rest of the picture shows |
+| 16b | Open a domain written by someone else that uses a negative precondition and a "one of these" condition, say in their own words what each action needs, run a scenario against it, and export a review pack (workstream D) |
+| 17 | Mark a fact as a contingency and another as a safe state, run the analysis, and read whether the safe state is reachable |
+| 18 | Save a run, send the folder to a colleague, and have the colleague step through the same mission |
+| 19 | Read a concept mockup pack in a browser and answer its questions without asking what anything means |
+| 20 | Read the generated assurance report without opening the tool and say which parts of the mission have been checked |
+
+### Risks that stay live
 
 | Risk | Likelihood | Impact | What we do about it |
 |------|-----------|--------|--------------------|
-| Simulated behaviour diverges from real execution, so a mission that works in the tool fails in the field | Medium | High | The simulation uses the real compiled tree, the real world model and the real planner. After B0 the substitution is one node per action and nothing else, and the simulated node is given the same preconditions and effects a deployed one would be; the difference is that the simulated node predicts the state that follows an action, where a deployed system establishes it. Each substitution is visible in the user interface with its settings shown, and the tool never claims a run proves field behaviour |
-| B0 changes the compiled tree for everything that reads it, not just the authoring tool | Medium | Medium | The two node types being withdrawn appear only in generated output and in the tests that assert on it; no hand-written tree in the repository uses them, so the change is confined to the compiler, the executor and those tests. The architecture files and the user guide listed in B0 are updated in the same change, so no document is left describing the old tree shape |
-| Simulation settings per action become a modelling burden of their own | Medium | Medium | Defaults that need no configuration: one tick, always succeeds. Settings are only opened by users who want a specific fault |
-| Fault injection grows into a scripting language | Medium | Medium | Two mechanisms only, fixed at the start: force an action to fail on a given attempt, and set a fact at a given tick. Anything more expressive is a separate decision, not a slow accumulation |
-| The timeline and tree views drift apart from DevEnv's, so the two tools disagree | Low | Medium | Both read the same three JSONL schemas. B6 makes the files interchangeable in both directions, which is testable |
-| Concept mockups become documentation nobody reads | Medium | Low | Each pack ends with specific questions and is reviewed before the corresponding build starts. A pack with no answered questions has failed and should not be repeated |
-| The upstream node-editor library stays quiet | Medium | Low | It is MIT-licensed and stable, the fork maintained as part of ImGui Bundle is the more active line, and nothing in this plan needs new features from it |
-| Non-specialist acceptance is signed off by developers | Medium | High | The walkthrough in section 9 is a release gate and is run by someone who does not write software. If nobody suitable is available, the release does not proceed on a developer's run of the same steps. It waits, or the person who owns the release accepts the gap in writing, naming which steps were not run and why. That waiver is the single exception, it is recorded with the release, and it does not carry over to the next one |
+| Simulated behaviour diverges from real execution, so a mission that works in the tool fails in the field | Medium | High | The simulation uses the real compiled tree, the real world model and the real planner; the substitution is one stand-in node per action and nothing else, given the same preconditions and effects a deployed node would get. The difference is that the stand-in predicts the state that follows an action where a deployment establishes it. Each substitution is visible with its settings shown, and the tool never claims a run proves field behaviour |
+| Non-specialist acceptance gets signed off by developers | Medium | High | The walkthrough above is a release gate with a written-waiver exception, and nothing else. Two defects found so far were of exactly the kind only this gate catches: a cascading type rename that was written and tested but had no button calling it, and a way to make a fact false that existed, worked and was tested, but whose button read the same as the button beside it. Neither is a bug a test suite can see |
+| The tool falls behind the core's PDDL again, because it keeps its own reader and generator | Medium | High | Workstream D records every accepted construct and has a reader-generator round-trip case for each, followed by a parse through `PddlParser`. Adding a core construct without extending that contract is now a visible test change rather than silent drift |
+| Simulation settings per action become a modelling burden of their own | Medium | Medium | Defaults that need no configuration: four ticks, always succeeds. Settings are opened only for a specific fault, or an action whose duration matters to the mission |
+| Fault injection grows into a scripting language | Medium | Medium | Two mechanisms only, fixed: fail an action on a given attempt, and set a fact at a given tick. Anything more expressive is a separate decision, not a slow accumulation |
+| The timeline and tree views drift apart from DevEnv's, so the two tools disagree | Low | Medium | Both read the same three JSONL schemas, and the files are interchangeable in both directions, which is testable |
+| Assurance evidence is read as stronger than it is | Medium | Medium | The generated report always ends by stating its own limits: every run is a simulation of stand-in actions, a passing scenario means the model matched what somebody wrote down rather than that what they wrote down was right, and it counts the scenarios declaring no contingency and the actions with nothing bound |
+| The upstream node-editor library stays quiet | Medium | Low | It is MIT-licensed and stable, the fork maintained as part of ImGui Bundle is the more active line, and nothing outstanding needs new features from it |
 
----
+### Two decisions worth re-reading before extending the tool
 
-## 11. Where the history went
+**The headless commands live outside the graphical binary.** `ame_authoring_tool` links SDL2
+and OpenGL, so anything headless that lives there forces a build agent to carry a display
+stack. New headless work belongs in `ame_mission_cli`, whose conventions match the
+contingency verifier. The graphical tool keeps `--self-test` alone, because that genuinely
+needs a window. The machine-readable report is written only when `--json` names a file:
+standard output belongs to the summary a person reads, and the planner writes progress
+lines there too.
 
-The previous plan listed sixty work items across seven phases, each with a tick box
-and, in many cases, a note explaining what had been deferred or done differently. That
-record was useful while the tool was being built and is preserved in the repository
-history; the commit that introduced this document removes the file.
-
-Everything the old plan recorded as finished is described in section 3 as a capability.
-The rationale it referenced in passing lives in the research documents, which remain the
-place to look for why the tool is shaped this way.
-
-Everything it recorded as unfinished is listed below, so that deleting the file does not
-quietly lose work. Each entry is either carried into an item of this plan or dropped on
-purpose with the reason given. Nothing is left implicit, and no reader should have to
-open the repository history to find out what happened to a deferral.
-
-**Carried forward.**
-
-| Unfinished in the old plan | Now |
-|----------------------------|-----|
-| File open and save-as stubbed; hard-coded paths | A1 |
-| Undo does not cover text edits | A2 |
-| Validation messages name an element but are not clickable | A3 |
-| Scenario facts typed as text rather than chosen | A4 |
-| Domain import overwrites the project; no merge choice | A5 |
-| Problem export writes only the first scenario | A5 |
-| Imported elements laid out as two long rows | A5 |
-| Collapsible named groups | A6 |
-| Saved named views | A6 |
-| Types cannot be renamed | A7 |
-| Action parameters cannot be reordered | A7 |
-| The canvas "Add Type" menu entry does nothing | A7 |
-| No copy and paste, only duplicate | A7 |
-| No fit-canvas-to-contents key | A7 |
-| Quick-add reachable only from the palette, not the canvas or the keyboard | A7 |
-| Behaviour-tree subtrees cannot be expanded or collapsed | A7 |
-| Keyboard-only workflow claimed but incomplete | A7, which is what completes it |
-| Contingency and safe-state facts inferred, not declared per scenario | A8 |
-| Contingency search limited to eight facts; no monotonicity pruning | A8 |
-| Batch runs show no progress and cannot be stopped | B5, where a simulated run makes it matter |
-
-**Dropped, with the reason.**
-
-| Dropped | Why |
-|---------|-----|
-| Light theme | One dark theme is the house style across DevEnv and this tool. It would be reopened by a user asking for it, not by the plan |
-| Icon set for node types | Text labels read correctly in review. Icons would add a legend to learn, which works against the rule that a view should be readable without training |
-| Drag from the palette onto the canvas | The canvas is not where authoring happens, which is a stated non-goal in section 4. Clicking a palette entry to select and edit is the right interaction, and the quick-add work in A7 covers creating things |
-| Per-flow colour-coding in the plan view | The neighbourhood and matrix views established one colour language for relationships. A second, unrelated colour language in the plan view would teach users a rule that holds on one screen only |
-| Layout presets and a docking arrangement menu | The tool moved to fixed tabs, so there is no arrangement to preset. A6's saved views cover the underlying need, which was returning to a particular picture |
-| A custom animation layer for canvas navigation | The node editor already animates panning and zooming. Nothing was missing |
-| Building the importer on the PDDL parser rather than its own reader | Settled during the build, not deferred. The parser discards names and structure the importer needs; the dedicated reader is tested for round-trip against the generator |
+**The contingency search is one algorithm.** The exhaustive safe-state reachability search
+and its monotonicity pruning live in `ame_core`. The verifier, the authoring tool's analyser
+and the assurance report all call it. Do not grow a second copy — two implementations of the
+same proof with nothing checking they agree is worse than either alone.

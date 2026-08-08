@@ -7,6 +7,9 @@ class TypeHierarchyPanel {
 public:
     void render(ProjectModel& model, CommandStack& stack);
 private:
+    std::string m_renameTypeName;
+    char m_renameTypeInput[64] = {};
+    bool m_openRenamePopup = false;
     char m_newTypeName[64] = {};
     char m_newParentName[64] = {};
     char m_newObjName[64] = {};

@@ -49,6 +49,10 @@
 /subprojects/AME/ros2/build/
 /subprojects/AME/ros2/install/
 /subprojects/AME/ros2/log/
+# AME can be configured from its own directory as well as from the workspace,
+# and its presets put the build trees beside its CMakeLists.
+/subprojects/AME/build/
+/subprojects/AME/build-*/
 
 # Coverage artefacts
 *.gcov

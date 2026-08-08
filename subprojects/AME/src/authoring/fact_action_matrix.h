@@ -6,9 +6,11 @@
 #include <string>
 #include <vector>
 
-/// \brief The three possible relationships represented by one matrix cell.
+/// \brief The possible relationships represented by one matrix cell.
 struct FactActionCell {
   bool requires = false;
+  bool requiresFalse = false;
+  bool alternative = false;
   bool makesTrue = false;
   bool makesFalse = false;
 };

@@ -54,6 +54,18 @@ NeighbourhoodModel::NeighbourhoodModel(const ProjectModel& model,
                            NeighbourColumn::NeedsIt,
                            PredicateRelationKind::Requires, "needs it"});
       }
+      for (const auto& relation : relations.requiredFalseBy) {
+        pending.push_back({{DomainElementKind::Action, relation.actionIndex},
+                           NeighbourColumn::NeedsIt,
+                           PredicateRelationKind::RequiresFalse,
+                           "needs it to be false"});
+      }
+      for (const auto& relation : relations.acceptedAsAlternativeBy) {
+        pending.push_back({{DomainElementKind::Action, relation.actionIndex},
+                           NeighbourColumn::NeedsIt,
+                           PredicateRelationKind::AcceptsAlternative,
+                           "can use it as one choice"});
+      }
     }
   };
 
@@ -64,6 +76,20 @@ NeighbourhoodModel::NeighbourhoodModel(const ProjectModel& model,
         pending.push_back({{DomainElementKind::Predicate, relation.predicateIndex},
                            NeighbourColumn::ChangesIt,
                            PredicateRelationKind::Requires, "required before"});
+      }
+      for (const auto& relation : relations.requiresFalse) {
+        pending.push_back({{DomainElementKind::Predicate,
+                            relation.predicateIndex},
+                           NeighbourColumn::ChangesIt,
+                           PredicateRelationKind::RequiresFalse,
+                           "must be false before"});
+      }
+      for (const auto& relation : relations.acceptsAlternatives) {
+        pending.push_back({{DomainElementKind::Predicate,
+                            relation.predicateIndex},
+                           NeighbourColumn::ChangesIt,
+                           PredicateRelationKind::AcceptsAlternative,
+                           "is one possible choice"});
       }
     }
     if ((filter & ShowMakesTrue) != 0U) {

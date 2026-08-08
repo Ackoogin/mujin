@@ -72,6 +72,11 @@ inline std::string regressionReportPath(const std::string& projectName) {
 
 inline std::string formatEffectRef(const EffectRef& ref) {
   std::ostringstream out;
+  if (ref.negated) {
+    out << "must be false: ";
+  } else if (ref.alternative) {
+    out << "one choice: ";
+  }
   out << "(" << ref.predicateName;
   for (const auto& arg : ref.argNames) {
     out << " " << arg;

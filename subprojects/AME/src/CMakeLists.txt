@@ -9,6 +9,7 @@ set(_AME_CORE_SOURCES
     lib/plan_compiler.cpp
     lib/pddl_parser.cpp
     lib/planner.cpp
+    lib/contingency_search.cpp
     lib/goal_allocator.cpp
     lib/execution_sink.cpp
     nodes/check_world_predicate.cpp
@@ -55,9 +56,29 @@ add_library(ame_core STATIC ${_AME_CORE_SOURCES})
 target_include_directories(ame_core PUBLIC
     ${AME_ROOT_DIR}/include
 )
+
+# ActionRegistry parses behaviour-tree XML with tinyxml2, which comes bundled
+# inside BehaviorTree.CPP. BehaviorTree.CPP keeps its 3rdparty directory to
+# itself, so name it here rather than relying on a system-wide tinyxml2 that
+# only some machines have.
 target_include_directories(ame_core PRIVATE
-    $<TARGET_PROPERTY:pcl_core,INTERFACE_INCLUDE_DIRECTORIES>
+    ${behaviortree_cpp_SOURCE_DIR}/3rdparty
 )
+
+target_link_libraries(ame_core
+    PUBLIC
+        behaviortree_cpp
+        lapkt_core
+)
+
+# ---------------------------------------------------------------------------
+# PCL component layer and the PYRAMID bridge
+#
+# Everything from here to the end of the block needs PCL, and some of it needs
+# PYRAMID as well. It is the only part of AME that does, which is why a
+# standalone AME build simply leaves it out. See subprojects/AME/CMakeLists.txt.
+# ---------------------------------------------------------------------------
+if(AME_BUILD_PCL_COMPONENTS)
 
 # PYRAMID owns the C++ convenience layer over PCL's C ABI. AME needs those
 # headers even when the rest of the PYRAMID subproject is disabled.
@@ -68,12 +89,6 @@ if(NOT TARGET pyramid_pcl_cpp)
     )
     target_link_libraries(pyramid_pcl_cpp INTERFACE pcl_core)
 endif()
-
-target_link_libraries(ame_core
-    PUBLIC
-        behaviortree_cpp
-        lapkt_core
-)
 
 add_library(ame_pcl_components STATIC ${_AME_PCL_COMPONENT_SOURCES})
 
@@ -129,6 +144,8 @@ if(UNMANNED_BUILD_PYRAMID)
             AME_BUILD_AGRA_MA_BRIDGE=1)
     endif()
 endif()
+
+endif()  # AME_BUILD_PCL_COMPONENTS
 
 # ---------------------------------------------------------------------------
 # Foxglove WebSocket bridge (optional)
@@ -213,11 +230,13 @@ add_executable(ame_test_app apps/main.cpp)
 # ---------------------------------------------------------------------------
 # Pure-PCL entry point (no ROS2 dependency)
 # ---------------------------------------------------------------------------
-add_executable(ame_pcl_main apps/ame_pcl_main.cpp)
-target_link_libraries(ame_pcl_main PRIVATE ame_pcl_components)
-if(AME_FOXGLOVE)
-    target_link_libraries(ame_pcl_main PRIVATE ame_foxglove)
-    target_compile_definitions(ame_pcl_main PRIVATE AME_FOXGLOVE=1)
+if(AME_BUILD_PCL_COMPONENTS)
+    add_executable(ame_pcl_main apps/ame_pcl_main.cpp)
+    target_link_libraries(ame_pcl_main PRIVATE ame_pcl_components)
+    if(AME_FOXGLOVE)
+        target_link_libraries(ame_pcl_main PRIVATE ame_foxglove)
+        target_compile_definitions(ame_pcl_main PRIVATE AME_FOXGLOVE=1)
+    endif()
 endif()
 
 target_link_libraries(ame_test_app
@@ -238,9 +257,9 @@ endif()
 # Contingency verifier — exhaustive safe-state reachability tool
 # ---------------------------------------------------------------------------
 add_executable(contingency_verifier apps/contingency_verifier.cpp)
-target_link_libraries(contingency_verifier PRIVATE ame_core)
-target_include_directories(contingency_verifier PRIVATE
-    "${PYRAMID_ROOT_DIR}/core/external"
+target_link_libraries(contingency_verifier PRIVATE
+    ame_core
+    nlohmann_json::nlohmann_json
 )
 
 # ---------------------------------------------------------------------------
@@ -270,7 +289,11 @@ if(NOT EXISTS "${behaviortree_cpp_BINARY_DIR}/cmake_install.cmake")
 endif()
 
 # Static archives
-install(TARGETS ame_core ame_pcl_components lapkt_core
+set(_AME_INSTALL_TARGETS ame_core lapkt_core)
+if(AME_BUILD_PCL_COMPONENTS)
+    list(APPEND _AME_INSTALL_TARGETS ame_pcl_components)
+endif()
+install(TARGETS ${_AME_INSTALL_TARGETS}
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -295,7 +318,7 @@ install(DIRECTORY ${AME_ROOT_DIR}/include/
 
 # Hand-written config file: creates ame::ame_core IMPORTED target
 configure_package_config_file(
-    ${UNMANNED_WORKSPACE_ROOT}/cmake/ame_coreConfig.cmake.in
+    ${AME_ROOT_DIR}/cmake/ame_coreConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/ame_coreConfig.cmake
     INSTALL_DESTINATION lib/cmake/ame_core
 )

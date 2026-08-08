@@ -58,6 +58,40 @@ bool startsWith(const ScenarioDef& scenario, const FactRef& fact) {
                      });
 }
 
+void appendMandatoryPositiveFacts(const ConditionExpression& condition,
+                                  std::vector<EffectRef>& facts) {
+  if (condition.kind == ConditionKind::Fact) {
+    if (!condition.negated && !condition.fact.negated) {
+      facts.push_back(condition.fact);
+    }
+    return;
+  }
+  if (condition.kind != ConditionKind::AllOf) {
+    // Alternatives and quantified names need their own grounded explanation.
+    // Following either as if it were one ordinary mandatory fact can name the
+    // wrong cause, so this concise backward chain stops at that boundary.
+    return;
+  }
+  for (const ConditionExpression& child : condition.children) {
+    appendMandatoryPositiveFacts(child, facts);
+  }
+}
+
+std::vector<EffectRef> mandatoryPositiveFacts(const ActionDef& action) {
+  if (action.hasConditionExpression) {
+    std::vector<EffectRef> facts;
+    appendMandatoryPositiveFacts(action.conditionExpression, facts);
+    return facts;
+  }
+  std::vector<EffectRef> facts;
+  for (const EffectRef& fact : action.preconditions) {
+    if (!fact.negated) {
+      facts.push_back(fact);
+    }
+  }
+  return facts;
+}
+
 std::string producerText(const ProjectModel& model,
                          const PredicateRelations& relations,
                          const FactRef& fact) {
@@ -75,6 +109,11 @@ bool actionCouldRemoveInitialFact(const ProjectModel& model,
                                   size_t action_index,
                                   const FactRef& fact) {
   const ActionDef& action = model.actions[action_index];
+  if (action.hasConditionExpression) {
+    // An alternative or quantified condition cannot safely be reduced to the
+    // flat "all of these" check used by this narrow lifecycle diagnostic.
+    return false;
+  }
   const auto removed = std::find_if(action.delEffects.begin(), action.delEffects.end(),
                                     [&fact](const EffectRef& effect) {
                                       return effect.predicateName == fact.predicateName;
@@ -83,7 +122,8 @@ bool actionCouldRemoveInitialFact(const ProjectModel& model,
     return false;
   }
   const Bindings bindings = bindingsFor(*removed, fact);
-  return std::all_of(action.preconditions.begin(), action.preconditions.end(),
+  const std::vector<EffectRef> conditions = mandatoryPositiveFacts(action);
+  return std::all_of(conditions.begin(), conditions.end(),
                      [&](const EffectRef& precondition) {
                        return startsWith(scenario, applyBindings(precondition, bindings));
                      });
@@ -148,10 +188,12 @@ FailureExplanation FailureExplainer::explain(const ProjectModel& model,
     producer_already_named = false;
     const Bindings bindings =
         bindingsFor(producer.addEffects[producer_relation.referenceIndex], current);
+    const std::vector<EffectRef> producer_conditions =
+        mandatoryPositiveFacts(producer);
 
     FactRef next;
     bool found_next = false;
-    for (const auto& precondition : producer.preconditions) {
+    for (const auto& precondition : producer_conditions) {
       const FactRef candidate = applyBindings(precondition, bindings);
       const int candidate_index = index.predicateIndex(candidate.predicateName);
       if (candidate_index >= 0 && !startsWith(scenario, candidate) &&
@@ -162,7 +204,7 @@ FailureExplanation FailureExplainer::explain(const ProjectModel& model,
       }
     }
     if (!found_next) {
-      for (const auto& precondition : producer.preconditions) {
+      for (const auto& precondition : producer_conditions) {
         const FactRef candidate = applyBindings(precondition, bindings);
         const int candidate_index = index.predicateIndex(candidate.predicateName);
         if (candidate_index < 0) {
@@ -193,7 +235,7 @@ FailureExplanation FailureExplainer::explain(const ProjectModel& model,
       }
     }
     if (!found_next) {
-      for (const auto& precondition : producer.preconditions) {
+      for (const auto& precondition : producer_conditions) {
         const FactRef candidate = applyBindings(precondition, bindings);
         if (!startsWith(scenario, candidate)) {
           next = candidate;

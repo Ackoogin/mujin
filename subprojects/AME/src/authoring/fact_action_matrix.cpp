@@ -12,6 +12,12 @@ std::string marks(const FactActionCell& cell) {
   if (cell.requires) {
     value += "R";
   }
+  if (cell.requiresFalse) {
+    value += value.empty() ? "F" : " F";
+  }
+  if (cell.alternative) {
+    value += value.empty() ? "A" : " A";
+  }
   if (cell.makesTrue) {
     value += value.empty() ? "+" : " +";
   }
@@ -49,6 +55,12 @@ FactActionMatrix::FactActionMatrix(const ProjectModel& model,
     const PredicateRelations& relations = index.predicate(predicate_index);
     for (const auto& relation : relations.requiredBy) {
       cells_[predicate_index][relation.actionIndex].requires = true;
+    }
+    for (const auto& relation : relations.requiredFalseBy) {
+      cells_[predicate_index][relation.actionIndex].requiresFalse = true;
+    }
+    for (const auto& relation : relations.acceptedAsAlternativeBy) {
+      cells_[predicate_index][relation.actionIndex].alternative = true;
     }
     for (const auto& relation : relations.madeTrueBy) {
       cells_[predicate_index][relation.actionIndex].makesTrue = true;

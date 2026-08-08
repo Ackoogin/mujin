@@ -611,6 +611,12 @@ code, .mono { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: b
 }
 .qlist .q { font-weight: 650; }
 .qlist .a { font-size: 14px; color: var(--ink-2); }
+.qlist .decided {
+  margin-top: 0.55rem; font-size: 14px; color: var(--ink-1);
+  border-left: 3px solid var(--add); padding-left: 0.7rem;
+}
+.qlist .decided b { font-family: var(--font-mono); font-size: 12px; color: var(--add);
+  display: block; letter-spacing: 0.06em; text-transform: uppercase; }
 
 footer.page-foot {
   border-top: 1px solid var(--line);
@@ -634,7 +640,7 @@ footer.page-foot p { max-width: 70ch; }
     <div class="masthead-meta">
       <div>
         <span class="k">Status</span>
-        <span class="v">Concept — for review, nothing built</span>
+        <span class="v">Reviewed — answers recorded, B0 and B1 built</span>
       </div>
       <div>
         <span class="k">Source plan</span>
@@ -682,8 +688,9 @@ footer.page-foot p { max-width: 70ch; }
         <span class="h">Nothing to set up first</span>
         <p>
           Pressing Run works on a project that has never been near this screen. Every action
-          takes one tick and succeeds until somebody says otherwise. Settings exist for people
-          who want a specific fault, not as a toll on the first run.
+          takes four ticks, which is one second at the speed shown above, and succeeds until
+          somebody says otherwise. Settings exist for people who want a specific fault, or an
+          action whose duration matters to the mission, not as a toll on the first run.
         </p>
       </div>
       <div class="rule">
@@ -1102,14 +1109,14 @@ footer.page-foot p { max-width: 70ch; }
             <div class="ui-row"><span>move</span><span class="dim grow">6 ticks · always works</span></div>
             <div class="ui-row"><span>search</span><span class="dim grow">5 ticks · always works</span></div>
             <div class="ui-row on"><span>classify</span><span class="dim grow">4 ticks · fails once</span></div>
-            <div class="ui-row"><span>withdraw-agent</span><span class="dim grow">1 tick · always works</span></div>
-            <div class="ui-row"><span>mark-task-failed</span><span class="dim grow">1 tick · always works</span></div>
-            <div class="ui-row"><span>reallocate-task</span><span class="dim grow">1 tick · always works</span></div>
-            <div class="ui-row"><span>search-degraded</span><span class="dim grow">1 tick · always works</span></div>
+            <div class="ui-row"><span>withdraw-agent</span><span class="dim grow">4 ticks · always works</span></div>
+            <div class="ui-row"><span>mark-task-failed</span><span class="dim grow">4 ticks · always works</span></div>
+            <div class="ui-row"><span>reallocate-task</span><span class="dim grow">4 ticks · always works</span></div>
+            <div class="ui-row"><span>search-degraded</span><span class="dim grow">4 ticks · always works</span></div>
           </div>
           <div class="check">
             <span class="y">i</span>
-            <span>Untouched actions take one tick and always work. Nothing here has to be filled in before a first run.</span>
+            <span>Untouched actions take four ticks and always work. A one-tick default would make a whole mission start and end on the same tick, with nothing to watch and no order visible on the timeline. Nothing here has to be filled in before a first run.</span>
             <span class="mk">E</span>
           </div>
 
@@ -1644,6 +1651,7 @@ footer.page-foot p { max-width: 70ch; }
             people who will use this say "pause" and "reset" in their own speech, the mockups
             should say that instead.
           </div>
+          <div class="decided"><b>Answered in review</b>The ordinary machine words. The people who use this are technical, just not software engineers, and they say “pause” and “reset” in their own speech. The controls are <span class="mono">Run · Pause · Step · Stop · Reset</span>. Built.</div>
         </div>
       </li>
       <li>
@@ -1655,6 +1663,7 @@ footer.page-foot p { max-width: 70ch; }
             invisible in the tree and obvious on the timeline, and "when did that happen" is the
             question a reviewer actually asks. Swapping them is cheap now and awkward later.
           </div>
+          <div class="decided"><b>Answered in review</b>The timeline. The tree stays, beside it, as the answer to “where are we” rather than as the thing a reviewer reads first. Not built yet: the run screen currently leads with the tree, and the timeline takes the primary position when B3 lands.</div>
         </div>
       </li>
       <li>
@@ -1667,6 +1676,7 @@ footer.page-foot p { max-width: 70ch; }
             with the plain sentence and put the technical term in the run record and the exported
             report, where the audience is different.
           </div>
+          <div class="decided"><b>Answered in review</b>“Replan” is fine on the screen, for the same reason as the control names. The plain sentence is still worth having; it no longer has to avoid the word.</div>
         </div>
       </li>
       <li>
@@ -1678,6 +1688,7 @@ footer.page-foot p { max-width: 70ch; }
             makes the compiled tree feel like a thing that runs rather than a thing you inspect.
             This is a layout decision, but it changes what the tool appears to be for.
           </div>
+          <div class="decided"><b>Answered in review</b>The BT tab becomes the run view. There is no separate tree tab: the Run tab draws the compiled tree, waiting when nothing is running and coloured as it goes when something is. Built.</div>
         </div>
       </li>
       <li>
@@ -1689,6 +1700,7 @@ footer.page-foot p { max-width: 70ch; }
             label on the row. That is either the point — one way of reading a mission, whatever
             produced it — or it is a confusion waiting to be quoted out of context in a report.
           </div>
+          <div class="decided"><b>Answered in review</b>They look the same and the data says which is which. Every run this tool produces carries a <span class="mono">simulated</span> marker in its report and its record, so anything quoting a run has that to quote. Built for the report; the recorded runs follow in B6.</div>
         </div>
       </li>
       <li>
@@ -1701,6 +1713,7 @@ footer.page-foot p { max-width: 70ch; }
             worth checking now: if it does not, the gap is a third mechanism, and it should be
             named before B4 starts rather than after.
           </div>
+          <div class="decided"><b>Answered in review</b>Yes. Failing an action and setting a fact mid-run are adequate; no third mechanism is planned, and B4 builds exactly these two.</div>
         </div>
       </li>
     </ol>
@@ -1708,8 +1721,9 @@ footer.page-foot p { max-width: 70ch; }
 
   <footer class="page-foot">
     <p>
-      Concept mockups only — no implementation has started, and nothing shown here exists in the
-      tool today. All domain content is taken from
+      Concept mockups, reviewed. The answers recorded against each question above are the
+      decisions the build follows; where a screen has since been built, the answer says so, and
+      what the tool does now takes precedence over the drawing. All domain content is taken from
       <span class="mono">subprojects/AME/domains/mission_autonomy</span>: the plans, action
       counts, contingency paths and fact names are derived from
       <span class="mono">domain.pddl</span> and the six problem files, and the tree structure

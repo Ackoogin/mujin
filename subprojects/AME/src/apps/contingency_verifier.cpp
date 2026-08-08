@@ -35,6 +35,7 @@
 //   --verbose      Show full plan signatures
 // =========================================================================
 
+#include "ame/contingency_search.h"
 #include "ame/pddl_parser.h"
 #include "ame/planner.h"
 #include "ame/world_model.h"
@@ -56,12 +57,6 @@
 #include <unordered_set>
 #include <vector>
 
-static unsigned portablePopcount(unsigned x) {
-    x = x - ((x >> 1) & 0x55555555u);
-    x = (x & 0x33333333u) + ((x >> 2) & 0x33333333u);
-    return (((x + (x >> 4)) & 0x0F0F0F0Fu) * 0x01010101u) >> 24;
-}
-
 // -------------------------------------------------------------------------
 // Context predicate detection
 // -------------------------------------------------------------------------
@@ -72,43 +67,13 @@ static unsigned portablePopcount(unsigned x) {
 // change due to real-world events between replanning cycles, but within
 // any single planning snapshot they are fixed context.
 //
-// A context fluent is a "health variable" if it appears in at least one
-// action's preconditions and never appears in any action's effects. These are
-// the grounded fluents whose combinations we enumerate.
+// Finding them, enumerating their combinations and carrying conclusions
+// between those combinations all live in ame_core, so that this tool, the
+// authoring tool and the generated assurance report cannot disagree about
+// what a domain's contingencies are. See ame/contingency_search.h. What stays
+// here is this tool's own presentation of the answer.
 
-struct HealthVar {
-    unsigned fluent_id;
-    std::string fluent_name;
-    std::string short_name;
-    bool initial_value;
-};
-
-static std::vector<HealthVar> identifyHealthVars(const ame::WorldModel& wm) {
-    // Collect all fluent IDs that appear in any action's effects.
-    // Context predicates are those used in preconditions but never in effects.
-    std::vector<bool> appears_in_effects(wm.numFluents(), false);
-    std::vector<bool> appears_in_preconditions(wm.numFluents(), false);
-
-    for (unsigned i = 0; i < wm.numGroundActions(); ++i) {
-        auto& ga = wm.groundActions()[i];
-        for (auto id : ga.add_effects) appears_in_effects[id] = true;
-        for (auto id : ga.del_effects) appears_in_effects[id] = true;
-        for (auto id : ga.preconditions) appears_in_preconditions[id] = true;
-    }
-
-    std::vector<HealthVar> vars;
-    for (unsigned id = 0; id < wm.numFluents(); ++id) {
-        if (appears_in_effects[id]) continue;
-        if (!appears_in_preconditions[id]) continue;
-
-        const auto& name = wm.fluentName(id);
-        std::string short_name = name.substr(1, name.size() - 2);
-
-        vars.push_back({id, name, short_name, wm.getFact(id)});
-    }
-
-    return vars;
-}
+using HealthVar = ame::ContextFact;
 
 // -------------------------------------------------------------------------
 // Combination result
@@ -132,18 +97,6 @@ struct ComboResult {
     std::string actions;
     std::string full_plan;
 };
-
-// -------------------------------------------------------------------------
-// Monotonicity helpers
-// -------------------------------------------------------------------------
-
-static bool isSubset(unsigned a, unsigned b) {
-    return (a & b) == a;
-}
-
-static bool isSuperset(unsigned a, unsigned b) {
-    return (a & b) == b;
-}
 
 static std::string joinFluents(const ame::WorldModel& wm,
                                const std::vector<bool>& state) {
@@ -188,90 +141,10 @@ static std::vector<bool> applyPlanToState(
     return state;
 }
 
-// -------------------------------------------------------------------------
-// Solve one combination
-// -------------------------------------------------------------------------
-
+// The forward declaration stays because the reachable-state expansion below
+// formats goal options as well.
 static std::string formatGoalOption(const std::vector<std::string>& goal_keys);
 
-static ComboResult solveCombo(
-    const std::string& domain_pddl,
-    const std::string& problem_pddl_template,
-    const std::vector<HealthVar>& vars,
-    unsigned combo,
-    const std::vector<std::vector<std::string>>& goal_options)
-{
-    ComboResult cr;
-    cr.combo = combo;
-
-    // Parse fresh WorldModel from domain + template
-    ame::WorldModel wm;
-    ame::PddlParser::parseFromString(domain_pddl, problem_pddl_template, wm);
-
-    // Toggle health vars according to combo
-    for (size_t i = 0; i < vars.size(); ++i) {
-        bool on = (combo >> i) & 1;
-        wm.setFact(vars[i].fluent_id, on);
-    }
-    const std::vector<bool> initial_state = currentStateVector(wm);
-    cr.initial_state = joinFluents(wm, initial_state);
-
-    ame::Planner planner;
-    ame::PlanResult best_result;
-    std::vector<std::string> best_goal;
-    bool solved = false;
-
-    for (const auto& goal_keys : goal_options) {
-        wm.setGoal(goal_keys);
-        auto result = planner.solve(wm);
-        cr.solve_time_ms += result.solve_time_ms;
-        if (result.success) {
-            best_result = result;
-            best_goal = goal_keys;
-            solved = true;
-            break;
-        }
-        best_result = result;
-        best_goal = goal_keys;
-    }
-
-    if (solved) {
-        cr.kind = ResultKind::SOLVED;
-        cr.plan_length = static_cast<unsigned>(best_result.steps.size());
-        cr.selected_goal = formatGoalOption(best_goal);
-
-        // Extract unique action names
-        std::string names;
-        for (auto& s : best_result.steps) {
-            auto& sig = wm.groundActions()[s.action_index].signature;
-            auto paren = sig.find('(');
-            std::string name = (paren != std::string::npos)
-                                   ? sig.substr(0, paren)
-                                   : sig;
-            if (names.find(name) == std::string::npos) {
-                if (!names.empty()) names += ", ";
-                names += name;
-            }
-        }
-        cr.actions = names;
-
-        // Full plan
-        std::string full;
-        for (auto& s : best_result.steps) {
-            if (!full.empty()) full += " -> ";
-            full += wm.groundActions()[s.action_index].signature;
-        }
-        cr.full_plan = full;
-        cr.end_state =
-            joinFluents(wm, applyPlanToState(wm, best_result, initial_state));
-    } else {
-        cr.kind = ResultKind::UNSOLVABLE;
-        cr.selected_goal = "(none reachable)";
-        cr.end_state = "(no safe end state)";
-    }
-
-    return cr;
-}
 
 static bool hasFluent(const ame::WorldModel& wm, const std::string& key) {
     for (unsigned id = 0; id < wm.numFluents(); ++id) {
@@ -1002,14 +875,7 @@ static int runReachableExpansion(
 // -------------------------------------------------------------------------
 
 static std::string comboLabel(const std::vector<HealthVar>& vars, unsigned combo) {
-    std::string label;
-    for (size_t i = 0; i < vars.size(); ++i) {
-        if (!label.empty()) label += "  ";
-        bool on = (combo >> i) & 1;
-        label += vars[i].short_name;
-        label += (on ? "=ON" : "=off");
-    }
-    return label;
+    return ame::ContingencySearch::combinationLabel(vars, combo);
 }
 
 static const char* kindStr(ResultKind k) {
@@ -1238,7 +1104,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    auto vars = identifyHealthVars(template_wm);
+    auto vars = ame::ContingencySearch::identifyContextFacts(template_wm);
     if (vars.empty()) {
         std::cerr << "No context predicates found in domain.\n"
                   << "Context predicates are grounded fluents that appear in\n"
@@ -1255,13 +1121,8 @@ int main(int argc, char* argv[]) {
     // enable more actions, never disable them. A negative precondition breaks
     // that monotonicity (adding a fact can disable an action), so pruning would
     // be unsound. Disable it automatically with an explicit message.
-    bool domain_has_neg_preconditions = false;
-    for (unsigned i = 0; i < template_wm.numGroundActions(); ++i) {
-        if (!template_wm.groundActions()[i].neg_preconditions.empty()) {
-            domain_has_neg_preconditions = true;
-            break;
-        }
-    }
+    const bool domain_has_neg_preconditions =
+        !ame::ContingencySearch::pruningIsSound(template_wm);
     if (domain_has_neg_preconditions && prune) {
         prune = false;
         std::cout << "\nNOTE: domain uses negative preconditions; monotone\n"
@@ -1375,104 +1236,59 @@ int main(int argc, char* argv[]) {
 
     std::cout << "\n";
 
-    // --- Enumerate combinations with optional pruning ---
-    auto wall_start = std::chrono::steady_clock::now();
+    // --- Enumerate combinations, carrying conclusions where that is sound ---
+    // The search itself is ame_core's, so that this tool, the authoring tool
+    // and the generated assurance report all answer this question the same way.
+    ame::ContingencySearchOptions search_options;
+    search_options.prune = prune;
+    search_options.goal_options = goal_options;
 
+    ame::ContingencySearchReport search;
+    try {
+        search = ame::ContingencySearch::run(domain_pddl, problem_pddl,
+                                             search_options);
+    } catch (const std::exception& e) {
+        std::cerr << "Error during contingency search: " << e.what() << "\n";
+        return 1;
+    }
+
+    const double total_ms = search.wall_time_ms;
+    const unsigned solver_calls = search.solver_calls;
+    const unsigned pruned_safe = search.implied_reachable;
+    const unsigned pruned_unsafe = search.implied_unreachable;
+
+    // Present the search's answer in this tool's own vocabulary.
     std::vector<ComboResult> results(num_combos);
-    for (unsigned i = 0; i < num_combos; ++i) {
-        results[i].combo = i;
-        results[i].kind = ResultKind::UNSOLVABLE;  // safe default
-    }
-    std::vector<bool> classified(num_combos, false);
-    unsigned solver_calls = 0;
-    unsigned pruned_safe = 0, pruned_unsafe = 0;
-
-    // Process bottom-up (fewest capabilities first) for best pruning.
-    // Sort combos by popcount (number of ON bits).
-    std::vector<unsigned> order(num_combos);
-    for (unsigned i = 0; i < num_combos; ++i) order[i] = i;
-    std::sort(order.begin(), order.end(), [](unsigned a, unsigned b) {
-        return portablePopcount(a) < portablePopcount(b);
-    });
-
-    for (unsigned combo : order) {
-        if (classified[combo]) continue;
-
-        // Check if already implied by pruning
-        if (prune) {
-            bool skip = false;
-
-            // Check if any classified subset is solved → implied safe
-            for (unsigned other = 0; other < num_combos; ++other) {
-                if (!classified[other]) continue;
-                if (results[other].kind == ResultKind::SOLVED &&
-                    isSuperset(combo, other) && combo != other) {
-                    results[combo].kind = ResultKind::IMPLIED_SAFE;
-                    results[combo].actions = "(implied by " +
-                        comboLabel(vars, other) + ")";
-                    classified[combo] = true;
-                    pruned_safe++;
-                    skip = true;
-                    break;
-                }
-            }
-
-            if (!skip) {
-                // Check if any classified superset is unsolvable → implied gap
-                for (unsigned other = 0; other < num_combos; ++other) {
-                    if (!classified[other]) continue;
-                    if (results[other].kind == ResultKind::UNSOLVABLE &&
-                        isSubset(combo, other) && combo != other) {
-                        results[combo].kind = ResultKind::IMPLIED_UNSAFE;
-                        results[combo].actions = "(implied by " +
-                            comboLabel(vars, other) + ")";
-                        classified[combo] = true;
-                        pruned_unsafe++;
-                        skip = true;
-                        break;
-                    }
-                }
-            }
-
-            if (skip) continue;
+    for (unsigned combo = 0; combo < num_combos && combo < search.cases.size();
+         ++combo) {
+        const ame::ContingencyCase& c = search.cases[combo];
+        ComboResult& r = results[combo];
+        r.combo = c.combination;
+        r.plan_length = c.plan_length;
+        r.solve_time_ms = c.solve_time_ms;
+        r.selected_goal = c.selected_goal;
+        r.initial_state = c.initial_state;
+        r.end_state = c.end_state;
+        r.actions = c.action_names;
+        r.full_plan = c.full_plan;
+        switch (c.outcome) {
+            case ame::ContingencyOutcome::Reachable:
+                r.kind = ResultKind::SOLVED;
+                break;
+            case ame::ContingencyOutcome::Unreachable:
+                r.kind = ResultKind::UNSOLVABLE;
+                break;
+            case ame::ContingencyOutcome::ImpliedReachable:
+                r.kind = ResultKind::IMPLIED_SAFE;
+                break;
+            case ame::ContingencyOutcome::ImpliedUnreachable:
+                r.kind = ResultKind::IMPLIED_UNSAFE;
+                break;
         }
-
-        // Actually solve
-        results[combo] = solveCombo(
-            domain_pddl, problem_pddl, vars, combo, goal_options);
-        classified[combo] = true;
-        solver_calls++;
-
-        // Eagerly propagate to unclassified supersets/subsets
-        if (prune && results[combo].kind == ResultKind::SOLVED) {
-            for (unsigned other = 0; other < num_combos; ++other) {
-                if (classified[other]) continue;
-                if (isSuperset(other, combo)) {
-                    results[other].kind = ResultKind::IMPLIED_SAFE;
-                    results[other].actions = "(implied by " +
-                        comboLabel(vars, combo) + ")";
-                    classified[other] = true;
-                    pruned_safe++;
-                }
-            }
-        }
-        if (prune && results[combo].kind == ResultKind::UNSOLVABLE) {
-            for (unsigned other = 0; other < num_combos; ++other) {
-                if (classified[other]) continue;
-                if (isSubset(other, combo)) {
-                    results[other].kind = ResultKind::IMPLIED_UNSAFE;
-                    results[other].actions = "(implied by " +
-                        comboLabel(vars, combo) + ")";
-                    classified[other] = true;
-                    pruned_unsafe++;
-                }
-            }
+        if (c.has_implied_by) {
+            r.actions = "(implied by " + comboLabel(vars, c.implied_by) + ")";
         }
     }
-
-    auto wall_end = std::chrono::steady_clock::now();
-    double total_ms = std::chrono::duration<double, std::milli>(
-                          wall_end - wall_start).count();
 
     // --- Print results table ---
     // Determine column width from longest label

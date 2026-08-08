@@ -8,6 +8,9 @@ Exhaustive safe-state reachability analysis for PDDL contingency domains.
 
 The contingency verifier accepts a PDDL domain and a template problem file, then proves whether every possible combination of system health states has a valid plan to reach the safety goal. It produces a reviewable report suitable for safety case evidence.
 
+The analysis behind it lives in `ame_core`, as `ContingencySearch` in
+[`include/ame/contingency_search.h`](../../include/ame/contingency_search.h). The graphical authoring tool runs the same search over a project being edited, and the assurance report it generates quotes the same results, so the three cannot disagree about a domain's contingencies. What belongs to this tool alone is how the answer is presented: the report below, its JSON schema, and the reachable-state expansion behind `--expansion-sidecar`.
+
 The tool:
 
 1. Parses the domain and **automatically identifies context fluents** -- grounded precondition fluents that gate actions but are never produced or consumed by any action.
